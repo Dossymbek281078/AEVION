@@ -1,0 +1,120 @@
+"use strict";
+/**
+ * Planning-module waitlist confirmation email.
+ *
+ * Sent fire-and-forget after a successful waitlist insert. Uses SMTP via
+ * nodemailer (Brevo, Gmail, Mailgun, anything). Silently skips if SMTP isn't
+ * configured — never blocks the HTTP response.
+ *
+ * Required env (all optional):
+ *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+ */
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.sendWaitlistConfirmation = sendWaitlistConfirmation;
+const nodemailer_1 = __importDefault(require("nodemailer"));
+/*
+ * Отправитель — через общий помощник: ИМЯ из кода, адрес из настройки.
+ *
+ * 12.10.2026: здесь было `process.env.SMTP_FROM`, а на проде в этой переменной
+ * лежало «AEVION QPayNet» — то есть письма листа ожидания тоже приходили от
+ * имени платёжного модуля, которого человек не открывал. Один и тот же класс в
+ * двух местах: имя, видимое человеку, задавалось настройкой.
+ */
+const email_1 = require("./build/email");
+// 01.09.2026: приглашение ответить письмом убрано из подписи.
+// У домена aevion.app НЕТ записи MX (контроль: у gmail.com и aevion.io она есть),
+// то есть ответ на такое письмо не доходил никуда: человек узнавал отлупом, мы не
+// узнавали вовсе. Звать писать на адрес можно только после того, как у домена
+// появится приём почты; до тех пор — форма, у которой обращения читаются.
+const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.app";
+function getTransport() {
+    const host = process.env.SMTP_HOST?.trim();
+    const user = process.env.SMTP_USER?.trim();
+    const pass = process.env.SMTP_PASS?.trim();
+    if (!host || !user || !pass)
+        return null;
+    return nodemailer_1.default.createTransport({
+        host,
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: Number(process.env.SMTP_PORT || 587) === 465,
+        auth: { user, pass },
+    });
+}
+function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+function layout(title, body) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>
+  body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#020617; color:#e2e8f0; margin:0; padding:24px; }
+  .card { max-width:560px; margin:0 auto; background:#0f172a; border-radius:16px; padding:32px; border:1px solid rgba(255,255,255,0.08); }
+  .logo { font-size:13px; font-weight:800; color:#22d3ee; letter-spacing:0.08em; margin-bottom:24px; text-transform:uppercase; }
+  h2 { margin:0 0 12px; font-size:22px; color:#f8fafc; }
+  p { margin:0 0 16px; line-height:1.6; color:#cbd5e1; font-size:14px; }
+  .btn { display:inline-block; background:#22d3ee; color:#06292e; font-weight:700; font-size:14px; padding:12px 24px; border-radius:10px; text-decoration:none; margin-top:8px; }
+  .muted { font-size:12px; color:#475569; margin-top:24px; }
+  .pill { display:inline-block; background:rgba(34,211,238,0.12); border:1px solid rgba(34,211,238,0.4); color:#67e8f9; font-size:11px; font-weight:600; padding:4px 10px; border-radius:999px; letter-spacing:0.05em; text-transform:uppercase; }
+</style>
+</head>
+<body><div class="card">
+  <div class="logo">AEVION</div>
+  ${body}
+  <p class="muted">This is an automated confirmation from AEVION. Need help? Write to us here: <a href="${BASE}/pricing/contact" style="color:#0ea5e9">${BASE}/pricing/contact</a>.</p>
+</div></body></html>`;
+}
+/** Fire-and-forget. Never throws. */
+function sendWaitlistConfirmation(ctx) {
+    void (async () => {
+        try {
+            const transport = getTransport();
+            if (!transport) {
+                // Молчаливый пропуск здесь опаснее, чем кажется: это письмо —
+                // подтверждение записи в лист ожидания, то есть ЕДИНСТВЕННОЕ, что
+                // человек получает, оставив адрес. Без настроек оно не уходило, и об
+                // этом не оставалось ничего: список подписчиков рос, и снаружи это
+                // выглядело как работающая воронка.
+                //
+                // Отправку не роняем — запись в лист ожидания важнее письма. Но след
+                // обязателен, иначе «письма не приходят» неотличимо от «письма не
+                // отправлялись». Тот же дефект был в lib/build/email.ts (19.08.2026).
+                console.warn(`[planning/email] SMTP не настроен — подтверждение для ${ctx.toEmail} ` +
+                    `(модуль ${ctx.moduleId}) НЕ отправлено. Задайте SMTP_HOST, SMTP_USER, SMTP_PASS.`);
+                return;
+            }
+            const apiBase = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/$/, "");
+            const moduleUrl = `${BASE}/${ctx.moduleId}`;
+            const statusUrl = `${apiBase}/api/${ctx.moduleId}/status`;
+            const unsubUrl = ctx.unsubToken
+                ? `${apiBase}/api/${ctx.moduleId}/unsubscribe?token=${encodeURIComponent(ctx.unsubToken)}`
+                : null;
+            const body = `
+        <span class="pill">${escapeHtml(ctx.modulePhase)}</span>
+        <h2 style="margin-top:14px">You're on the ${escapeHtml(ctx.moduleTitle)} waitlist.</h2>
+        <p>${escapeHtml(ctx.moduleDescription)}</p>
+        <p>We'll notify you the moment ${escapeHtml(ctx.moduleTitle)} goes live. Estimated launch: <strong>${escapeHtml(ctx.moduleEta)}</strong>.</p>
+        <a class="btn" href="${escapeHtml(moduleUrl)}">View module page →</a>
+        <p style="margin-top:24px;font-size:12px;color:#64748b">
+          Live status JSON: <a href="${escapeHtml(statusUrl)}" style="color:#22d3ee">${escapeHtml(statusUrl)}</a>
+        </p>
+        ${unsubUrl
+                ? `<p style="font-size:12px;color:#64748b">Don't want updates? <a href="${escapeHtml(unsubUrl)}" style="color:#22d3ee">One-click unsubscribe</a>.</p>`
+                : `<p style="font-size:12px;color:#64748b">Don't want updates? Just reply with "unsubscribe" and we'll remove you.</p>`}
+      `;
+            await transport.sendMail({
+                from: (0, email_1.otpravitel)(),
+                to: ctx.toEmail,
+                subject: `You're on the ${ctx.moduleTitle} waitlist`,
+                html: layout(`${ctx.moduleTitle} waitlist`, body),
+            });
+        }
+        catch (e) {
+            console.warn(`[planning/email] send failed for ${ctx.moduleId}:`, e.message);
+        }
+    })();
+}

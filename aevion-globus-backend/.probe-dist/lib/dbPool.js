@@ -1,0 +1,91 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getPool = getPool;
+exports.закрытьПулЕслиОткрыт = закрытьПулЕслиОткрыт;
+exports.getPoolStats = getPoolStats;
+const pg_1 = __importDefault(require("pg"));
+const sentry_1 = require("./sentry");
+let pool = null;
+/**
+ * Single shared Postgres pool for all routes.
+ *
+ * Tuning rationale (production):
+ *   - max: 20 — Railway free Postgres caps at 100 connections; we keep
+ *     headroom for migrations/admin tools while serving spiky burst traffic.
+ *     Override via PG_POOL_MAX.
+ *   - idleTimeoutMillis: 30s — frees idle conns during quiet periods.
+ *   - connectionTimeoutMillis: 5s — quick fail-fast so /health flips to
+ *     degraded instead of hanging on cold-start storms.
+ *   - keepAlive: true — avoids dropped TCP after long idle behind Railway's
+ *     proxy. Without this we'd see ECONNRESET on first query after ~10min idle.
+ *   - statement_timeout (per-conn): 10s — kills runaway queries before they
+ *     pile up and exhaust the pool.
+ *
+ * Errors on idle clients are reported to Sentry (when configured) and logged,
+ * never re-thrown — pg's pool error event is fired off the request path so
+ * letting it propagate would crash the process.
+ */
+function getPool() {
+    if (!pool) {
+        const max = Number(process.env.PG_POOL_MAX ?? 20);
+        const idleMs = Number(process.env.PG_POOL_IDLE_MS ?? 30000);
+        const connMs = Number(process.env.PG_POOL_CONN_MS ?? 5000);
+        const stmtMs = Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 10000);
+        pool = new pg_1.default.Pool({
+            connectionString: process.env.DATABASE_URL,
+            max,
+            idleTimeoutMillis: idleMs,
+            connectionTimeoutMillis: connMs,
+            keepAlive: true,
+            keepAliveInitialDelayMillis: 10000,
+            application_name: "aevion-backend",
+        });
+        // Set per-connection statement timeout. This bounds how long any single
+        // query can run, protecting the pool from runaway queries.
+        pool.on("connect", (client) => {
+            client.query(`SET statement_timeout = ${stmtMs}`).catch((err) => {
+                console.warn("[dbPool] failed to set statement_timeout:", err?.message || err);
+            });
+        });
+        pool.on("error", (err) => {
+            // Idle client errors are NOT request-bound; they happen out-of-band when
+            // the DB closes a TCP connection. Logging + Sentry is enough — never throw.
+            console.warn("[dbPool] idle client error:", err?.message || err);
+            (0, sentry_1.captureException)(err, { source: "dbPool", phase: "idle" });
+        });
+        if (process.env.NODE_ENV !== "test") {
+            console.log(`[dbPool] init max=${max} idleMs=${idleMs} connMs=${connMs} stmtMs=${stmtMs}`);
+        }
+    }
+    return pool;
+}
+/**
+ * Pool stats for /health and runbook diagnostics.
+ * Returns null if pool was never initialised (no queries yet).
+ */
+/**
+ * Закрыть пул, ЕСЛИ он был открыт. Нужна при завершении по сигналу замены:
+ * `getPool()` там звать нельзя — он СОЗДАСТ пул ради того, чтобы его закрыть,
+ * и процесс, который уже уходит, успеет открыть соединения к базе.
+ *
+ * Молчит, когда пула не было: это не отказ, а честный ноль.
+ */
+async function закрытьПулЕслиОткрыт() {
+    if (!pool)
+        return;
+    const открытый = pool;
+    pool = null;
+    await открытый.end();
+}
+function getPoolStats() {
+    if (!pool)
+        return null;
+    return {
+        total: pool.totalCount,
+        idle: pool.idleCount,
+        waiting: pool.waitingCount,
+    };
+}

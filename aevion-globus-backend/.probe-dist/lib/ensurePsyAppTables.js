@@ -1,0 +1,84 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isPsyAppDbReady = isPsyAppDbReady;
+exports.getPsyAppDbError = getPsyAppDbError;
+exports.ensurePsyAppTables = ensurePsyAppTables;
+let ensured = false;
+let _dbReady = null;
+let _dbError = null;
+function isPsyAppDbReady() {
+    return _dbReady === true;
+}
+function getPsyAppDbError() {
+    return _dbError;
+}
+/**
+ * PsyApp-Deps tables — addiction recovery tracker.
+ *
+ * Three tables:
+ *   psyapp_users     — per-alias program state (addiction kind, started_at, current streak anchor)
+ *   psyapp_triggers  — log of urges/cravings with intensity 1..10 and free-text notes
+ *   psyapp_relapses  — append-only history of resets; never deleted, total_relapses on user row
+ *
+ * Falls back silently to in-memory store if DATABASE_URL is missing or DDL fails.
+ */
+async function ensurePsyAppTables(pool) {
+    if (ensured)
+        return;
+    try {
+        await pool.query("SELECT 1");
+    }
+    catch (e) {
+        _dbReady = false;
+        ensured = true;
+        _dbError = e?.message || "database unavailable";
+        console.warn(`[PsyApp] Database unavailable — falling back to in-memory store: ${_dbError}`);
+        return;
+    }
+    try {
+        await pool.query(`
+      CREATE TABLE IF NOT EXISTS psyapp_users (
+        alias            TEXT PRIMARY KEY,
+        addiction        TEXT NOT NULL CHECK (addiction IN ('alcohol','smoking','other')),
+        started_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        streak_start_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        total_relapses   INTEGER NOT NULL DEFAULT 0,
+        owner_user_id    TEXT
+      );
+    `);
+        // Owner binding: claims an alias to a JWT sub so another authenticated user
+        // can't read/mutate someone's recovery data. NULL = legacy anonymous alias
+        // (unchanged behavior). ALTER covers tables created before this column.
+        await pool.query(`ALTER TABLE psyapp_users ADD COLUMN IF NOT EXISTS owner_user_id TEXT;`);
+        await pool.query(`
+      CREATE TABLE IF NOT EXISTS psyapp_triggers (
+        id            SERIAL PRIMARY KEY,
+        alias         TEXT NOT NULL,
+        trigger_type  TEXT NOT NULL CHECK (trigger_type IN ('craving','stress','social','emotion')),
+        intensity     INTEGER NOT NULL CHECK (intensity BETWEEN 1 AND 10),
+        note          TEXT,
+        coped_how     TEXT,
+        logged_at     TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+        await pool.query(`
+      CREATE TABLE IF NOT EXISTS psyapp_relapses (
+        id           SERIAL PRIMARY KEY,
+        alias        TEXT NOT NULL,
+        relapsed_at  TIMESTAMPTZ DEFAULT NOW(),
+        reason       TEXT
+      );
+    `);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_psyapp_triggers_alias ON psyapp_triggers (alias, logged_at DESC);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_psyapp_relapses_alias ON psyapp_relapses (alias, relapsed_at DESC);`);
+        _dbReady = true;
+        ensured = true;
+        console.log("[PsyApp] Tables ready.");
+    }
+    catch (e) {
+        _dbReady = false;
+        ensured = true;
+        _dbError = e?.message || "DDL failed";
+        console.warn(`[PsyApp] Schema bootstrap failed — falling back to in-memory store: ${_dbError}`);
+    }
+}

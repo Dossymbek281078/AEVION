@@ -1,0 +1,104 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isQStoreDbReady = isQStoreDbReady;
+exports.getQStoreDbError = getQStoreDbError;
+exports.ensureQStoreTables = ensureQStoreTables;
+let ensured = false;
+let dbReady = null;
+let dbError = null;
+function isQStoreDbReady() {
+    return dbReady === true;
+}
+function getQStoreDbError() {
+    return dbError;
+}
+async function ensureQStoreTables(pool) {
+    if (ensured)
+        return;
+    try {
+        await pool.query("SELECT 1");
+    }
+    catch (e) {
+        dbReady = false;
+        ensured = true;
+        dbError = e instanceof Error ? e.message : "database unavailable";
+        console.warn(`[QStore] Database unavailable — falling back to in-memory store: ${dbError}`);
+        return;
+    }
+    try {
+        await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QStoreProduct" (
+        "id"          TEXT PRIMARY KEY,
+        "sellerId"    TEXT NOT NULL,
+        "title"       TEXT NOT NULL,
+        "description" TEXT,
+        "category"    TEXT NOT NULL DEFAULT 'template',
+        "price"       INTEGER NOT NULL DEFAULT 0,
+        "currency"    TEXT NOT NULL DEFAULT 'usd',
+        "previewUrl"  TEXT,
+        "tags"        TEXT[] DEFAULT '{}',
+        "salesCount"  INTEGER NOT NULL DEFAULT 0,
+        "avgRating"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "reviewCount" INTEGER NOT NULL DEFAULT 0,
+        "isPublic"    BOOLEAN NOT NULL DEFAULT TRUE,
+        "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+        // Back-fill columns on pre-existing tables (selected in /products and /featured)
+        await pool.query(`ALTER TABLE "QStoreProduct" ADD COLUMN IF NOT EXISTS "avgRating" DOUBLE PRECISION NOT NULL DEFAULT 0`);
+        await pool.query(`ALTER TABLE "QStoreProduct" ADD COLUMN IF NOT EXISTS "reviewCount" INTEGER NOT NULL DEFAULT 0`);
+        // Признак «избранное». Ручка переключения читала и писала его в ПАМЯТИ,
+        // а колонки не существовало: на проде товар в памяти отсутствует, и
+        // переключение отвечало «товар не найден» СВОЕМУ ЖЕ продавцу.
+        await pool.query(`ALTER TABLE "QStoreProduct" ADD COLUMN IF NOT EXISTS "featured" BOOLEAN NOT NULL DEFAULT FALSE;`);
+        await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QStoreProduct_cat_idx"
+        ON "QStoreProduct" ("category", "salesCount" DESC);
+    `);
+        await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QStorePurchase" (
+        "id"              TEXT PRIMARY KEY,
+        "productId"       TEXT NOT NULL,
+        "buyerId"         TEXT NOT NULL,
+        "amount"          INTEGER NOT NULL DEFAULT 0,
+        "status"          TEXT NOT NULL DEFAULT 'pending',
+        "stripeSessionId" TEXT,
+        "paidAt"          TIMESTAMPTZ,
+        "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+        await pool.query(`ALTER TABLE "QStorePurchase" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'pending'`);
+        await pool.query(`ALTER TABLE "QStorePurchase" ADD COLUMN IF NOT EXISTS "stripeSessionId" TEXT`);
+        await pool.query(`ALTER TABLE "QStorePurchase" ADD COLUMN IF NOT EXISTS "paidAt" TIMESTAMPTZ`);
+        await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QStorePurchase_buyer_idx"
+        ON "QStorePurchase" ("buyerId");
+    `);
+        await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QStoreReview" (
+        "id"        TEXT PRIMARY KEY,
+        "productId" TEXT NOT NULL,
+        "userId"    TEXT NOT NULL,
+        "rating"    INTEGER NOT NULL,
+        "comment"   TEXT,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE ("productId", "userId")
+      );
+    `);
+        await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QStoreReview_product_idx"
+        ON "QStoreReview" ("productId", "createdAt" DESC);
+    `);
+        dbReady = true;
+        console.log("[QStore] Tables ready");
+    }
+    catch (e) {
+        dbReady = false;
+        dbError = e instanceof Error ? e.message : "table creation failed";
+        console.warn(`[QStore] Could not create tables — falling back to in-memory: ${dbError}`);
+    }
+    finally {
+        ensured = true;
+    }
+}

@@ -1,0 +1,647 @@
+"use strict";
+/**
+ * Lemon Squeezy SUBSCRIPTION webhook → plan provisioning.
+ *
+ * Distinct from the bureau one-off payment webhook (/api/bureau/payment/webhook,
+ * which confirms a single Verified-tier purchase). This endpoint handles
+ * recurring bundle / All-Access subscriptions and maps them to a user plan:
+ *
+ *   subscription_created | subscription_updated(active) |
+ *   subscription_resumed | subscription_unpaused
+ *     → provisionSubscription(...) — writes data/subscriptions.jsonl +
+ *       welcome email. /api/pricing/subscription/me then reports the plan.
+ *
+ *   subscription_cancelled | subscription_expired | subscription_paused
+ *     → writes a tierId:"free" downgrade record so /subscription/me reflects it.
+ *
+ * Activation tier (variant_id → reference → tier):
+ *   - LEMON_SQUEEZY_VARIANT_MEDIUM_* → "medium" (modules = MEDIUM_BUNDLE)
+ *   - LEMON_SQUEEZY_VARIANT_FULL_*   → "full"   (modules = [] == all)
+ *   - LEMON_SQUEEZY_VARIANT_LITE_*   → "lite"   (modules = [], 1 product chosen in cabinet)
+ *   - LEMON_SQUEEZY_VARIANT_<app>_*  → app_*    (доступ к одному модулю)
+ *   - unrecognised variant id        → 500 `unmapped_variant`, НИЧЕГО не выдаём
+ *
+ * 🔴 Про «unrecognised → lite» (было до 12.08.2026). Дефолт выглядел
+ * безопасным, а был самым дорогим: DevHub Studio Pro продаётся подпиской
+ * $149/мес, ссылки `app_devhub` в таблице не было, обратный поиск возвращал
+ * null — и покупатель за $149 получал доступ уровня $19. Ответ при этом 200,
+ * то есть магазин не повторял доставку и следа не оставалось. Тариф наугад
+ * не выдаём: неизвестный вариант — это «мы не знаем, что человек купил»,
+ * и это должно быть видно. Охраняется `tests/lemonSqueezyWebhookEntitlement.test.ts`.
+ *
+ * Signature: HMAC-SHA256(rawBody, LEMON_SQUEEZY_WEBHOOK_SECRET) compared to
+ * the x-signature header (hex). See
+ * https://docs.lemonsqueezy.com/help/webhooks/signing-requests
+ *
+ * Env:
+ *   LEMON_SQUEEZY_WEBHOOK_SECRET — required; if unset the route is a no-op
+ *     stub (200 OK, logs) so a misconfigured deploy doesn't 500 on every hit.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.lemonSqueezyWebhookRouter = void 0;
+const express_1 = require("express");
+const node_crypto_1 = require("node:crypto");
+const provisioning_1 = require("./provisioning");
+const billingPeriod_1 = require("../lib/payment/billingPeriod");
+const lemonSqueezyVariants_1 = require("../data/lemonSqueezyVariants");
+const pricing_1 = require("../data/pricing");
+const platform_1 = require("../lib/sentry/platform");
+const dbPool_1 = require("../lib/dbPool");
+const webhookDedup_1 = require("../lib/webhookDedup");
+const safeError_1 = require("../lib/safeError");
+const appEntitlements_1 = require("../lib/appEntitlements");
+const paymentConfirmedEvent_1 = require("../lib/payment/paymentConfirmedEvent");
+const proofPilot_1 = require("./proofPilot");
+/**
+ * Запись прав живёт в lib/appEntitlements и НЕ дублируется здесь.
+ *
+ * Копия была, и она разошлась с оригиналом ровно так, как предсказывал
+ * комментарий в самой библиотеке: молча и в трёх местах сразу.
+ *   • не создавала таблицу прав — первая же покупка на базе без миграции
+ *     падала в 500 и повторялась вечно;
+ *   • не приводила адрес к нижнему регистру, а ЧТЕНИЕ прав приводит —
+ *     покупка с адресом Ivan@Mail.ru не находилась никогда;
+ *   • не сбрасывала кэш прав, и только что заплативший до минуты упирался
+ *     в отказ.
+ *
+ * Через Gumroad те же покупки шли через библиотеку и работали. Один и тот
+ * же товар выдавался по-разному в зависимости от кассы.
+ */
+async function upgradeDevHubByEmail(email, tier) {
+    const pool = (0, dbPool_1.getPool)();
+    try {
+        await pool.query(`
+      INSERT INTO "DevHubEmailTier" ("email","tier","updatedAt") VALUES ($1,$2,NOW())
+      ON CONFLICT ("email") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+    `, [email, tier]);
+        const ur = await pool.query(`SELECT "id" FROM "AEVIONUser" WHERE LOWER("email")=$1 LIMIT 1`, [email]);
+        if (ur.rows[0]?.id) {
+            await pool.query(`
+        INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+        ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+      `, [ur.rows[0].id, tier]);
+        }
+    }
+    catch (err) {
+        console.error("[ls/devhub] upgradeByEmail error:", err instanceof Error ? err.message : err);
+        throw err; // см. комментарий в upsertAppSubscription — молчаливый 200 недопустим
+    }
+}
+const capture = (0, platform_1.makeServiceCapture)("lemonSqueezyWebhook");
+exports.lemonSqueezyWebhookRouter = (0, express_1.Router)();
+const ACTIVATE_EVENTS = new Set([
+    "subscription_created",
+    "subscription_updated",
+    "subscription_resumed",
+    "subscription_unpaused",
+]);
+const DEACTIVATE_EVENTS = new Set([
+    "subscription_cancelled",
+    "subscription_expired",
+    "subscription_paused",
+]);
+// Dedup survives restarts (see lib/webhookDedup): LS delivers at-least-once.
+// Key on subscription id + event + the renews/ends timestamp so a redelivery is
+// a no-op but a genuine later state change (new renews_at) still provisions.
+//
+// This used to be a process-lifetime Set, and the comment here said a missed
+// dedup was tolerable because /subscription/me is latest-wins. That reasoning
+// only covered the subscription record — a second provisioning run also sends
+// the customer a second welcome email, which no reader tolerates.
+function modulesForReference(ref) {
+    if (!ref)
+        return [];
+    // 🔴 ПУСТОЙ СПИСОК — ЭТО НЕ ПОТЕРЯ ПРАВ, и комментарий здесь пришлось
+    // переписать 29.09.2026, потому что прежний описывал мир до 15.09 и увёл
+    // меня в ложную «дыру»: он говорил «lite → [] (1 продукт на выбор,
+    // выбирается в кабинете после оплаты)». Я прочитал это как действующее
+    // правило, нашёл, что ручки выбора не существует, и собрался отказывать в
+    // покупке Lite без выбранного модуля. Такая правка отбила бы ВСЕ покупки
+    // планеты Lite: страница цен посылает `{tierId:"lite"}` без модуля.
+    //
+    // Как устроено на самом деле (planGate.ts): с 15.09.2026 тариф — это СРОК,
+    // а не набор. `normalizeTier` превращает lite/medium/pro/full/max в `full`,
+    // `resolveUserPlan` кладёт в план уже нормализованное значение, а
+    // `isModuleEntitled` первой строкой отвечает true для `full`. То есть доступ
+    // даёт ТАРИФ, и список модулей для него не читается вовсе.
+    //
+    // Список остаётся заполненным на одном пути и только там, где он осмыслен:
+    // покупка отдельного модуля запасным вариантом (`custom_data.module`,
+    // checkout.ts) — по нему видно, ЗА ЧТО заплатили, и его читает письмо.
+    return [];
+}
+function verifySignature(rawBody, presented, secret) {
+    if (!presented)
+        return false;
+    const expected = (0, node_crypto_1.createHmac)("sha256", secret).update(rawBody, "utf8").digest("hex");
+    const a = Buffer.from(presented);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length)
+        return false;
+    try {
+        return (0, node_crypto_1.timingSafeEqual)(a, b);
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Состояние вебхука — GET, для человека и для сторожа.
+ *
+ * Раньше ручки не было вовсе, и снаружи нельзя было отличить рабочий вебхук
+ * от заглушки. Разница при этом денежная: без секрета POST ниже отвечает
+ * `{ok:true, mode:"stub"}` — то есть говорит магазину «доставлено», ничего не
+ * провижинит, и повторной доставки не будет. Покупка исчезает молча, а через
+ * этот вебхук идут ВСЕ семь товаров каталога.
+ *
+ * Секрет наружу не отдаётся — только признак наличия. Сделано по образцу
+ * такой же ручки у Gumroad, чтобы у обоих денежных каналов ответ читался
+ * одинаково.
+ */
+exports.lemonSqueezyWebhookRouter.get("/webhook", (_req, res) => {
+    const configured = Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
+    res.json({
+        ok: true,
+        endpoint: "lemon squeezy webhook",
+        accepts: "POST application/json with x-signature",
+        signed: configured,
+        // Поле названо ОТРИЦАНИЕМ и означает ровно то, что измеряет.
+        //
+        // Сперва здесь стояло `provisioningLive: configured`, и это обещало
+        // больше, чем проверено: секрет задан — ещё не значит, что провижининг
+        // работает (нужны и база, и разбор варианта, и живой Postgres). Поле с
+        // именем шире собственного замера — тот самый класс, из-за которого
+        // `/health.qsign` однажды прочитали как состояние всей подписи.
+        //
+        // `true` здесь утверждает узкое и проверенное: секрета нет, POST ниже
+        // отвечает магазину «доставлено» и НЕ провижинит. Обратное не обещает,
+        // что всё хорошо, — только что этой конкретной поломки нет.
+        purchasesDropped: !configured,
+        mode: configured ? "live" : "stub",
+        info: "GET is a status check. Without LEMON_SQUEEZY_WEBHOOK_SECRET the POST route is a no-op stub.",
+    });
+});
+exports.lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
+    const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim();
+    if (!secret) {
+        // Отвечаем 200 намеренно: 5xx заставил бы магазин повторять доставку, а
+        // при СОЗНАТЕЛЬНО пустом секрете (превью, локальный запуск) это был бы
+        // поток повторов. Но молчать нельзя: в бою это означает, что оплаченная
+        // покупка исчезла и никто не узнал. Поэтому след громкий — ошибка в
+        // журнал и в Sentry, а не строчка console.log среди тысяч других.
+        console.error("[ls/webhook] STUB — LEMON_SQUEEZY_WEBHOOK_SECRET unset: покупка НЕ провижинена и повтора не будет");
+        capture(new Error("lemonSqueezy webhook received while unconfigured — purchase dropped"), { route: "lemonsqueezy/webhook", mode: "stub" });
+        return res.json({ ok: true, mode: "stub" });
+    }
+    const rawBuf = req.rawBody;
+    const rawBody = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
+    const sig = req.headers["x-signature"] ?? undefined;
+    if (!verifySignature(rawBody, sig, secret)) {
+        console.error("[ls/webhook] signature mismatch");
+        return res.status(401).json({ ok: false, error: "signature mismatch" });
+    }
+    let payload;
+    try {
+        payload = JSON.parse(rawBody);
+    }
+    catch {
+        return res.status(400).json({ ok: false, error: "body is not JSON" });
+    }
+    const event = (payload.meta?.event_name ?? "").toLowerCase();
+    const attrs = payload.data?.attributes ?? {};
+    // 19.10.2026: почта аккаунта из custom_data (её кладёт наша касса по Bearer покупателя)
+    // сильнее адреса, набранного в кассе: доступ открывается тому, кто вошёл и нажал
+    // «оплатить». Без неё — как прежде: user_email кассы, затем custom_data.email.
+    const почтаАккаунта = String(payload.meta?.custom_data?.accountEmail ?? "").trim().toLowerCase();
+    const email = (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(почтаАккаунта)
+        ? почтаАккаунта
+        : String(attrs.user_email ?? payload.meta?.custom_data?.email ?? "")).trim().toLowerCase();
+    if (event === "order_created" || event === "order_refunded") {
+        // Возврат ЗАБИРАЕТ то, что выдала покупка. До 13.08.2026 слова «refund» в
+        // этом обработчике не было вовсе: деньги вернули, а доступ к DevHub Pro
+        // оставался навсегда. У Gumroad это обработано (`refunded → free`), у
+        // Lemon Squeezy — нет; асимметрия нашлась сверкой двух рельсов.
+        //
+        // Осознанно НЕ трогаем `subscription_payment_refunded`: возврат одного
+        // платежа не означает конца подписки (продавец может вернуть один счёт и
+        // продолжить обслуживание), и снимать доступ по нему — значит отключать
+        // платящего. Это решение о политике, а не о коде.
+        const revoke = event === "order_refunded";
+        // DevHub Studio Pro. В магазине это ПОДПИСКА, поэтому основной путь выдачи
+        // доступа — ветка subscription_* ниже; здесь остаётся разовая покупка того
+        // же варианта. Оба пути ведут в одну и ту же выдачу, повтор безвреден
+        // (upgradeDevHubByEmail — upsert).
+        // Через ОБЩУЮ карту, а не напрямую из окружения: имя переменной живёт в
+        // data/lemonSqueezyVariants.ts, и прямое чтение было вторым источником того
+        // же факта. Переименуй кто-нибудь переменную в карте — прямое чтение
+        // сохранило бы старое имя, выдача тарифа за $149 тихо перестала бы
+        // срабатывать, а заплативший не получил бы ничего.
+        const studioVariant = (0, lemonSqueezyVariants_1.legacyStudioProVariantId)();
+        const variantId = String(attrs.variant_id ?? "");
+        if (studioVariant && variantId === studioVariant && email) {
+            const tier = revoke ? "free" : "pro";
+            try {
+                await upgradeDevHubByEmail(email, tier);
+            }
+            catch (err) {
+                capture(err);
+                console.error(`[ls/webhook] ${event} devhub tier NOT set for ${email}:`, err instanceof Error ? err.message : err);
+                return res.status(500).json({ ok: false, error: "devhub_upgrade_failed" });
+            }
+            console.log(`[ls/webhook] ${event} devhub-studio-pro → ${tier} for ${email}`);
+            return res.json({
+                ok: true,
+                action: revoke ? "devhub_studio_pro_revoked" : "devhub_studio_pro_activated",
+                email,
+            });
+        }
+        // 🔴 22.09.2026. Досюда доходит РАЗОВЫЙ заказ, который не является прежним
+        // DevHub Studio Pro. Если его вариант при этом опознаётся как позиция
+        // лестницы — значит товар в кабинете завели разовым платежом вместо
+        // подписки, и человек заплатил, а доступ ему не выдан: выдача живёт в
+        // ветке subscription_* ниже. Прежде такой случай отвечал «ignored» и не
+        // оставлял НИ СЛЕДА — снаружи это неотличимо от успеха, а искать пришлось
+        // бы по жалобе покупателя.
+        //
+        // Доступ здесь намеренно НЕ выдаём: сроки и продление считает ветка
+        // подписки, и половинчатая выдача без срока создала бы право без конца.
+        // Правильное действие — переделать товар в кабинете в подписку; наша
+        // задача сделать это ВИДИМЫМ немедленно.
+        // 129б: пилот $490 с /proof — разовый товар, доступов не выдаёт: письмо на data@,
+        // строка в журнал заявок, событие оплаты в воронку. Сверка по id варианта.
+        const пилот = (0, lemonSqueezyVariants_1.resolveLemonSqueezyVariant)(lemonSqueezyVariants_1.PILOT_490_REFERENCE);
+        if (пилот && variantId === пилот) {
+            const custom = (payload.meta?.custom_data ?? {});
+            const итог = await (0, proofPilot_1.obrabotatZakazPilota)({
+                event,
+                revoke,
+                email,
+                orderId: payload.data?.id ?? null,
+                totalCents: attrs.total != null && Number.isFinite(Number(attrs.total)) ? Number(attrs.total) : null,
+                channel: custom.channel ?? null,
+                post: custom.post ?? null,
+                testMode: Boolean(payload.meta?.test_mode),
+            });
+            console.log(`[ls/webhook] ${event} pilot_490 → ${revoke ? "refunded" : "paid"} ${email || "(без почты)"} mailed=${итог.mailed} journaled=${итог.journaled}`);
+            return res.json({ ok: true, action: revoke ? "pilot_490_refunded" : "pilot_490_paid", email, ...итог });
+        }
+        const позиция = (0, lemonSqueezyVariants_1.referenceForVariantId)(variantId);
+        if (позиция && !revoke) {
+            const беда = new Error(`[ls/webhook] РАЗОВЫЙ заказ по позиции лестницы ${позиция} (variant ${variantId}) — ` +
+                "доступ НЕ выдан: выдача идёт только по подписке. Товар в кабинете заведён " +
+                "разовым платежом, его надо пересоздать подпиской с интервалом, равным сроку.");
+            capture(беда);
+            console.error(беда.message, email ? `покупатель: ${email}` : "почта не пришла");
+            return res.status(200).json({
+                ok: true,
+                ignored: event,
+                warning: "one_time_order_for_term_reference",
+                reference: позиция,
+            });
+        }
+        return res.json({ ok: true, ignored: event });
+    }
+    if (!event.startsWith("subscription_")) {
+        return res.json({ ok: true, ignored: event || "unknown" });
+    }
+    if (!email) {
+        // 🔴 ОТКАЗ ПО ДЕНЬГАМ ОБЯЗАН БЫТЬ СЛЫШНЫМ У НАС, а не только у кассы.
+        //
+        // Прежде здесь стоял один 400. Со стороны Lemon Squeezy это выглядит как
+        // повтор доставки, и пока повторы идут, кажется, что всё под контролем. Но
+        // повторы кончаются, а у нас об оплате не остаётся НИ ОДНОГО следа: ни в
+        // журнале, ни в Sentry. Человек заплатил, доступ не выдан, и мы об этом
+        // никогда не узнаем — это тот же класс, что «молчаливый отказ выглядит
+        // успехом», только дороже: здесь уже прошли деньги.
+        //
+        // Адреса в сообщении нет, потому что его и не пришло; называем номер заказа,
+        // по нему покупателя находят в кабинете кассы.
+        console.error(`[ls/webhook] ${event}: ОПЛАТА БЕЗ АДРЕСА, выдать некому — заказ ${payload.data?.id ?? "?"}, вариант ${attrs.variant_id ?? "?"}`);
+        capture(new Error(`ls_paid_without_email:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+        return res.status(400).json({ ok: false, error: "missing user_email" });
+    }
+    // Dedup
+    const dedupKey = `${payload.data?.id ?? "?"}:${event}:${attrs.renews_at ?? attrs.ends_at ?? ""}`;
+    if ((0, webhookDedup_1.hasSeenWebhook)("lemonsqueezy", dedupKey)) {
+        return res.json({ ok: true, deduped: true });
+    }
+    (0, webhookDedup_1.markWebhookSeen)("lemonsqueezy", dedupKey);
+    try {
+        const ref = (0, lemonSqueezyVariants_1.referenceForVariantId)(attrs.variant_id);
+        const lsSubId = payload.data?.id ?? undefined;
+        // СУММА. Сверять её точным равенством нельзя: скидочные коды делают
+        // меньшую сумму законной, а у годового периода она другая по устройству.
+        // Поэтому здесь только два случая, у которых нет законного прочтения.
+        //
+        // Цену берём из ЕДИНСТВЕННОГО источника — data/pricing.ts, тем же путём,
+        // которым её показывает витрина. Второй список цен на бэкенде разошёлся бы
+        // с первым молча.
+        // Проверка на undefined/null ИЗБЫТОЧНА: Number(undefined) даёт NaN, а он не
+        // проходит isFinite ниже. Мутация, снимающая её, поэтому и не ловится — это
+        // честный результат, а не дыра. Условие оставлено: оно называет намерение
+        // (отсутствие суммы у события подписки — норма, а не тревога) и стоит ноль.
+        // ФАКТИЧЕСКИ списанная сумма, в долларах. Считаем один раз: её читают
+        // и проверки ниже, и запись подписки.
+        const paidCents = attrs.total === undefined || attrs.total === null ? null : Number(attrs.total);
+        const paidUsd = paidCents !== null && Number.isFinite(paidCents) ? paidCents / 100 : undefined;
+        if (attrs.total !== undefined && attrs.total !== null) {
+            const paid = Number(attrs.total);
+            const tier = pricing_1.TIERS.find((t) => t.id === (0, lemonSqueezyVariants_1.tierForLemonSqueezyReference)(ref));
+            const потолокUsd = (0, lemonSqueezyVariants_1.priceForReference)(ref);
+            const потолокCents = потолокUsd != null ? Math.round(потолокUsd * 100) : null;
+            if (Number.isFinite(paid) && paid === 0) {
+                // Ноль у платного тарифа — это не «дешевле», а «доступ бесплатно».
+                console.warn(`[ls/webhook] ${event}: сумма 0 при тарифе ${tier?.id ?? "?"} — доступ выдаётся БЕСПЛАТНО ` +
+                    `(купон на 100% или ошибка настройки варианта)`);
+                capture(new Error(`ls_zero_total_provisioned:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+            }
+            else if (Number.isFinite(paid) && потолокCents !== null && paid > потолокCents) {
+                // Порог — годовая стоимость по МЕСЯЧНОЙ цене. Годовой тариф у нас
+                // дешевле двенадцати месяцев, скидки только уменьшают, поэтому всё,
+                // что выше этой границы, законного прочтения не имеет: с человека
+                // взяли больше, чем мы где-либо обещали. И он этого не увидит — наш
+                // экран успеха показывает ОЖИДАЕМУЮ сумму из адреса возврата.
+                console.warn(`[ls/webhook] ${event}: списано ${paid} при потолке ${потолокCents} для тарифа ` +
+                    `${tier?.id ?? "?"} — с покупателя взяли БОЛЬШЕ обещанного`);
+                capture(new Error(`ls_overcharge:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+            }
+        }
+        // ── Individual app subscription (app_* variants) ──────────────────
+        if ((0, lemonSqueezyVariants_1.isAppReference)(ref)) {
+            const appSlug = (0, lemonSqueezyVariants_1.appSlugForReference)(ref);
+            if (ACTIVATE_EVENTS.has(event)) {
+                await (0, appEntitlements_1.upsertAppSubscription)(email, appSlug, "active", lsSubId, payload.meta?.custom_data?.bureauIntentId);
+                // У DevHub доступ открывает НЕ ТОЛЬКО строка AppSubscription: у него есть
+                // свой тариф в DevHubTier/DevHubEmailTier, его и ставим отдельно.
+                //
+                // Формулировка «строку прав пока никто не читает» здесь была и устарела:
+                // её читает planGate (hasActiveAppSubscription) и маршрут /api/apps/access.
+                // Комментарий, объявляющий живой механизм мёртвым, опаснее отсутствия
+                // комментария: по нему следующий заведёт второй такой же.
+                if (appSlug === "devhub")
+                    await upgradeDevHubByEmail(email, "pro");
+                console.log(`[ls/webhook] ${event} → app_sub activated: ${appSlug} for ${email}`);
+                // Деньги дошли и купленное выдано — только ТЕПЕРЬ это «оплатили» в
+                // воронке. Почту не пишем: в хранилище воронки личных данных нет.
+                (0, paymentConfirmedEvent_1.записатьПодтверждённуюОплату)({
+                    testMode: payload.meta?.test_mode === true,
+                    source: "lemonsqueezy",
+                    tier: appSlug,
+                    app: appSlug,
+                    reference: ref ?? null,
+                    event,
+                    email,
+                });
+                return res.json({ ok: true, action: "app_activated", appSlug, email });
+            }
+            if (DEACTIVATE_EVENTS.has(event)) {
+                // ПОРЯДОК ЗДЕСЬ ЗНАЧИМ, и он обратный порядку активации.
+                //
+                // Записей две: строка прав (AppSubscription) и тариф, который РЕАЛЬНО
+                // открывает доступ (DevHubTier/DevHubEmailTier). Строку прав читает
+                // planGate. Между ними возможен сбой, и тогда важно, в какую
+                // сторону мы промахнёмся.
+                //
+                // Было: сперва «отменено» в правах, потом снятие тарифа. Упади второе
+                // — права говорят «отменено», а доступ ОСТАЁТСЯ. Магазин повторит
+                // доставку (ниже 500 и освобождение ключа дедупликации), но если
+                // повторы кончатся, платный доступ останется навсегда после отмены.
+                //
+                // Стало: сперва снимаем тариф. Упади вторая запись — доступа уже нет,
+                // а строка прав всего лишь отстала, и её поправит повтор. Отказ
+                // направлен в безопасную сторону.
+                //
+                // На активации порядок остаётся прежним намеренно: там безопасная
+                // сторона другая — человек заплатил, и открыть доступ раньше, чем
+                // дописать учёт, для него лучше.
+                if (appSlug === "devhub")
+                    await upgradeDevHubByEmail(email, "free");
+                await (0, appEntitlements_1.upsertAppSubscription)(email, appSlug, "cancelled", lsSubId);
+                console.log(`[ls/webhook] ${event} → app_sub cancelled: ${appSlug} for ${email}`);
+                return res.json({ ok: true, action: "app_cancelled", appSlug, email });
+            }
+            return res.json({ ok: true, ignored: event });
+        }
+        // ── Platform tier subscription (tier_* variants) ─────────────────
+        if (ACTIVATE_EVENTS.has(event)) {
+            // Товар, которого нет ни в одной переменной окружения, — это НЕ повод
+            // выдать тариф наугад. Прежде здесь срабатывал дефолт "lite": подписка за
+            // $149 или $250 молча превращалась в доступ уровня $19, и магазин получал
+            // 200 OK, то есть повтора и следа не было. Отвечаем 500 — доставка
+            // повторится, событие останется видимым в панели магазина.
+            if (!ref) {
+                const err = new Error(`unmapped LS variant_id=${String(attrs.variant_id ?? "?")} (email=${email}, event=${event}) — ` +
+                    `добавьте переменную варианта в data/lemonSqueezyVariants.ts, тариф наугад не выдаём`);
+                capture(err);
+                console.error(`[ls/webhook] ${err.message}`);
+                // Отпускаем ключ дедупликации: иначе повторная доставка после
+                // нашего 500 была бы отброшена как «уже видели», и покупка
+                // осталась бы без выдачи навсегда. Тот же вызов, что в общем
+                // обработчике ошибок ниже — хранилище дедупликации теперь
+                // переживает перезапуск (lib/webhookDedup), и in-memory Set,
+                // на который эта строка ссылалась, больше не существует.
+                (0, webhookDedup_1.releaseWebhookKey)("lemonsqueezy", dedupKey);
+                return res.status(500).json({ ok: false, error: "unmapped_variant", variantId: String(attrs.variant_id ?? "") });
+            }
+            /*
+             * 🔴 19.10.2026, вариант «Б»: план на срок приходит вариантом tier_lite
+             * (помесячно) или tier_<t> (вперёд) с custom_data {term, billing}. Ступень —
+             * из term, но ТОЛЬКО когда списанная сумма равна ожидаемой для пары: иначе
+             * custom_data с чужим term открыл бы год за цену месяца. Сумма меньше
+             * ожидаемой или пара неизвестна — отказ без выдачи (409/400), ключ
+             * дедупликации отпускаем, чтобы повтор не пропал.
+             */
+            const планCd = payload.meta?.custom_data;
+            const планЕсть = планCd?.term !== undefined || планCd?.billing !== undefined;
+            let планTerm = null;
+            if (планЕсть) {
+                const ожидаемо = (0, lemonSqueezyVariants_1.expectedPlanetChargeUsd)(планCd?.term, планCd?.billing);
+                if (ожидаемо === null || typeof планCd?.term !== "string" || !(0, pricing_1.isTermTier)(планCd.term)) {
+                    (0, webhookDedup_1.releaseWebhookKey)("lemonsqueezy", dedupKey);
+                    capture(new Error(`ls_plan_custom_data_invalid:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+                    console.error(`[ls/webhook] ${event}: custom_data плана непонятен (term=${String(планCd?.term)}, billing=${String(планCd?.billing)}) — доступ НЕ выдан`);
+                    return res.status(400).json({ ok: false, error: "plan_custom_data_invalid" });
+                }
+                if (paidUsd !== undefined && paidUsd + 0.005 < ожидаемо) {
+                    (0, webhookDedup_1.releaseWebhookKey)("lemonsqueezy", dedupKey);
+                    capture(new Error(`ls_plan_amount_mismatch:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+                    console.error(`[ls/webhook] ${event}: план ${планCd.term}/${String(планCd.billing)} ждёт $${ожидаемо}, списано $${paidUsd} — доступ НЕ выдан`);
+                    return res.status(409).json({ ok: false, error: "plan_amount_mismatch", expectedUsd: ожидаемо, paidUsd });
+                }
+                планTerm = планCd.term;
+            }
+            const tierId = планTerm && (0, pricing_1.isTermTier)(планTerm) ? планTerm : (0, lemonSqueezyVariants_1.tierForLemonSqueezyReference)(ref);
+            const customModule = payload.meta?.custom_data?.module;
+            // 🔴 ПОКУПКА ОДНОГО МОДУЛЯ ЧЕРЕЗ ВАРИАНТ ТАРИФА — НЕ ТАРИФ.
+            //
+            // У четырёх модулей нет своего товара в кассе, и они продаются вариантом
+            // «AEVION Planet — Lite» с подменой цены: QSkyway $16, QRight и QSign $24,
+            // Биржа $40 (checkout.ts, fallbackVariantForReference). Слаг купленного
+            // приложения приезжает в custom_data.module.
+            //
+            // Утечка, замеренная 29.09.2026: раньше такая покупка писалась
+            // ПЛАТФОРМЕННЫМ тарифом `lite`, а с 15.09 тариф — это срок, и
+            // normalizeTier превращает lite в `full`; isModuleEntitled при full
+            // отвечает true на любой модуль. То есть за $16 покупатель получал всю
+            // планету, которая стоит $400 в месяц, включая Multichat за $40 —
+            // единственный модуль, реально закрытый стеной. Ветка `plan.tier ===
+            // "lite"`, которая должна была ограничить доступ выбранным модулем, для
+            // нормализованного плана недостижима.
+            //
+            // Пишем то, что продали: право на ОДИН модуль, тем же путём, которым
+            // выдаются покупки приложений со своим товаром (upsertAppSubscription).
+            // Платформенную подписку при этом не создаём вовсе — иначе тариф снова
+            // откроет всё. Отмена приходит ниже, в DEACTIVATE, и снимает то же право.
+            if (tierId === "lite" && customModule) {
+                await (0, appEntitlements_1.upsertAppSubscription)(email, String(customModule), "active", lsSubId, payload.meta?.custom_data?.bureauIntentId);
+                if (String(customModule) === "devhub")
+                    await upgradeDevHubByEmail(email, "pro");
+                console.log(`[ls/webhook] ${event} → один модуль: ${String(customModule)} for ${email}`);
+                (0, paymentConfirmedEvent_1.записатьПодтверждённуюОплату)({
+                    testMode: payload.meta?.test_mode === true,
+                    source: "lemonsqueezy",
+                    tier: String(customModule),
+                    app: String(customModule),
+                    reference: ref ?? null,
+                    event,
+                    email,
+                    path: "fallback_single_module",
+                });
+                return res.json({ ok: true, action: "app_activated", appSlug: String(customModule), email });
+            }
+            const modules = modulesForReference(ref);
+            // Канал приходит из ссылки: withChannel() кладёт его в
+            // checkout[custom][channel] для LemonSqueezy. До 19.08.2026 вебхук его
+            // не читал, и метка терялась на последнем шаге: клик по «Купить» мы
+            // видели в своих событиях, а связать оплату с роликом было нечем.
+            //
+            // Пишем в ОТДЕЛЬНОЕ поле `channel`, а не суффиксом к `source`.
+            // Сперва сделал суффиксом — у LemonSqueezy дословных сравнений нет, и
+            // казалось безопасным. Но у Gumroad такие сравнения есть: страница
+            // /revenue рисует бейдж провайдера через `s.source === "gumroad"`.
+            // Значит `source` — это «через какую кассу прошли деньги», а канал —
+            // другая ось, и складывать их в одно поле нельзя ни там, ни здесь.
+            const channel = payload.meta?.custom_data?.channel?.trim().slice(0, 40);
+            // ПЕРИОД БЕРЁМ ИЗ ССЫЛКИ. Здесь было зашито "monthly", а магазин
+            // продаёт годовые тарифы (LEMON_SQUEEZY_VARIANT_{LITE,MEDIUM,FULL,
+            // PLANET}_ANNUAL — см. data/lemonSqueezyVariants.ts), и витрина
+            // строит ссылку `tier_${id}_annual`. То есть годовая покупка
+            // записывалась месячной, срок доступа считался на месяц, а
+            // следующее событие от кассы пришло бы через одиннадцать.
+            //
+            // Тот же дефект был у gumroad и починен 03.09.2026; у paybox и
+            // paypal правило было изначально. Четвёртая касса отстала молча,
+            // потому что правило жило тремя копиями — теперь оно одно
+            // (lib/payment/billingPeriod).
+            // ТЕСТОВЫЙ РЕЖИМ КАССЫ. LemonSqueezy шлёт `meta.test_mode: true` для покупок
+            // из тестового режима. Замер 20.09.2026: слова `test_mode` не было в бэкенде
+            // НИ РАЗУ — такая покупка провизионилась как настоящая и попадала в выручку.
+            //
+            // Доступ выдаём (в этом и смысл проверки — пройти цепочку целиком: подпись,
+            // права, письмо), но признак кладём В ДАННЫЕ, чтобы отличить проверку от
+            // выручки. Оговорка в комментарии этого не даёт — нужен именно флаг в записи.
+            const testMode = payload.meta?.test_mode === true;
+            if (testMode) {
+                console.warn("[lemonsqueezy] ТЕСТОВАЯ покупка (meta.test_mode): ref=%s — доступ выдан, в выручку не считать", ref ?? "?");
+            }
+            const termMonths = планTerm && (0, pricing_1.isTermTier)(планTerm) ? pricing_1.TERM_MONTHS[планTerm] : (0, billingPeriod_1.termMonthsForReference)(ref ?? "");
+            const result = await (0, provisioning_1.provisionSubscription)({
+                email,
+                tierId,
+                termMonths,
+                modules,
+                source: "lemonsqueezy",
+                ...(testMode ? { testMode: true } : {}),
+                // ФАКТИЧЕСКИ списанное, а не то, что мы ожидали. Поле amountUsd в записи
+                // подписки существовало давно и не заполнялось НИКЕМ — оно молча
+                // исчезло бы, и никто бы не заметил.
+                //
+                // Пишем его сейчас не впрок: у него есть названный читатель. Панель
+                // «выручка по каналам» соседнего окна до сих пор считает сумму из
+                // АДРЕСА ВОЗВРАТА, то есть нашу ожидаемую. Пока сверки не было, разница
+                // выглядела теоретической; теперь известно, что она реальна, и две
+                // колонки рядом — ожидаемая и списанная — полезнее одной: расхождение
+                // между ними и есть сигнал.
+                ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
+                providerPaymentId: lsSubId,
+                // Наш идентификатор намерения: уходил в кассу и терялся здесь, из-за
+                // чего страница после оплаты не могла подтвердить выдачу (см. поле
+                // bureauIntentId в provisioning.ts).
+                ...(payload.meta?.custom_data?.bureauIntentId
+                    ? { bureauIntentId: String(payload.meta.custom_data.bureauIntentId) }
+                    : {}),
+                ...(channel ? { channel } : {}),
+            });
+            console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
+            // То же, что у ветки приложений: ступень «оплатили» двигает подтверждение
+            // кассы, а не загрузка страницы «спасибо».
+            (0, paymentConfirmedEvent_1.записатьПодтверждённуюОплату)({
+                testMode: payload.meta?.test_mode === true,
+                source: "lemonsqueezy",
+                tier: tierId,
+                reference: ref ?? null,
+                event,
+                email,
+            });
+            return res.json({ ok: true, action: "activated", tierId, subscriptionId: result.subscription.id });
+        }
+        if (DEACTIVATE_EVENTS.has(event)) {
+            // Симметрия к активации выше: покупка ОДНОГО модуля через вариант тарифа
+            // платформенной подписки не создаёт, значит и гасить надо право на модуль,
+            // а не понижать тариф. Без этой ветки отмена уходила бы в понижение
+            // несуществующей подписки, а право на модуль оставалось активным навсегда
+            // — ровно тот дефект, который 12.08.2026 уже находили у DevHub Studio Pro.
+            const отменяемыйМодуль = payload.meta?.custom_data?.module;
+            if ((0, lemonSqueezyVariants_1.tierForLemonSqueezyReference)(ref) === "lite" && отменяемыйМодуль) {
+                // Порядок как в ветке приложений: сперва отнять доступ, потом учёт.
+                if (String(отменяемыйМодуль) === "devhub")
+                    await upgradeDevHubByEmail(email, "free");
+                await (0, appEntitlements_1.upsertAppSubscription)(email, String(отменяемыйМодуль), "cancelled", lsSubId);
+                console.log(`[ls/webhook] ${event} → один модуль снят: ${String(отменяемыйМодуль)} for ${email}`);
+                return res.json({ ok: true, action: "app_cancelled", appSlug: String(отменяемыйМодуль), email });
+            }
+            // Отзываем ТУ подписку, за которую пришло событие, а не любую.
+            // Правило общее на все кассы — provisioning.возвратКасаетсяДействующей.
+            // У Lemon Squeezy это отмена/истечение конкретной подписки: если у
+            // человека уже есть НОВАЯ платная, отмена старой не должна её гасить.
+            const действующая = (0, provisioning_1.readLatestSubscription)(email);
+            const отзываем = (0, provisioning_1.возвратКасаетсяДействующей)(действующая, lsSubId ?? "");
+            if (!отзываем) {
+                console.warn(`[ls/webhook] ${event} относится к ДРУГОЙ подписке: действующая ` +
+                    `${действующая?.tierId} не тронута`);
+                capture(new Error("refund_for_older_purchase_kept_current_subscription"), {
+                    route: "ls/webhook/deactivate",
+                    email,
+                    event,
+                    currentTier: действующая?.tierId,
+                });
+            }
+            const downgrade = {
+                id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                ts: new Date().toISOString(),
+                email,
+                tierId: "free",
+                termMonths: null,
+                seats: 1,
+                modules: [],
+                trialDays: 0,
+                source: "lemonsqueezy:cancel",
+            };
+            if (отзываем)
+                (0, provisioning_1.writeSubscription)(downgrade);
+            console.log(`[ls/webhook] ${event} → downgraded ${email} to free`);
+            return res.json({ ok: true, action: "downgraded" });
+        }
+        // Known subscription_* event we don't act on (e.g. subscription_payment_success).
+        return res.json({ ok: true, ignored: event });
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : "ls webhook failed"; // только для журнала
+        const msgPublic = (0, safeError_1.safeErrorText)(err, "ls webhook failed", "lemonSqueezyWebhook");
+        capture(err);
+        console.error("[ls/webhook] handler error:", msg);
+        // 500 so LS retries — provisioning is idempotent enough (latest-wins).
+        (0, webhookDedup_1.releaseWebhookKey)("lemonsqueezy", dedupKey);
+        return res.status(500).json({ ok: false, error: msgPublic });
+    }
+});

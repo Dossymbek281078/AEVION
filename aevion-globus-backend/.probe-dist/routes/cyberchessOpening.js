@@ -1,0 +1,181 @@
+"use strict";
+// AEVION CyberChess — opening explorer proxy
+// Mount expected at: /api/cyberchess-opening
+//
+// The frontend must NOT call explorer.lichess.ovh directly from the browser:
+// cross-origin browser requests get an HTML rate-limit / Cloudflare challenge
+// page back (not JSON), so res.json() throws and the opening panels show "no
+// master games" (or silently fall back to mock stats) even for the starting
+// position. This server-side proxy fixes that for ALL explorer consumers:
+//   - server-to-server request (no CORS / browser challenge)
+//   - shared in-memory cache per query (masters/community stats are ~static),
+//     which also respects Lichess's ~1 req/s soft limit across all users
+//   - outbound requests throttled and de-duplicated per identical query
+//
+// It is a thin, allowlisted pass-through of the Lichess explorer JSON so both
+// the Opening Explorer panel (fen=) and the Repertoire book stats (play=,
+// ratings=, speeds=) can share it. Any upstream failure degrades to an empty
+// {moves:[]} result, never a crash.
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const cyberchessOpeningTree_1 = require("./cyberchessOpeningTree");
+const router = (0, express_1.Router)();
+// db -> upstream base. Only these two explorer DBs are reachable.
+const UPSTREAM = {
+    masters: "https://explorer.lichess.ovh/masters",
+    lichess: "https://explorer.lichess.ovh/lichess",
+};
+// Query params we forward to Lichess. Anything else is dropped.
+const ALLOWED = ["fen", "play", "moves", "topGames", "recentGames", "ratings", "speeds", "since", "until"];
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h — explorer aggregates barely move
+const NEG_TTL_MS = 5 * 60 * 1000; // cache upstream failures briefly to avoid hammering
+const MIN_INTERVAL_MS = 1100; // keep under Lichess's ~1 req/s soft limit
+const MAX_CACHE = 5000;
+const cache = new Map();
+// De-dupe concurrent identical requests into a single upstream call.
+const inflight = new Map();
+let lastFetchAt = 0;
+function prune() {
+    if (cache.size <= MAX_CACHE)
+        return;
+    const entries = [...cache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    const drop = Math.ceil(entries.length * 0.1);
+    for (let i = 0; i < drop; i++)
+        cache.delete(entries[i][0]);
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Build a canonical upstream URL from allowlisted params + a matching cache key.
+function buildQuery(req) {
+    const db = String(req.query.db || "masters").toLowerCase();
+    if (!UPSTREAM[db])
+        return null;
+    const sp = new URLSearchParams();
+    for (const k of ALLOWED) {
+        const v = req.query[k];
+        if (v == null || v === "")
+            continue;
+        sp.set(k, String(v).slice(0, 400)); // hard length guard
+    }
+    // must have a position anchor
+    if (!sp.has("fen") && !sp.has("play"))
+        return null;
+    // sensible defaults
+    if (!sp.has("topGames"))
+        sp.set("topGames", "0");
+    if (!sp.has("recentGames"))
+        sp.set("recentGames", "0");
+    const qs = sp.toString();
+    return { db, qs, key: `${db}?${qs}` };
+}
+async function fetchUpstream(db, qs) {
+    // Global outbound throttle so bursts of users don't trip the rate limit.
+    const wait = MIN_INTERVAL_MS - (Date.now() - lastFetchAt);
+    if (wait > 0)
+        await sleep(wait);
+    lastFetchAt = Date.now();
+    const url = `${UPSTREAM[db]}?${qs}`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    try {
+        const headers = {
+            Accept: "application/json",
+            "User-Agent": "AEVION-CyberChess/1.0 (opening explorer proxy)",
+        };
+        // Since Feb 2026 Lichess gated explorer.lichess.ovh behind login
+        // (anonymous → 401). A personal API token re-enables live master stats;
+        // without it the frontend degrades to its self-contained opening book.
+        const token = process.env.LICHESS_API_TOKEN;
+        if (token)
+            headers.Authorization = `Bearer ${token}`;
+        const r = await fetch(url, { signal: ctrl.signal, headers });
+        if (!r.ok)
+            return null;
+        const ct = r.headers.get("content-type") || "";
+        if (!ct.includes("json"))
+            return null; // HTML challenge page → treat as failure
+        return await r.json();
+    }
+    catch {
+        return null;
+    }
+    finally {
+        clearTimeout(t);
+    }
+}
+const EMPTY = { white: 0, draws: 0, black: 0, opening: null, moves: [] };
+// Live Lichess masters/community — only meaningful when a token is configured
+// (anonymous access is 401 since Feb 2026). Returns the entry or null.
+async function tryLichess(req) {
+    if (!process.env.LICHESS_API_TOKEN)
+        return null;
+    const q = buildQuery(req);
+    if (!q)
+        return null;
+    const now = Date.now();
+    const hit = cache.get(q.key);
+    if (hit && now - hit.ts < (hit.data ? CACHE_TTL_MS : NEG_TTL_MS))
+        return hit.data;
+    let p = inflight.get(q.key);
+    if (!p) {
+        p = fetchUpstream(q.db, q.qs).then((data) => {
+            cache.set(q.key, { ts: Date.now(), data });
+            prune();
+            inflight.delete(q.key);
+            return data;
+        });
+        inflight.set(q.key, p);
+    }
+    return (await p);
+}
+// GET / — opening explorer, three tiers:
+//   1. live Lichess masters (needs LICHESS_API_TOKEN)          — query: fen|play
+//   2. our own deep tree, built from CC0 Lichess Elite games    — query: path (SAN)
+//   3. empty → the frontend falls back to its static book
+// Query: path=e4,e5,Nf3 (or space-separated) — SAN move path from the start.
+//        fen|play|db|moves|ratings|speeds — for the Lichess tier.
+router.get("/", async (req, res) => {
+    // Tier 1: live Lichess (token only)
+    try {
+        const live = await tryLichess(req);
+        if (live && Array.isArray(live.moves) && live.moves.length) {
+            res.json({ ok: true, source: "lichess", cached: false, ...live });
+            return;
+        }
+    }
+    catch (e) {
+        console.warn("[cyberchess-opening] lichess tier failed:", e instanceof Error ? e.message : e);
+    }
+    // Tier 2: our deep tree, by SAN move path
+    if (typeof req.query.path === "string") {
+        try {
+            await (0, cyberchessOpeningTree_1.ensureTreeLoaded)();
+            const sanPath = String(req.query.path).trim().split(/[\s,]+/).filter(Boolean);
+            const node = (0, cyberchessOpeningTree_1.lookupPath)(sanPath);
+            if (node) {
+                res.json({
+                    ok: true,
+                    source: "tree",
+                    white: node.white,
+                    draws: node.draws,
+                    black: node.black,
+                    opening: null,
+                    moves: node.moves.map((r) => ({
+                        san: r.m,
+                        uci: "",
+                        white: r.w,
+                        draws: r.d,
+                        black: r.b,
+                        games: r.n,
+                    })),
+                });
+                return;
+            }
+        }
+        catch (e) {
+            console.warn("[cyberchess-opening] tree tier failed:", e instanceof Error ? e.message : e);
+        }
+    }
+    // Tier 3: nothing → frontend static book fallback
+    res.json({ ok: true, source: "none", ...EMPTY });
+});
+exports.default = router;

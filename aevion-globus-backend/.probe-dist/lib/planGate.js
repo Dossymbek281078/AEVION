@@ -1,0 +1,667 @@
+"use strict";
+/**
+ * Platform-wide module paywall gate.
+ *
+ * Generalises the constitution Pro gate (lib/constitutionGate.ts) to ALL
+ * modules. The policy — "which subscription tier unlocks which module" — is
+ * derived from MODULES_PRICING[].includedIn in data/pricing.ts. That is the
+ * single source of truth, shared with the public pricing page, so the paywall
+ * a user hits can never disagree with what they were sold.
+ *
+ * SAFETY — dormant by default. A module is only enforced when its id is listed
+ * in env PAYWALL_MODULES (comma-separated, or "*" for every module). With the
+ * env unset, every requireModule() gate is a transparent no-op: existing free
+ * traffic and the prod smoke suite are unaffected until the paywall is
+ * deliberately switched on (after the frontend 402 UX + pricing pages ship).
+ *
+ * Enabling on Railway, once the frontend can render the 402 paywall:
+ *   PAYWALL_MODULES=qfusionai,healthai   # gate a curated set
+ *   PAYWALL_MODULES=*                    # gate everything priced full-only (blocked below for UNSAFE_TO_GATE ids)
+ *   PAYWALL_DISABLED=1                   # global kill-switch (overrides all)
+ *
+ * UNSAFE_TO_GATE — see the const below. `qcoreai` briefly went live in
+ * PAYWALL_MODULES on 2026-07-16 for ~44min via a manual Railway flip that
+ * didn't cross-check docs/PAYWALL_FLIP_READINESS.md first; it 402'd free-tier
+ * users who hadn't touched their advertised 100k-token/mo quota, since
+ * qcoreai's includedIn starts at "medium" and no token-metering exists yet
+ * to honor the free promise before falling back to a paid gate. Caught via
+ * prod smoke and reverted. `enforcedModuleSet()` now strips these ids
+ * defensively — this is a backstop, not a substitute for checking the docs.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ссылкаНаТариф = ссылкаНаТариф;
+exports.нормализоватьАдрес = нормализоватьАдрес;
+exports.нашВнутреннийАдрес = нашВнутреннийАдрес;
+exports.normalizeTier = normalizeTier;
+exports.resolveUserPlan = resolveUserPlan;
+exports.resolvePlanFromPayload = resolvePlanFromPayload;
+exports.tiersForModule = tiersForModule;
+exports.isModuleEntitled = isModuleEntitled;
+exports.paywallEnabledFor = paywallEnabledFor;
+exports.пробныйПуть = пробныйПуть;
+exports.denyAudience = denyAudience;
+exports.путиРоутера = путиРоутера;
+exports.путьСовпадает = путьСовпадает;
+exports.requireModule = requireModule;
+exports.getEntitlements = getEntitlements;
+const node_crypto_1 = require("node:crypto");
+const lemonSqueezyVariants_1 = require("../data/lemonSqueezyVariants");
+const authJwt_1 = require("./authJwt");
+const provisioning_1 = require("../routes/provisioning");
+const pricing_1 = require("../data/pricing");
+const moduleAccess_1 = require("../data/moduleAccess");
+const paywallDenyLog_1 = require("./paywallDenyLog");
+const appEntitlements_1 = require("./appEntitlements");
+/**
+ * Куда ведёт стена: на КАРТОЧКУ модуля на /pricing, а не на общую страницу тарифов.
+ * Замер 13.10.2026 (гость Мультичата, 390×844): стена вела на /pricing, где человеку ещё
+ * надо было найти Multichat среди тридцати карточек; у самой страницы модуля кнопка
+ * «Купить» ведёт на /pricing?app=multichat#apps. Slug — из MODULES_PRICING (источник
+ * истины витрины: STANDALONE_APPS); модуль без карточки — прежний /pricing.
+ */
+function ссылкаНаТариф(moduleId) {
+    const карточка = pricing_1.STANDALONE_APPS.find((m) => m.moduleId === moduleId);
+    return карточка ? `/pricing?app=${карточка.slug}#apps` : "/pricing";
+}
+const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+/**
+ * Modules that must NEVER go behind this blanket, all-or-nothing module gate,
+ * regardless of what PAYWALL_MODULES says — each advertises a free-tier
+ * promise (a token/request quota, or "1 module of choice") that an immediate
+ * 402 on every request would break outright, rather than honoring "first N
+ * free, then upgrade".
+ *
+ * This is PERMANENT, not a placeholder — it is not lifted once some metering
+ * ships. qcoreai already has its own metering (`lib/qcoreQuota.ts`,
+ * `enforceFreeTokenQuota()`, live since PR #463 / QCOREAI_FREE_QUOTA=1 on
+ * Railway) which correctly enforces "100k tokens/mo then 402" — but that is a
+ * SEPARATE, more granular mechanism wired directly into qcoreai's routes, not
+ * this blanket per-module gate. The right fix for a quota-shaped promise is
+ * always a dedicated metering gate like qcoreQuota.ts, never adding the
+ * module here to PAYWALL_MODULES — so qcoreai/qright/qsign stay in this set
+ * even after (or especially after) proper metering exists for them.
+ *
+ * Update this list alongside docs/PAYWALL_FLIP_READINESS.md's "Deliberately
+ * NOT gated" section — they must stay in sync.
+ */
+const UNSAFE_TO_GATE = new Set([
+    "qcoreai", // free tier promises 100k tokens/mo; includedIn starts at "medium"; no token-metering yet
+    "qright", // same free-tier-promise conflict; includedIn starts at "full"
+    "qsign", // same free-tier-promise conflict; includedIn starts at "full"
+]);
+const ALLOWLIST = (process.env.PAYWALL_ALLOWLIST || "")
+    .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+/** Наши собственные домены: покупка с такого адреса — внутренняя по определению. */
+const НАШИ_ДОМЕНЫ = ["aevion.app", "aevion.dev"];
+/**
+ * 🔴 19.10.2026: семь тестовых вебхуков с адресами @example.test легли в воронку
+ * «живыми оплатами» (всего 7, наши 0). Зарезервированные домены примеров
+ * (RFC 2606/6761) и наши пробные префиксы — покупки проверочные по определению:
+ * ни один человек не платит с такого адреса.
+ */
+const ДОМЕНЫ_ПРИМЕРОВ = ["example.test", "example.com", "example.org", "example.net", "test", "invalid", "localhost"];
+const ПРОБНЫЕ_ПРЕФИКСЫ = ["smoke-", "probe-", "qa-", "e2e"];
+/**
+ * 🔴 20.10.2026: все 10 «живых» лидов оказались нашими — ящик основателя, пять его
+ * +алиасов gmail и четыре e2e…@primer.ru («пример» по-русски — домен наших прогонов).
+ */
+const НАШИ_ДОМЕНЫ_ПРОГОНОВ = ["primer.ru"];
+/**
+ * Ящики основателя — sha256 НОРМАЛИЗОВАННОГО адреса (см. нормализоватьАдрес), а не
+ * сам адрес: открытым текстом в публичном коде ему не место. Добавить ещё ящик:
+ * FOUNDER_EMAIL_SHA256 (через запятую) на Railway или строка сюда.
+ */
+const ХЕШИ_ЯЩИКОВ_ОСНОВАТЕЛЯ = new Set([
+    "930b75ddd796e073b0c9d2904dc7838edab858edd39db86de046236a1365d7cf",
+    ...(process.env.FOUNDER_EMAIL_SHA256 || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+]);
+/**
+ * Один ящик — один адрес: «+хвост» срезается у всех, точки — только у gmail
+ * (gmail их не различает, другие почты различают).
+ */
+function нормализоватьАдрес(email) {
+    const e = String(email ?? "").trim().toLowerCase();
+    const at = e.lastIndexOf("@");
+    if (at < 1)
+        return e;
+    let имя = e.slice(0, at).split("+")[0];
+    let домен = e.slice(at + 1);
+    if (домен === "googlemail.com")
+        домен = "gmail.com";
+    if (домен === "gmail.com")
+        имя = имя.split(".").join("");
+    return `${имя}@${домен}`;
+}
+function ящикОснователя(email) {
+    return ХЕШИ_ЯЩИКОВ_ОСНОВАТЕЛЯ.has((0, node_crypto_1.createHash)("sha256").update(нормализоватьАдрес(email)).digest("hex"));
+}
+/**
+ * Наш ли это адрес — то есть покупка внутренняя, а не продажа человеку.
+ *
+ * 🔴 Зачем наружу. Замер 29.09.2026: воронка показала «оплатили: 2», и это были
+ * ДВЕ настоящие оплаты — но обе совершил сам основатель, проверяя кассу
+ * ($40 Multichat и $16 через запасной путь). Первое же число про деньги
+ * прочиталось бы как первые продажи. Это тот же класс, из-за которого 20.09
+ * выяснилось, что воронка на 91 % состояла из нашей автоматики, только теперь
+ * про выручку — а её показывают основателю.
+ *
+ * Список берём ТОТ ЖЕ, что и у гейта (`PAYWALL_ALLOWLIST`): второй список наших
+ * адресов разошёлся бы с первым молча. Плюс наши домены — адрес вида
+ * `…@aevion.app` внешним покупателем быть не может.
+ *
+ * ⚠️ Признак верен ровно настолько, насколько заполнен список. Если адрес
+ * основателя в `PAYWALL_ALLOWLIST` не значится, его покупка будет считаться
+ * внешней — поэтому воронка отдаёт «наши» отдельным числом, а не вычитает молча:
+ * читатель должен видеть оба и понимать, что второе зависит от настройки.
+ */
+function нашВнутреннийАдрес(email) {
+    const e = String(email ?? "").trim().toLowerCase();
+    if (!e)
+        return false;
+    if (ALLOWLIST.includes(e))
+        return true;
+    if (НАШИ_ДОМЕНЫ.some((d) => e.endsWith(`@${d}`)))
+        return true;
+    if (ДОМЕНЫ_ПРИМЕРОВ.some((d) => e.endsWith(`@${d}`) || e.endsWith(`.${d}`)))
+        return true;
+    if (НАШИ_ДОМЕНЫ_ПРОГОНОВ.some((d) => e.endsWith(`@${d}`)))
+        return true;
+    if (ящикОснователя(e))
+        return true;
+    return ПРОБНЫЕ_ПРЕФИКСЫ.some((p) => e.startsWith(p));
+}
+const TIER_RANK = {
+    free: 0, lite: 1, medium: 2, full: 3, enterprise: 4,
+};
+/**
+ * Normalise any stored tier id to a canonical tier for gating purposes.
+ *
+ * `pro` ("Universe") is a real, live, self-serve flagship tier (see TIERS in
+ * data/pricing.ts, $149.99/mo) — "all AEVION in one place", so it normalizes
+ * to `full` (every module's ceiling short of a negotiated Enterprise
+ * contract), NOT `lite`. It used to alias `lite` back when `pro` was a
+ * placeholder id with no real tier object behind it; now that it's sold at
+ * the top of the ladder, gating it at `lite` would 402 a $149.99/mo customer
+ * out of modules a $19/mo Lite customer can already reach — checked and
+ * fixed 2026-07-22.
+ *
+ * `business` is a legacy alias with no live tier object of its own — still
+ * written by older Gumroad/LemonSqueezy webhook paths (see provisioning.ts)
+ * for subscriptions sold before the current tier lineup — and maps to
+ * `full` ("all-access"), matching what those old plans actually granted.
+ */
+function normalizeTier(tier) {
+    switch ((tier ?? "free").toLowerCase()) {
+        // С 15.09.2026 любой платный тариф — это срок доступа ко ВСЕЙ планете
+        // (data/pricing.ts, TERM_*): lite и medium больше не урезанные наборы.
+        case "lite":
+        case "medium":
+        case "pro":
+        case "full":
+        case "max":
+        case "business":
+            return "full";
+        case "enterprise":
+            return "enterprise";
+        default:
+            return "free";
+    }
+}
+/**
+ * Single source of truth for platform plan resolution. Mirrors the priority
+ * order of the constitution gate so behaviour is consistent across modules.
+ *
+ * Priority: env allowlist (full) → JWT payload.plan → active paid
+ * subscription (data/subscriptions.jsonl) → free.
+ */
+function resolveUserPlan(req) {
+    return resolvePlanFromPayload((0, authJwt_1.verifyBearerOptional)(req));
+}
+/**
+ * Same resolution as resolveUserPlan, but from an already-verified JWT payload
+ * — for callers that don't hold an Express Request (e.g. the QCoreAI
+ * WebSocket server, which authenticates via a `?token=` query param).
+ */
+function resolvePlanFromPayload(payload) {
+    const email = payload && typeof payload.email === "string" ? payload.email.toLowerCase() : null;
+    if (email && ALLOWLIST.includes(email)) {
+        return { tier: "full", rawTier: "full", email, reason: "allowlist", chosenModules: [] };
+    }
+    // A tier baked into the JWT wins over the subscription store (used for
+    // impersonation / comped accounts). Only trust it if it names a real tier.
+    if (payload && typeof payload.plan === "string" && payload.plan !== "free") {
+        const t = normalizeTier(payload.plan);
+        if (t !== "free")
+            return { tier: t, rawTier: payload.plan, email, reason: "jwt-plan", chosenModules: [] };
+    }
+    if (email) {
+        const sub = (0, provisioning_1.readLatestSubscription)(email);
+        if (sub) {
+            const expired = sub.validUntil ? new Date(sub.validUntil).getTime() < Date.now() : false;
+            if (!expired && sub.tierId !== "free") {
+                return {
+                    tier: normalizeTier(sub.tierId),
+                    rawTier: sub.tierId,
+                    email,
+                    reason: `subscription:${sub.tierId}`,
+                    chosenModules: Array.isArray(sub.modules) ? sub.modules : [],
+                };
+            }
+        }
+    }
+    return { tier: "free", rawTier: "free", email, reason: "default", chosenModules: [] };
+}
+/* ───── Entitlement policy (derived from MODULES_PRICING) ───────── */
+const PRICING_BY_ID = new Map(pricing_1.MODULES_PRICING.map((m) => [m.id, m]));
+/** Tiers (incl. free) that include this module without an add-on purchase. */
+function tiersForModule(moduleId) {
+    return PRICING_BY_ID.get(moduleId)?.includedIn ?? ["full", "enterprise"];
+}
+/**
+ * Does `plan` grant access to `moduleId`?
+ *   - full / enterprise are all-access (the whole ecosystem), always true.
+ *   - otherwise the module's `includedIn` must list the canonical tier.
+ *   - Lite is "1 product of choice": granted when the module was the one
+ *     chosen on the subscription, even if not in `includedIn`.
+ */
+function isModuleEntitled(plan, moduleId) {
+    if (plan.tier === "full" || plan.tier === "enterprise")
+        return true;
+    const included = tiersForModule(moduleId).map(normalizeTier);
+    if (included.includes(plan.tier))
+        return true;
+    // 🔴 Ступень lite = один выбранный модуль, и здесь сравниваются ИМЕНА —
+    // а имён у модуля два: слаг кассы и id модуля. У `startup_exchange` они
+    // различаются (`startup_exchange` против `startup-exchange`), у `multichat`
+    // тоже (`multichat` против `multichat-engine`). В запись попадает то, что
+    // пришло в `custom_data.module`, то есть СЛАГ, а гейт спрашивает по ID —
+    // строгое сравнение давало бы «заплатил и не опознан».
+    //
+    // Соседний путь (подписка на отдельное приложение) имя переводит
+    // (`appSubscriptionState` → `appSlugForModuleId`), а этот — нет. Принимаем
+    // обе формы: так чинятся и будущие записи, и уже сделанные, без миграции
+    // данных. Замер 23.09.2026: сегодня это латентно (ни один из спорных
+    // модулей не в PAYWALL_MODULES), но включение стены заперло бы купивших.
+    if (plan.tier === "lite") {
+        if (plan.chosenModules.includes(moduleId))
+            return true;
+        const слагКассы = (0, lemonSqueezyVariants_1.appSlugForModuleId)(moduleId);
+        if (слагКассы && plan.chosenModules.includes(слагКассы))
+            return true;
+    }
+    return false;
+}
+/* ───── Enforcement switch ──────────────────────────────────────── */
+let warnedUnsafeGate = false;
+/** Logs once per process, not once per request — this fires on every gated call otherwise. */
+function warnUnsafeGateAttempt(ids) {
+    if (warnedUnsafeGate || ids.length === 0)
+        return;
+    warnedUnsafeGate = true;
+    console.error(`[planGate] PAYWALL_MODULES included UNSAFE_TO_GATE module(s) [${ids.join(", ")}] — ` +
+        `stripped from enforcement. These have a quota-shaped free promise that the blanket ` +
+        `module gate can't honor — use a dedicated metering gate instead (see qcoreQuota.ts for ` +
+        `qcoreai); see UNSAFE_TO_GATE in planGate.ts and ` +
+        `docs/PAYWALL_FLIP_READINESS.md. Fix the PAYWALL_MODULES env var on Railway.`);
+}
+/**
+ * Ни один тариф не даёт доступа к этому модулю.
+ *
+ * Вынесено на уровень модуля НАМЕРЕННО: правило нужно в ДВУХ местах, и первая
+ * редакция закрыла только одно. Список модулей проверялся, а «закрыть всё»
+ * (PAYWALL_MODULES=*) шло мимо — сторож поймал это мутацией в тот же час.
+ * Одно правило в двух вызовах вместо двух копий, которые разойдутся молча.
+ */
+function niOdinTarifNeDaet(id) {
+    // ТОЛЬКО про модули ИЗ КАТАЛОГА. Первая редакция считала «нет в каталоге» за
+    // «нет тарифов» — и тем самым переставала закрывать неизвестные
+    // идентификаторы под PAYWALL_MODULES=*. Это открывало лишнее вместо того,
+    // чтобы защищать: поймал существующий тест planGate, закреплявший прежний
+    // договор. Опасность, ради которой правило написано, — модуль, который В
+    // КАТАЛОГЕ ЕСТЬ и не входит ни в один тариф.
+    const запись = PRICING_BY_ID.get(id);
+    if (!запись)
+        return false;
+    return (запись.includedIn?.length ?? 0) === 0;
+}
+function enforcedModuleSet() {
+    if (process.env.PAYWALL_DISABLED === "1")
+        return null;
+    /*
+     * ИСТОЧНИК СТЕНЫ: переменная сервиса, и только при явном PAYWALL_SOURCE=data —
+     * таблица data/moduleAccess.ts.
+     *
+     * 🔴 Почему НЕ наоборот, хотя данные и задумывались источником правды.
+     * Я сперва сделал данные значением по умолчанию («переменная не задана →
+     * берём таблицу») и это молча перевернуло защитное свойство, записанное в
+     * шапке файла: «dormant by default». Замер 01.10.2026 на этой же ветке, при
+     * удалённой переменной:
+     *     paywallEnabledFor("qnews")  было false → стало TRUE
+     *     paywallEnabledFor("qcoreai") false → false (он в UNSAFE_TO_GATE)
+     * То есть любое окружение без переменной (локальная разработка, новый
+     * сервис, случайно очищенная настройка) начинало ОТКАЗЫВАТЬ людям вместо
+     * того, чтобы пропускать. Ровно этим свойством 16.07 за минуты погасили
+     * ошибочно включённый qcoreai: «забыл настроить» обязано означать «открыто».
+     *
+     * ⚠️ И ловушка рядом: существующий тест «is off when env unset» проверяет
+     * qcoreai — модуль из UNSAFE_TO_GATE, который не закрывается НИКОГДА. Он
+     * остался зелёным при перевёрнутом умолчании. Проверять это свойство нужно
+     * ЗАКРЫВАЕМЫМ модулем (см. tests/planGate.test.ts, правка 01.10).
+     *
+     * Переключатель назван отдельно и НЕ ЗАДАН нигде: пока основатель не решит,
+     * поведение прода и разработки совпадает с тем, что было до этой ветки.
+     */
+    const изПеременной = (process.env.PAYWALL_MODULES || "").trim();
+    const раз_решеноБратьИзДанных = process.env.PAYWALL_SOURCE === "data";
+    const raw = изПеременной || (раз_решеноБратьИзДанных ? (0, moduleAccess_1.модулиСоСтенойПоДанным)().join(",") : "");
+    if (!raw)
+        return null;
+    if (raw === "*")
+        return "all";
+    const set = new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+    /*
+     * ВТОРАЯ ПРИЧИНА НЕБЕЗОПАСНОСТИ — ВЫВОДИТСЯ, А НЕ ПЕРЕЧИСЛЯЕТСЯ.
+     *
+     * Модуль, который не входит НИ В ОДИН тариф (includedIn пуст), закрывать
+     * нельзя ни при каких настройках: шлюз потребует тариф из includedIn, а
+     * подходящего нет — откажут ВСЕМ, включая платящих. Это хуже, чем «бесплатные
+     * получают 402»: доступа не остаётся ни у кого.
+     *
+     * Живой повод 03.09.2026: у qskyway includedIn пуст по решению основателя
+     * («продукт, убирай из тарифов», 02.09). Пока стена выключена, никто не
+     * заблокирован — но ровно в тот момент, когда её включат, сработает.
+     * В комментариях этого же файла записано, что похожее уже случалось:
+     * qcoreai 44 минуты отдавал 402 бесплатным, поймали продовым смоуком.
+     *
+     * Почему условием, а не строкой в UNSAFE_TO_GATE: список — вторая копия
+     * знания, которое уже лежит в каталоге. Выведенное правило покрывает КАЖДЫЙ
+     * будущий модуль, а перечисление — только те, о ком вспомнили.
+     *
+     * Нашло соседнее окно, чинит окно запуска: файл общий, зона денежная.
+     */
+    // ВТОРОЙ СЛОЙ. Основную защиту несёт проверка в paywallEnabledFor — она
+    // пинается мутацией и покрывает в том числе «закрыть всё» (PAYWALL_MODULES=*),
+    // мимо которого этот список проходит по устройству. Здесь то же правило
+    // повторено, чтобы модуль без тарифов не попадал в набор вовсе: так
+    // warnUnsafeGateAttempt назовёт его в журнале, и человек увидит попытку.
+    // Снятие ЭТОЙ строки мутацией не ловится намеренно — её работу подстрахует
+    // второй слой; снятие второй строки ловится.
+    const unsafe = [...set].filter((id) => UNSAFE_TO_GATE.has(id) || niOdinTarifNeDaet(id));
+    if (unsafe.length) {
+        warnUnsafeGateAttempt(unsafe);
+        for (const id of unsafe)
+            set.delete(id);
+    }
+    return set;
+}
+/** Is the paywall actively enforced for this module right now? */
+function paywallEnabledFor(moduleId) {
+    const id = moduleId.toLowerCase();
+    if (UNSAFE_TO_GATE.has(id))
+        return false;
+    // Пустой список тарифов небезопасен и при «закрыть всё»: подходящего тарифа
+    // нет ни у кого, значит отказ получат ВСЕ, включая платящих.
+    if (niOdinTarifNeDaet(id))
+        return false;
+    const set = enforcedModuleSet();
+    if (set === null)
+        return false;
+    if (set === "all")
+        return true;
+    return set.has(id);
+}
+/**
+ * Sub-paths that stay open even on a gated module.
+ *
+ * Две группы, и вторая появилась 19.08.2026 после замера на проде:
+ *
+ *   служебные — health, статус, план, провайдеры: без них не понять, что с
+ *   модулем, и закрывать их нечего продавать;
+ *
+ *   сбор адресов — waitlist и subscribe. Лист ожидания по определению для тех,
+ *   у кого продукта ЕЩЁ НЕТ. Закрыв его тарифом, мы говорим человеку «купите
+ *   Full за $49, чтобы записаться в очередь» — и теряем адрес.
+ *
+ * Замер, из-за которого правка: POST /api/qfusionai/waitlist отвечал 402
+ * upgrade_required, а соседний POST /api/veilnetx/waitlist — 201 и счётчик 11.
+ * Разница только в том, что qfusionai попал в PAYWALL_MODULES.
+ *
+ * Горькая деталь: upgradeResponse() тут же записывает каждый 402 как «сигнал
+ * спроса». То есть спрос мы фиксировали, а человека, который его проявил,
+ * отправляли ни с чем. Ровно наоборот к тому, ради чего лист ожидания заведён.
+ *
+ * Границу держим узко: открываем ПОДПИСКУ на будущее, а не выдачу продукта.
+ * Всё, что отдаёт функциональность, остаётся за тарифом.
+ */
+/**
+ * Пробные пути: гость получает ОДИН результат закрытого модуля, дальше стена.
+ *
+ * Замер прода 12.10.2026 (окно Приложения-31.12): в HealthAI гость упирался в
+ * 402 уже на «Создать профиль» — попробовать нельзя было ничего, хотя модуль
+ * рекламируется. Путь открывается ТОЛЬКО если его действие названо в
+ * PAID_ACTIONS: тогда ручка сама считает бесплатную норму
+ * (lib/freeActionQuota.ts, FREE_<ДЕЙСТВИЕ>_PER_MONTH). Без этой переменной
+ * выкатка ничего не меняет — включает основатель одной настройкой.
+ * PAID_ACTIONS читаем здесь напрямую: freeActionQuota сам импортирует planGate.
+ */
+const ПРОБНЫЕ_ПУТИ = {
+    healthai: [
+        { method: "POST", path: "/profile", действие: "healthai_check" },
+        { method: "POST", path: "/check", действие: "healthai_check" },
+        // Страница зовёт её сразу после «Создать профиль» (loadFamily). Закрытая, она
+        // отвечала бы 402 в окне того же клика — и перехватчик показал бы стену
+        // раньше, чем гость получил свою бесплатную проверку. Ручка отдаёт только
+        // СВОИ профили (без входа — 401), продукта не выдаёт.
+        { method: "GET", path: "/profiles/me", действие: "healthai_check" },
+    ],
+};
+function пробныйПуть(moduleId, req) {
+    const список = ПРОБНЫЕ_ПУТИ[moduleId];
+    if (!список)
+        return false;
+    const названные = new Set((process.env.PAID_ACTIONS || "").split(",").map((x) => x.trim()).filter(Boolean));
+    const p = req.path.toLowerCase().replace(/\/+$/, "");
+    return список.some((x) => x.method === req.method && p === x.path && названные.has(x.действие));
+}
+function isExemptPath(req) {
+    if (req.method === "OPTIONS")
+        return true;
+    const p = req.path.toLowerCase();
+    return (p === "/health" || p.endsWith("/health") ||
+        p === "/me/plan" || p.endsWith("/me/plan") ||
+        p === "/me/entitlements" || p.endsWith("/me/entitlements") ||
+        p === "/providers" || p.endsWith("/providers") ||
+        p === "/status" || p.endsWith("/status") ||
+        p === "/waitlist" || p.endsWith("/waitlist") ||
+        p === "/subscribe" || p.endsWith("/subscribe") ||
+        // Описание API — не выдача продукта: по нему интегратор решает, покупать ли.
+        // Проба прода 14.09.2026: /api/qfusionai/openapi.json отвечал 402 любому,
+        // а страница модуля ссылается на него кнопкой. Генератор клиентов вход не шлёт.
+        p === "/openapi.json" || p.endsWith("/openapi.json") ||
+        // Публичный справочник нотариусов бюро — только ЧТЕНИЕ. Страницы /bureau/notaries
+        // рендерятся на сервере, токена там нет, и после закрытия бюро стена отдала бы
+        // 402 любому посетителю, включая заплатившего. Решение основателя 15.09.2026.
+        (req.method === "GET" && (p === "/notaries" || p.startsWith("/notaries/"))));
+}
+/**
+ * Аноним или владелец учётной записи. Решает НАЛИЧИЕ адреса, а не тариф.
+ *
+ * `resolveUserPlan` берёт токен необязательно (`verifyBearerOptional`), и
+ * запрос вообще без учётной записи доходит сюда с `tier: "free"` — ровно так
+ * же, как зарегистрированный человек на бесплатном тарифе. В воронке они
+ * складывались в одно число, которое дальше умножается на цену модуля.
+ *
+ * Третьего состояния здесь намеренно НЕТ. Напрашивалось "expired", но вывести
+ * его из `plan.reason` нельзя: истёкшая подписка не даёт своего признака, она
+ * проваливается в тот же `reason: "default"`. Придумывать категорию, которой
+ * не соответствует ни одна ветка кода, — значит завести поле, всегда равное
+ * нулю, и принять его пустоту за факт.
+ */
+function denyAudience(plan) {
+    return plan.email ? "registered" : "anonymous";
+}
+function upgradeResponse(res, moduleId, plan, authenticated) {
+    // 🔴 Дубликаты убираем, и это не косметика. С 15.09.2026 любой платный тариф —
+    // доступ ко ВСЕЙ планете, поэтому normalizeTier схлопывает lite/medium/pro/max
+    // в «full». Список `includedIn` из шести ступеней превращался в
+    // ["full","full","full","full","full","enterprise"], и человек, упёршийся в
+    // платную стену, читал: «доступен на тарифах: full, full, full, full, full,
+    // enterprise» (замер на проде 24.09.2026, все пять закрытых модулей).
+    //
+    // Это последний текст, который видит несостоявшийся покупатель, и он выглядит
+    // поломкой. Доступа это НЕ касается: план подписчика нормализуется тем же
+    // правилом, поэтому Lite пускают — проверено отдельным тестом ниже по файлу.
+    const requiredTiers = [...new Set(tiersForModule(moduleId).map(normalizeTier).filter((t) => TIER_RANK[t] > TIER_RANK.free))];
+    // Demand signal: every 402 is someone who WANTED a paid module. Aggregate-
+    // only (module + tier + audience, no user id), fire-and-forget — see
+    // paywallDenyLog. Аудитория добавлена 13.09.2026: без неё «спрос» считал
+    // наравне и обход роботами (проверено на проде одним анонимным запросом).
+    (0, paywallDenyLog_1.recordDeny)(moduleId, plan.tier, denyAudience(plan));
+    // 🔴 Две РАЗНЫЕ ситуации, и до 05.10.2026 обе получали один текст «входит в
+    // платную подписку → оформить» (замер окна Связи). Это значит, что человеку,
+    // который УЖЕ заплатил, но зашёл не войдя (или под другим email), предлагали
+    // заплатить второй раз. Источник различия — наличие JWT (вошёл или нет):
+    //   • не вошёл      → сперва вход под почтой оплаты, доступ привязан к ней;
+    //   • вошёл, нет прав → возможно, платил другим адресом; либо ещё не оформлял.
+    // Доступ при этом не меняется — дверь всё равно закрыта; меняется только то,
+    // что человек читает. loginUrl ведёт на вход с возвратом на страницу модуля.
+    const authState = authenticated ? "authenticated" : "anonymous";
+    const loginUrl = `${PUBLIC_BASE}/auth?next=${encodeURIComponent(`/${moduleId}`)}`;
+    const message = authenticated
+        ? `На этом аккаунте покупки модуля «${moduleId}» нет. ` +
+            `Если вы оплачивали другим адресом — войдите под ним: ${loginUrl}. ` +
+            `Если ещё не оформляли — модуль входит в план «AEVION Планета» (любой срок): ${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`
+        : `Если вы уже оплатили — войдите под почтой, которой платили, и доступ откроется: ${loginUrl}. ` +
+            `Если ещё нет — модуль «${moduleId}» входит в план «AEVION Планета» (любой срок): ${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`;
+    res.status(402).json({
+        error: "upgrade_required",
+        module: moduleId,
+        plan: plan.tier,
+        requiredTiers: requiredTiers.length ? requiredTiers : ["full"],
+        // 19.10.2026: канонический «full» = любой платный срок; наружу — имя плана, который открывает.
+        requiredPlan: "AEVION Планета (любой срок)",
+        upgradeUrl: `${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`,
+        // authState и loginUrl — чтобы фронт показал кнопку входа в случае
+        // «не вошёл», а не только «к тарифам». Старые клиенты поля игнорируют.
+        authState,
+        loginUrl,
+        message,
+    });
+}
+function путиРоутера(роутер) {
+    const слои = роутер?.stack;
+    if (!Array.isArray(слои))
+        return [];
+    const пути = [];
+    for (const слой of слои) {
+        const p = слой?.route?.path;
+        if (typeof p === "string")
+            пути.push(p);
+        else if (Array.isArray(p))
+            for (const x of p)
+                if (typeof x === "string")
+                    пути.push(x);
+    }
+    return пути;
+}
+/**
+ * Совпадает ли путь запроса с одним из шаблонов (`/a/:id/b`).
+ *
+ * Намеренно простое сопоставление: равенство по сегментам, `:параметр`
+ * совпадает с любым непустым сегментом, `*` — с любым хвостом. Всё, чего эта
+ * проверка не поняла, считается СОВПАДЕНИЕМ: сомнение обязано оставлять
+ * прежнее поведение, иначе опечатка в шаблоне закроет живой платный путь.
+ */
+function путьСовпадает(шаблоны, путь) {
+    const ч = путь.split("/").filter(Boolean);
+    for (const шаблон of шаблоны) {
+        if (шаблон.includes("(") || шаблон.includes("{"))
+            return true; // регулярка в пути — не беремся судить
+        const ш = шаблон.split("/").filter(Boolean);
+        const звезда = ш.indexOf("*");
+        if (звезда >= 0) {
+            if (ч.length >= звезда && ш.slice(0, звезда).every((seg, i) => seg.startsWith(":") || seg === ч[i]))
+                return true;
+            continue;
+        }
+        if (ш.length !== ч.length)
+            continue;
+        if (ш.every((seg, i) => (seg.startsWith(":") ? Boolean(ч[i]) : seg === ч[i])))
+            return true;
+    }
+    return false;
+}
+function requireModule(moduleId, роутер) {
+    // Пути считаем один раз на монтирование: стек роутера после старта не растёт.
+    let пути = null;
+    return async function moduleGate(req, res, next) {
+        if (!paywallEnabledFor(moduleId)) {
+            next();
+            return;
+        }
+        // Неизвестный путь — это 404, и отвечать им должен Express, а не стена.
+        // Пустой список означает «стек прочитать не вышло»: тогда ведём себя
+        // как раньше, иначе собственная слепота закрыла бы платный модуль.
+        if (роутер) {
+            if (пути === null)
+                пути = путиРоутера(роутер);
+            if (пути.length > 0 && !путьСовпадает(пути, req.path)) {
+                next();
+                return;
+            }
+        }
+        if (isExemptPath(req)) {
+            next();
+            return;
+        }
+        if (пробныйПуть(moduleId, req)) {
+            next();
+            return;
+        }
+        const plan = resolveUserPlan(req);
+        if (isModuleEntitled(plan, moduleId)) {
+            next();
+            return;
+        }
+        // Модуль мог быть куплен ОТДЕЛЬНОЙ подпиской — это второй источник прав,
+        // до 13.08.2026 гейт про него не знал, и купивший модуль упирался в отказ
+        // наравне с гостем. Спрашиваем базу только здесь: до этой строки доходят
+        // лишь те, кому иначе отказали бы, поэтому обычный путь остаётся без
+        // запросов. Права только добавляются — отнять этот источник ничего не может.
+        const состояниеПодписки = await (0, appEntitlements_1.appSubscriptionState)(plan.email, moduleId);
+        if (состояниеПодписки === "active") {
+            next();
+            return;
+        }
+        // «Проверить не удалось» — это НЕ «не куплено». Дверь всё равно
+        // закрываем (гейт обязан закрываться на сбое), но говорим правду и НЕ
+        // засчитываем это в спрос: иначе заплативший видит «купите тариф» при
+        // дрожании базы, а сбой инфраструктуры уезжает в цифру, по которой
+        // решают, что продавать.
+        if (состояниеПодписки === "unknown") {
+            res.status(503).json({
+                error: "entitlement_check_failed",
+                module: moduleId,
+                message: "Не удалось проверить ваш доступ — это наша ошибка, а не отказ. " +
+                    "Повторите через минуту; если повторяется, напишите нам.",
+            });
+            return;
+        }
+        // Наличие JWT различает «не вошёл» и «вошёл, но прав нет» — два разных
+        // текста в upgradeResponse. verifyBearerOptional здесь, в редком пути
+        // отказа (вошедшим с правами сюда не дойти), второго разбора токена не жаль.
+        upgradeResponse(res, moduleId, plan, (0, authJwt_1.verifyBearerOptional)(req) !== null);
+    };
+}
+/** Full per-module entitlement map for the resolved request plan. */
+function getEntitlements(req) {
+    const plan = resolveUserPlan(req);
+    const modules = pricing_1.MODULES_PRICING.map((m) => ({
+        module: m.id,
+        requiredTiers: tiersForModule(m.id).map(normalizeTier)
+            .filter((t) => TIER_RANK[t] > TIER_RANK.free),
+        entitled: isModuleEntitled(plan, m.id),
+        enforced: paywallEnabledFor(m.id),
+    }));
+    return { plan: plan.tier, email: plan.email, reason: plan.reason, modules };
+}

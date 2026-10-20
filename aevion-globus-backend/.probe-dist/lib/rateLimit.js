@@ -1,0 +1,452 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeAddressForKey = normalizeAddressForKey;
+exports.generationLimit = generationLimit;
+exports.bucketFingerprint = bucketFingerprint;
+exports.realIpShape = realIpShape;
+exports.clientIp = clientIp;
+exports.rateLimit = rateLimit;
+const node_crypto_1 = require("node:crypto");
+/**
+ * Нормализация адреса для ключа лимитера.
+ *
+ * Своей реализации здесь намеренно нет — берём ту же, которой уже пользуются
+ * `qpaynet`, `build/public` и `cyberchessTournaments`. Обёртка нужна только
+ * ради одного: сбой нормализации не должен ронять запрос. Если она бросит на
+ * неожидаемом входе, лимит останется работать по сырому адресу — это хуже
+ * нормализованного, но лучше отказа.
+ */
+function normalizeAddressForKey(ip) {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { ipKeyGenerator } = require("express-rate-limit");
+        return ipKeyGenerator(ip) || ip;
+    }
+    catch {
+        return ip;
+    }
+}
+const GLOBAL_BUCKETS = new Map();
+let lastSweep = 0;
+/**
+ * In-process fixed-window rate limiter. No external deps.
+ * Serial for the default keyPrefix. Only has to be unique inside the process —
+ * the buckets it names live in this module's Map and nothing outside reads the
+ * key. Module-load order therefore does not matter.
+ */
+let limiterSeq = 0;
+/**
+ * Уже предупреждённые лимитеры: сообщение печатается ОДИН раз на лимитер, а не на
+ * каждый запрос. Иначе сломанный keyFn на горячей ручке зальёт лог и его отключат
+ * вместе с полезными записями — тревога, которую заглушают, хуже отсутствующей.
+ */
+const keyFnWarned = new Set();
+function warnKeyFnFallback(prefix, why) {
+    if (keyFnWarned.has(prefix))
+        return;
+    keyFnWarned.add(prefix);
+    console.error(`[rateLimit] keyFn лимитера "${prefix}" не дал ключа (${why}) — считаю по адресу. ` +
+        `Это НЕ то же самое: счёт по аккаунту заменён счётом по адресу, и все за одним ` +
+        `NAT снова делят один бюджет. Проверь, разрешён ли req.auth к моменту лимитера.`);
+}
+/**
+ * In-process rate limiter. No external deps. Fixed window by default; a token
+ * bucket when the call site passes `refillPerSec`.
+ *
+ * 🔴 «if the app ever runs on multiple instances» — УЖЕ. Замерено 23.08.2026 на
+ * боевом сервисе, не выведено рассуждением:
+ *
+ *   100 запросов за 11 секунд с одного адреса на `/api/qcoreai/chat`
+ *   (объявлено `max: 30` в минуту) → отказов ВСЕГО 2.
+ *
+ *   Двенадцать ПОСЛЕДОВАТЕЛЬНЫХ запросов, заголовок X-RateLimit-Remaining:
+ *   29, 28, 29, 28, 29, 29, 27, 28, 29, 26, 29, 29.
+ *
+ * Один счётчик давал бы 29, 28, 27, 26… Значит счётчиков несколько. Заголовок
+ * при этом честен — врёт не он, а наше прочтение `max` как «предела платформы».
+ *
+ * ⚠️ ПОПРАВКА 28.08.2026: ПРИЧИНА, записанная здесь раньше, ОКАЗАЛАСЬ НЕВЕРНОЙ.
+ * Я написал «процессов у сервиса несколько». Проверил: `railway status` даёт
+ * `multiRegionConfig: { "us-west2": { numReplicas: 1 } }`, кластера в коде нет
+ * (`start` — обычный `node dist/index.js`). Экземпляр ОДИН, а счётчики всё равно
+ * скачут: перепроверено, 29 29 29 28 28 27 29 29 28 27.
+ *
+ * Что измерено дополнительно: запросы приходят через РАЗНЫЕ краевые узлы Railway
+ * (в заголовках `x-railway-edge` встречались ams1 и ber1), а подделка
+ * `X-Forwarded-For` своей корзины не даёт — значит ключ не под контролем клиента.
+ *
+ * ✅ ПРИЧИНА ДОКАЗАНА тем же утром, замером без единой строки нового кода.
+ *
+ * Двадцать четыре запроса подряд, и у каждого записаны ДВА заголовка сразу —
+ * `x-railway-edge` (через какой краевой узел пришёл) и `x-ratelimit-remaining`:
+ *
+ *   ber1 (6 запросов):  29, 28, 27, 26, 25, 24   — строго монотонно, ОДНА корзина
+ *   ams1 (18 запросов): 29×6, 28×4, 27×4, 26×3, 25×1 — несколько корзин
+ *
+ * Внутри `ber1` счётчик ведёт себя идеально. Значит ключ стабилен — но стабилен
+ * он ПО УЗЛУ, а не по клиенту: у `ber1` один исходящий адрес, у `ams1` их
+ * несколько. `app.set("trust proxy", 1)` доверяет одному узлу, а цепочка длиннее,
+ * и `req.ip` оказывается адресом КРАЕВОГО УЗЛА.
+ *
+ * Два следствия, и оба плохи: один клиент размазан по нескольким корзинам, а все
+ * клиенты одного узла делят одну. Предел не «на посетителя» ни в одну сторону.
+ *
+ * ЧЕТЫРЕ КОНТРОЛЯ, которыми я пытался это ОПРОВЕРГНУТЬ и не смог:
+ *
+ *   1. Все запросы в ОДНОМ соединении (keep-alive) → 29, 28, 27, 26, 25, 24.
+ *      Идеально монотонно. Значит сам счётчик исправен.
+ *   2. Мой внешний адрес постоянен: шесть отдельных проверок дали один и тот
+ *      же 147.30.21.19. Значит дело не в том, что меняюсь я.
+ *   3. Принудительный IPv4 (`curl -4`), десять отдельных соединений →
+ *      29 28 29 29 28 29 27 27 28 26. Разброс остался, то есть это не
+ *      IPv6 с меняющимся адресом (классический обход лимитеров).
+ *   4. Подделка X-Forwarded-For своей корзины не даёт — ключ не под
+ *      контролем клиента, и это единственная хорошая новость здесь.
+ *
+ * Один клиент, один протокол, постоянный адрес — и разные корзины на разных
+ * соединениях. Другого объяснения, кроме «ключ берётся не у клиента»,
+ * не осталось.
+ *
+ * ✅ ИЗМЕРЕНО ОТПЕЧАТКОМ 28.08.2026 (заголовок X-RateLimit-Bucket, добавлен
+ * тем же утром). Двенадцать отдельных соединений с ОДНОГО клиента, IPv4
+ * принудительно, адрес постоянный:
+ *
+ *   e415943f: 29, 28, 27, 26     d5cec7eb: 29, 28     de7d4415: 29, 28
+ *   c5b1cd5a: 29   ba916d3c: 29   e83c223a: 29   094a4e03: 29
+ *
+ * СЕМЬ корзин на двенадцать запросов, и внутри каждой счёт идеален. Это уже не
+ * вывод, а наблюдение: ключ меняется от соединения к соединению.
+ *
+ * Что ещё измерено: с собственным заголовком `x-real-ip` корзин по-прежнему
+ * много — значит сокет приходит НЕ из 100.0.0.0/8, и защита в clientIp
+ * правильно ему не верит (подделать ключ снаружи по-прежнему нельзя).
+ *
+ * СЛЕДУЮЩИЙ ШАГ — не догадка, а один замер: узнать, какой адрес видит сервер в
+ * `req.socket.remoteAddress`. Пока он неизвестен, любое расширение
+ * `isRailwayInternal` будет подбором. Отпечаток теперь позволяет проверить
+ * любую правку одной командой: если корзина стала одна — попали.
+ *
+ * ⚠️ ПОЧЕМУ НЕ ПОЧИНЕНО ЗДЕСЬ. Лечится это настройкой `trust proxy`, а она
+ * влияет на КАЖДЫЙ лимитер и на каждое решение по адресу во всём приложении.
+ * Поднять её вслепую нельзя: доверив лишний узел, мы начнём брать элемент XFF,
+ * который пишет сам клиент, — и ключ станет подделываемым (об этом прямо
+ * предупреждает комментарий к clientIp ниже). Нужно точное число узлов Railway,
+ * а не «true». За два дня до запуска это правка не на ночь.
+ *
+ * Что НЕ надо делать: строить общий счётчик в Redis. Он не вылечит ключ, который
+ * с самого начала не про клиента.
+ *
+ * Что это значит на практике: настоящий предел примерно вчетверо выше
+ * объявленного и зависит от числа процессов, то есть меняется при масштабировании
+ * молча. Пока лимитер стоит перед бесплатной ручкой — терпимо. Перед ручкой,
+ * которая тратит деньги (платный ИИ), — нет, и там нужна граница, не зависящая
+ * от числа процессов: см. `aiInputBudget.ts`, он ограничивает цену ОДНОГО вызова.
+ *
+ * Настоящая починка — общий счётчик (Redis/Postgres). Она не сделана намеренно:
+ * это работа, которую нельзя проверить иначе как на проде, а до запуска 30.08
+ * сломанный ограничитель, отказывающий живым людям, хуже слабого.
+ */
+/**
+ * Адрес клиента как КЛЮЧ ограничителя.
+ *
+ * Возвращён 19.08.2026 при объединении веток: пять шахматных модулей зовут эту
+ * функцию, а в версии из ветки прода её не было — проверка типов поймала это
+ * до выкатки. Восстановлена поверх ИХ файла, а не заменой файла целиком: там
+ * живёт нормализация адреса, закрывающая обход ограничителя по IPv6.
+ *
+ * Почему НЕ читаем X-Forwarded-For напрямую (объяснение из удалённой копии,
+ * оно отвечает на другой вопрос и потерять его нельзя): прокси дописывает
+ * себя справа, поэтому ЛЕВЫЙ элемент — тот, что берёт `split(",")[0]`, —
+ * пишет сам клиент, и его никто не проверяет. Ограничитель по такому ключу
+ * даёт каждому запросу свою корзину, как только клиент меняет заголовок:
+ * снаружи он выглядит работающим и не срабатывает никогда. `req.ip` читает
+ * тот же заголовок, но только по узлам, которые приложение объявило
+ * доверенными (`app.set("trust proxy", 1)`).
+ *
+ * Нормализуем тем же helper-ом, что и сам ограничитель. Иначе один и тот же
+ * человек получал бы РАЗНЫЕ корзины в шахматах и в остальной платформе — а
+ * это и есть обход: две записи одного адреса считаются двумя посетителями.
+ */
+/**
+ * ВЗЯТО ЦЕЛИКОМ из ветки fix/build-closed-vacancy-feed (коммит d9cc19ce0 от
+ * 28.07.2026), а не написано заново: там эта функция уже стоит на 27 дорогих
+ * ручках, и второй способ ограничивать те же вызовы разошёлся бы с первым на
+ * первом же краевом случае. Ветка ждёт мержа; когда он случится, эта копия и
+ * тамошний оригинал совпадут дословно.
+ *
+ * Оговорка, которой у оригинала не было: счётчик живёт в памяти ПРОЦЕССА, а
+ * процессов у сервиса несколько (замер 23.08: 100 запросов за 11 с при пределе
+ * 30 дали 2 отказа). Настоящий предел примерно вчетверо выше объявленного.
+ * Поэтому у платных ручек рядом обязана стоять граница ЦЕНЫ одного вызова —
+ * см. aiInputBudget.ts, она от числа процессов не зависит.
+ */
+function generationLimit(keyPrefix) {
+    const raw = Number(process.env.GENERATION_RATE_LIMIT);
+    const max = Number.isFinite(raw) && raw > 0 ? raw : 30;
+    return rateLimit({
+        windowMs: 60000,
+        max,
+        keyPrefix,
+        message: "Слишком много запросов к генерации. Подождите минуту.",
+    });
+}
+/**
+ * Адрес ВНУТРЕННЕГО прокси Railway.
+ *
+ * Документировано вендором: внутренние узлы всегда в 100.0.0.0/8, и именно по
+ * этому признаку рекомендуется решать, доверять ли заголовкам. Проверка нужна
+ * ровно одна: «мы точно за их прокси». Снаружи попасть к нам с адреса 100.x
+ * нельзя, поэтому подделать доверие этим способом клиент не может.
+ */
+function isRailwayInternal(ip) {
+    const bare = ip.replace(/^::ffff:/, "");
+    if (bare === "127.0.0.1" || bare === "::1")
+        return true; // локальный запуск
+    return /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(bare);
+}
+/** Похоже ли значение на адрес. Дешёвая проверка формы, не валидация. */
+function looksLikeAddress(v) {
+    return /^[0-9a-fA-F:.]{3,45}$/.test(v) && /[.:]/.test(v);
+}
+/**
+ * Короткий НЕОБРАТИМЫЙ отпечаток ключа корзины — для диагностики снаружи.
+ *
+ * Зачем. 28.08.2026 я трижды подряд объяснял скачущий счётчик неверно, потому
+ * что снаружи не видно, ПО ЧЕМУ он считает. Каждая догадка стоила замера и
+ * оказывалась мимо. Отпечаток превращает вопрос «одна ли это корзина» из
+ * рассуждения в наблюдение: два запроса с одинаковым отпечатком — одна корзина.
+ *
+ * Восемь шестнадцатеричных знаков от sha256: подобрать по ним адрес нельзя, а
+ * отличить корзины — можно. Клиент и так знает свой адрес, так что нового о
+ * себе он отсюда не узнаёт.
+ */
+function bucketFingerprint(key) {
+    return (0, node_crypto_1.createHash)("sha256").update(key).digest("hex").slice(0, 8);
+}
+/**
+ * ОДНОРАЗОВАЯ запись в журнал: какой адрес и какие заголовки видит сервер.
+ *
+ * Зачем именно так. Отпечаток корзины показал, что ключ меняется от соединения
+ * к соединению, но НЕ говорит, чем он оказывается. Следующая правка без этого
+ * знания была бы четвёртой догадкой подряд.
+ *
+ * В журнал, а НЕ в ответ: адрес внутреннего узла — устройство нашей
+ * инфраструктуры, и наружу ему незачем (тот же принцип, что у publicErrorCategory
+ * в httpErrorHandler). В журнал он попадает один раз за жизнь процесса и без
+ * адреса ПОСЕТИТЕЛЯ: печатается только форма — первый октет соседа по сокету и
+ * наличие заголовков, а не их значения.
+ *
+ * Строка одноразовая намеренно: журнал, куда каждую секунду капает диагностика,
+ * перестают читать — тот же класс, что тревога без читателя.
+ */
+// Диагностика формы соседа по сокету: по одной строке на КАЖДУЮ НОВУЮ форму,
+// не больше трёх за жизнь процесса.
+//
+// Первая версия была ОДНОРАЗОВОЙ — и ответила про другого звонящего. Строку
+// напечатала проверка живости платформы: она приходит по локальной петле и без
+// заголовков, поэтому в журнале стояло «префикс=127, заголовков нет», и по ней
+// напрашивался вывод обо всех посетителях. Вывод был бы ложным: расчёт показал,
+// что отпечаток ключа от адреса 127.0.0.1 не совпадает НИ С ОДНИМ из семи
+// наблюдавшихся на проде.
+//
+// Урок общий: одноразовый зонд отвечает про ПЕРВЫЙ вызов, а не про типичный, и
+// первым к серверу обращается платформа, а не человек.
+const peerShapesLogged = new Set();
+const PEER_SHAPE_LOG_LIMIT = 3;
+/** Огрублённая форма значения X-Real-IP. Само значение НИКУДА не уходит. */
+function realIpShape(raw) {
+    if (typeof raw !== "string")
+        return raw === undefined ? "нет" : "не-строка";
+    const v = raw.trim();
+    if (!v)
+        return "пусто";
+    if (v.includes(","))
+        return "список";
+    if (/^[0-9.]+:[0-9]+$/.test(v))
+        return "с-портом";
+    if (looksLikeAddress(v))
+        return "адрес";
+    return "иное";
+}
+function logPeerShapeOnce(peer, headers, where) {
+    if (peerShapesLogged.size >= PEER_SHAPE_LOG_LIMIT)
+        return;
+    const bare = peer.replace(/^::ffff:/, "");
+    const family = bare.includes(":") ? "ipv6" : "ipv4";
+    const firstOctet = family === "ipv4" ? bare.split(".")[0] : bare.split(":")[0];
+    const real = headers?.["x-real-ip"] ? "есть" : "нет";
+    const xff = headers?.["x-forwarded-for"] ? "есть" : "нет";
+    // 20.10.2026: доходят ли через rewrite /api-backend платформенные заголовки Vercel —
+    // только «есть/нет», без значений. Если x-vercel-forwarded-for доходит, адрес гостя
+    // можно брать на бэке без обработчика на каждый путь (разбор у окна Приложения).
+    const vercel = ["x-vercel-forwarded-for", "x-vercel-id", "x-vercel-ip-country"].map((h) => (headers?.[h] ? "есть" : "нет")).join("/");
+    // ГЛАВНОЕ: печатаем не догадку, а исход КАЖДОГО условия ветки X-Real-IP.
+    // Отпечаток ключа показал, что ветка не срабатывает даже когда сосед из
+    // 100.x и заголовок на месте, — а какое из трёх условий падает, снаружи
+    // не видно. Три предыдущих объяснения были подбором и все оказались мимо.
+    const internal = isRailwayInternal(peer) ? "да" : "нет";
+    const realShape = realIpShape(headers?.["x-real-ip"]);
+    const branch = internal === "да" && realShape === "адрес" ? "x-real-ip" : "req.ip";
+    const shape = [family, firstOctet || "?", real, xff, vercel, where, internal, realShape, branch].join("|");
+    if (peerShapesLogged.has(shape))
+        return;
+    peerShapesLogged.add(shape);
+    console.warn("[rateLimit] форма соседа по сокету: семейство=%s префикс=%s | x-real-ip=%s x-forwarded-for=%s x-vercel(ff/id/страна)=%s | путь=%s | внутренний=%s форма-real=%s ветка=%s", family, firstOctet || "?", real, xff, vercel, where, internal, realShape, branch);
+}
+function clientIp(req) {
+    // X-Real-IP — ЕДИНСТВЕННЫЙ источник правды у Railway, и без него ключ
+    // ограничителя оказывается адресом их ВНУТРЕННЕГО прокси.
+    //
+    // Замер на проде 28.08.2026, четыре контроля (подробности в шапке файла):
+    // при постоянном собственном адресе и принудительном IPv4 остаток лимита в
+    // отдельных соединениях шёл вразнобой — 29 28 29 29 28 29 27 27 28 26, — а
+    // внутри ОДНОГО соединения был идеален. То есть один человек получал
+    // несколько лимитов, а все, кто пришёл через один внутренний узел, делили
+    // один. Предел не «на посетителя» ни в одну сторону.
+    //
+    // Причина: `trust proxy = 1` берёт ОДИН узел, а у Railway их больше, и
+    // `req.ip` останавливается на внутреннем прокси.
+    //
+    // Заголовку доверяем ТОЛЬКО когда сокет пришёл от внутреннего узла Railway.
+    // Клиент снаружи не может прийти с адреса 100.x, значит подсунуть себе
+    // чужой X-Real-IP он не может. Нет заголовка или мы не за прокси — ведём
+    // себя ровно как раньше: отказ здесь не должен ломать ограничитель.
+    const peer = String(req.socket?.remoteAddress || "");
+    // Путь огрубляется до «/api» или «прочее»: он нужен только чтобы отличить
+    // запрос посетителя от служебной проверки живости, а не для наблюдения.
+    const url = String(req.originalUrl || req.path || "");
+    logPeerShapeOnce(peer, req.headers, url.startsWith("/api") ? "/api" : "прочее");
+    // 🔴 ИТОГ ЗАМЕРА 28.08.2026, читать до любой правки ниже.
+    //
+    // Ветка X-Real-IP СРАБАТЫВАЕТ на проде (зонд: «внутренний=да форма-real=адрес
+    // ветка=x-real-ip»), и всё равно один посетитель получает СЕМЬ корзин. Значит
+    // значение заголовка посетителю не принадлежит: платформа заполняет его одним
+    // из своих внутренних адресов. Доказательство без догадок — расчёт: отпечаток
+    // ключа по моему настоящему адресу равен 62fbd24d, среди наблюдавшихся семи
+    // его НЕТ; принудительный IPv4 картину не меняет.
+    //
+    // Отсюда: считать посетителя по адресу тут НЕЧЕМ. X-Forwarded-For не спасает —
+    // его подделывает клиент, и корзин станет бесконечно много вместо семи.
+    // Поэтому расход ограничен ОБЩИМ потолком для анонимов (anonChatCeiling в
+    // qcoreai.ts, anonCoachCeiling в coach.ts), а не ключом.
+    //
+    // Четыре объяснения подряд оказались мимо, и каждое стоило замера. Пятого
+    // угадывания не нужно: если правите ключ — сначала получите ЧИСЛО, а не
+    // гипотезу (отпечаток в заголовке X-RateLimit-Bucket показывает корзину).
+    const realRaw = req.headers?.["x-real-ip"];
+    const real = typeof realRaw === "string" ? realRaw.trim() : "";
+    if (real && looksLikeAddress(real) && isRailwayInternal(peer)) {
+        return normalizeAddressForKey(real);
+    }
+    const raw = req.ip || req.socket?.remoteAddress || "unknown";
+    return raw === "unknown" ? raw : normalizeAddressForKey(raw);
+}
+function rateLimit(opts) {
+    const windowMs = opts.windowMs ?? 60000;
+    const max = opts.max ?? opts.capacity ?? 60;
+    const { message = "Too many requests", keyFn } = opts;
+    // Unique per instance, not the shared "rl" this used to default to.
+    const keyPrefix = opts.keyPrefix ?? `rl#${++limiterSeq}`;
+    const refillPerSec = typeof opts.refillPerSec === "number" && Number.isFinite(opts.refillPerSec) && opts.refillPerSec > 0
+        ? opts.refillPerSec
+        : null;
+    return function rateLimitMiddleware(req, res, next) {
+        const now = Date.now();
+        if (now - lastSweep > 60000) {
+            lastSweep = now;
+            for (const [k, b] of GLOBAL_BUCKETS) {
+                const spent = b.kind === "window"
+                    ? b.resetAt <= now
+                    : // A full bucket carries no state worth keeping.
+                        b.tokens + ((now - b.updatedAt) / 1000) * b.refillPerSec >= b.capacity;
+                if (spent)
+                    GLOBAL_BUCKETS.delete(k);
+            }
+        }
+        // Адрес берётся у соседней починки: clientIp читает заголовок прокси
+        // только по доверенным узлам, поэтому подделать его нельзя.
+        // Как сводить это место, прошлая сессия написала прямо здесь: их получение
+        // адреса + моё построение ключа. Взять только одно — вернуть либо
+        // подделываемый заголовок, либо общий счётчик на шесть лимитеров.
+        const ip = clientIp(req);
+        // A keyFn from the call site names the unit to count (an account, a tenant);
+        // the address is the fallback, including when the fn yields nothing usable.
+        let counted = ip;
+        if (keyFn) {
+            try {
+                const named = keyFn(req);
+                if (typeof named === "string" && named.trim())
+                    counted = named.trim();
+                else
+                    warnKeyFnFallback(keyPrefix, "вернул не строку или пусто");
+            }
+            catch (err) {
+                // Лимитер не должен быть причиной отказа запроса — считаем по адресу.
+                // Но МОЛЧА этого делать нельзя: подмена единицы счёта незаметно
+                // возвращает тот самый дефект, ради которого keyFn и появился. Пример:
+                // multichat считает по аккаунту, keyFn падает — и все, кто за одним
+                // адресом, снова делят один бюджет. Ни отказа, ни следа в логах.
+                warnKeyFnFallback(keyPrefix, String(err?.message || err).slice(0, 120));
+            }
+        }
+        // Адрес в ключе — нормализованный, иначе IPv6-клиент обходит любой лимит
+        // по адресу, просто меняя адрес: провайдер выдаёт клиенту целый префикс
+        // (/64), то есть 18 квинтиллионов адресов, и каждый давал бы свой счётчик.
+        //
+        // Нормализация берётся из `express-rate-limit`, а не пишется своя: пакет уже
+        // в зависимостях, три файла бэкенда (`qpaynet`, `build/public`,
+        // `cyberchessTournaments`) нормализуют именно им, и второй способ делать то
+        // же самое разошёлся бы с первым на первом же краевом случае. Проверено:
+        // два адреса из одного префикса дают один ключ, `::ffff:127.0.0.1`
+        // разворачивается в `127.0.0.1`, а «unknown» и пустая строка проходят без
+        // исключения.
+        //
+        // На аккаунтные ключи (из keyFn) нормализация НЕ распространяется — там в
+        // ключе не адрес, и трогать его нечем.
+        const key = `${keyPrefix}:${counted === ip ? normalizeAddressForKey(ip) : counted}`;
+        const existing = GLOBAL_BUCKETS.get(key);
+        if (refillPerSec !== null) {
+            let b = existing?.kind === "tokens" ? existing : undefined;
+            if (!b) {
+                b = { kind: "tokens", tokens: max, updatedAt: now, capacity: max, refillPerSec };
+                GLOBAL_BUCKETS.set(key, b);
+            }
+            // Accrue first, then decide. Capped at capacity so idle time can't bank a
+            // burst larger than the bucket.
+            b.tokens = Math.min(b.capacity, b.tokens + ((now - b.updatedAt) / 1000) * refillPerSec);
+            b.updatedAt = now;
+            const allowed = b.tokens >= 1;
+            if (allowed)
+                b.tokens -= 1;
+            res.setHeader("X-RateLimit-Limit", String(b.capacity));
+            // Floor for display only — the decision above uses the exact value.
+            res.setHeader("X-RateLimit-Remaining", String(Math.max(0, Math.floor(b.tokens))));
+            const secsToFull = (b.capacity - b.tokens) / refillPerSec;
+            res.setHeader("X-RateLimit-Reset", String(Math.ceil(now / 1000 + secsToFull)));
+            if (!allowed) {
+                const retryAfter = Math.max(1, Math.ceil((1 - b.tokens) / refillPerSec));
+                res.setHeader("Retry-After", String(retryAfter));
+                return res.status(429).json({ error: message, retryAfterSec: retryAfter });
+            }
+            return next();
+        }
+        let bucket = existing?.kind === "window" ? existing : undefined;
+        if (!bucket || bucket.resetAt <= now) {
+            bucket = { kind: "window", count: 0, resetAt: now + windowMs };
+            GLOBAL_BUCKETS.set(key, bucket);
+        }
+        bucket.count += 1;
+        const remaining = Math.max(0, max - bucket.count);
+        res.setHeader("X-RateLimit-Limit", String(max));
+        res.setHeader("X-RateLimit-Remaining", String(remaining));
+        // По чему считаем — иначе снаружи не отличить «одна корзина» от «несколько».
+        res.setHeader("X-RateLimit-Bucket", bucketFingerprint(key));
+        res.setHeader("X-RateLimit-Reset", String(Math.ceil(bucket.resetAt / 1000)));
+        if (bucket.count > max) {
+            const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+            res.setHeader("Retry-After", String(retryAfter));
+            return res.status(429).json({ error: message, retryAfterSec: retryAfter });
+        }
+        next();
+    };
+}

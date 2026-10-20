@@ -1,0 +1,637 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.qeventsRouter = void 0;
+const rateLimit_1 = require("../lib/rateLimit");
+const express_1 = require("express");
+const node_crypto_1 = __importDefault(require("node:crypto"));
+const authJwt_1 = require("../lib/authJwt");
+const dbPool_1 = require("../lib/dbPool");
+const ensureQEventsTables_1 = require("../lib/ensureQEventsTables");
+const platform_1 = require("../lib/sentry/platform");
+const capture = (0, platform_1.makeServiceCapture)("qevents");
+exports.qeventsRouter = (0, express_1.Router)();
+const pool = (0, dbPool_1.getPool)();
+(async () => {
+    try {
+        await (0, ensureQEventsTables_1.ensureQEventsTables)(pool);
+    }
+    catch {
+        // silent — in-memory fallback active
+    }
+})();
+// ─── In-memory fallback ───────────────────────────────────────────────────────
+const memEvents = new Map();
+const memRSVPs = new Map();
+const memWaitlist = new Map(); // eventId -> userId[]
+// ─── Constants ────────────────────────────────────────────────────────────────
+const EVENT_CATEGORIES = ["tech", "business", "art", "music", "sports", "education", "networking", "other"];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function param(req, key) {
+    const v = req.params[key];
+    return Array.isArray(v) ? v[0] : String(v ?? "");
+}
+function nowIso() {
+    return new Date().toISOString();
+}
+// Validate an ISO-8601 datetime string that is not in the past.
+// Returns the normalized ISO string, or null if invalid/past.
+function validStartAt(raw) {
+    if (typeof raw !== "string" || raw.trim() === "")
+        return null;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime()))
+        return null;
+    // Require an explicit ISO-ish date (reject things like "tomorrow" that Date won't parse anyway,
+    // and loose numeric strings that coerce unexpectedly).
+    if (!/\d{4}-\d{2}-\d{2}/.test(raw))
+        return null;
+    if (d.getTime() < Date.now())
+        return null;
+    return d.toISOString();
+}
+// ─── GET /api/qevents/health ──────────────────────────────────────────────────
+exports.qeventsRouter.get("/health", (_req, res) => {
+    res.json({
+        ok: true,
+        service: "qevents",
+        db: (0, ensureQEventsTables_1.isQEventsDbReady)() ? "postgres" : "in-memory",
+    });
+});
+// ─── GET /api/qevents/categories ─────────────────────────────────────────────
+exports.qeventsRouter.get("/categories", (_req, res) => {
+    res.json({ categories: EVENT_CATEGORIES });
+});
+// ─── GET /api/qevents/events ─────────────────────────────────────────────────
+// Query: ?category=&location=&limit=&when=upcoming|past|all (default upcoming)
+exports.qeventsRouter.get("/events", async (req, res) => {
+    const { category, location, limit, when } = req.query;
+    // `|| 20` ловит NaN, но НЕ отрицательное: limit=-5 проходило дальше и
+    // уезжало в SQL как LIMIT -5, что Postgres отвергает пятисоткой. Проверено
+    // на проде 19.08.2026, и ровно эти ручки называл журнал ошибок
+    // («LIMIT must not be negative» x4 за неделю). Идиом — как в bureau.ts.
+    const limitN = Math.min(Math.max(parseInt(String(limit ?? "20"), 10) || 20, 1), 100);
+    const now = new Date().toISOString();
+    const whenFilter = (when ?? "upcoming").toLowerCase();
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const conditions = [`"isPublic"=TRUE`];
+            const args = [];
+            let idx = 1;
+            if (whenFilter === "upcoming") {
+                conditions.push(`"startAt">=$${idx++}`);
+                args.push(now);
+            }
+            else if (whenFilter === "past") {
+                conditions.push(`"startAt"<$${idx++}`);
+                args.push(now);
+            }
+            // when=all → no time filter
+            if (category && EVENT_CATEGORIES.includes(category)) {
+                conditions.push(`"category"=$${idx++}`);
+                args.push(category);
+            }
+            if (location) {
+                conditions.push(`"location" ILIKE $${idx++}`);
+                args.push(`%${location}%`);
+            }
+            const where = conditions.join(" AND ");
+            const orderBy = whenFilter === "past" ? `ORDER BY "startAt" DESC` : `ORDER BY "startAt" ASC`;
+            const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE ${where} ${orderBy} LIMIT $${idx}`, [...args, limitN]);
+            return res.json({ events: rows, when: whenFilter });
+        }
+        let events = Array.from(memEvents.values()).filter((e) => e.isPublic);
+        if (whenFilter === "upcoming") {
+            events = events.filter((e) => e.startAt >= now);
+        }
+        else if (whenFilter === "past") {
+            events = events.filter((e) => e.startAt < now);
+        }
+        if (category && EVENT_CATEGORIES.includes(category)) {
+            events = events.filter((e) => e.category === category);
+        }
+        if (location) {
+            events = events.filter((e) => e.location.toLowerCase().includes(location.toLowerCase()));
+        }
+        events = events
+            .sort((a, b) => whenFilter === "past"
+            ? b.startAt.localeCompare(a.startAt)
+            : a.startAt.localeCompare(b.startAt))
+            .slice(0, limitN);
+        return res.json({ events, when: whenFilter });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── GET /api/qevents/events/:id ─────────────────────────────────────────────
+exports.qeventsRouter.get("/events/:id", async (req, res) => {
+    const id = param(req, "id");
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE "id"=$1`, [id]);
+            if (!rows[0])
+                return res.status(404).json({ error: "not_found" });
+            return res.json({ event: rows[0] });
+        }
+        const event = memEvents.get(id);
+        if (!event)
+            return res.status(404).json({ error: "not_found" });
+        return res.json({ event });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── POST /api/qevents/me/events ─────────────────────────────────────────────
+exports.qeventsRouter.post("/me/events", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    const { title, description, category, location, startAt, endAt, capacity, price, coverUrl } = req.body;
+    if (!title || !startAt) {
+        return res.status(400).json({ error: "title and startAt required" });
+    }
+    const normalizedStartAt = validStartAt(startAt);
+    if (!normalizedStartAt) {
+        return res.status(400).json({ error: "startAt must be a valid ISO-8601 date not in the past" });
+    }
+    const event = {
+        id: node_crypto_1.default.randomUUID(),
+        organizerId: auth.sub,
+        title: title.trim(),
+        description: typeof description === "string" ? description.trim() : null,
+        category: typeof category === "string" && EVENT_CATEGORIES.includes(category) ? category : "tech",
+        location: typeof location === "string" ? location.trim() : "Online",
+        startAt: normalizedStartAt,
+        endAt: typeof endAt === "string" ? endAt : null,
+        capacity: typeof capacity === "number" && capacity > 0 ? capacity : 100,
+        price: typeof price === "number" && price >= 0 ? price : 0,
+        attendeeCount: 0,
+        isPublic: true,
+        coverUrl: typeof coverUrl === "string" ? coverUrl : null,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+    };
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            await pool.query(`INSERT INTO "QEvent" ("id","organizerId","title","description","category","location","startAt","endAt","capacity","price","attendeeCount","isPublic","coverUrl","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,TRUE,$11,NOW(),NOW())`, [
+                event.id, event.organizerId, event.title, event.description,
+                event.category, event.location, event.startAt, event.endAt,
+                event.capacity, event.price, event.coverUrl,
+            ]);
+        }
+        else {
+            memEvents.set(event.id, event);
+        }
+        // Признак хранилища в ответе. До 19.08.2026 обе ветки возвращали
+        // одинаковое, и человек не мог узнать, что его событие живёт только до
+        // следующего перезапуска. Выкаток бэкенда за один день бывает шесть.
+        //
+        // Флаг берём из того же вызова, что выбирал ветку, — считать его заново
+        // после записи нельзя: на восстановившейся базе ветка памяти вернула бы
+        // "db" и соврала снова, только реже.
+        return res.status(201).json({ event, storage: (0, ensureQEventsTables_1.isQEventsDbReady)() ? "db" : "memory" });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── PATCH /api/qevents/me/events/:id ────────────────────────────────────────
+exports.qeventsRouter.patch("/me/events/:id", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    const id = param(req, "id");
+    const patchBody = req.body;
+    if (patchBody.startAt !== undefined) {
+        const normalized = validStartAt(patchBody.startAt);
+        if (!normalized) {
+            return res.status(400).json({ error: "startAt must be a valid ISO-8601 date not in the past" });
+        }
+        patchBody.startAt = normalized;
+    }
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE "id"=$1`, [id]);
+            if (!rows[0])
+                return res.status(404).json({ error: "not_found" });
+            if (rows[0].organizerId !== auth.sub)
+                return res.status(403).json({ error: "forbidden" });
+            const ev = rows[0];
+            const b = patchBody;
+            const { rows: updated } = await pool.query(`UPDATE "QEvent" SET "title"=$1,"description"=$2,"category"=$3,"location"=$4,"startAt"=$5,"endAt"=$6,"capacity"=$7,"price"=$8,"updatedAt"=NOW()
+         WHERE "id"=$9 RETURNING *`, [
+                b.title ?? ev.title,
+                b.description ?? ev.description,
+                b.category ?? ev.category,
+                b.location ?? ev.location,
+                b.startAt ?? ev.startAt,
+                b.endAt ?? ev.endAt,
+                b.capacity ?? ev.capacity,
+                b.price ?? ev.price,
+                id,
+            ]);
+            return res.json({ event: updated[0] });
+        }
+        const event = memEvents.get(id);
+        if (!event)
+            return res.status(404).json({ error: "not_found" });
+        if (event.organizerId !== auth.sub)
+            return res.status(403).json({ error: "forbidden" });
+        Object.assign(event, { ...patchBody, updatedAt: nowIso() });
+        return res.json({ event });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── DELETE /api/qevents/me/events/:id ───────────────────────────────────────
+exports.qeventsRouter.delete("/me/events/:id", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    const id = param(req, "id");
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT "organizerId" FROM "QEvent" WHERE "id"=$1`, [id]);
+            if (!rows[0])
+                return res.status(404).json({ error: "not_found" });
+            if (rows[0].organizerId !== auth.sub)
+                return res.status(403).json({ error: "forbidden" });
+            await pool.query(`DELETE FROM "QEvent" WHERE "id"=$1`, [id]);
+        }
+        else {
+            const event = memEvents.get(id);
+            if (!event)
+                return res.status(404).json({ error: "not_found" });
+            if (event.organizerId !== auth.sub)
+                return res.status(403).json({ error: "forbidden" });
+            memEvents.delete(id);
+        }
+        return res.json({ ok: true });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── POST /api/qevents/events/:id/rsvp — toggle ──────────────────────────────
+exports.qeventsRouter.post("/events/:id/rsvp", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    const eventId = param(req, "id");
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows: existing } = await pool.query(`SELECT * FROM "QEventRSVP" WHERE "eventId"=$1 AND "userId"=$2`, [eventId, auth.sub]);
+            let status;
+            let attendeeCount;
+            if (existing[0]) {
+                // Toggle: if going → not-going, else → going
+                const newStatus = existing[0].status === "going" ? "not-going" : "going";
+                await pool.query(`UPDATE "QEventRSVP" SET "status"=$1 WHERE "eventId"=$2 AND "userId"=$3`, [newStatus, eventId, auth.sub]);
+                const delta = newStatus === "going" ? 1 : -1;
+                await pool.query(`UPDATE "QEvent" SET "attendeeCount"=GREATEST(0,"attendeeCount"+$1) WHERE "id"=$2`, [delta, eventId]);
+                status = newStatus;
+            }
+            else {
+                const rsvpId = node_crypto_1.default.randomUUID();
+                await pool.query(`INSERT INTO "QEventRSVP" ("id","eventId","userId","status","createdAt") VALUES ($1,$2,$3,'going',NOW())`, [rsvpId, eventId, auth.sub]);
+                await pool.query(`UPDATE "QEvent" SET "attendeeCount"="attendeeCount"+1 WHERE "id"=$1`, [eventId]);
+                status = "going";
+            }
+            const { rows: ev } = await pool.query(`SELECT "attendeeCount" FROM "QEvent" WHERE "id"=$1`, [eventId]);
+            attendeeCount = ev[0]?.attendeeCount ?? 0;
+            return res.json({ status, attendeeCount });
+        }
+        const event = memEvents.get(eventId);
+        if (!event)
+            return res.status(404).json({ error: "not_found" });
+        const existingKey = Array.from(memRSVPs.values()).find((r) => r.eventId === eventId && r.userId === auth.sub);
+        let status;
+        if (existingKey) {
+            const newStatus = existingKey.status === "going" ? "not-going" : "going";
+            // Capacity check when attempting to RSVP "going"
+            if (newStatus === "going" && event.attendeeCount >= event.capacity) {
+                return res.status(409).json({ error: "Event is full", waitlistAvailable: true });
+            }
+            existingKey.status = newStatus;
+            const delta = newStatus === "going" ? 1 : -1;
+            event.attendeeCount = Math.max(0, event.attendeeCount + delta);
+            status = newStatus;
+        }
+        else {
+            // New RSVP — enforce capacity
+            if (event.attendeeCount >= event.capacity) {
+                return res.status(409).json({ error: "Event is full", waitlistAvailable: true });
+            }
+            const rsvp = {
+                id: node_crypto_1.default.randomUUID(),
+                eventId,
+                userId: auth.sub,
+                status: "going",
+                createdAt: nowIso(),
+            };
+            memRSVPs.set(rsvp.id, rsvp);
+            event.attendeeCount += 1;
+            status = "going";
+        }
+        // Тот же признак: запись на событие при недоступной базе живёт в памяти,
+        // а ответ до 19.08.2026 был неотличим от настоящего сохранения.
+        return res.json({ status, attendeeCount: event.attendeeCount, storage: (0, ensureQEventsTables_1.isQEventsDbReady)() ? "db" : "memory" });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── GET /api/qevents/events/:id/attendees ───────────────────────────────────
+exports.qeventsRouter.get("/events/:id/attendees", async (req, res) => {
+    const eventId = param(req, "id");
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT * FROM "QEventRSVP" WHERE "eventId"=$1 AND "status"='going' ORDER BY "createdAt" ASC`, [eventId]);
+            return res.json({ attendees: rows });
+        }
+        const attendees = Array.from(memRSVPs.values())
+            .filter((r) => r.eventId === eventId && r.status === "going")
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        return res.json({ attendees });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── GET /api/qevents/me/rsvps ────────────────────────────────────────────────
+exports.qeventsRouter.get("/me/rsvps", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT * FROM "QEventRSVP" WHERE "userId"=$1 ORDER BY "createdAt" DESC`, [auth.sub]);
+            return res.json({ rsvps: rows });
+        }
+        const rsvps = Array.from(memRSVPs.values())
+            .filter((r) => r.userId === auth.sub)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        return res.json({ rsvps });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── GET /api/qevents/calendar ────────────────────────────────────────────────
+exports.qeventsRouter.get("/calendar", async (_req, res) => {
+    const year = parseInt(String(_req.query.year ?? new Date().getFullYear()), 10);
+    const month = parseInt(String(_req.query.month ?? new Date().getMonth() + 1), 10);
+    // Негодный год или месяц — ошибка ЗАПРОСА, а не сервера. Без этой проверки
+    // parseInt("abc") даёт NaN, ниже new Date(Date.UTC(NaN, …)) бросает
+    // RangeError, мягкий catch отвечает 500 — и обычный обход роботом выглядит
+    // как настоящая авария. Замер на проде 20.08.2026: ?year= , ?year=abc и
+    // ?year=99999999999 давали 500; без параметра и с верным годом — 200.
+    if (!Number.isInteger(year) || year < 1970 || year > 2100 ||
+        !Number.isInteger(month) || month < 1 || month > 12) {
+        return res.status(400).json({ error: "invalid_year_or_month" });
+    }
+    const ym = `${year}-${String(month).padStart(2, "0")}`;
+    const days = {};
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const monthStart = `${ym}-01T00:00:00.000Z`;
+            const monthEnd = new Date(Date.UTC(year, month, 1)).toISOString(); // first day of next month
+            const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE "isPublic"=TRUE AND "startAt">=$1 AND "startAt"<$2 ORDER BY "startAt" ASC`, [monthStart, monthEnd]);
+            for (const ev of rows) {
+                const iso = typeof ev.startAt === "string" ? ev.startAt : new Date(ev.startAt).toISOString();
+                const day = iso.slice(0, 10);
+                if (!days[day])
+                    days[day] = [];
+                days[day].push(ev);
+            }
+            return res.json({ year, month, days });
+        }
+        for (const ev of memEvents.values()) {
+            if (!ev.isPublic)
+                continue;
+            if (!ev.startAt.startsWith(ym))
+                continue;
+            const day = ev.startAt.slice(0, 10);
+            if (!days[day])
+                days[day] = [];
+            days[day].push(ev);
+        }
+        return res.json({ year, month, days });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── POST /api/qevents/events/:id/waitlist ────────────────────────────────────
+exports.qeventsRouter.post("/events/:id/waitlist", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    const eventId = param(req, "id");
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT "attendeeCount","capacity" FROM "QEvent" WHERE "id"=$1`, [eventId]);
+            if (!rows[0])
+                return res.status(404).json({ error: "not_found" });
+            if (rows[0].attendeeCount < rows[0].capacity) {
+                return res.status(400).json({ error: "Event is not full, RSVP directly" });
+            }
+            await pool.query(`INSERT INTO "QEventWaitlist" ("id","eventId","userId","createdAt") VALUES ($1,$2,$3,NOW())
+         ON CONFLICT ("eventId","userId") DO NOTHING`, [node_crypto_1.default.randomUUID(), eventId, auth.sub]);
+            const { rows: list } = await pool.query(`SELECT "userId" FROM "QEventWaitlist" WHERE "eventId"=$1 ORDER BY "createdAt" ASC`, [eventId]);
+            const position = list.findIndex((r) => r.userId === auth.sub) + 1;
+            return res.json({ position });
+        }
+        const event = memEvents.get(eventId);
+        if (!event)
+            return res.status(404).json({ error: "not_found" });
+        if (event.attendeeCount < event.capacity) {
+            return res.status(400).json({ error: "Event is not full, RSVP directly" });
+        }
+        const list = memWaitlist.get(eventId) ?? [];
+        if (!list.includes(auth.sub))
+            list.push(auth.sub);
+        memWaitlist.set(eventId, list);
+        // Лист ожидания ветки с базой НЕ ИМЕЕТ ВОВСЕ — только memWaitlist. Он
+        // теряется при КАЖДОЙ выкатке, а не при сбое базы, поэтому здесь "memory"
+        // жёстко: человек должен знать, что очередь временная. Полноценная починка
+        // требует таблицы (образец создания на лету — lib/conceptBoardStore.ts) и
+        // вынесена отдельной задачей на доску.
+        return res.json({
+            position: list.indexOf(auth.sub) + 1,
+            storage: "memory",
+            warning: "Очередь хранится временно и не переживёт перезапуск сервиса. " +
+                "Мы сообщим, когда место освободится, только если запись сохранится — " +
+                "надёжнее вернуться на страницу события позже.",
+        });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── GET /api/qevents/events/:id/waitlist — owner only ────────────────────────
+exports.qeventsRouter.get("/events/:id/waitlist", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    const eventId = param(req, "id");
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT "organizerId" FROM "QEvent" WHERE "id"=$1`, [eventId]);
+            if (!rows[0])
+                return res.status(404).json({ error: "not_found" });
+            if (rows[0].organizerId !== auth.sub)
+                return res.status(403).json({ error: "forbidden" });
+            const { rows: list } = await pool.query(`SELECT "userId" FROM "QEventWaitlist" WHERE "eventId"=$1 ORDER BY "createdAt" ASC`, [eventId]);
+            const waitlist = list.map((r) => r.userId);
+            return res.json({ waitlist, count: waitlist.length });
+        }
+        const event = memEvents.get(eventId);
+        if (!event)
+            return res.status(404).json({ error: "not_found" });
+        if (event.organizerId !== auth.sub)
+            return res.status(403).json({ error: "forbidden" });
+        const list = memWaitlist.get(eventId) ?? [];
+        return res.json({ waitlist: list, count: list.length });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+/**
+ * Предел на «поделиться».
+ *
+ * ЗАЧЕМ. Это единственная ручка модуля БЕЗ входа: остальные четыре отвечают
+ * 401 без токена, а эта отвечает всем. При этом каждый вызов пишет строку в
+ * "QEventShare", и таблицу никто никогда не читает — ни одного SELECT по ней в
+ * коде нет. То есть любой мог неограниченно наращивать платную базу данными,
+ * которые никому не пригодятся.
+ *
+ * Ключ берётся ограничителем из нормализованного адреса (умолчание rateLimit),
+ * поэтому подбор адреса внутри своей же IPv6-подсети не даёт свежего окна.
+ *
+ * 20 в минуту — по-человечески щедро: поделиться событием чаще нескольких раз
+ * подряд живой человек не станет.
+ */
+const shareRateLimit = (0, rateLimit_1.rateLimit)({
+    windowMs: 60000,
+    max: 20,
+    keyPrefix: "qevents:share",
+});
+// ─── POST /api/qevents/events/:id/share ──────────────────────────────────────
+exports.qeventsRouter.post("/events/:id/share", shareRateLimit, async (req, res) => {
+    const id = param(req, "id");
+    try {
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT "id" FROM "QEvent" WHERE "id"=$1`, [id]);
+            if (!rows[0])
+                return res.status(404).json({ error: "not_found" });
+            await pool.query(`INSERT INTO "QEventShare" ("id","eventId","createdAt") VALUES ($1,$2,NOW())`, [node_crypto_1.default.randomUUID(), id]);
+            return res.json({ shareUrl: `https://aevion.app/events/${id}` });
+        }
+        const event = memEvents.get(id);
+        if (!event)
+            return res.status(404).json({ error: "not_found" });
+        return res.json({ shareUrl: `https://aevion.app/events/${id}` });
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});
+// ─── GET /api/qevents/events/:id/ics — iCal export ───────────────────────────
+function icsEscape(text) {
+    return text
+        .replace(/\\/g, "\\\\")
+        .replace(/;/g, "\\;")
+        .replace(/,/g, "\\,")
+        .replace(/\r?\n/g, "\\n");
+}
+function toIcsDate(iso) {
+    // 2026-05-13T15:30:00.000Z → 20260513T153000Z
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime()))
+        return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return (`${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+        `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`);
+}
+function buildIcs(event) {
+    const dtStamp = toIcsDate(new Date().toISOString());
+    const dtStart = toIcsDate(event.startAt);
+    // Fallback: end = start + 1 hour if not provided
+    const endIso = event.endAt ?? new Date(new Date(event.startAt).getTime() + 60 * 60 * 1000).toISOString();
+    const dtEnd = toIcsDate(endIso);
+    const summary = icsEscape(event.title || "QEvent");
+    const description = icsEscape(event.description ?? "");
+    const location = icsEscape(event.location ?? "");
+    return [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//AEVION//QEvents//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        `UID:${event.id}@qevents.aevion.app`,
+        `DTSTAMP:${dtStamp}`,
+        `DTSTART:${dtStart}`,
+        `DTEND:${dtEnd}`,
+        `SUMMARY:${summary}`,
+        description ? `DESCRIPTION:${description}` : "",
+        location ? `LOCATION:${location}` : "",
+        `CATEGORIES:${icsEscape(event.category || "other").toUpperCase()}`,
+        `URL:https://aevion.app/qevents/${event.id}`,
+        "STATUS:CONFIRMED",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+        .filter(Boolean)
+        .join("\r\n");
+}
+exports.qeventsRouter.get("/events/:id/ics", async (req, res) => {
+    const id = param(req, "id");
+    try {
+        let event;
+        if ((0, ensureQEventsTables_1.isQEventsDbReady)()) {
+            const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE "id"=$1`, [id]);
+            if (!rows[0])
+                return res.status(404).json({ error: "not_found" });
+            event = rows[0];
+        }
+        else {
+            event = memEvents.get(id);
+            if (!event)
+                return res.status(404).json({ error: "not_found" });
+        }
+        const ics = buildIcs(event);
+        const safeTitle = (event.title || "event")
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 40) || "event";
+        res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="qevents-${safeTitle}-${event.id.slice(0, 8)}.ics"`);
+        return res.send(ics);
+    }
+    catch (err) {
+        capture(err);
+        return res.status(500).json({ error: "internal_error" });
+    }
+});

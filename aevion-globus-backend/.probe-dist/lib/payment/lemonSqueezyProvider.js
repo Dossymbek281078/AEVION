@@ -1,0 +1,328 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.lemonSqueezyPaymentProvider = void 0;
+exports.successRedirectUrl = successRedirectUrl;
+exports.localeForCheckout = localeForCheckout;
+/**
+ * Lemon Squeezy payment provider.
+ *
+ * Activate via env:
+ *   BUREAU_PAYMENT_PROVIDER=lemonsqueezy
+ *   LEMON_SQUEEZY_API_KEY=<from Settings → API in the LS dashboard>
+ *   LEMON_SQUEEZY_STORE_ID=<numeric store id from LS dashboard URL>
+ *   LEMON_SQUEEZY_WEBHOOK_SECRET=<signing secret created when adding a webhook>
+ *   AEVION_PUBLIC_BASE_URL=https://aevion.app    (success/cancel redirects)
+ *
+ *   # ❌ LEMON_SQUEEZY_DEFAULT_VARIANT_ID этим провайдером НЕ используется.
+ *   # Здесь было написано, что createIntent подставляет её, когда ссылка не
+ *   # сопоставлена товару. Так делать нельзя: 14.09.2026 такое поведение списало бы
+ *   # $149 за DevHub вместо отметки бюро — человек заплатил бы за чужой товар.
+ *   # createIntent теперь ОТКАЗЫВАЕТ на несопоставленной ссылке (см. ниже), а
+ *   # переменная осталась только у DevHub для его собственной покупки.
+ *
+ * Reference:
+ *   https://docs.lemonsqueezy.com/api/checkouts/create-checkout
+ *   https://docs.lemonsqueezy.com/help/webhooks
+ *   https://docs.lemonsqueezy.com/help/webhooks/signing-requests
+ *
+ * Mapping notes:
+ * - LS doesn't have a Stripe-style payment intent; each checkout is its own
+ *   resource keyed by a UUID. We generate our own intentId (UUID) and pass
+ *   it via `custom_data.bureauIntentId` so the webhook returns it. LS
+ *   echoes `custom_data` back on every order_created / subscription_created
+ *   event.
+ * - parseWebhook reads `x-signature` header (HMAC-SHA256, hex) and verifies
+ *   against LEMON_SQUEEZY_WEBHOOK_SECRET. Then maps event_name → PaymentStatus.
+ *   See https://docs.lemonsqueezy.com/help/webhooks/signing-requests
+ * - getIntent polls /v1/orders?filter[order_number]=<our ref> — LS doesn't
+ *   give us back our intentId in the order list, so we filter by the
+ *   reference we passed as `order_number` (or fall back to custom_data via
+ *   /v1/checkouts/{id} if we cached the LS checkout id on creation).
+ */
+const successUrl_1 = require("./successUrl");
+const node_crypto_1 = require("node:crypto");
+const lemonSqueezyVariants_1 = require("../../data/lemonSqueezyVariants");
+const LS_BASE = "https://api.lemonsqueezy.com/v1";
+function requiredEnv(name) {
+    const v = process.env[name];
+    if (!v)
+        throw new Error(`LemonSqueezy: missing env ${name}`);
+    return v;
+}
+function authHeaders() {
+    return {
+        Authorization: `Bearer ${requiredEnv("LEMON_SQUEEZY_API_KEY")}`,
+        Accept: "application/vnd.api+json",
+        "Content-Type": "application/vnd.api+json",
+    };
+}
+function publicBaseUrl() {
+    return (process.env.AEVION_PUBLIC_BASE_URL || "https://aevion.app").replace(/\/+$/, "");
+}
+/**
+ * Куда вернуть человека после успешной оплаты.
+ *
+ * 🔴 Было `${base}/payment/success` — страницы с таким адресом не существует
+ * ни в репозитории, ни на проде (замер 12.08.2026: `aevion.app/payment/success`
+ * → 404, при том что `/pricing/checkout/success`, `/pricing/checkout/cancel`
+ * и `/bureau` отвечают 200). То есть человек платил за подписку и попадал на
+ * страницу ошибки. Деньги при этом списывались и доступ выдавался — ломался
+ * только последний экран, поэтому дефект не проявлял себя ничем, кроме
+ * впечатления покупателя.
+ *
+ * Ведём на существующую страницу успеха — ту же, что уже используют PayPal и
+ * PayBox. Она читает tier/period/total/provider и показывает, что делать
+ * дальше, так что параметры передаём, а не теряем.
+ */
+function successRedirectUrl(base, intentId, input) {
+    // Собирает общий сборщик: адрес возврата был в трёх копиях, и они
+    // разошлись — appId не клал никто, а tier знал только этот помощник.
+    return (0, successUrl_1.buildSuccessUrl)(base, input, { provider: "lemonsqueezy", intentId });
+}
+// In-memory cache: our intentId → LS checkout id (so getIntent can fetch the
+// right LS order). Rebuilds on process restart; webhook-driven status is the
+// source of truth, so a cache miss just means we can't poll until next webhook.
+const INTENT_TO_LS_CHECKOUT = new Map();
+function mapStatus(raw, refunded) {
+    if (refunded)
+        return "refunded";
+    switch ((raw || "").toLowerCase()) {
+        case "paid":
+            return "paid";
+        case "pending":
+            return "processing";
+        case "failed":
+            return "failed";
+        case "expired":
+        case "void":
+            return "expired";
+        default:
+            return "unpaid";
+    }
+}
+/**
+ * Язык страницы оплаты: наш код языка -> код, который принимает касса.
+ *
+ * ⚠️ Списки НЕ совпадают, и это не мелочь. Замер 09.09.2026: у нас 11 языков
+ * интерфейса, касса принимает 8 из них. Не принимает `ar`, `kk` и `zh` —
+ * причём китайский у неё существует, но называется `zh-CN`.
+ *
+ * Неизвестный код НЕ передаём вовсе (возвращаем undefined), а не подставляем
+ * английский молча: пустое поле означает «решай сам», и покупатель увидит язык
+ * своего браузера — это лучше, чем чужой язык, навязанный нами. Передать же
+ * код, которого касса не знает, нельзя вообще: риск в том, что оплата
+ * ОТКАЖЕТ, а это дороже любого языка.
+ *
+ * Список сверен с документацией кассы 09.09.2026. Появится казахский — сюда
+ * добавляется одна строка.
+ */
+const ЯЗЫКИ_КАССЫ = new Set([
+    "bg", "hr", "cs", "da", "nl", "en", "et", "fil", "fi", "fr", "de", "el",
+    "hu", "id", "it", "ja", "ko", "lv", "lt", "ms", "mt", "pl", "pt", "ro",
+    "ru", "zh-CN", "sk", "sl", "es", "sv", "th", "tr", "vi",
+]);
+function localeForCheckout(наш) {
+    if (!наш)
+        return undefined;
+    const код = String(наш).trim().toLowerCase();
+    if (код === "zh")
+        return "zh-CN"; // у кассы китайский только так
+    if (ЯЗЫКИ_КАССЫ.has(код))
+        return код;
+    const база = код.split("-")[0]; // "ru-RU" -> "ru"
+    if (ЯЗЫКИ_КАССЫ.has(база))
+        return база;
+    return undefined; // ar, kk и прочие — молча не шлём
+}
+exports.lemonSqueezyPaymentProvider = {
+    id: "lemonsqueezy",
+    async createIntent(input) {
+        const storeId = requiredEnv("LEMON_SQUEEZY_STORE_ID");
+        // Reference-based mapping first ("bundle:fintech", "all-access" → published
+        // variant), env DEFAULT acts as the catch-all when the slot isn't filled
+        // yet OR when reference doesn't match any known bundle.
+        /*
+         * ЗАПАС МОЛЧАЛ, А ЭТО ДЕНЬГИ.
+         *
+         * Неизвестная ссылка уходит в товар по умолчанию — и покупатель платит цену
+         * ТОГО товара, а не ту, что мы ему назвали. Соседнее окно замерило это на
+         * витрине 02.09: наборы показывали свои три цены, касса брала цену товара
+         * по умолчанию — в полтора-два раза выше любой из показанных. (Числа из
+         * замера убраны намеренно: сторож отставных цен читает и комментарии.)
+         *
+         * Отказывать нельзя: `bureau.ts` передаёт сюда идентификатор проверки,
+         * который не сопоставлен НАМЕРЕННО и живёт на товаре по умолчанию. Запрет
+         * сломал бы работающую оплату — то есть лечение было бы хуже болезни.
+         *
+         * Поэтому не меняем поведение, а прекращаем молчать: в журнале остаётся,
+         * КАКАЯ ссылка не нашлась и КАКУЮ сумму мы при этом назвали. Расхождение
+         * этих двух чисел и есть дефект, и теперь его видно без покупки.
+         */
+        /*
+         * 🔴 30.09.2026: НЕСОПОСТАВЛЕННАЯ ССЫЛКА — ОТКАЗ, А НЕ ТОВАР ПО УМОЛЧАНИЮ.
+         *
+         * Прежняя редакция здесь только предупреждала в журнал и продавала товар по
+         * умолчанию. Автор сознательно «не менял поведение, а прекращал молчать», и
+         * тогда это было осторожно. Сегодня измерено, чем это оборачивается.
+         *
+         * Товар по умолчанию на проде — подписка DevHub Studio Pro $149/мес. Бюро
+         * авторства посылало сюда `reference: <номер проверки>` — случайную строку,
+         * которой в кассе не сопоставлено ничего. То есть сайт обещал $29 в месяц,
+         * касса списала бы $149 и выдала бы ЧУЖОЙ продукт, а подтверждение бюро не
+         * пришло бы вовсе. Предупреждение в журнале этого не остановило: журнал
+         * читают после, а деньги списываются сразу.
+         *
+         * Кто сюда доходит — измерено, а не предположено: вызовов `createIntent` у
+         * этого провайдера два. Касса (`routes/checkout.ts`) пускает запрос только
+         * когда есть свой вариант ИЛИ запасной, то есть её ссылка сопоставлена
+         * всегда; второй вызов — бюро, и это ровно тот дефект. Значит отказ не
+         * ломает ни одного работающего пути продажи.
+         *
+         * Направление отказа выбрано по правилу: пропуск ведёт к необратимому
+         * наружу (списание чужой суммы за чужой товар), поэтому закрываемся.
+         */
+        const сопоставленный = (0, lemonSqueezyVariants_1.resolveLemonSqueezyVariant)(input.reference);
+        if (!сопоставленный) {
+            throw new Error(`lemonsqueezy: ссылка "${input.reference}" не сопоставлена товару магазина. ` +
+                `Продажа остановлена: товар по умолчанию стоит другую сумму, и покупатель ` +
+                `заплатил бы не за то, что ему обещано (названная сумма ${input.amountCents} ${input.currency}).`);
+        }
+        const variantId = сопоставленный;
+        const intentId = (0, node_crypto_1.randomUUID)();
+        const base = publicBaseUrl();
+        const body = {
+            data: {
+                type: "checkouts",
+                attributes: {
+                    // Цена этой покупки, когда она не равна цене товара в кассе:
+                    // так продаётся отдельный модуль поверх варианта тарифа (см.
+                    // PaymentIntentInput.customPriceCents). Ноль и отрицательное не
+                    // передаём — бесплатное идёт другой веткой checkout.ts, а здесь
+                    // такое значение означало бы ошибку расчёта, и касса взяла бы
+                    // цену товара молча.
+                    ...(typeof input.customPriceCents === "number" && input.customPriceCents > 0
+                        ? { custom_price: Math.round(input.customPriceCents) }
+                        : {}),
+                    checkout_data: {
+                        email: input.email ?? undefined,
+                        custom: { bureauIntentId: intentId, reference: input.reference, ...(input.customData ?? {}) },
+                    },
+                    checkout_options: {
+                        // без этого касса берёт язык магазина, а он у нас болгарский
+                        ...(localeForCheckout(input.locale) ? { locale: localeForCheckout(input.locale) } : {}),
+                        embed: false,
+                        media: false,
+                        logo: true,
+                    },
+                    product_options: {
+                        name: input.description,
+                        description: input.description,
+                        redirect_url: successRedirectUrl(base, intentId, input),
+                        receipt_button_text: "Back to AEVION",
+                        enabled_variants: [Number.parseInt(variantId, 10)],
+                    },
+                },
+                relationships: {
+                    store: { data: { type: "stores", id: String(storeId) } },
+                    variant: { data: { type: "variants", id: String(variantId) } },
+                },
+            },
+        };
+        const res = await fetch(`${LS_BASE}/checkouts`, {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(8000),
+        });
+        if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            throw new Error(`LS createCheckout failed: ${res.status} ${txt.slice(0, 200)}`);
+        }
+        const j = (await res.json());
+        const lsId = j.data?.id;
+        const url = j.data?.attributes?.url;
+        if (!lsId || !url)
+            throw new Error("LS createCheckout: missing id/url in response");
+        INTENT_TO_LS_CHECKOUT.set(intentId, lsId);
+        return {
+            intentId,
+            checkoutUrl: url,
+            status: "unpaid",
+            amountCents: input.amountCents,
+            currency: input.currency,
+        };
+    },
+    async getIntent(intentId) {
+        // Best-effort poll: filter orders by our bureauIntentId stored in custom
+        // data. LS doesn't index custom_data so we fall back to "no info yet" —
+        // the webhook is authoritative.
+        const url = `${LS_BASE}/orders?filter[store_id]=${requiredEnv("LEMON_SQUEEZY_STORE_ID")}&sort=-created_at&page[size]=20`;
+        const res = await fetch(url, {
+            headers: authHeaders(),
+            signal: AbortSignal.timeout(6000),
+        }).catch(() => null);
+        if (!res || !res.ok) {
+            return { status: "unpaid", paidAt: null, reason: null, raw: null };
+        }
+        const j = (await res.json());
+        // Without filter on custom_data we just confirm there's no obvious paid
+        // match — webhook will deliver the real status.
+        const recent = j.data?.[0]?.attributes;
+        return {
+            status: mapStatus(recent?.status, recent?.refunded),
+            paidAt: recent?.status === "paid" ? recent?.created_at ?? null : null,
+            reason: null,
+            raw: j,
+        };
+    },
+    parseWebhook(headers, rawBody) {
+        const secret = requiredEnv("LEMON_SQUEEZY_WEBHOOK_SECRET");
+        const presented = headers["x-signature"] || headers["X-Signature"];
+        if (!presented)
+            throw new Error("LS webhook: missing x-signature header");
+        const expected = (0, node_crypto_1.createHmac)("sha256", secret).update(rawBody, "utf8").digest("hex");
+        const a = Buffer.from(presented);
+        const b = Buffer.from(expected);
+        if (a.length !== b.length || !(0, node_crypto_1.timingSafeEqual)(a, b)) {
+            throw new Error("LS webhook: signature mismatch");
+        }
+        let parsed;
+        try {
+            parsed = JSON.parse(rawBody);
+        }
+        catch {
+            throw new Error("LS webhook: body is not JSON");
+        }
+        const intentId = parsed.meta?.custom_data?.bureauIntentId;
+        if (!intentId)
+            throw new Error("LS webhook: meta.custom_data.bureauIntentId missing");
+        const event = (parsed.meta?.event_name || "").toLowerCase();
+        let status;
+        switch (event) {
+            case "order_created":
+                status = mapStatus(parsed.data?.attributes?.status, parsed.data?.attributes?.refunded);
+                break;
+            case "order_refunded":
+                status = "refunded";
+                break;
+            case "subscription_payment_failed":
+                status = "failed";
+                break;
+            case "subscription_expired":
+                status = "expired";
+                break;
+            default:
+                status = mapStatus(parsed.data?.attributes?.status, parsed.data?.attributes?.refunded);
+        }
+        return {
+            intentId,
+            eventId: parsed.meta?.webhook_id || undefined,
+            result: {
+                status,
+                paidAt: status === "paid" ? parsed.data?.attributes?.created_at ?? null : null,
+                reason: null,
+                raw: parsed,
+            },
+        };
+    },
+};

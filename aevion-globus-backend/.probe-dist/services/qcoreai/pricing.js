@@ -1,0 +1,125 @@
+"use strict";
+/**
+ * QCoreAI provider+model pricing table.
+ *
+ * Values are USD per 1,000,000 tokens (input / output). Prices move often and
+ * vary by tier / region — the numbers below are representative list prices at
+ * the time of writing and are used only for cost-dashboard display. Consumers
+ * that need exact billing must read provider invoices, not this table.
+ *
+ * When a model is not in the table we return { input: 0, output: 0 } and the
+ * UI renders a gentle "—" instead of a misleading zero cost.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getModelPrice = getModelPrice;
+exports.isPremiumModel = isPremiumModel;
+exports.getPremiumModelNames = getPremiumModelNames;
+exports.costUsd = costUsd;
+exports.getPricingTable = getPricingTable;
+// Every model listed in a "free" gateway gets an explicit { 0, 0 } so the cost
+// dashboard renders "Free" instead of a misleading "—" (unpriced). Helper below.
+function freeModels(...ids) {
+    return Object.fromEntries(ids.map((id) => [id, { input: 0, output: 0 }]));
+}
+const TABLE = {
+    anthropic: {
+        "claude-opus-4-8": { input: 5.0, output: 25.0 },
+        "claude-fable-5": { input: 10.0, output: 50.0 },
+        "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
+        "claude-haiku-4-5-20251001": { input: 0.8, output: 4.0 },
+    },
+    openai: {
+        "gpt-4o": { input: 2.5, output: 10.0 },
+        "gpt-4o-mini": { input: 0.15, output: 0.6 },
+        // `gpt-4-turbo` снят 07.10.2026: его нет в списке моделей OpenAI.
+        // Строку убираем вместе с именем — цена без модели считает несуществующее.
+    },
+    gemini: {
+        // Free-tier (rate-limited) on Flash; paid list prices shown for reference.
+        "gemini-2.5-flash": { input: 0.15, output: 0.6 },
+        // 07.10.2026: вместо снятых `gemini-2.0-flash-001` и `gemini-1.5-pro`
+        // (обе отвечают 404) — те, что объявлены в реестре и проверены вызовом.
+        //
+        // Цены взяты с прейскуранта поставщика (ai.google.dev/gemini-api/docs/pricing),
+        // стандартный тариф, действует по 31.12.2026 — с 01.01.2027 у 3.8 Flash
+        // вдвое дороже. Первую версию этих двух строк я написал ПО ПАМЯТИ и
+        // ошибся вдвое с лишним; числа в коде, которые кто-то сложит в деньги,
+        // пишутся только из источника.
+        "gemini-3.8-flash": { input: 0.75, output: 3.75 },
+        "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
+    },
+    deepseek: {
+        "deepseek-chat": { input: 0.14, output: 0.28 },
+        "deepseek-reasoner": { input: 0.55, output: 2.19 },
+    },
+    grok: {
+        "grok-3": { input: 3.0, output: 15.0 },
+        "grok-3-mini": { input: 0.3, output: 0.5 },
+    },
+    // ── Free fleet: no per-token cost to the user ──────────────────────────
+    openrouter: freeModels("meta-llama/llama-3.3-70b-instruct:free", "openai/gpt-oss-120b:free", "qwen/qwen3-next-80b-a3b-instruct:free", "nvidia/nemotron-3-super-120b-a12b:free", "google/gemma-4-31b-it:free", "nousresearch/hermes-3-llama-3.1-405b:free", "qwen/qwen3-coder:free"),
+    groq: freeModels("llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it", "moonshotai/kimi-k2-instruct"),
+    cerebras: freeModels("llama-3.3-70b", "llama3.1-8b", "qwen-3-32b"),
+    mistral: freeModels("mistral-small-latest", "open-mistral-nemo"),
+    together: freeModels("meta-llama/Llama-3.3-70B-Instruct-Turbo-Free", "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"),
+    github: freeModels("openai/gpt-4o-mini", "openai/gpt-4o", "meta/Meta-Llama-3.1-70B-Instruct", "microsoft/Phi-3.5-MoE-instruct"),
+    nvidia: freeModels("nvidia/llama-3.3-nemotron-super-49b-v1", "deepseek-ai/deepseek-r1", "meta/llama-3.3-70b-instruct", "qwen/qwen2.5-72b-instruct", "mistralai/mistral-large-2-instruct"),
+    ollama: freeModels("llama3.1", "qwen2.5", "gemma2", "mistral", "phi3"),
+};
+function getModelPrice(provider, model) {
+    const p = TABLE[provider];
+    if (!p)
+        return null;
+    const m = p[model];
+    if (!m)
+        return null;
+    return m;
+}
+/**
+ * Frontier/premium models — priced high enough ($5+/1M output tokens at the
+ * time of writing) that a tier's overall token allowance shouldn't be
+ * spendable entirely on them. Used to size a smaller sub-cap within each
+ * tier's llmTokensPerMonth (see TierLimits.premiumTokensPerMonth in
+ * data/pricing.ts) — mirrors how Claude/ChatGPT plans give generous access
+ * to a cheaper model but a much smaller quota for their top model.
+ *
+ * Threshold, not a hand-picked list, so a newly added expensive model is
+ * automatically covered without a second place to remember to update.
+ */
+const PREMIUM_OUTPUT_USD_PER_1M_THRESHOLD = 5.0;
+function isPremiumModel(provider, model) {
+    const price = getModelPrice(provider, model);
+    if (!price)
+        return false; // unpriced (incl. free-fleet/local) — never premium
+    return price.output >= PREMIUM_OUTPUT_USD_PER_1M_THRESHOLD;
+}
+/** Flat list of every premium model name across all providers — for SQL `= ANY(...)` filters. */
+function getPremiumModelNames() {
+    const out = [];
+    for (const models of Object.values(TABLE)) {
+        for (const [model, price] of Object.entries(models)) {
+            if (price.output >= PREMIUM_OUTPUT_USD_PER_1M_THRESHOLD)
+                out.push(model);
+        }
+    }
+    return out;
+}
+/** Cost in USD for a single call. Returns 0 when tokens are unknown or model is unpriced. */
+function costUsd(provider, model, tokensIn, tokensOut) {
+    const price = getModelPrice(provider, model);
+    if (!price)
+        return 0;
+    const tin = typeof tokensIn === "number" && tokensIn > 0 ? tokensIn : 0;
+    const tout = typeof tokensOut === "number" && tokensOut > 0 ? tokensOut : 0;
+    return (tin * price.input + tout * price.output) / 1000000;
+}
+/** Public shape: flat list of {provider, model, input, output} for frontend mirroring. */
+function getPricingTable() {
+    const out = [];
+    for (const [provider, models] of Object.entries(TABLE)) {
+        for (const [model, price] of Object.entries(models)) {
+            out.push({ provider, model, inputPer1M: price.input, outputPer1M: price.output });
+        }
+    }
+    return out;
+}

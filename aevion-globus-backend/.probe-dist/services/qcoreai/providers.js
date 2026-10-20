@@ -1,0 +1,1392 @@
+"use strict";
+/**
+ * QCoreAI providers — common adapter layer for all supported LLMs.
+ *
+ * Two surfaces:
+ *   - callProvider(...) — classic non-streaming, returns { reply, model, usage }.
+ *   - streamProvider(...) — async generator yielding text chunks + final event.
+ *
+ * Used by both the legacy POST /api/qcoreai/chat route and the multi-agent
+ * orchestrator (sequential / parallel / debate / council).
+ *
+ * ── Free-fleet design ──────────────────────────────────────────────────────
+ * Every provider below is one of three tiers:
+ *   - "premium"  — flagship reasoning (Claude Fable/Opus, GPT-4o, Grok-3).
+ *                  Paid per token. Used for the hard depth roles (synthesis,
+ *                  judging, analysis).
+ *   - "budget"   — cheap paid models (Gemini Flash, DeepSeek, GPT-4o-mini).
+ *   - "free"     — no per-token cost to the user: free-tier gateways
+ *                  (OpenRouter :free, Groq, Cerebras, Together Free, GitHub
+ *                  Models, Mistral free tier) and local Ollama. These are the
+ *                  "crowd" — cheap parallel breadth for council/parallel modes.
+ *
+ * Most providers speak the OpenAI /chat/completions dialect, so they share one
+ * adapter (callOpenAICompat / streamOpenAICompat) driven by OPENAI_COMPAT.
+ * Only Anthropic and Gemini use their native wire formats.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getProviders = getProviders;
+exports.getFreeProviders = getFreeProviders;
+exports.getLocalProviders = getLocalProviders;
+exports.listRuntimeModels = listRuntimeModels;
+exports.discoverLocalModels = discoverLocalModels;
+exports.sanitizeMessages = sanitizeMessages;
+exports.providerOutageReason = providerOutageReason;
+exports.noteProviderOutage = noteProviderOutage;
+exports.isProviderOutOfService = isProviderOutOfService;
+exports.listProviderOutages = listProviderOutages;
+exports.__resetProviderOutages = __resetProviderOutages;
+exports.resolveProvider = resolveProvider;
+exports.pickConfiguredProvider = pickConfiguredProvider;
+exports.tokensFromUsage = tokensFromUsage;
+exports.__unmeteredCallCounts = __unmeteredCallCounts;
+exports.срокВызоваМс = срокВызоваМс;
+exports.callProvider = callProvider;
+exports.границаБлока = границаБлока;
+exports.streamProvider = streamProvider;
+exports.callProviderResilient = callProviderResilient;
+exports.streamProviderResilient = streamProviderResilient;
+const providerHealth_1 = require("./providerHealth");
+const OPENAI_COMPAT = {
+    openai: {
+        baseUrl: () => (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, ""),
+        envKey: "OPENAI_API_KEY",
+    },
+    deepseek: {
+        baseUrl: () => "https://api.deepseek.com",
+        envKey: "DEEPSEEK_API_KEY",
+    },
+    grok: {
+        baseUrl: () => "https://api.x.ai/v1",
+        envKey: "GROK_API_KEY",
+    },
+    // ── Free-tier gateways ──────────────────────────────────────────────────
+    openrouter: {
+        // One key → dozens of `:free` models (Llama, Qwen, DeepSeek R1, Gemma…).
+        baseUrl: () => "https://openrouter.ai/api/v1",
+        envKey: "OPENROUTER_API_KEY",
+        extraHeaders: () => ({
+            "HTTP-Referer": process.env.OPENROUTER_REFERER || "https://aevion.app",
+            "X-Title": "AEVION QCoreAI",
+        }),
+    },
+    groq: {
+        baseUrl: () => "https://api.groq.com/openai/v1",
+        envKey: "GROQ_API_KEY",
+    },
+    cerebras: {
+        baseUrl: () => "https://api.cerebras.ai/v1",
+        envKey: "CEREBRAS_API_KEY",
+    },
+    mistral: {
+        baseUrl: () => "https://api.mistral.ai/v1",
+        envKey: "MISTRAL_API_KEY",
+    },
+    together: {
+        baseUrl: () => "https://api.together.xyz/v1",
+        envKey: "TOGETHER_API_KEY",
+    },
+    github: {
+        // GitHub Models — OpenAI-compatible inference, free for GitHub accounts.
+        baseUrl: () => (process.env.GITHUB_MODELS_BASE_URL || "https://models.github.ai/inference").replace(/\/$/, ""),
+        envKey: "GITHUB_MODELS_TOKEN",
+    },
+    nvidia: {
+        // NVIDIA NIM (build.nvidia.com) — OpenAI-compatible catalogue of 80+ hosted
+        // models. Free tier: `nvapi-…` key, no card, ~5000 credits + 40 req/min per
+        // model (prototyping, not production). Opt-in via NVIDIA_API_KEY.
+        baseUrl: () => (process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/$/, ""),
+        envKey: "NVIDIA_API_KEY",
+    },
+    // ── Local runtimes (offline-capable) ────────────────────────────────────
+    // Each exposes an OpenAI-compatible /chat/completions on localhost, so the
+    // same adapter drives them. Keyless. Opt-in via their *_BASE_URL env, which
+    // also means they never appear in a cloud deploy unless explicitly set.
+    ollama: {
+        // Local runtime — fully free, no key. Opt-in via OLLAMA_BASE_URL.
+        baseUrl: () => (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434/v1").replace(/\/$/, ""),
+        envKey: "OLLAMA_BASE_URL",
+        keyless: true,
+    },
+    lmstudio: {
+        // LM Studio — GUI runtime, OpenAI server on :1234. Opt-in via LMSTUDIO_BASE_URL.
+        baseUrl: () => (process.env.LMSTUDIO_BASE_URL || "http://127.0.0.1:1234/v1").replace(/\/$/, ""),
+        envKey: "LMSTUDIO_BASE_URL",
+        keyless: true,
+    },
+    jan: {
+        // Jan — fully-offline desktop app, OpenAI server on :1337. Opt-in via JAN_BASE_URL.
+        baseUrl: () => (process.env.JAN_BASE_URL || "http://127.0.0.1:1337/v1").replace(/\/$/, ""),
+        envKey: "JAN_BASE_URL",
+        keyless: true,
+    },
+    localai: {
+        // LocalAI — drop-in OpenAI replacement, default :8080. Opt-in via LOCALAI_BASE_URL.
+        baseUrl: () => (process.env.LOCALAI_BASE_URL || "http://127.0.0.1:8080/v1").replace(/\/$/, ""),
+        envKey: "LOCALAI_BASE_URL",
+        keyless: true,
+    },
+    llamacpp: {
+        // llama.cpp server — bare engine, default :8080. Opt-in via LLAMACPP_BASE_URL
+        // (set a distinct port if sharing the host with LocalAI).
+        baseUrl: () => (process.env.LLAMACPP_BASE_URL || "http://127.0.0.1:8080/v1").replace(/\/$/, ""),
+        envKey: "LLAMACPP_BASE_URL",
+        keyless: true,
+    },
+};
+function isConfigured(envKey) {
+    return !!process.env[envKey]?.trim();
+}
+/**
+ * The full provider catalogue. Model ids are current-as-of-writing defaults and
+ * can be overridden per call; free-gateway model ids in particular churn, so the
+ * lists below are representative rather than exhaustive.
+ */
+function getProviders() {
+    return [
+        {
+            id: "anthropic",
+            name: "Claude (Anthropic)",
+            // claude-opus-4-8 = рабочий конь; claude-fable-5 = топ-тир под тяжёлое
+            // рассуждение и финальный синтез. ВАЖНО: fable-5 / opus-4-7 / opus-4-8
+            // НЕ принимают temperature.
+            models: [
+                "claude-opus-4-8",
+                "claude-fable-5",
+                "claude-sonnet-4-6",
+                "claude-haiku-4-5-20251001",
+            ],
+            defaultModel: process.env.QCOREAI_ANTHROPIC_MODEL || "claude-opus-4-8",
+            envKey: "ANTHROPIC_API_KEY",
+            configured: isConfigured("ANTHROPIC_API_KEY"),
+            free: false,
+            tier: "premium",
+        },
+        {
+            id: "openai",
+            name: "GPT (OpenAI)",
+            // 🔴 07.10.2026, через минуты после выкатки: новая проба
+            // `models_declared` на проде сама нашла здесь мёртвое имя —
+            // `gpt-4-turbo` ОТСУТСТВУЕТ в списке моделей OpenAI («проверено имён:
+            // 15 у 4 поставщиков · НЕТ У ПОСТАВЩИКА: openai/gpt-4-turbo»).
+            // Замены не придумываю: ключ OpenAI без денег (429 insufficient_quota),
+            // проверить живым вызовом нечем, а имя, взятое по памяти, — это тот же
+            // мёртвый слаг, только новый. Останутся два проверенных.
+            models: ["gpt-4o", "gpt-4o-mini"],
+            defaultModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
+            envKey: "OPENAI_API_KEY",
+            configured: isConfigured("OPENAI_API_KEY"),
+            free: false,
+            tier: "premium",
+        },
+        {
+            id: "gemini",
+            name: "Gemini (Google)",
+            // 🔴 07.10.2026. Здесь стояли `gemini-2.0-flash-001` и `gemini-1.5-pro`:
+            // живым вызовом обе отвечают 404 («снята с обслуживания», «не найдена»).
+            // Пока зовут умолчание, это невидимо — падает только явный вызов моделью
+            // из нашего же списка, и выглядит как «ИИ сломался».
+            //
+            // Замена проверена НАСТОЯЩИМ вызовом generateContent, а не наличием в
+            // каталоге: `gemini-2.5-pro` и `gemini-2.5-flash-lite` в каталоге ЕСТЬ,
+            // а на вызов отвечают 404. Присутствие в списке не значит пригодность.
+            // Проверка списка — `aevion-ai-models-alive.mjs`.
+            // Имена КОНКРЕТНЫЕ, не псевдонимы вида `*-latest`: псевдоним переезжает
+            // на другую модель вместе с другой ценой, и строка в прейскуранте
+            // перестаёт соответствовать тому, что мы зовём.
+            models: ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
+            defaultModel: "gemini-2.5-flash",
+            envKey: "GEMINI_API_KEY",
+            configured: isConfigured("GEMINI_API_KEY"),
+            // Gemini has a genuinely free tier (rate-limited) on the Flash models.
+            free: true,
+            tier: "free",
+        },
+        {
+            id: "deepseek",
+            name: "DeepSeek",
+            models: ["deepseek-chat", "deepseek-reasoner"],
+            defaultModel: "deepseek-chat",
+            envKey: "DEEPSEEK_API_KEY",
+            configured: isConfigured("DEEPSEEK_API_KEY"),
+            free: false,
+            tier: "budget",
+        },
+        {
+            id: "grok",
+            name: "Grok (xAI)",
+            models: ["grok-3", "grok-3-mini"],
+            defaultModel: "grok-3-mini",
+            envKey: "GROK_API_KEY",
+            configured: isConfigured("GROK_API_KEY"),
+            free: false,
+            tier: "premium",
+        },
+        /* ── Free fleet ─────────────────────────────────────────────────────── */
+        {
+            id: "openrouter",
+            name: "OpenRouter (free models)",
+            // 🔴 07.10.2026: из семи прежних слагов ПЯТИ в каталоге больше нет
+            // (`openai/gpt-oss-120b:free`, `qwen/qwen3-next-80b-a3b-instruct:free`,
+            // `meta-llama/llama-3.3-70b-instruct:free`,
+            // `nousresearch/hermes-3-llama-3.1-405b:free`, `qwen/qwen3-coder:free`).
+            // Комментарий выше сам предупреждал: «The catalogue churns» — и за три
+            // месяца список усох на две трети молча. Проверка:
+            // `node C:/Users/user/aevion-ai-models-alive.mjs --провайдер=openrouter`
+            // (каталог OpenRouter публичный, ключ не нужен — зовите перед волной).
+            //
+            // Живы на 07.10 (сверено с openrouter.ai/api/v1/models: 465 моделей,
+            // из них бесплатных 16). Порядок — по размеру модели, от крупной к
+            // мелкой. Прежний комментарий обещал порядок «по наблюдаемой
+            // доступности под нагрузкой»: такого замера у нас нет и сделать его без
+            // ключа нельзя, поэтому обещание убрано, а не переписано заново.
+            models: [
+                "nvidia/nemotron-3-super-120b-a12b:free",
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+                "google/gemma-4-31b-it:free",
+                "google/gemma-4-26b-a4b-it:free",
+                "nvidia/nemotron-3.5-lightning:free",
+            ],
+            defaultModel: process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-super-120b-a12b:free",
+            envKey: "OPENROUTER_API_KEY",
+            configured: isConfigured("OPENROUTER_API_KEY"),
+            free: true,
+            tier: "free",
+        },
+        {
+            id: "groq",
+            name: "Groq (free, ultra-fast)",
+            models: [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "deepseek-r1-distill-llama-70b",
+                "gemma2-9b-it",
+                "moonshotai/kimi-k2-instruct",
+            ],
+            defaultModel: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+            envKey: "GROQ_API_KEY",
+            configured: isConfigured("GROQ_API_KEY"),
+            free: true,
+            tier: "free",
+        },
+        {
+            id: "cerebras",
+            name: "Cerebras (free, fastest)",
+            models: ["llama-3.3-70b", "llama3.1-8b", "qwen-3-32b"],
+            defaultModel: process.env.CEREBRAS_MODEL || "llama-3.3-70b",
+            envKey: "CEREBRAS_API_KEY",
+            configured: isConfigured("CEREBRAS_API_KEY"),
+            free: true,
+            tier: "free",
+        },
+        {
+            id: "mistral",
+            name: "Mistral (free tier)",
+            models: ["mistral-small-latest", "open-mistral-nemo", "mistral-large-latest"],
+            defaultModel: process.env.MISTRAL_MODEL || "mistral-small-latest",
+            envKey: "MISTRAL_API_KEY",
+            configured: isConfigured("MISTRAL_API_KEY"),
+            free: true,
+            tier: "free",
+        },
+        {
+            id: "together",
+            name: "Together (free model)",
+            models: [
+                "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+                "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+            ],
+            defaultModel: process.env.TOGETHER_MODEL || "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+            envKey: "TOGETHER_API_KEY",
+            configured: isConfigured("TOGETHER_API_KEY"),
+            free: true,
+            tier: "free",
+        },
+        {
+            id: "github",
+            name: "GitHub Models (free)",
+            models: ["openai/gpt-4o-mini", "openai/gpt-4o", "meta/Meta-Llama-3.1-70B-Instruct", "microsoft/Phi-3.5-MoE-instruct"],
+            defaultModel: process.env.GITHUB_MODELS_MODEL || "openai/gpt-4o-mini",
+            envKey: "GITHUB_MODELS_TOKEN",
+            configured: isConfigured("GITHUB_MODELS_TOKEN"),
+            free: true,
+            tier: "free",
+        },
+        {
+            id: "nvidia",
+            name: "NVIDIA NIM (free tier)",
+            // build.nvidia.com hosted catalogue — OpenAI-compatible ids. Adds frontier
+            // free-tier breadth (NVIDIA's own Nemotron, DeepSeek R1, Llama, Qwen) to
+            // the council crowd at $0. Catalogue churns; override via NVIDIA_MODEL.
+            models: [
+                "nvidia/llama-3.3-nemotron-super-49b-v1",
+                "deepseek-ai/deepseek-r1",
+                "meta/llama-3.3-70b-instruct",
+                "qwen/qwen2.5-72b-instruct",
+                "qwen/qwen2.5-coder-32b-instruct",
+                "mistralai/mistral-large-2-instruct",
+            ],
+            defaultModel: process.env.NVIDIA_MODEL || "meta/llama-3.3-70b-instruct",
+            envKey: "NVIDIA_API_KEY",
+            configured: isConfigured("NVIDIA_API_KEY"),
+            free: true,
+            tier: "free",
+        },
+        /* ── Local runtimes (offline-capable) ───────────────────────────────── */
+        {
+            id: "ollama",
+            name: "Ollama (local, offline)",
+            models: ["llama3.1", "qwen2.5", "gemma2", "mistral", "phi3"],
+            defaultModel: process.env.OLLAMA_MODEL || "llama3.1",
+            envKey: "OLLAMA_BASE_URL",
+            configured: isConfigured("OLLAMA_BASE_URL"),
+            free: true,
+            tier: "free",
+            local: true,
+        },
+        {
+            id: "lmstudio",
+            name: "LM Studio (local, offline)",
+            // Model id = whatever you've loaded in LM Studio. Override via LMSTUDIO_MODEL.
+            models: ["qwen2.5-7b-instruct", "llama-3.2-3b-instruct", "mistral-7b-instruct"],
+            defaultModel: process.env.LMSTUDIO_MODEL || "qwen2.5-7b-instruct",
+            envKey: "LMSTUDIO_BASE_URL",
+            configured: isConfigured("LMSTUDIO_BASE_URL"),
+            free: true,
+            tier: "free",
+            local: true,
+        },
+        {
+            id: "jan",
+            name: "Jan (local, offline)",
+            models: ["llama3.2-3b-instruct", "qwen2.5-7b-instruct", "mistral-7b-instruct"],
+            defaultModel: process.env.JAN_MODEL || "llama3.2-3b-instruct",
+            envKey: "JAN_BASE_URL",
+            configured: isConfigured("JAN_BASE_URL"),
+            free: true,
+            tier: "free",
+            local: true,
+        },
+        {
+            id: "localai",
+            name: "LocalAI (local, offline)",
+            models: ["llama-3.2-3b-instruct", "qwen2.5-7b-instruct", "phi-3-mini"],
+            defaultModel: process.env.LOCALAI_MODEL || "llama-3.2-3b-instruct",
+            envKey: "LOCALAI_BASE_URL",
+            configured: isConfigured("LOCALAI_BASE_URL"),
+            free: true,
+            tier: "free",
+            local: true,
+        },
+        {
+            id: "llamacpp",
+            name: "llama.cpp (local, offline)",
+            // The server usually ignores the model field (serves the loaded gguf).
+            models: ["local-gguf"],
+            defaultModel: process.env.LLAMACPP_MODEL || "local-gguf",
+            envKey: "LLAMACPP_BASE_URL",
+            configured: isConfigured("LLAMACPP_BASE_URL"),
+            free: true,
+            tier: "free",
+            local: true,
+        },
+        // Demo/offline provider — canned responses, no network. Only appears (and
+        // only "configured") when QCOREAI_STUB=1, so it never leaks into prod.
+        // Lets the full council pipeline run for demos/screenshots without keys.
+        ...(process.env.QCOREAI_STUB === "1"
+            ? [{
+                    id: "stub",
+                    name: "Demo (offline stub)",
+                    models: ["stub-rigorous", "stub-creative", "stub-skeptic", "stub-pragmatist", "stub-domain", "stub-synth"],
+                    defaultModel: "stub-rigorous",
+                    envKey: "QCOREAI_STUB",
+                    configured: true,
+                    free: true,
+                    tier: "free",
+                    // Marked local so the WHOLE offline pipeline (council AND debate) can
+                    // run through the stub with no network — offline demos/CI don't need a
+                    // real local runtime. Never in prod (stub only exists under STUB=1).
+                    local: true,
+                }]
+            : []),
+    ];
+}
+/** All configured providers whose tier is "free" (for the council swarm). */
+function getFreeProviders() {
+    return getProviders().filter((p) => p.configured && p.free);
+}
+/**
+ * All configured providers that run locally (Ollama / LM Studio / Jan / LocalAI
+ * / llama.cpp). These keep working with the internet fully off — the pool the
+ * offline council draws from for both its crowd and its chair.
+ */
+function getLocalProviders() {
+    return getProviders().filter((p) => p.configured && p.local);
+}
+/** GET a JSON body with a short timeout; null on any failure. */
+async function fetchJsonSafe(url, timeoutMs = 2500) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+        const r = await fetch(url, { signal: ctrl.signal });
+        if (!r.ok)
+            return null;
+        return await r.json();
+    }
+    catch {
+        return null;
+    }
+    finally {
+        clearTimeout(t);
+    }
+}
+/**
+ * Ask a single local runtime which models are ACTUALLY pulled/loaded, so the
+ * offline council convenes only models that exist (no 404s on a model the user
+ * never downloaded). Best-effort: returns [] if the runtime is unreachable.
+ *   - Ollama exposes the native `/api/tags` ({ models: [{ name }] }).
+ *   - LM Studio / Jan / LocalAI / llama.cpp expose OpenAI `/models` ({ data:[{id}] }).
+ */
+async function listRuntimeModels(providerId) {
+    const cfg = OPENAI_COMPAT[providerId];
+    if (!cfg)
+        return [];
+    const base = cfg.baseUrl(); // e.g. http://127.0.0.1:11434/v1
+    if (providerId === "ollama") {
+        const host = base.replace(/\/v1$/, "");
+        const j = await fetchJsonSafe(`${host}/api/tags`);
+        const names = Array.isArray(j?.models) ? j.models.map((m) => m?.name).filter(Boolean) : [];
+        return names;
+    }
+    const j = await fetchJsonSafe(`${base}/models`);
+    const ids = Array.isArray(j?.data) ? j.data.map((m) => m?.id).filter(Boolean) : [];
+    return ids;
+}
+/**
+ * Discover the real, pulled models for every configured LOCAL runtime, in
+ * parallel. Feeds the offline council so it only assembles models that exist.
+ * Providers that are unreachable or expose nothing are simply omitted.
+ */
+async function discoverLocalModels() {
+    const locals = getLocalProviders();
+    const entries = await Promise.all(locals.map(async (p) => [p.id, await listRuntimeModels(p.id)]));
+    const out = {};
+    for (const [id, models] of entries) {
+        if (models.length)
+            out[id] = models;
+    }
+    return out;
+}
+function sanitizeMessages(raw) {
+    if (!Array.isArray(raw))
+        return null;
+    const out = [];
+    for (const m of raw) {
+        if (!m || typeof m !== "object")
+            continue;
+        const role = m.role;
+        const content = m.content;
+        if (role !== "user" && role !== "assistant" && role !== "system")
+            continue;
+        if (typeof content !== "string" || !content.trim())
+            continue;
+        out.push({ role, content: content.slice(0, 32000) });
+    }
+    return out.length ? out : null;
+}
+/* ═══════════════════════════════════════════════════════════════════════
+   Поставщик, закрытый по лимиту или кредитам, помнится и пропускается
+   ═══════════════════════════════════════════════════════════════════════
+   20.09.2026, день запуска: Anthropic ответил «You have reached your specified
+   API usage limits. You will regain access on 2026-10-01», OpenAI — «no credits
+   remaining». А resolveProvider брал ПЕРВОГО настроенного — Anthropic, — и
+   /api/qcoreai/chat отвечал chat_failed на проде при живом Gemini. «Настроен»
+   не значит «платёжеспособен»: это не сбой сети, повтор через секунду не
+   поможет, и пробовать закрытого поставщика на каждом запросе нельзя. */
+const OUTAGE_DEFAULT_MS = 30 * 60 * 1000;
+const providerOutages = new Map();
+/** Причина отключения по тексту ошибки поставщика; null — ошибка другого рода. */
+function providerOutageReason(e) {
+    const m = e instanceof Error ? e.message : String(e ?? "");
+    const l = m.toLowerCase();
+    const closed = l.includes("usage limit") ||
+        l.includes("no credits") ||
+        l.includes("credit_balance") ||
+        l.includes("insufficient_quota") ||
+        l.includes("insufficient credits") ||
+        l.includes("quota exceeded") ||
+        l.includes("billing") ||
+        /\b402\b/.test(l) ||
+        l.includes("regain access");
+    return closed ? m.slice(0, 200) : null;
+}
+/** Срок закрытия: дата из текста поставщика («regain access on 2026-10-01 at 00:00 UTC»), иначе полчаса. */
+function outageUntil(reason, now) {
+    const m = /regain access on (\d{4}-\d{2}-\d{2})(?: at (\d{2}:\d{2}))?/i.exec(reason);
+    if (m) {
+        const t = Date.parse(`${m[1]}T${m[2] ?? "00:00"}:00Z`);
+        if (Number.isFinite(t) && t > now)
+            return t;
+    }
+    return now + OUTAGE_DEFAULT_MS;
+}
+function noteProviderOutage(providerId, reason, now = Date.now()) {
+    const until = outageUntil(reason, now);
+    providerOutages.set(providerId, { until, reason });
+    console.warn(`[providers] ${providerId} закрыт поставщиком до ${new Date(until).toISOString()}: ${reason.slice(0, 120)}`);
+}
+function isProviderOutOfService(providerId, now = Date.now()) {
+    const o = providerOutages.get(providerId);
+    if (!o)
+        return false;
+    if (o.until <= now) {
+        providerOutages.delete(providerId);
+        return false;
+    }
+    return true;
+}
+function listProviderOutages(now = Date.now()) {
+    return [...providerOutages.entries()]
+        .filter(([, o]) => o.until > now)
+        .map(([id, o]) => ({ id, until: new Date(o.until).toISOString(), reason: o.reason }));
+}
+function __resetProviderOutages() { providerOutages.clear(); }
+function resolveProvider(providerId) {
+    if (providerId) {
+        const p = getProviders().find((p) => p.id === providerId);
+        // Явно запрошенный, но закрытый поставщик — берём следующего живого:
+        // человек просил ответ, а не конкретный логотип.
+        if (p?.configured && !isProviderOutOfService(p.id))
+            return p.id;
+    }
+    for (const p of getProviders()) {
+        if (p.configured && !isProviderOutOfService(p.id))
+            return p.id;
+    }
+    // Все настроенные закрыты — отдаём первого настроенного, чтобы отказ был
+    // честным отказом поставщика, а не заглушкой под видом ответа.
+    for (const p of getProviders()) {
+        if (p.configured)
+            return p.id;
+    }
+    return "stub";
+}
+/** Pick a provider id from a preference list; fallback to first configured. */
+function pickConfiguredProvider(preferred) {
+    return resolveProvider(preferred);
+}
+/**
+ * Fable 5 / Opus 4.7 / 4.8 убрали sampling-параметры: temperature, top_p, top_k
+ * возвращают 400. Для этих моделей temperature НЕ отправляем (иначе chat_failed).
+ */
+function anthropicRejectsSampling(model) {
+    return (model.startsWith("claude-fable-5") ||
+        model.startsWith("claude-opus-4-7") ||
+        model.startsWith("claude-opus-4-8"));
+}
+async function callAnthropic(messages, model, temperature, images, maxTokens) {
+    const key = process.env.ANTHROPIC_API_KEY?.trim();
+    if (!key)
+        throw new Error("ANTHROPIC_API_KEY not configured");
+    const systemMsg = messages.find((m) => m.role === "system");
+    const chatMsgs = messages.filter((m) => m.role !== "system");
+    const body = {
+        model,
+        // 4096 silently truncated multi-file code generations mid-JSON (found
+        // live 2026-07-22: an 8.8KB reply cut off inside a CSS string).
+        max_tokens: maxTokens ?? 8192,
+        messages: chatMsgs.map((m, i) => {
+            if (images?.length && m.role === "user" && i === chatMsgs.length - 1) {
+                return {
+                    role: m.role,
+                    content: [
+                        ...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.dataBase64 } })),
+                        { type: "text", text: m.content },
+                    ],
+                };
+            }
+            return { role: m.role, content: m.content };
+        }),
+    };
+    if (!anthropicRejectsSampling(model))
+        body.temperature = temperature;
+    if (systemMsg)
+        body.system = systemMsg.content;
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+    });
+    const data = (await r.json());
+    if (!r.ok)
+        throw new Error(data?.error?.message || `Anthropic ${r.status}`);
+    const reply = data.content?.map((b) => b.text || "").join("") || "";
+    return { reply, model: data.model || model, usage: data.usage || null };
+}
+/** Resolve the OpenAI-compat gateway config or throw a clear error. */
+function openAICompatCfg(providerId) {
+    const cfg = OPENAI_COMPAT[providerId];
+    if (!cfg)
+        throw new Error(`Unknown OpenAI-compatible provider "${providerId}"`);
+    const headers = { "Content-Type": "application/json" };
+    if (!cfg.keyless) {
+        const key = process.env[cfg.envKey]?.trim();
+        if (!key)
+            throw new Error(`${cfg.envKey} not configured`);
+        headers.Authorization = `Bearer ${key}`;
+    }
+    if (cfg.extraHeaders)
+        Object.assign(headers, cfg.extraHeaders());
+    return { url: `${cfg.baseUrl()}/chat/completions`, headers };
+}
+/** Generic non-streaming call for any OpenAI-compatible gateway. */
+async function callOpenAICompat(providerId, messages, model, temperature, images, maxTokens) {
+    const { url, headers } = openAICompatCfg(providerId);
+    const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
+    const wireMessages = images?.length
+        ? messages.map((m, i) => i === lastUserIdx
+            ? {
+                role: m.role,
+                content: [
+                    ...images.map((img) => ({ type: "image_url", image_url: { url: `data:${img.mediaType};base64,${img.dataBase64}` } })),
+                    { type: "text", text: m.content },
+                ],
+            }
+            : m)
+        : messages;
+    const r = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ model, messages: wireMessages, temperature, ...(maxTokens ? { max_tokens: maxTokens } : {}) }),
+    });
+    const data = (await r.json());
+    if (!r.ok) {
+        // Include the HTTP status AND any provider error code so callers (and the
+        // 429-fallback wrapper) can classify it. OpenRouter often returns
+        // {"error":{"message":"Provider returned error","code":429}} — the bare
+        // message alone hides the 429.
+        const code = data?.error?.code ?? r.status;
+        const msg = data?.error?.message || "request failed";
+        throw new Error(`${providerId} ${r.status}: ${msg} (code ${code})`);
+    }
+    const reply = data.choices?.[0]?.message?.content ?? "";
+    return { reply, model: data.model || model, usage: data.usage || null };
+}
+async function callGemini(messages, model, temperature, images, maxTokens, структурныйОтвет) {
+    const key = process.env.GEMINI_API_KEY?.trim();
+    if (!key)
+        throw new Error("GEMINI_API_KEY not configured");
+    const systemMsg = messages.find((m) => m.role === "system");
+    const chatMsgs = messages.filter((m) => m.role !== "system");
+    const lastUserIdx = chatMsgs.map((m) => m.role).lastIndexOf("user");
+    const contents = chatMsgs.map((m, i) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: images?.length && i === lastUserIdx
+            ? [
+                ...images.map((img) => ({ inline_data: { mime_type: img.mediaType, data: img.dataBase64 } })),
+                { text: m.content },
+            ]
+            : [{ text: m.content }],
+    }));
+    const body = {
+        contents,
+        generationConfig: {
+            temperature,
+            maxOutputTokens: maxTokens ?? 4096,
+            // 🔴 07.10.2026. `gemini-2.5-flash` — модель с внутренним «размышлением»,
+            // и токены на него берутся ИЗ ТОГО ЖЕ `maxOutputTokens`. Когда звонящий
+            // просит короткий ответ (512 — столько исторически просил qgood у
+            // Anthropic, где скрытого размышления нет), размышление съедает почти
+            // весь бюджет, и человеку достаётся обрывок на 60–95 знаков, часто
+            // посреди слова и не по теме вопроса. Именно это увидела приёмка на
+            // проде 07.10: на «сколько будет два плюс два» пришёл кусок про лень.
+            //
+            // Поэтому при МАЛЕНЬКОМ бюджете размышление выключается: бюджет
+            // звонящего — на ОТВЕТ, а не на невидимые рассуждения. Большие бюджеты
+            // (4096 по умолчанию и выше) не трогаем — там размышление уместно и
+            // помещается.
+            // Размышление выключается в двух случаях, и причины у них разные:
+            //   • бюджет маленький (< 2048) — иначе размышление съест ответ;
+            //   • ответ СТРУКТУРНЫЙ (JSON) — обрыв такого ответа делает его
+            //     неразбираемым целиком, и модуль отдаст ошибку вместо результата.
+            // Второе не зависит от размера бюджета: перевод вакансии просит 2200,
+            // и этого хватило бы тексту, но не хватит, если часть уйдёт на мысли.
+            ...(структурныйОтвет || (maxTokens != null && maxTokens < 2048)
+                ? { thinkingConfig: { thinkingBudget: 0 } }
+                : {}),
+        },
+    };
+    if (systemMsg)
+        body.systemInstruction = { parts: [{ text: systemMsg.content }] };
+    const адрес = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const послать = (тело) => fetch(адрес, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(тело) });
+    let r = await послать(body);
+    let data = (await r.json());
+    /*
+     * 🔴 09.10.2026. Не всякая модель принимает `thinkingConfig`, и отказ
+     * выглядит как поломка МОДЕЛИ, хотя сломана НАША ФОРМА ЗАПРОСА.
+     *
+     * Замер того дня, один ключ, один и тот же запрос:
+     *   gemini-3.5-flash-lite  без thinkingConfig → 200
+     *   gemini-3.5-flash-lite  с  thinkingConfig → 400 «invalid argument»
+     *   gemini-2.5-flash / 3.8-flash — 200 в обоих случаях
+     *
+     * Модель объявлена у нас ЗАПАСОМ. То есть в день, когда основной поставщик
+     * откажет, запас упал бы с 400 — и по журналу это читалось бы как «модель
+     * мертва». Нашла проба `default_model_answers` на проде через час после
+     * выкатки волны 32.
+     *
+     * Повторяем БЕЗ размышления, а не ведём список «кто не умеет»: список
+     * устаревает молча (в тот же день два имени Gemini исчезли у поставщика),
+     * а поведение отвечает за себя само. Цена несимметрична: лишний повтор —
+     * один вызов, непринятый запрос — отказ модуля.
+     */
+    const былоРазмышление = Boolean(body.generationConfig?.thinkingConfig);
+    const ЭтоПроФормуЗапроса = r.status === 400 && /invalid argument|unknown name|not supported/i.test(String(data?.error?.message || ""));
+    if (!r.ok && былоРазмышление && ЭтоПроФормуЗапроса) {
+        const безРазмышления = { ...body, generationConfig: { ...body.generationConfig } };
+        delete безРазмышления.generationConfig.thinkingConfig;
+        console.warn(`[providers] ${model}: не принял thinkingConfig, повторяю без него`);
+        r = await послать(безРазмышления);
+        data = (await r.json());
+    }
+    if (!r.ok)
+        throw new Error(data?.error?.message || `Gemini ${r.status}`);
+    const reply = data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
+    return { reply, model, usage: data.usageMetadata || null };
+}
+/* ── Offline stub (QCOREAI_STUB=1) ───────────────────────────────────────── */
+/** Canned demo text, flavoured by the persona detected in the system prompt. */
+function stubReply(messages) {
+    const sys = (messages.find((m) => m.role === "system")?.content || "").toLowerCase();
+    const rawUser = messages.filter((m) => m.role === "user").pop()?.content || "";
+    const qMatch = rawUser.match(/user question:\s*([^\n]+)/i);
+    const q = (qMatch ? qMatch[1] : rawUser).trim().slice(0, 80) || "the question";
+    if (sys.includes("synthesizer") || sys.includes("chair of a multi-model council")) {
+        return `**Bottom line.** Combining the council's views: the strongest answer to “${q}” is the one all members converged on, with the skeptic's caveat folded in. Where they disagreed, the verifiable facts win. This fused answer keeps the rigorous member's structure, the creative member's framing, and the pragmatist's concrete next step — corrected for the one error the domain member flagged.`;
+    }
+    if (sys.includes("lateral-thinking") || sys.includes("creative")) {
+        return `Here's the non-obvious angle on “${q}”: reframe it as a system, not a task — the leverage is upstream of where it looks. Two adjacent ideas worth stealing follow.`;
+    }
+    if (sys.includes("skeptic")) {
+        return `Stress-testing “${q}”: the naive answer hides two assumptions and one failure mode. Name them before committing — the edge case bites at scale, not in the demo.`;
+    }
+    if (sys.includes("pragmatic")) {
+        return `Shortest working path for “${q}”: pick the sane default, ship the minimal version, measure, iterate. Concrete first step, then the one trade-off you accept.`;
+    }
+    if (sys.includes("domain-expert") || sys.includes("domain")) {
+        return `From a specialist's view of “${q}”: the term most people get wrong matters here, and the correct reasoning (not just the conclusion) points to a subtly different answer.`;
+    }
+    // Rigorous / default.
+    return `Rigorous take on “${q}”: state the definition, reason step by step, and flag the one uncertainty. Correctness first; assumptions made explicit.`;
+}
+function tokensFromUsage(usage) {
+    if (!usage)
+        return { tin: 0, tout: 0 };
+    return {
+        tin: Number(usage.input_tokens ?? usage.prompt_tokens ?? usage.promptTokenCount ?? 0) || 0,
+        tout: Number(usage.output_tokens ?? usage.completion_tokens ?? usage.candidatesTokenCount ?? 0) || 0,
+    };
+}
+const unmeteredCalls = new Map();
+let unmeteredLastLogAt = 0;
+function __unmeteredCallCounts() { return unmeteredCalls; }
+function noteUnmetered(module) {
+    unmeteredCalls.set(module, (unmeteredCalls.get(module) ?? 0) + 1);
+    const nowMs = Date.now();
+    if (nowMs - unmeteredLastLogAt > 3600000) {
+        unmeteredLastLogAt = nowMs;
+        const rows = [...unmeteredCalls.entries()].map(([m, n]) => `${m}=${n}`).join(", ");
+        console.warn(`[qcoreai] платные вызовы БЕЗ учёта за процесс: ${rows}`);
+    }
+}
+async function meterCall(meter, providerId, model, usage) {
+    if (!meter || !meter.userId) {
+        noteUnmetered(meter?.module ?? "unknown");
+        return;
+    }
+    const { tin, tout } = tokensFromUsage(usage);
+    try {
+        // Ленивый импорт: store статически импортирует providers, обратное ребро
+        // замкнуло бы цикл модулей.
+        const { addTokenUsage } = await Promise.resolve().then(() => __importStar(require("./store")));
+        await addTokenUsage(meter.userId, tin, tout, { provider: providerId, model });
+    }
+    catch (e) {
+        // Учёт не роняет ответ, ради которого его зовут, — но и не молчит.
+        console.error(`[qcoreai] учёт вызова не записан (${meter.module ?? "?"}):`, e instanceof Error ? e.message : e);
+    }
+}
+/**
+ * 🔴 СРОК НА ОДИН ВЫЗОВ МОДЕЛИ. До 12.10.2026 его не было вовсе.
+ *
+ * Замер в тот день, пять генераций DevHub гостем на одном и том же тексте:
+ * 23.3 / 63.0 / 23.9 / 22.5 / 26.3 с. Разброс 2.8×, а у окна продаж на том же
+ * описании — 27 и 170 с. При этом во всём файле единственный AbortController
+ * стоял на вспомогательном чтении JSON (2.5 с), а сам вызов модели шёл БЕЗ
+ * срока: одна медленная сторона у поставщика держала человека сколько угодно,
+ * и перейти к запасному было некому — переход существовал только по ОТКАЗУ
+ * (402, «no credits»), то есть по деньгам, а не по времени.
+ *
+ * Значение: 35 с. Медиана живого вызова 24 с, худший нормальный — 26 с;
+ * 35 даёт запас в полтора раза и при этом укладывает худший случай из трёх
+ * последовательных вызовов (основной + дозапрос + самопочинка) в разумное
+ * время. Переопределяется переменной сервиса, если жизнь покажет другое.
+ */
+function срокВызоваМс() {
+    // Функция, а не константа модуля: значение читается В МОМЕНТ вызова. Иначе
+    // его нельзя было бы проверить (сторож задаёт срок в миллисекундах, чтобы не
+    // ждать в прогоне по полминуты), а переменная сервиса начала бы действовать
+    // только с перезапуска — ровно та ловушка, на которой застряли нормы 3 и 3.
+    return Math.max(1, Number(process.env.AI_CALL_TIMEOUT_MS ?? 35000) || 35000);
+}
+/** Признак «вызов не уложился в срок» — по нему и только по нему идём к запасному. */
+const ПРОСРОЧКА = "aevion_call_deadline_exceeded";
+/**
+ * Гонка вызова со сроком.
+ *
+ * ⚠️ Сам запрос мы НЕ обрываем: обрыв fetch у разных поставщиков ведёт себя
+ * по-разному, а нам нужно только перестать ЖДАТЬ. Висящий запрос завершится
+ * сам и просто никому не понадобится — цена этого меньше, чем риск оставить
+ * человека без ответа из-за нашей же отмены.
+ */
+async function соСроком(работа, мс) {
+    let таймер;
+    try {
+        return await Promise.race([
+            работа,
+            new Promise((_, отказ) => {
+                таймер = setTimeout(() => отказ(new Error(ПРОСРОЧКА)), мс);
+            }),
+        ]);
+    }
+    finally {
+        if (таймер)
+            clearTimeout(таймер);
+    }
+}
+async function callProvider(providerId, messages, model, temperature, images, maxTokens, meter, порядокЗапаса, 
+/**
+ * Ответ должен быть СТРУКТУРНЫМ (JSON, таблица, строгий формат).
+ *
+ * 🔴 07.10.2026. У моделей с внутренним размышлением (`gemini-2.5-flash`)
+ * оно тратит тот же бюджет, что и ответ. Для свободного текста обрыв —
+ * это неполный, но читаемый ответ; для JSON обрыв означает, что ответ не
+ * разберётся ВООБЩЕ и модуль отдаст ошибку вместо результата. Поэтому
+ * структурные вызовы просят не размышлять независимо от размера бюджета:
+ * правило по смыслу задачи, а не по числу.
+ */
+структурныйОтвет) {
+    const tried = [];
+    let current = providerId;
+    let currentModel = model;
+    for (;;) {
+        tried.push(current);
+        try {
+            const res = await соСроком(callProviderOnce(current, messages, currentModel, temperature, images, maxTokens, meter, структурныйОтвет), срокВызоваМс());
+            if (current !== "stub" && !String(res.reply ?? "").trim()) {
+                throw new Error(`${current} answered with an empty reply`);
+            }
+            return current === providerId ? res : { ...res, providerUsed: current, failedOver: { from: providerId, tried } };
+        }
+        catch (e) {
+            const просрочка = (e instanceof Error ? e.message : "") === ПРОСРОЧКА;
+            const reason = просрочка
+                ? `не ответил за ${Math.round(срокВызоваМс() / 1000)} с`
+                : providerOutageReason(e) ?? ((e instanceof Error ? e.message : "").includes("empty reply") ? "empty reply" : null);
+            if (!reason || current === "stub")
+                throw e;
+            /*
+             * Просрочка НЕ отключает поставщика на полчаса: один медленный ответ —
+             * это не закрытый счёт. Отключив его, мы наказали бы живого поставщика за
+             * единичную медлительность и увели бы весь поток на запасного, который
+             * может быть дороже. Поэтому помечаем только настоящие отказы, а по
+             * просрочке просто берём следующего на ЭТОТ вызов.
+             */
+            if (!просрочка)
+                noteProviderOutage(current, reason);
+            // Кандидаты: либо явный порядок этого вызова, либо прежний — порядок
+            // реестра. Имена, которых в реестре нет, просто выпадают.
+            const кандидаты = порядокЗапаса
+                ? порядокЗапаса
+                    .map((id) => getProviders().find((p) => p.id === id))
+                    .filter((p) => Boolean(p))
+                : getProviders();
+            const next = кандидаты.find((p) => p.configured && p.id !== "stub" && !tried.includes(p.id) && !isProviderOutOfService(p.id));
+            if (!next)
+                throw e;
+            console.warn(`[providers] ${current} → ${next.id}: ${reason.slice(0, 100)}`);
+            current = next.id;
+            currentModel = next.defaultModel;
+        }
+    }
+}
+async function callProviderOnce(providerId, messages, model, temperature, images, maxTokens, meter, структурныйОтвет) {
+    if (providerId === "stub") {
+        const reply = stubReply(messages);
+        const res = { reply, model, usage: { input_tokens: 40, output_tokens: reply.split(/\s+/).length } };
+        await meterCall(meter, providerId, model, res.usage);
+        return res;
+    }
+    let res;
+    if (providerId === "anthropic")
+        res = await callAnthropic(messages, model, temperature, images, maxTokens);
+    else if (providerId === "gemini")
+        res = await callGemini(messages, model, temperature, images, maxTokens, структурныйОтвет);
+    else if (OPENAI_COMPAT[providerId])
+        res = await callOpenAICompat(providerId, messages, model, temperature, images, maxTokens);
+    else
+        throw new Error("No AI provider configured");
+    await meterCall(meter, providerId, model, res.usage);
+    return res;
+}
+async function* streamStub(messages) {
+    const reply = stubReply(messages);
+    const words = reply.split(/(\s+)/);
+    for (const w of words) {
+        yield { kind: "text", text: w };
+        // Small delay so the demo streams visibly; skipped in test/CI (fast path).
+        if (process.env.QCOREAI_STUB_DELAY !== "0") {
+            await new Promise((r) => setTimeout(r, 12));
+        }
+    }
+    yield { kind: "done", tokensIn: 40, tokensOut: words.filter((w) => w.trim()).length };
+}
+/* ═══════════════════════════════════════════════════════════════════════
+   Streaming calls (multi-agent orchestrator)
+   ═══════════════════════════════════════════════════════════════════════ */
+/** Low-level SSE line reader: yields {event?, data} blocks separated by \n\n. */
+/**
+ * Где кончается блок SSE. Три вида пустой строки, а не один.
+ *
+ * 🔴 ПОВОД 30.09.2026. Искалось только "\n\n". У потока, обрамлённого по
+ * CRLF, такой последовательности НЕТ: между переводами строк стоит возврат
+ * каретки. Границы не находились ни разу, весь ответ доезжал одним куском в
+ * хвостовой ветке, все строки data склеивались через перевод строки — и
+ * JSON.parse отвергал склейку. Разбор молча отдавал НОЛЬ событий.
+ *
+ * Снаружи это выглядело исправной работой: поток закрывался штатно, ошибок
+ * не было. Живой замер на проде: ручка тренера отдавала 31 байт, только
+ * message_stop, — при том что тот же поставщик по обычному пути отвечал
+ * полным разбором. Воспроизведено на этом же коде: с LF-обрамлением разбор
+ * даёт «Привет, мир», с CRLF — пустую строку.
+ *
+ * Спецификация SSE считает разделителем строк CR, LF и CRLF — принимать надо
+ * все три. Берётся САМАЯ РАННЯЯ граница: если искать их по очереди, поздняя
+ * «съест» несколько блоков разом.
+ */
+function границаБлока(buffer) {
+    const варианты = [];
+    for (const р of ["\r\n\r\n", "\n\n", "\r\r"]) {
+        const i = buffer.indexOf(р);
+        if (i >= 0)
+            варианты.push({ начало: i, длина: р.length });
+    }
+    if (!варианты.length)
+        return null;
+    // Самая ранняя; при равном начале — самый длинный разделитель, иначе от
+    // CRLF-границы останется висеть возврат каретки и следующий блок начнётся
+    // с мусора.
+    варианты.sort((a, b) => (a.начало - b.начало) || (b.длина - a.длина));
+    return варианты[0];
+}
+async function* readSSEBlocks(body) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done)
+                break;
+            buffer += decoder.decode(value, { stream: true });
+            for (;;) {
+                const граница = границаБлока(buffer);
+                if (!граница)
+                    break;
+                const block = buffer.slice(0, граница.начало);
+                buffer = buffer.slice(граница.начало + граница.длина);
+                const parsed = parseSSEBlock(block);
+                if (parsed.data)
+                    yield parsed;
+            }
+        }
+        if (buffer.trim()) {
+            const parsed = parseSSEBlock(buffer);
+            if (parsed.data)
+                yield parsed;
+        }
+    }
+    finally {
+        try {
+            reader.releaseLock();
+        }
+        catch { /* noop */ }
+    }
+}
+function parseSSEBlock(block) {
+    let event;
+    const dataLines = [];
+    for (const rawLine of block.split("\n")) {
+        const line = rawLine.replace(/\r$/, "");
+        if (!line || line.startsWith(":"))
+            continue;
+        if (line.startsWith("event:")) {
+            event = line.slice(6).trim();
+        }
+        else if (line.startsWith("data:")) {
+            dataLines.push(line.slice(5).replace(/^\s/, ""));
+        }
+    }
+    return { event, data: dataLines.join("\n") };
+}
+async function* streamAnthropic(messages, model, temperature) {
+    const key = process.env.ANTHROPIC_API_KEY?.trim();
+    if (!key)
+        throw new Error("ANTHROPIC_API_KEY not configured");
+    const systemMsg = messages.find((m) => m.role === "system");
+    const chatMsgs = messages.filter((m) => m.role !== "system");
+    const body = {
+        model,
+        // 8192 — как у НЕ-потокового callAnthropic. #842 (22.07) поднимал предел,
+        // чиня обрезанные ответы, и поднял только одну ветвь из двух: потоковый
+        // близнец остался на 4096, то есть тот же вопрос тому же провайдеру в
+        // стриме обрывался вдвое раньше. Равенство ветвей держит сторож
+        // (tests/streamCapsMatchNonStream.guard.test.ts).
+        max_tokens: 8192,
+        stream: true,
+        messages: chatMsgs.map((m) => ({ role: m.role, content: m.content })),
+    };
+    if (!anthropicRejectsSampling(model))
+        body.temperature = temperature;
+    if (systemMsg)
+        body.system = systemMsg.content;
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+    });
+    if (!r.ok || !r.body) {
+        const text = await r.text().catch(() => "");
+        throw new Error(`Anthropic ${r.status}: ${text.slice(0, 300)}`);
+    }
+    let tokensIn;
+    let tokensOut;
+    for await (const block of readSSEBlocks(r.body)) {
+        if (!block.data)
+            continue;
+        let payload;
+        try {
+            payload = JSON.parse(block.data);
+        }
+        catch {
+            continue;
+        }
+        const t = payload?.type;
+        if (t === "content_block_delta") {
+            const delta = payload?.delta;
+            if (delta?.type === "text_delta" && typeof delta.text === "string") {
+                yield { kind: "text", text: delta.text };
+            }
+        }
+        else if (t === "message_start") {
+            const u = payload?.message?.usage;
+            if (u?.input_tokens != null)
+                tokensIn = u.input_tokens;
+            if (u?.output_tokens != null)
+                tokensOut = u.output_tokens;
+        }
+        else if (t === "message_delta") {
+            const u = payload?.usage;
+            if (u?.output_tokens != null)
+                tokensOut = u.output_tokens;
+        }
+    }
+    yield { kind: "done", tokensIn, tokensOut };
+}
+/** Streaming call for any OpenAI-compatible gateway in OPENAI_COMPAT. */
+async function* streamOpenAICompat(providerId, messages, model, temperature) {
+    const { url, headers } = openAICompatCfg(providerId);
+    const r = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+            model,
+            messages,
+            temperature,
+            stream: true,
+            stream_options: { include_usage: true },
+        }),
+    });
+    if (!r.ok || !r.body) {
+        const text = await r.text().catch(() => "");
+        throw new Error(`${providerId} ${r.status}: ${text.slice(0, 300)}`);
+    }
+    let tokensIn;
+    let tokensOut;
+    for await (const block of readSSEBlocks(r.body)) {
+        const data = block.data;
+        if (!data || data === "[DONE]")
+            continue;
+        let payload;
+        try {
+            payload = JSON.parse(data);
+        }
+        catch {
+            continue;
+        }
+        const delta = payload?.choices?.[0]?.delta?.content;
+        if (typeof delta === "string" && delta.length) {
+            yield { kind: "text", text: delta };
+        }
+        if (payload?.usage) {
+            tokensIn = payload.usage.prompt_tokens ?? tokensIn;
+            tokensOut = payload.usage.completion_tokens ?? tokensOut;
+        }
+    }
+    yield { kind: "done", tokensIn, tokensOut };
+}
+async function* streamGemini(messages, model, temperature) {
+    const key = process.env.GEMINI_API_KEY?.trim();
+    if (!key)
+        throw new Error("GEMINI_API_KEY not configured");
+    const systemMsg = messages.find((m) => m.role === "system");
+    const chatMsgs = messages.filter((m) => m.role !== "system");
+    const contents = chatMsgs.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+    }));
+    const body = {
+        contents,
+        generationConfig: { temperature, maxOutputTokens: 4096 },
+    };
+    if (systemMsg)
+        body.systemInstruction = { parts: [{ text: systemMsg.content }] };
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent` +
+        `?alt=sse&key=${key}`;
+    const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    });
+    if (!r.ok || !r.body) {
+        const text = await r.text().catch(() => "");
+        throw new Error(`Gemini ${r.status}: ${text.slice(0, 300)}`);
+    }
+    let tokensIn;
+    let tokensOut;
+    for await (const block of readSSEBlocks(r.body)) {
+        if (!block.data)
+            continue;
+        let payload;
+        try {
+            payload = JSON.parse(block.data);
+        }
+        catch {
+            continue;
+        }
+        const parts = payload?.candidates?.[0]?.content?.parts;
+        if (Array.isArray(parts)) {
+            for (const p of parts) {
+                if (typeof p?.text === "string" && p.text.length) {
+                    yield { kind: "text", text: p.text };
+                }
+            }
+        }
+        const um = payload?.usageMetadata;
+        if (um) {
+            tokensIn = um.promptTokenCount ?? tokensIn;
+            tokensOut = um.candidatesTokenCount ?? tokensOut;
+        }
+    }
+    yield { kind: "done", tokensIn, tokensOut };
+}
+/**
+ * Stream a provider. Yields { kind: "text", text } chunks as they arrive,
+ * then a single { kind: "done", tokensIn?, tokensOut? } event at the end.
+ *
+ * ⚠️ Метра здесь НЕТ НАМЕРЕННО — это проверенный честный ноль (06.09.2026),
+ * а не хвост учёта. Оба вызывающих записывают расход САМИ из события done:
+ * /chat/stream пишет QCoreTokenLedger (routes/qcoreai.ts, addTokenUsage по
+ * ledgerIn/Out), агенты — в QCoreMessage.tokensIn/Out, и getMonthlyTokens
+ * суммирует ОБА источника. Добавить сюда meterCall — значит посчитать те же
+ * токены дважды; дубль опаснее пропуска: он выглядит как рост честности.
+ */
+async function* streamProvider(providerId, messages, model, temperature) {
+    if (providerId === "stub") {
+        yield* streamStub(messages);
+        return;
+    }
+    if (providerId === "anthropic") {
+        yield* streamAnthropic(messages, model, temperature);
+        return;
+    }
+    if (providerId === "gemini") {
+        yield* streamGemini(messages, model, temperature);
+        return;
+    }
+    if (OPENAI_COMPAT[providerId]) {
+        yield* streamOpenAICompat(providerId, messages, model, temperature);
+        return;
+    }
+    throw new Error(`streamProvider: unsupported provider "${providerId}"`);
+}
+/* ═══════════════════════════════════════════════════════════════════════
+   429-resilient wrappers.
+
+   Free-tier gateways (OpenRouter etc.) return 429 when a popular free model is
+   saturated. For FREE providers only, if a call fails with a retryable status
+   BEFORE any text has streamed, we transparently fall back to the next model in
+   that provider's list (capped at MAX_FALLBACK attempts). Paid providers get no
+   silent model swap — a model change there has cost/behaviour implications the
+   caller didn't ask for.
+   ═══════════════════════════════════════════════════════════════════════ */
+const MAX_FALLBACK = 4;
+/** A provider error worth retrying on a different model (rate-limit / transient). */
+function isRetryableProviderError(e) {
+    const m = (e instanceof Error ? e.message : String(e)).toLowerCase();
+    return (/\b(429|502|503|529)\b/.test(m) ||
+        m.includes("rate-limit") ||
+        m.includes("rate limit") ||
+        m.includes("rate_limit") ||
+        m.includes("overloaded") ||
+        m.includes("temporarily") ||
+        m.includes("timeout"));
+}
+/** Candidate models for a call: the requested one first, then (for free
+    providers only) the rest of that provider's list, capped at MAX_FALLBACK. */
+function fallbackCandidates(providerId, model) {
+    const prov = getProviders().find((p) => p.id === providerId);
+    if (!prov || !prov.free)
+        return [model];
+    const rest = prov.models.filter((m) => m !== model);
+    return [model, ...rest].slice(0, MAX_FALLBACK);
+}
+/** Non-streaming call with free-model fallback on retryable errors. */
+async function callProviderResilient(providerId, messages, model, temperature, meter) {
+    const candidates = fallbackCandidates(providerId, model);
+    let lastErr;
+    for (let i = 0; i < candidates.length; i++) {
+        const t0 = Date.now();
+        try {
+            const res = await callProvider(providerId, messages, candidates[i], temperature, undefined, undefined, meter);
+            (0, providerHealth_1.recordOutcome)(providerId, candidates[i], true, Date.now() - t0);
+            return res;
+        }
+        catch (e) {
+            (0, providerHealth_1.recordOutcome)(providerId, candidates[i], false);
+            lastErr = e;
+            if (!isRetryableProviderError(e) || i === candidates.length - 1)
+                throw e;
+            // otherwise: try the next free model
+        }
+    }
+    throw lastErr;
+}
+/**
+ * Streaming call with free-model fallback. Falls back to the next model ONLY if
+ * the failure happens before any text was emitted (a mid-stream failure can't be
+ * un-streamed, so it propagates). Yields the same events as streamProvider.
+ */
+async function* streamProviderResilient(providerId, messages, model, temperature) {
+    // Поставщик, закрытый по лимиту (см. providerOutages), не запускается вовсе:
+    // 20.09.2026 критик консилиума получил Anthropic и упал, хотя чат уже знал,
+    // что тот закрыт до 01.10. Роль уходит следующему настроенному с его моделью;
+    // переход возможен только пока ни одного слова не напечатано.
+    const tried = new Set();
+    let currentProvider = providerId;
+    let currentModel = model;
+    if (isProviderOutOfService(currentProvider)) {
+        const alt = getProviders().find((p) => p.configured && p.id !== "stub" && !isProviderOutOfService(p.id));
+        if (alt) {
+            currentProvider = alt.id;
+            currentModel = alt.defaultModel;
+        }
+    }
+    for (;;) {
+        tried.add(currentProvider);
+        const candidates = fallbackCandidates(currentProvider, currentModel);
+        let lastErr;
+        let switched = false;
+        for (let i = 0; i < candidates.length; i++) {
+            let emitted = false;
+            try {
+                for await (const ev of streamProvider(currentProvider, messages, candidates[i], temperature)) {
+                    if (ev.kind === "text" && ev.text)
+                        emitted = true;
+                    yield ev;
+                }
+                (0, providerHealth_1.recordOutcome)(currentProvider, candidates[i], true);
+                return; // completed successfully
+            }
+            catch (e) {
+                (0, providerHealth_1.recordOutcome)(currentProvider, candidates[i], false);
+                lastErr = e;
+                // Can't retry once text is out.
+                if (emitted)
+                    throw e;
+                const outage = providerOutageReason(e);
+                if (outage) {
+                    noteProviderOutage(currentProvider, outage);
+                    const next = getProviders().find((p) => p.configured && p.id !== "stub" && !tried.has(p.id) && !isProviderOutOfService(p.id));
+                    if (!next)
+                        throw e;
+                    console.warn(`[providers] stream ${currentProvider} → ${next.id}: ${outage.slice(0, 100)}`);
+                    currentProvider = next.id;
+                    currentModel = next.defaultModel;
+                    switched = true;
+                    break;
+                }
+                // Not retryable, or this was the last candidate.
+                if (!isRetryableProviderError(e) || i === candidates.length - 1)
+                    throw e;
+            }
+        }
+        if (!switched) {
+            if (lastErr)
+                throw lastErr;
+            return;
+        }
+    }
+}

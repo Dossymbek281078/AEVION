@@ -1,0 +1,1150 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.qstoreRouter = void 0;
+const express_1 = require("express");
+const denPoMestnomu_1 = require("../lib/denPoMestnomu");
+const platform_1 = require("../lib/sentry/platform");
+const node_crypto_1 = __importDefault(require("node:crypto"));
+const authJwt_1 = require("../lib/authJwt");
+const dbPool_1 = require("../lib/dbPool");
+const ensureQStoreTables_1 = require("../lib/ensureQStoreTables");
+const ogEtag_1 = require("../lib/ogEtag");
+const gumroadProvider_1 = require("../lib/payment/gumroadProvider");
+const WARN = "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+const captureQStoreError = (0, platform_1.makeServiceCapture)("qstore");
+/**
+ * 🔴 ПЛАТНЫЙ ТОВАР НЕ ВЫДАЁТСЯ БЕЗ ОПЛАТЫ.
+ *
+ * Найдено 19.08.2026. В обработчике покупки было ТРИ пути, каждый из которых
+ * записывал `status:'paid'`, `paidAt:NOW()` и увеличивал счётчик продаж, не
+ * получив ни тенге:
+ *
+ *   1) `gumroadConfigured("qstore")` ложно — то есть на сервере просто не
+ *      задан permalink. Замер того же дня: прод не отдаёт `permalink` ни у
+ *      одного тарифа;
+ *   2) `createIntent` бросил исключение — оно ловилось и «падало» в прямую
+ *      выдачу, то есть сбой платёжного провайдера раздавал товары даром;
+ *   3) база недоступна — запасной путь в памяти отвечал `status:"paid"`.
+ *
+ * Ровно этот класс уже чинили 26.07 в `routes/checkout.ts` (коммит 5890f9a15,
+ * «stub выписывал платную подписку без оплаты»). Здесь он остался: та починка
+ * трогала другой файл. Поэтому решение взято ИХ — честный отказ в проде,
+ * прежнее поведение в разработке, — а не придумано второе.
+ *
+ * Почему отказ, а не «тихо выдать»: молчаливая выдача портит и деньги, и
+ * отчётность — в `QStorePurchase` появляются строки с суммой, которой не
+ * было, и выручка в дашборде становится выдумкой.
+ */
+function refusePaidWithoutProvider(res, ctx) {
+    if (process.env.NODE_ENV !== "production")
+        return false; // в разработке путь остаётся
+    console.error(`[QStore] НЕТ ПРОЦЕССИНГА для товара ${ctx.productId} (цена ${ctx.price}, ${ctx.reason}) — покупка НЕ выдана`);
+    captureQStoreError(new Error(`qstore_no_payment_provider:${ctx.reason}`), {
+        route: "qstore/products/:id/purchase",
+        productId: ctx.productId,
+    });
+    res.status(503).json({
+        error: "no_payment_provider",
+        message: "Оплата временно недоступна. Товар не выдан, деньги не списаны — напишите нам.",
+    });
+    return true;
+}
+const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "https://aevion.app").replace(/\/$/, "");
+/** A Gumroad checkout is "real" only when a product permalink is configured. */
+function gumroadConfigured(reference) {
+    const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+    return Boolean(process.env[envKey] || process.env.GUMROAD_DEFAULT_PERMALINK);
+}
+exports.qstoreRouter = (0, express_1.Router)();
+const pool = (0, dbPool_1.getPool)();
+// Bootstrap tables
+(async () => {
+    try {
+        await (0, ensureQStoreTables_1.ensureQStoreTables)(pool);
+    }
+    catch {
+        // silent — in-memory fallback active
+    }
+})();
+/** Safely extract a route param as plain string */
+function param(req, key) {
+    const v = req.params[key];
+    return Array.isArray(v) ? v[0] : String(v ?? "");
+}
+// In-memory fallback
+const memProducts = new Map();
+const memPurchases = new Map();
+// key: `${productId}:${userId}`
+const memReviews = new Map();
+const CATEGORIES = [
+    { id: "template", name: "Templates" },
+    { id: "preset", name: "Presets" },
+    { id: "music", name: "Music" },
+    { id: "video", name: "Video" },
+    { id: "design", name: "Design" },
+    { id: "code", name: "Code" },
+    { id: "other", name: "Other" },
+];
+// GET /api/qstore/health
+exports.qstoreRouter.get("/health", (_req, res) => {
+    res.json({
+        ok: true,
+        module: "qstore",
+        db: (0, ensureQStoreTables_1.isQStoreDbReady)() ? "postgres" : "in-memory",
+        timestamp: new Date().toISOString(),
+    });
+});
+// GET /api/qstore/categories
+exports.qstoreRouter.get("/categories", (_req, res) => {
+    res.json({ categories: CATEGORIES });
+});
+// GET /api/qstore/products
+//   ?q=...               full-text search
+//   ?category=xxx        filter by category id
+//   ?sort=popular|newest|trending|rating  (default: popular)
+//   ?limit=N             max 50
+exports.qstoreRouter.get("/products", async (req, res) => {
+    const q = req.query.q ? String(req.query.q) : undefined;
+    const category = req.query.category ? String(req.query.category) : undefined;
+    const sort = req.query.sort ? String(req.query.sort) : "popular";
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+    const orderBySql = {
+        popular: `"salesCount" DESC`,
+        newest: `"createdAt" DESC`,
+        trending: `"salesCount" DESC, "createdAt" DESC`,
+        rating: `"avgRating" DESC NULLS LAST, "salesCount" DESC`,
+    };
+    // `??` здесь НЕ защита: обычный объект наследует ключи прототипа, и
+    // `orderBySql["constructor"]` возвращает функцию `Object` — она не null и не
+    // undefined, поэтому откат на "popular" не срабатывает. Дальше текст функции
+    // уезжает в ORDER BY, запрос падает, и витрина отдаёт ПУСТОЙ список товаров.
+    //
+    // Проверено на живом проде 19.08.2026:
+    //   ?sort=zzqwezzqwez  -> 10924 байта, товары на месте
+    //   ?sort=constructor  -> {"products":[],"total":0,"sort":"constructor"}
+    //   ?sort=__proto__    -> то же
+    //
+    // Контрольное слово той же длины, не являющееся ключом прототипа, работает
+    // правильно — значит дело именно в наследовании, а не в длине или символах.
+    const orderClause = Object.prototype.hasOwnProperty.call(orderBySql, sort)
+        ? orderBySql[sort]
+        : orderBySql.popular;
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const conditions = ['"isPublic" = TRUE'];
+            const params = [];
+            if (category) {
+                params.push(category);
+                conditions.push(`"category" = $${params.length}`);
+            }
+            if (q) {
+                params.push(`%${q}%`);
+                conditions.push(`("title" ILIKE $${params.length} OR "description" ILIKE $${params.length})`);
+            }
+            params.push(limit);
+            const where = `WHERE ${conditions.join(" AND ")}`;
+            const rows = await pool.query(`SELECT * FROM "QStoreProduct" ${where} ORDER BY ${orderClause} LIMIT $${params.length}`, params);
+            res.json({ products: rows.rows, total: rows.rowCount ?? rows.rows.length, sort });
+            return;
+        }
+        catch (e) {
+            // Магазин: «товар не найден» при отказе базы — это несостоявшаяся
+            // покупка, о которой никто не узнает. Раньше голый catch уводил
+            // управление в память, пустую в проде.
+            console.error("[QStore] GET /products DB error", e);
+            res.status(503).json({ error: "storage_unavailable", warning: WARN });
+            return;
+        }
+    }
+    let products = Array.from(memProducts.values()).filter((p) => p.isPublic);
+    if (category)
+        products = products.filter((p) => p.category === category);
+    if (q)
+        products = products.filter((p) => p.title.toLowerCase().includes(q.toLowerCase()) ||
+            p.description.toLowerCase().includes(q.toLowerCase()));
+    // In-memory sort
+    if (sort === "newest") {
+        products.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+    else if (sort === "rating") {
+        products.sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0) || b.salesCount - a.salesCount);
+    }
+    else if (sort === "trending") {
+        // crude trending: sales weighted by recency
+        products.sort((a, b) => {
+            const ageA = Date.now() - new Date(a.createdAt).getTime();
+            const ageB = Date.now() - new Date(b.createdAt).getTime();
+            const scoreA = a.salesCount / Math.max(1, ageA / 86400000);
+            const scoreB = b.salesCount / Math.max(1, ageB / 86400000);
+            return scoreB - scoreA;
+        });
+    }
+    else {
+        products.sort((a, b) => b.salesCount - a.salesCount);
+    }
+    products = products.slice(0, limit);
+    res.json({ products, total: products.length, sort });
+});
+// GET /api/qstore/products/:id
+exports.qstoreRouter.get("/products/:id", async (req, res) => {
+    const id = param(req, "id");
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const row = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "id" = $1`, [id]);
+            if (row.rows.length === 0) {
+                res.status(404).json({ error: "Product not found" });
+                return;
+            }
+            res.json({ product: row.rows[0] });
+            return;
+        }
+        catch (e) {
+            // Голый catch без возврата уводил управление ниже, в память — в
+            // проде она пуста, и запись объявлялась несуществующей. «Не
+            // найдено» на отказ базы законно и потому незаметно.
+            console.error("[QStore] GET /products/:id DB error", e);
+            res.status(503).json({ error: "storage_unavailable", warning: WARN });
+            return;
+        }
+    }
+    const product = memProducts.get(id);
+    if (!product) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+    }
+    res.json({ product });
+});
+// POST /api/qstore/me/products — create product
+exports.qstoreRouter.post("/me/products", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    const { title, description, category, price, previewUrl, tags } = req.body;
+    if (!title?.trim()) {
+        res.status(400).json({ error: "title is required" });
+        return;
+    }
+    if (!category) {
+        res.status(400).json({ error: "category is required" });
+        return;
+    }
+    const newId = node_crypto_1.default.randomUUID();
+    const now = new Date().toISOString();
+    const product = {
+        id: newId,
+        sellerId: auth.sub,
+        title: title.trim(),
+        description: description?.trim() || "",
+        category,
+        price: Number(price) || 0,
+        currency: "usd",
+        previewUrl: previewUrl || "",
+        tags: tags || [],
+        salesCount: 0,
+        avgRating: 0,
+        reviewCount: 0,
+        isPublic: true,
+        createdAt: now,
+        updatedAt: now,
+    };
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            await pool.query(`INSERT INTO "QStoreProduct"
+         ("id","sellerId","title","description","category","price","currency","previewUrl","tags","salesCount","isPublic","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [product.id, product.sellerId, product.title, product.description, product.category,
+                product.price, product.currency, product.previewUrl, product.tags,
+                product.salesCount, product.isPublic, product.createdAt, product.updatedAt]);
+            res.status(201).json({ product });
+            return;
+        }
+        catch {
+            // fall through
+        }
+    }
+    memProducts.set(newId, product);
+    res.status(201).json({ product });
+});
+// PATCH /api/qstore/me/products/:id
+exports.qstoreRouter.patch("/me/products/:id", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    const id = param(req, "id");
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const row = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "id" = $1`, [id]);
+            if (row.rows.length === 0) {
+                res.status(404).json({ error: "Product not found" });
+                return;
+            }
+            if (row.rows[0].sellerId !== auth.sub) {
+                res.status(403).json({ error: "Forbidden" });
+                return;
+            }
+            const { title, description, category, price, previewUrl, tags, isPublic } = req.body;
+            const updated = await pool.query(`UPDATE "QStoreProduct" SET
+          "title" = COALESCE($2, "title"),
+          "description" = COALESCE($3, "description"),
+          "category" = COALESCE($4, "category"),
+          "price" = COALESCE($5, "price"),
+          "previewUrl" = COALESCE($6, "previewUrl"),
+          "tags" = COALESCE($7, "tags"),
+          "isPublic" = COALESCE($8, "isPublic"),
+          "updatedAt" = NOW()
+         WHERE "id" = $1 RETURNING *`, [id, title, description, category, price, previewUrl, tags, isPublic]);
+            res.json({ product: updated.rows[0] });
+            return;
+        }
+        catch (e) {
+            // Раньше управление уходило ниже, в память (в проде пустую), и продавцу
+            // отвечали «Product not found» про ЕГО ЖЕ товар. Проверено контролем
+            // 21.08.2026: с живой базой та же ручка доходит до проверки владельца и
+            // отвечает 403, с упавшей — 404. Значит база на пути.
+            console.error("[QStore] /me/products/:id DB error", e);
+            res.status(503).json({
+                error: "storage_unavailable",
+                warning: "Хранилище временно недоступно. Это НЕ значит, что товара нет — " +
+                    "изменение не применено. Повторите позже.",
+            });
+            return;
+        }
+    }
+    const product = memProducts.get(id);
+    if (!product) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+    }
+    if (product.sellerId !== auth.sub) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+    }
+    const updated = { ...product, ...req.body, updatedAt: new Date().toISOString() };
+    memProducts.set(id, updated);
+    res.json({ product: updated });
+});
+// DELETE /api/qstore/me/products/:id
+exports.qstoreRouter.delete("/me/products/:id", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    const id = param(req, "id");
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const row = await pool.query(`SELECT "sellerId" FROM "QStoreProduct" WHERE "id" = $1`, [id]);
+            if (row.rows.length === 0) {
+                res.status(404).json({ error: "Product not found" });
+                return;
+            }
+            if (row.rows[0].sellerId !== auth.sub) {
+                res.status(403).json({ error: "Forbidden" });
+                return;
+            }
+            await pool.query(`DELETE FROM "QStoreProduct" WHERE "id" = $1`, [id]);
+            res.json({ ok: true });
+            return;
+        }
+        catch (e) {
+            // Раньше управление уходило ниже, в память (в проде пустую), и продавцу
+            // отвечали «Product not found» про ЕГО ЖЕ товар. Проверено контролем
+            // 21.08.2026: с живой базой та же ручка доходит до проверки владельца и
+            // отвечает 403, с упавшей — 404. Значит база на пути.
+            console.error("[QStore] /me/products/:id DB error", e);
+            res.status(503).json({
+                error: "storage_unavailable",
+                warning: "Хранилище временно недоступно. Это НЕ значит, что товара нет — " +
+                    "изменение не применено. Повторите позже.",
+            });
+            return;
+        }
+    }
+    const product = memProducts.get(id);
+    if (!product) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+    }
+    if (product.sellerId !== auth.sub) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+    }
+    memProducts.delete(id);
+    res.json({ ok: true });
+});
+// POST /api/qstore/products/:id/purchase
+exports.qstoreRouter.post("/products/:id/purchase", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    const id = param(req, "id");
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const row = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "id" = $1`, [id]);
+            if (row.rows.length === 0) {
+                res.status(404).json({ error: "Product not found" });
+                return;
+            }
+            const pRow = row.rows[0];
+            const purchaseId = node_crypto_1.default.randomUUID();
+            // Gumroad checkout — the only KYC-cleared processor. Routes to a product
+            // permalink via GUMROAD_PERMALINK_QSTORE (or GUMROAD_DEFAULT_PERMALINK).
+            // Price is fixed in the Gumroad product; provisioning of the sale arrives
+            // via the central POST /api/gumroad/webhook. Falls back to a direct paid
+            // record when no permalink is configured.
+            const qstoreRef = "qstore";
+            if (gumroadConfigured(qstoreRef) && pRow.price > 0) {
+                const currency = (pRow.currency || "KZT").toUpperCase();
+                // QStore stores "price" already in the currency's minor unit
+                // (USD/EUR cents — see frontend create form `Number(price) * 100`;
+                // KZT integer tenge). It must NOT be multiplied again here.
+                const amountCents = Math.round(pRow.price);
+                try {
+                    const intent = await gumroadProvider_1.gumroadPaymentProvider.createIntent({
+                        reference: qstoreRef,
+                        amountCents,
+                        currency,
+                        description: pRow.title.slice(0, 200),
+                        email: null,
+                    });
+                    await pool.query(`INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","stripeSessionId","createdAt")
+             VALUES ($1,$2,$3,$4,'pending',$5,NOW())`, [purchaseId, pRow.id, auth.sub, pRow.price, intent.intentId]);
+                    res.status(201).json({ purchaseId, checkoutUrl: intent.checkoutUrl, mode: "gumroad", status: "pending" });
+                    return;
+                }
+                catch (gumroadErr) {
+                    console.warn("[QStore] Gumroad error:", gumroadErr instanceof Error ? gumroadErr.message : gumroadErr);
+                    // Раньше здесь был проход в прямую выдачу: сбой провайдера означал
+                    // бесплатный товар. Теперь платный товар при сбое НЕ выдаётся.
+                    if (refusePaidWithoutProvider(res, { productId: pRow.id, price: pRow.price, reason: "provider_error" }))
+                        return;
+                }
+            }
+            // Прямая выдача — законна ТОЛЬКО для бесплатных товаров.
+            if (pRow.price > 0 && refusePaidWithoutProvider(res, { productId: pRow.id, price: pRow.price, reason: "permalink_not_configured" }))
+                return;
+            // Direct purchase (free items, or non-production without a permalink)
+            await pool.query(`INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","paidAt","createdAt")
+         VALUES ($1,$2,$3,$4,'paid',NOW(),NOW())`, [purchaseId, pRow.id, auth.sub, pRow.price]);
+            await pool.query(`UPDATE "QStoreProduct" SET "salesCount" = "salesCount" + 1 WHERE "id" = $1`, [pRow.id]);
+            res.status(201).json({ purchaseId, mode: "direct", status: "paid" });
+            return;
+        }
+        catch (e) {
+            console.error("[QStore] purchase error:", e instanceof Error ? e.message : e);
+            captureQStoreError(e, { route: "qstore/products/:id/purchase" });
+            res.status(500).json({ error: "purchase_failed" });
+            return;
+        }
+    }
+    // In-memory fallback
+    const product = memProducts.get(id);
+    if (!product) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+    }
+    // Третья поверхность той же меры: при недоступной базе запасной путь тоже
+    // отвечал `status:"paid"`. Сбой базы не может быть основанием отдать товар.
+    if (product.price > 0 && refusePaidWithoutProvider(res, { productId: product.id, price: product.price, reason: "db_unavailable" }))
+        return;
+    const purchaseId = node_crypto_1.default.randomUUID();
+    memPurchases.set(purchaseId, {
+        id: purchaseId,
+        productId: product.id,
+        buyerId: auth.sub,
+        amount: product.price,
+        createdAt: new Date().toISOString(),
+    });
+    product.salesCount += 1;
+    res.status(201).json({ purchaseId, mode: "memory", status: "paid" });
+});
+// GET /api/qstore/me/purchases
+exports.qstoreRouter.get("/me/purchases", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const rows = await pool.query(`SELECT p.*, pr."title" AS "productTitle", pr."category"
+         FROM "QStorePurchase" p
+         JOIN "QStoreProduct" pr ON pr."id" = p."productId"
+         WHERE p."buyerId" = $1
+         ORDER BY p."createdAt" DESC`, [auth.sub]);
+            res.json({ purchases: rows.rows, total: rows.rowCount ?? rows.rows.length });
+            return;
+        }
+        catch {
+            // fall through
+        }
+    }
+    const purchases = Array.from(memPurchases.values()).filter((p) => p.buyerId === auth.sub);
+    res.json({ purchases, total: purchases.length });
+});
+// POST /api/qstore/products/:id/review — add/update review (one per user per product)
+exports.qstoreRouter.post("/products/:id/review", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    const productId = param(req, "id");
+    const { rating, comment } = req.body;
+    if (typeof rating !== "number" || rating < 1 || rating > 5) {
+        res.status(400).json({ error: "rating must be 1-5" });
+        return;
+    }
+    const reviewKey = `${productId}:${auth.sub}`;
+    const reviewId = node_crypto_1.default.randomUUID();
+    const trimmedComment = comment ? String(comment).trim() : null;
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            // Upsert: one review per user per product
+            const upserted = await pool.query(`INSERT INTO "QStoreReview" ("id","productId","userId","rating","comment","createdAt")
+         VALUES ($1,$2,$3,$4,$5,NOW())
+         ON CONFLICT ("productId","userId")
+         DO UPDATE SET "rating" = EXCLUDED."rating", "comment" = EXCLUDED."comment", "createdAt" = NOW()
+         RETURNING "id"`, [reviewId, productId, auth.sub, rating, trimmedComment]);
+            const storedReviewId = upserted.rows[0]?.id ?? reviewId;
+            // Recalculate aggregate rating for the product
+            await pool.query(`UPDATE "QStoreProduct" SET
+           "reviewCount" = sub."cnt",
+           "avgRating"   = sub."avg",
+           "updatedAt"   = NOW()
+         FROM (
+           SELECT COUNT(*)::int AS "cnt", COALESCE(AVG("rating"), 0) AS "avg"
+           FROM "QStoreReview" WHERE "productId" = $1
+         ) sub
+         WHERE "QStoreProduct"."id" = $1`, [productId]);
+            res.status(201).json({ reviewId: storedReviewId, rating });
+            return;
+        }
+        catch (e) {
+            console.error("[QStore] review error:", e instanceof Error ? e.message : e);
+            // fall through to in-memory
+        }
+    }
+    const review = {
+        id: reviewId,
+        productId,
+        userId: auth.sub,
+        rating,
+        comment: trimmedComment,
+        createdAt: new Date().toISOString(),
+    };
+    memReviews.set(reviewKey, review);
+    // Recalculate average rating for product
+    const product = memProducts.get(productId);
+    if (product) {
+        const productReviews = Array.from(memReviews.values()).filter((r) => r.productId === productId);
+        product.reviewCount = productReviews.length;
+        product.avgRating = productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length;
+        product.updatedAt = new Date().toISOString();
+    }
+    res.status(201).json({ reviewId, rating });
+});
+// GET /api/qstore/products/:id/reviews — list reviews for a product
+exports.qstoreRouter.get("/products/:id/reviews", async (req, res) => {
+    const productId = param(req, "id");
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const rows = await pool.query(`SELECT "id","productId","userId","rating","comment","createdAt"
+         FROM "QStoreReview" WHERE "productId" = $1 ORDER BY "createdAt" DESC`, [productId]);
+            res.json({ reviews: rows.rows, total: rows.rowCount ?? rows.rows.length });
+            return;
+        }
+        catch {
+            // fall through to in-memory
+        }
+    }
+    const reviews = Array.from(memReviews.values())
+        .filter((r) => r.productId === productId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    res.json({ reviews, total: reviews.length });
+});
+// GET /api/qstore/featured — curated buckets: popular, newest, trending, topRated
+//   ?limit=N (default 5, max 12) per bucket
+exports.qstoreRouter.get("/featured", async (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 12);
+    // Try DB first
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const [popRes, newRes, ratedRes] = await Promise.all([
+                pool.query(`SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE ORDER BY "salesCount" DESC LIMIT $1`, [limit]),
+                pool.query(`SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE ORDER BY "createdAt" DESC LIMIT $1`, [limit]),
+                pool.query(`SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE AND "avgRating" > 0 ORDER BY "avgRating" DESC, "salesCount" DESC LIMIT $1`, [limit]),
+            ]);
+            const popular = popRes.rows;
+            const newest = newRes.rows;
+            const topRated = ratedRes.rows;
+            // Trending: sales weighted by recency
+            const allPublicRes = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE`);
+            const trending = [...allPublicRes.rows]
+                .map((p) => {
+                const ageDays = Math.max(1, (Date.now() - new Date(p.createdAt).getTime()) / 86400000);
+                return { ...p, _score: (p.salesCount || 0) / ageDays };
+            })
+                .sort((a, b) => b._score - a._score)
+                .slice(0, limit)
+                .map(({ _score, ...rest }) => rest);
+            res.json({ popular, newest, trending, topRated });
+            return;
+        }
+        catch {
+            // fall through
+        }
+    }
+    const allPublic = Array.from(memProducts.values()).filter((p) => p.isPublic);
+    const popular = [...allPublic]
+        .sort((a, b) => b.salesCount - a.salesCount)
+        .slice(0, limit);
+    const newest = [...allPublic]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit);
+    const topRated = [...allPublic]
+        .filter((p) => (p.avgRating || 0) > 0)
+        .sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0) || b.salesCount - a.salesCount)
+        .slice(0, limit);
+    const trending = [...allPublic]
+        .map((p) => {
+        const ageDays = Math.max(1, (Date.now() - new Date(p.createdAt).getTime()) / 86400000);
+        return { ...p, _score: (p.salesCount || 0) / ageDays };
+    })
+        .sort((a, b) => b._score - a._score)
+        .slice(0, limit)
+        .map(({ _score, ...rest }) => rest);
+    res.json({ popular, newest, trending, topRated });
+});
+// GET /api/qstore/me/sales — products I own that have been purchased
+exports.qstoreRouter.get("/me/sales", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    // Раньше и товары, и покупки брались из карт ПАМЯТИ. Покупки при этом
+    // пишутся в базу — то есть продавец с настоящими продажами видел ноль.
+    const mine = await sellerProducts(auth.sub);
+    if (mine.failed) {
+        replyQStoreStorageDown(res);
+        return;
+    }
+    const bought = await purchasesForProducts(mine.rows.map((p) => p.id));
+    if (bought.failed) {
+        replyQStoreStorageDown(res);
+        return;
+    }
+    const sales = bought.rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
+    res.json({ sales, total: sales.length, totalRevenue });
+});
+// GET /api/qstore/me/dashboard — seller analytics dashboard
+exports.qstoreRouter.get("/me/dashboard", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    const mine = await sellerProducts(auth.sub);
+    if (mine.failed) {
+        replyQStoreStorageDown(res);
+        return;
+    }
+    const myProducts = mine.rows;
+    const bought = await purchasesForProducts(myProducts.map((p) => p.id));
+    if (bought.failed) {
+        replyQStoreStorageDown(res);
+        return;
+    }
+    const allSales = bought.rows;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const monthlySales = allSales.filter((s) => s.createdAt >= startOfMonth);
+    const totalRevenue = allSales.reduce((sum, s) => sum + s.amount, 0);
+    const monthlyRevenue = monthlySales.reduce((sum, s) => sum + s.amount, 0);
+    // Top product by salesCount
+    const topProduct = myProducts.sort((a, b) => b.salesCount - a.salesCount)[0] ?? null;
+    // Recent sales (last 5)
+    const recentSales = allSales
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 5)
+        .map((s) => {
+        const product = myProducts.find((p) => p.id === s.productId);
+        return {
+            purchaseId: s.id,
+            productTitle: product?.title ?? "Unknown",
+            amount: s.amount,
+            createdAt: s.createdAt,
+        };
+    });
+    res.json({
+        products: {
+            total: myProducts.length,
+            public: myProducts.filter((p) => p.isPublic).length,
+        },
+        sales: {
+            total: allSales.length,
+            thisMonth: monthlySales.length,
+        },
+        revenue: {
+            total: totalRevenue,
+            thisMonth: monthlyRevenue,
+            currency: "usd",
+        },
+        topProduct: topProduct
+            ? { id: topProduct.id, title: topProduct.title, salesCount: topProduct.salesCount }
+            : null,
+        recentSales,
+    });
+});
+// GET /api/qstore/sellers/:userId — public seller profile
+exports.qstoreRouter.get("/sellers/:userId", async (req, res) => {
+    // param() приводит к строке: req.params при повторе ключа даёт массив, и
+    // тогда запрос ушёл бы в базу с массивом вместо идентификатора.
+    const userId = param(req, "userId");
+    // Публичная витрина продавца: пустой профиль у человека с товарами — это
+    // потерянный покупатель, а не косметика.
+    const all = await sellerProducts(userId);
+    if (all.failed) {
+        replyQStoreStorageDown(res);
+        return;
+    }
+    const products = all.rows
+        .filter((p) => p.isPublic)
+        .map(({ id, title, category, price, salesCount }) => ({ id, title, category, price, salesCount }));
+    const totalSales = products.reduce((sum, p) => sum + p.salesCount, 0);
+    const rev = await reviewsForProducts(all.rows.map((p) => p.id));
+    if (rev.failed) {
+        replyQStoreStorageDown(res);
+        return;
+    }
+    const reviews = rev.rows;
+    const avgRating = reviews.length > 0
+        ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+        : 0;
+    res.json({ userId, products, totalSales, avgRating: Math.round(avgRating * 10) / 10 });
+});
+// GET /api/qstore/me/dashboard/chart — daily sales & revenue for last N days (default 7)
+exports.qstoreRouter.get("/me/dashboard/chart", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
+    const mine = await sellerProducts(auth.sub);
+    if (mine.failed) {
+        replyQStoreStorageDown(res);
+        return;
+    }
+    const bought = await purchasesForProducts(mine.rows.map((p) => p.id));
+    if (bought.failed) {
+        replyQStoreStorageDown(res);
+        return;
+    }
+    const allSales = bought.rows;
+    const now = new Date();
+    const buckets = [];
+    for (let d = days - 1; d >= 0; d--) {
+        const day = new Date(now);
+        day.setDate(day.getDate() - d);
+        const dateStr = (0, denPoMestnomu_1.denPoMestnomu)(day);
+        const dayStart = dateStr;
+        const dayEnd = dateStr + "T23:59:59.999Z";
+        const daySales = allSales.filter((s) => s.createdAt >= dayStart && s.createdAt <= dayEnd);
+        buckets.push({
+            date: dateStr,
+            sales: daySales.length,
+            revenue: daySales.reduce((sum, s) => sum + s.amount, 0),
+        });
+    }
+    const totalRevenue = buckets.reduce((s, b) => s + b.revenue, 0);
+    const totalSales = buckets.reduce((s, b) => s + b.sales, 0);
+    const peakDay = buckets.reduce((best, b) => (b.revenue > best.revenue ? b : best), buckets[0]);
+    res.json({ days, buckets, summary: { totalRevenue, totalSales, peakDay: peakDay?.date ?? null } });
+});
+// POST /api/qstore/products/:id/feature — mark product as featured (owner only)
+exports.qstoreRouter.post("/products/:id/feature", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+    }
+    const id = param(req, "id");
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            // Переключаем В БАЗЕ одним запросом, владельца проверяем в WHERE:
+            // чтение с последующей записью разошлось бы при двух вкладках продавца.
+            const r = await pool.query(`UPDATE "QStoreProduct" SET "featured" = NOT COALESCE("featured", FALSE)
+          WHERE "id" = $1 AND "sellerId" = $2 RETURNING "featured"`, [id, auth.sub]);
+            // Товара нет ИЛИ он чужой — ответ один: иначе он подтверждал бы
+            // существование чужого товара тому, кто им не владеет.
+            if (r.rows.length === 0) {
+                res.status(404).json({ error: "Product not found" });
+                return;
+            }
+            res.json({ featured: Boolean(r.rows[0].featured) });
+            return;
+        }
+        catch (e) {
+            console.error("[QStore] избранное не переключено", e);
+            replyQStoreStorageDown(res);
+            return;
+        }
+    }
+    const product = memProducts.get(id);
+    if (!product) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+    }
+    if (product.sellerId !== auth.sub) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+    }
+    product.featured = !product.featured;
+    const featured = product.featured;
+    res.json({ featured });
+});
+// ─── OG image helpers (SVG, no external deps) ────────────────────────────────
+/**
+ * Панель продавца: товары, продажи и отзывы — ИЗ ХРАНИЛИЩА.
+ *
+ * Замер 28.08.2026: покупки пишутся в "QStorePurchase" (две вставки), товары в
+ * "QStoreProduct", а пять ручек продавца считали всё это по картам ПАМЯТИ. На
+ * проде память пуста, значит продавец с настоящими продажами видел
+ * «0 продаж, выручка 0». Это худшая из возможных неправд на витрине: она
+ * говорит человеку, что его денег не существует.
+ *
+ * `failed` отличает «продаж нет» от «спросить не удалось»: первое — законный
+ * ноль, второе обязано быть отказом, иначе отказ базы снова покажется нулём.
+ */
+async function sellerProducts(sellerId) {
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const r = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "sellerId" = $1`, [sellerId]);
+            return { rows: r.rows, failed: false };
+        }
+        catch (e) {
+            console.error("[QStore] товары продавца не прочитаны", e);
+            return { rows: [], failed: true };
+        }
+    }
+    return { rows: [...memProducts.values()].filter((x) => x.sellerId === sellerId), failed: false };
+}
+async function purchasesForProducts(productIds) {
+    if (productIds.length === 0)
+        return { rows: [], failed: false };
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const r = await pool.query(`SELECT * FROM "QStorePurchase" WHERE "productId" = ANY($1::text[])`, [productIds]);
+            return { rows: r.rows, failed: false };
+        }
+        catch (e) {
+            console.error("[QStore] продажи не прочитаны", e);
+            return { rows: [], failed: true };
+        }
+    }
+    const set = new Set(productIds);
+    return { rows: [...memPurchases.values()].filter((x) => set.has(x.productId)), failed: false };
+}
+async function reviewsForProducts(productIds) {
+    if (productIds.length === 0)
+        return { rows: [], failed: false };
+    if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+        try {
+            const r = await pool.query(`SELECT * FROM "QStoreReview" WHERE "productId" = ANY($1::text[])`, [productIds]);
+            return { rows: r.rows, failed: false };
+        }
+        catch (e) {
+            console.error("[QStore] отзывы не прочитаны", e);
+            return { rows: [], failed: true };
+        }
+    }
+    const set = new Set(productIds);
+    return { rows: [...memReviews.values()].filter((x) => set.has(x.productId)), failed: false };
+}
+/** Отказ хранилища на панели продавца — отказ, а не «продаж нет». */
+function replyQStoreStorageDown(res) {
+    res.status(503).json({
+        error: "storage_unavailable",
+        warning: "Хранилище временно недоступно. Показать продажи сейчас нельзя — это НЕ значит, что их нет.",
+    });
+}
+function qstoreEsc(s) {
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+}
+function qstoreWrap(text, perLine, maxLines) {
+    const words = String(text || "").split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = "";
+    for (const w of words) {
+        if ((current + " " + w).trim().length > perLine) {
+            if (current)
+                lines.push(current);
+            current = w;
+            if (lines.length >= maxLines - 1)
+                break;
+        }
+        else {
+            current = (current + " " + w).trim();
+        }
+    }
+    if (current && lines.length < maxLines)
+        lines.push(current);
+    const consumed = lines.join(" ").split(/\s+/).filter(Boolean).length;
+    if (consumed < words.length && lines.length === maxLines) {
+        lines[maxLines - 1] = (lines[maxLines - 1] || "").replace(/\s+\S+$/, "") + "…";
+    }
+    return lines;
+}
+function qstoreCategoryName(id) {
+    return CATEGORIES.find((c) => c.id === id)?.name || id || "Other";
+}
+function qstoreFormatPrice(price, currency) {
+    const c = (currency || "USD").toUpperCase();
+    const symbol = c === "USD" ? "$" : c === "EUR" ? "€" : c === "AEC" ? "ÆC" : "";
+    const value = Math.round(Number(price) * 100) / 100;
+    if (symbol)
+        return `${symbol}${value}`;
+    return `${value} ${c}`;
+}
+function qstoreInitial(s) {
+    const v = String(s || "").trim();
+    if (!v)
+        return "?";
+    const ch = v.charAt(0).toUpperCase();
+    return /[A-ZА-ЯЁ0-9]/i.test(ch) ? ch : "?";
+}
+function qstoreCategoryAccent(category) {
+    switch (category) {
+        case "template": return "#7dd3fc";
+        case "preset": return "#a78bfa";
+        case "music": return "#f472b6";
+        case "video": return "#fb923c";
+        case "design": return "#f59e0b";
+        case "code": return "#34d399";
+        default: return "#94a3b8";
+    }
+}
+/**
+ * Render the default QStore marketplace card.
+ * Used when no `id` / `seller` query is provided, or when lookup fails.
+ */
+function renderQStoreDefaultSvg() {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="qs-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#020617"/>
+      <stop offset="0.5" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="qs-accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7dd3fc"/>
+      <stop offset="0.5" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#f472b6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#qs-bg)"/>
+  <rect width="1200" height="6" fill="url(#qs-accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION QSTORE</text>
+    <text x="60" y="220" font-size="92" font-weight="900" letter-spacing="-2">Marketplace</text>
+    <text x="60" y="320" font-size="92" font-weight="900" letter-spacing="-2" fill="#a78bfa">для модулей.</text>
+    <text x="60" y="400" font-size="28" font-weight="500" fill="#cbd5e1">Templates · Presets · Music · Video · Design · Code</text>
+    <g transform="translate(60, 470)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <rect width="260" height="64" rx="12" fill="#7dd3fc" fill-opacity="0.12" stroke="#7dd3fc" stroke-width="2"/>
+      <text x="20" y="40" font-size="22" font-weight="800" fill="#7dd3fc">Buy &amp; sell modules</text>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / qstore</text>
+  </g>
+</svg>`;
+}
+/**
+ * GET /api/qstore/og.svg
+ *
+ * Query:
+ *   ?id=<itemId>       → product detail card (title, price, category, sales)
+ *   ?seller=<userId>   → seller profile card (initial, id, product count, total sales)
+ *   (none)             → default marketplace card
+ *
+ * 1200×630 inline SVG. Weak ETag fingerprint + 5-minute Cache-Control so social
+ * crawlers (Discord, Slack, Telegram, X, Facebook, LinkedIn) return 304 on
+ * repeat scrapes.
+ */
+exports.qstoreRouter.get("/og.svg", async (req, res) => {
+    try {
+        res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        const id = req.query.id ? String(req.query.id) : "";
+        const sellerId = req.query.seller ? String(req.query.seller) : "";
+        // ── Product detail card ──────────────────────────────────────────────────
+        if (id) {
+            let product = null;
+            if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+                try {
+                    const row = await pool.query(`SELECT "id","title","category","price","currency","salesCount","sellerId"
+             FROM "QStoreProduct" WHERE "id" = $1 LIMIT 1`, [id]);
+                    if (row.rows.length > 0) {
+                        product = row.rows[0];
+                    }
+                }
+                catch {
+                    // fall through to mem
+                }
+            }
+            if (!product) {
+                const mem = memProducts.get(id);
+                if (mem)
+                    product = mem;
+            }
+            if (!product) {
+                if ((0, ogEtag_1.applyOgEtag)(req, res, `qstore-item-missing-${id.slice(0, 24)}`, 60))
+                    return;
+                res.send(renderQStoreDefaultSvg());
+                return;
+            }
+            const fingerprint = `qstore-item-${product.id}-${product.salesCount}-${product.price}`;
+            if ((0, ogEtag_1.applyOgEtag)(req, res, fingerprint))
+                return;
+            const accent = qstoreCategoryAccent(product.category);
+            const titleLines = qstoreWrap(product.title || "Untitled module", 22, 2);
+            const categoryName = qstoreCategoryName(product.category);
+            const priceText = qstoreFormatPrice(product.price, product.currency);
+            const salesText = `${product.salesCount} sale${product.salesCount === 1 ? "" : "s"}`;
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="qs-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#020617"/>
+      <stop offset="0.5" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="qs-accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${accent}"/>
+      <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#qs-bg)"/>
+  <rect width="1200" height="6" fill="url(#qs-accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION QSTORE</text>
+    <g transform="translate(60, 170)">
+      ${titleLines
+                .map((line, i) => `<text y="${i * 92}" font-size="80" font-weight="900" letter-spacing="-2">${qstoreEsc(line)}</text>`)
+                .join("\n      ")}
+    </g>
+    <g transform="translate(60, ${170 + titleLines.length * 92 + 30})">
+      <rect width="${categoryName.length * 14 + 56}" height="44" rx="22" fill="${accent}" fill-opacity="0.18" stroke="${accent}" stroke-width="2"/>
+      <text x="22" y="30" font-size="20" font-weight="800" fill="${accent}" letter-spacing="2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${qstoreEsc(categoryName.toUpperCase())}</text>
+    </g>
+    <g transform="translate(60, 500)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <text font-size="56" font-weight="900" fill="#f8fafc">${qstoreEsc(priceText)}</text>
+      <text x="0" y="34" font-size="18" font-weight="700" fill="#64748b" letter-spacing="2">${qstoreEsc(salesText.toUpperCase())}</text>
+    </g>
+    <text x="${1200 - 60}" y="585" text-anchor="end" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / qstore / ${qstoreEsc(product.id.slice(0, 12))}</text>
+  </g>
+</svg>`;
+            res.send(svg);
+            return;
+        }
+        // ── Seller profile card ──────────────────────────────────────────────────
+        if (sellerId) {
+            let products = [];
+            if ((0, ensureQStoreTables_1.isQStoreDbReady)()) {
+                try {
+                    const r = await pool.query(`SELECT "id","salesCount","isPublic" FROM "QStoreProduct" WHERE "sellerId" = $1`, [sellerId]);
+                    products = r.rows;
+                }
+                catch {
+                    // fall through
+                }
+            }
+            if (products.length === 0) {
+                products = Array.from(memProducts.values())
+                    .filter((p) => p.sellerId === sellerId)
+                    .map(({ id: pid, salesCount, isPublic }) => ({ id: pid, salesCount, isPublic }));
+            }
+            const publicProducts = products.filter((p) => p.isPublic !== false);
+            const productCount = publicProducts.length;
+            const totalSales = publicProducts.reduce((sum, p) => sum + (p.salesCount || 0), 0);
+            const fingerprint = `qstore-seller-${sellerId}-${productCount}-${totalSales}`;
+            if ((0, ogEtag_1.applyOgEtag)(req, res, fingerprint))
+                return;
+            const initial = qstoreInitial(sellerId);
+            const displayId = sellerId.length > 22 ? `${sellerId.slice(0, 10)}…${sellerId.slice(-8)}` : sellerId;
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="qs-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#020617"/>
+      <stop offset="0.5" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="qs-accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#f472b6"/>
+    </linearGradient>
+    <linearGradient id="qs-avatar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7dd3fc"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#qs-bg)"/>
+  <rect width="1200" height="6" fill="url(#qs-accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION QSTORE · SELLER</text>
+    <g transform="translate(60, 160)">
+      <rect width="180" height="180" rx="40" fill="url(#qs-avatar)"/>
+      <text x="90" y="125" text-anchor="middle" font-size="110" font-weight="900" fill="#020617">${qstoreEsc(initial)}</text>
+    </g>
+    <g transform="translate(280, 220)">
+      <text font-size="56" font-weight="900" letter-spacing="-1" fill="#f8fafc">Creator</text>
+      <text y="56" font-size="24" font-weight="600" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${qstoreEsc(displayId)}</text>
+    </g>
+    <g transform="translate(60, 430)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="260" height="120" rx="18" fill="#a78bfa" fill-opacity="0.12" stroke="#a78bfa" stroke-width="2"/>
+        <text x="22" y="62" font-size="56" font-weight="900" fill="#c4b5fd">${qstoreEsc(String(productCount))}</text>
+        <text x="22" y="96" font-size="14" font-weight="700" fill="#a78bfa" letter-spacing="2">PRODUCTS</text>
+      </g>
+      <g transform="translate(280, 0)">
+        <rect width="260" height="120" rx="18" fill="#f472b6" fill-opacity="0.12" stroke="#f472b6" stroke-width="2"/>
+        <text x="22" y="62" font-size="56" font-weight="900" fill="#f9a8d4">${qstoreEsc(String(totalSales))}</text>
+        <text x="22" y="96" font-size="14" font-weight="700" fill="#f472b6" letter-spacing="2">TOTAL SALES</text>
+      </g>
+    </g>
+    <text x="${1200 - 60}" y="585" text-anchor="end" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / qstore / seller</text>
+  </g>
+</svg>`;
+            res.send(svg);
+            return;
+        }
+        // ── Default marketplace card ─────────────────────────────────────────────
+        if ((0, ogEtag_1.applyOgEtag)(req, res, "qstore-default-v1"))
+            return;
+        res.send(renderQStoreDefaultSvg());
+    }
+    catch (_err) {
+        captureQStoreError(_err, { route: "qstore/og.svg" });
+        try {
+            res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+            res.setHeader("Cache-Control", "public, max-age=60");
+            res.status(500).send(renderQStoreDefaultSvg());
+        }
+        catch {
+            res.status(500).json({ error: "qstore og failed" });
+        }
+    }
+});

@@ -1,0 +1,246 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.проверитьИменаМоделей = проверитьИменаМоделей;
+exports.сброситьКэшИмёнМоделей = сброситьКэшИмёнМоделей;
+exports.проверитьУмолчанияВызовом = проверитьУмолчанияВызовом;
+exports.сброситьКэшВызоваУмолчаний = сброситьКэшВызоваУмолчаний;
+const providers_1 = require("../services/qcoreai/providers");
+const КАК = {
+    gemini: {
+        ключ: "GEMINI_API_KEY",
+        список: async () => {
+            const k = process.env.GEMINI_API_KEY?.trim();
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(k || "")}`);
+            if (!r.ok)
+                throw new Error(`gemini list HTTP ${r.status}`);
+            const j = (await r.json());
+            return (j.models || []).map((m) => String(m.name || "").replace(/^models\//, ""));
+        },
+    },
+    openai: {
+        ключ: "OPENAI_API_KEY",
+        список: async () => {
+            const r = await fetch("https://api.openai.com/v1/models", {
+                headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY?.trim() || ""}` },
+            });
+            if (!r.ok)
+                throw new Error(`openai list HTTP ${r.status}`);
+            const j = (await r.json());
+            return (j.data || []).map((m) => String(m.id));
+        },
+    },
+    anthropic: {
+        ключ: "ANTHROPIC_API_KEY",
+        список: async () => {
+            const r = await fetch("https://api.anthropic.com/v1/models?limit=200", {
+                headers: {
+                    "x-api-key": process.env.ANTHROPIC_API_KEY?.trim() || "",
+                    "anthropic-version": "2023-06-01",
+                },
+            });
+            if (!r.ok)
+                throw new Error(`anthropic list HTTP ${r.status}`);
+            const j = (await r.json());
+            return (j.data || []).map((m) => String(m.id));
+        },
+    },
+    openrouter: {
+        // Ключ не нужен: каталог публичный. Значит эту часть проверки можно
+        // задавать всегда, даже когда ключа OpenRouter у нас нет вовсе.
+        список: async () => {
+            const r = await fetch("https://openrouter.ai/api/v1/models");
+            if (!r.ok)
+                throw new Error(`openrouter list HTTP ${r.status}`);
+            const j = (await r.json());
+            return (j.data || []).map((m) => String(m.id));
+        },
+    },
+};
+const ЧАСЫ = Number(process.env.MODEL_NAMES_CHECK_HOURS || 6);
+let кэш = null;
+async function проверитьИменаМоделей() {
+    if (кэш && Date.now() - кэш.когда < ЧАСЫ * 3600000)
+        return кэш.ответ;
+    const пропавшие = [];
+    const неСпрошены = [];
+    let проверено = 0;
+    let поставщиков = 0;
+    for (const [id, как] of Object.entries(КАК)) {
+        const п = (0, providers_1.getProviders)().find((x) => x.id === id);
+        if (!п)
+            continue;
+        // Поставщика без ключа мы и не зовём — его имена не могут нам навредить.
+        // Исключение: у кого ключ не нужен (публичный каталог), спрашиваем всегда.
+        if (как.ключ && !п.configured)
+            continue;
+        поставщиков += 1;
+        let живые;
+        try {
+            живые = await как.список();
+            if (!живые.length)
+                throw new Error("пустой список");
+        }
+        catch (e) {
+            неСпрошены.push(`${id} (${e instanceof Error ? e.message : String(e)})`);
+            continue;
+        }
+        const объявлены = п.models || [];
+        проверено += объявлены.length;
+        for (const м of объявлены)
+            if (!живые.includes(м))
+                пропавшие.push(`${id}/${м}`);
+    }
+    // Ноль проверенных имён — это «не знаю», а не «всё живо». Без этой ветки
+    // проверка, переставшая кого-либо находить, отвечала бы зелёным.
+    const ok = пропавшие.length === 0 && проверено > 0 && неСпрошены.length === 0;
+    const части = [
+        `проверено имён: ${проверено} у ${поставщиков} поставщиков`,
+        пропавшие.length ? `НЕТ У ПОСТАВЩИКА: ${пропавшие.join(", ")}` : "все объявленные имена на месте",
+        неСпрошены.length ? `не спрошены: ${неСпрошены.join("; ")}` : "",
+        "по списку поставщика; «имя есть» слабее, чем «вызов разрешён»",
+    ].filter(Boolean);
+    const ответ = { ok, detail: части.join(" · ").slice(0, 400) };
+    кэш = { когда: Date.now(), ответ };
+    return ответ;
+}
+/** Для проверок: сбросить кэш, чтобы следующий вызов пошёл в сеть заново. */
+function сброситьКэшИмёнМоделей() {
+    кэш = null;
+}
+/**
+ * Отвечает ли МОДЕЛЬ ПО УМОЛЧАНИЮ на настоящий вызов.
+ *
+ * Это ДРУГОЙ вопрос, чем выше, и держать их в одной пробе нельзя — сегодня я
+ * уже видел, во что это обходится. Разница измерена 07.10.2026:
+ *   • `gemini-2.0-flash-001` ИСЧЕЗ из каталога → ловится проверкой имён;
+ *   • `gemini-2.5-pro` в каталоге ЕСТЬ и отвечает 404 «недоступна новым
+ *     пользователям» → проверкой имён НЕ ловится, нужен вызов.
+ * Оба состояния реальны, поэтому нужны обе пробы.
+ *
+ * Зовём только УМОЛЧАНИЕ каждого настроенного поставщика — самое ходовое имя
+ * на платформе — и ровно один токен. Кэш общий по времени с проверкой имён.
+ * Проверять так все модели было бы тратой без повода: платят за каждый вызов.
+ */
+let кэшВызова = null;
+async function вызватьОдинТокен(id, модель) {
+    if (id === "gemini") {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${модель}:generateContent?key=${encodeURIComponent(process.env.GEMINI_API_KEY?.trim() || "")}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: "." }] }],
+                generationConfig: { maxOutputTokens: 1, thinkingConfig: { thinkingBudget: 0 } },
+            }),
+        });
+        return r.ok ? { ok: true } : { ok: false, почему: `HTTP ${r.status}` };
+    }
+    if (id === "anthropic") {
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+                "x-api-key": process.env.ANTHROPIC_API_KEY?.trim() || "",
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            // temperature НЕ шлём: opus-4-8 и fable-5 его не принимают.
+            body: JSON.stringify({ model: модель, max_tokens: 1, messages: [{ role: "user", content: "." }] }),
+        });
+        return r.ok ? { ok: true } : { ok: false, почему: `HTTP ${r.status}` };
+    }
+    if (id === "openai") {
+        const r = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${process.env.OPENAI_API_KEY?.trim() || ""}`,
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({ model: модель, max_tokens: 1, messages: [{ role: "user", content: "." }] }),
+        });
+        return r.ok ? { ok: true } : { ok: false, почему: `HTTP ${r.status}` };
+    }
+    if (id === "openrouter") {
+        // Последнее звено цепочки запаса, и до 07.10 оно было проверено ТОЛЬКО
+        // каталогом. Замер того дня: gemini — деньги есть, но срок перехода на
+        // предоплату 12.10; openai — ключ жив, денег нет; anthropic — $8.93.
+        // То есть запас держится на бесплатных слагах, а работают ли они на
+        // вызов, никто не спрашивал. Вызов бесплатный — спрашиваем.
+        const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${process.env.OPENROUTER_API_KEY?.trim() || ""}`,
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({ model: модель, max_tokens: 1, messages: [{ role: "user", content: "." }] }),
+        });
+        return r.ok ? { ok: true } : { ok: false, почему: `HTTP ${r.status}` };
+    }
+    return { ok: false, почему: "вызывать этого поставщика не умею" };
+}
+async function проверитьУмолчанияВызовом() {
+    if (кэшВызова && Date.now() - кэшВызова.когда < ЧАСЫ * 3600000)
+        return кэшВызова.ответ;
+    /*
+     * 🔴 08.10.2026: у Gemini зовём ВСЕ объявленные модели, у остальных —
+     * только умолчание. Разделение не ради аккуратности, а по цене и смыслу:
+     *
+     *   gemini     бесплатно по факту и первый в очереди → полный список,
+     *              +2 вызова по одному токену раз в 6 ч;
+     *   anthropic  остаток $8.93 → только умолчание, звать все четыре ради
+     *              проверки — трата без повода;
+     *   openai     денег нет, 429 на ЛЮБОЕ имя → полный список ничего не
+     *              добавит к уже известному отказу;
+     *   openrouter бесплатные слаги → полный список, тоже ноль денег
+     *              (решение оркестратора 08.10).
+     *
+     * Повод переносить это на прод: ручной прогон требовал брать ключ через
+     * буфер обмена, и 08.10 буфер подсунул чужой телефон — инструмент объявил
+     * три ЖИВЫЕ модели мёртвыми. Пока шаг ручной, этот источник ошибки
+     * возвращается на каждой волне; здесь ключ уже лежит.
+     */
+    const ПОЛНЫЙ_СПИСОК = new Set(["gemini", "openrouter"]);
+    const отказали = [];
+    const заняты = [];
+    let спрошено = 0;
+    for (const id of ["gemini", "anthropic", "openai", "openrouter"]) {
+        const п = (0, providers_1.getProviders)().find((x) => x.id === id);
+        if (!п?.configured)
+            continue;
+        const имена = ПОЛНЫЙ_СПИСОК.has(id) && п.models?.length ? п.models : [п.defaultModel];
+        for (const модель of имена) {
+            try {
+                const о = await вызватьОдинТокен(id, модель);
+                спрошено += 1;
+                if (о.ok)
+                    continue;
+                // 🔴 У БЕСПЛАТНОЙ модели 429 означает «занято сейчас», а не «сломана»:
+                // отказ по частоте для них — обычное состояние, и красить им панель
+                // значит завести проверку, которая краснеет при исправной системе.
+                // У платной тот же 429 означает «кончились деньги» — это находка.
+                if (п.free && String(о.почему || "").includes("429")) {
+                    заняты.push(`${id}/${модель}`);
+                    continue;
+                }
+                отказали.push(`${id}/${модель} ${о.почему}`);
+            }
+            catch (e) {
+                // Сеть не ответила — это тоже «не ок», но причина другая, и она названа.
+                отказали.push(`${id}/${модель} (${e instanceof Error ? e.message : String(e)})`);
+            }
+        }
+    }
+    // Ноль спрошенных — «не знаю», не «всё хорошо».
+    const ok = отказали.length === 0 && спрошено > 0;
+    const части = [
+        `проверено имён вызовом: ${спрошено} (у Gemini весь список, у остальных умолчание)`,
+        отказали.length ? `НЕ ОТВЕТИЛИ: ${отказали.join(", ")}` : "все проверенные имена отвечают",
+        заняты.length ? `занято по частоте (бесплатные, это не поломка): ${заняты.join(", ")}` : "",
+        "настоящий вызов на один токен; отказ по деньгам выглядит так же, как отказ по имени",
+    ];
+    const ответ = { ok, detail: части.filter(Boolean).join(" · ").slice(0, 400) };
+    кэшВызова = { когда: Date.now(), ответ };
+    return ответ;
+}
+/** Для проверок: сбросить и этот кэш тоже. */
+function сброситьКэшВызоваУмолчаний() {
+    кэшВызова = null;
+}

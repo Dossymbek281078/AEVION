@@ -1,0 +1,197 @@
+"use strict";
+// QSkyway — is the committed airspace snapshot still what the regulator publishes?
+//
+// The ceiling data in qskyway.airspace.<city>.ts is a committed snapshot: real,
+// signed, reproducible — and frozen at the moment it was fetched. The FAA
+// reissues UAS Facility Maps on a recurring cycle (the MAP_EFF field moves), so
+// a snapshot that is honest today quietly becomes a false claim in a month or
+// two. Nothing in the code would notice: the service would keep saying "real
+// regulator feed" while routing against a superseded edition.
+//
+// So the running service asks the regulator the *identical* bbox question on a
+// slow interval and compares. The answer is reported, never silently applied —
+// auto-adopting a live regulatory feed into a signed snapshot would break the
+// attestation and remove the human review that a rule change deserves. Drift
+// surfaces as `upToDate:false` plus what changed; a human regenerates the file.
+//
+// Fails soft in the METAR style: a failed check leaves the previous verdict and
+// reports `checked:false` rather than claiming either freshness or staleness.
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.compareSnapshot = compareSnapshot;
+exports.airspaceFreshness = airspaceFreshness;
+exports.checkAirspaceFreshnessNow = checkAirspaceFreshnessNow;
+const qskyway_airspace_1 = require("./qskyway.airspace");
+const FEED_QUERY = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query";
+// UAS Facility Maps change on a ~monthly cadence, so a twice-daily check is
+// already far more often than the data can move. Any tighter is pure noise
+// against a public regulator endpoint.
+const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
+// Don't add a network round-trip to boot — this backend redeploys constantly.
+const FIRST_CHECK_DELAY_MS = 60 * 1000;
+const verdicts = new Map();
+const blank = (src) => ({
+    checked: false,
+    upToDate: null,
+    publishedEffective: null,
+    snapshotEffective: src.effective,
+    cellsAdded: 0,
+    cellsRemoved: 0,
+    cellsChanged: 0,
+    checkedAt: null,
+    error: null,
+});
+const airspaceCellId_1 = require("../lib/airspaceCellId");
+/**
+ * Pure comparison, exported so the drift branch is testable: the live feed
+ * cannot be made to disagree on demand, so verifying "detects a changed ceiling"
+ * against the real network is impossible. The network path is exercised live
+ * (see the smoke's freshness check); this covers the branches it cannot reach.
+ */
+function compareSnapshot(src, live) {
+    // Сверяем по ключу, выведенному из ГЕОМЕТРИИ, а не по полю `id`.
+    //
+    // У отгруженных ячеек id исторически был `faa-<OBJECTID>` — номером строки в
+    // базе публикатора, который меняется при каждой перепубликации. Пока сверка
+    // шла по этому полю, сторож кричал «дрейф» на неизменных потолках. Но
+    // геометрия у отгруженной ячейки лежит тут же, в её собственных minLat/minLon,
+    // поэтому устойчивый ключ можно вывести для ОБЕИХ сторон прямо сейчас — не
+    // пересобирая слой и не трогая подписанное содержимое, которому иначе
+    // потребовалось бы переякорение в Bitcoin.
+    const prefix = src.feed === "bazl" ? "bazl" : "faa";
+    const keyOf = (c) => (0, airspaceCellId_1.stableCellId)({ minLat: c.minLat, minLon: c.minLon, airportIcao: c.airportIcao ?? null }, { prefix });
+    const liveById = new Map(live.map((c) => [c.id, c.ceilingFt])); // живой id уже устойчивый
+    const snapById = new Map(src.cells.map((c) => [keyOf(c), c.ceilingFt]));
+    let cellsAdded = 0, cellsRemoved = 0, cellsChanged = 0;
+    for (const [id, ceil] of liveById) {
+        if (!snapById.has(id))
+            cellsAdded++;
+        else if (snapById.get(id) !== ceil)
+            cellsChanged++;
+    }
+    for (const id of snapById.keys())
+        if (!liveById.has(id))
+            cellsRemoved++;
+    const effectives = [...new Set(live.map((c) => c.effective).filter(Boolean))];
+    return {
+        cellsAdded,
+        cellsRemoved,
+        cellsChanged,
+        // Ceilings are what routing obeys; a reissued publication date with identical
+        // ceilings is not a rule change and must not cry wolf.
+        upToDate: cellsAdded === 0 && cellsRemoved === 0 && cellsChanged === 0,
+        publishedEffective: effectives.length === 1 ? effectives[0] : effectives.join(", ") || null,
+    };
+}
+const BAZL_IDENTIFY = "https://api3.geo.admin.ch/rest/services/api/MapServer/identify";
+/**
+ * Тот же вопрос фиду BAZL: какие дрон-геозоны накрывают квадрат сейчас. Ключ
+ * ячейки — юго-западный угол полигона (как у FAA — угол прямоугольника), потолок
+ * у CTR-зон один: 120 м AGL = 394 ft. Даты у слоя нет — publishedEffective
+ * остаётся null, а дрейф ловится по составу и потолкам зон.
+ */
+async function liveBazl(src) {
+    const params = new URLSearchParams({
+        geometry: `${src.bbox.minLon},${src.bbox.minLat},${src.bbox.maxLon},${src.bbox.maxLat}`,
+        geometryType: "esriGeometryEnvelope",
+        layers: "all:ch.bazl.einschraenkungen-drohnen",
+        tolerance: "0",
+        sr: "4326",
+        geometryFormat: "geojson",
+        returnGeometry: "true",
+    });
+    const res = await fetch(`${BAZL_IDENTIFY}?${params}`, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok)
+        throw new Error(`http ${res.status}`);
+    const data = (await res.json());
+    const live = data.results ?? [];
+    if (!live.length)
+        throw new Error("feed returned no zones");
+    return live.map((f) => {
+        const polys = f.geometry?.type === "MultiPolygon" ? f.geometry.coordinates : [f.geometry?.coordinates];
+        const pts = polys.flatMap((p) => p?.[0] ?? []);
+        const m = (f.properties?.zone_restriction_en ?? "").match(/(\d+)\s*m above ground/);
+        const ceilingM = m ? Number(m[1]) : 0;
+        return {
+            id: (0, airspaceCellId_1.stableCellId)({ minLat: Math.min(...pts.map((p) => p[1])), minLon: Math.min(...pts.map((p) => p[0])), airportIcao: null }, { prefix: "bazl" }),
+            ceilingFt: Math.round(ceilingM / 0.3048),
+            effective: null,
+        };
+    });
+}
+async function checkCity(cityId, src) {
+    const prev = verdicts.get(cityId) ?? blank(src);
+    try {
+        if (src.feed === "bazl") {
+            const diff = compareSnapshot(src, await liveBazl(src));
+            verdicts.set(cityId, { checked: true, ...diff, snapshotEffective: src.effective, checkedAt: new Date().toISOString(), error: null });
+            return;
+        }
+        const params = new URLSearchParams({
+            geometry: `${src.bbox.minLon},${src.bbox.minLat},${src.bbox.maxLon},${src.bbox.maxLat}`,
+            geometryType: "esriGeometryEnvelope",
+            inSR: "4326",
+            outSR: "4326",
+            spatialRel: "esriSpatialRelIntersects",
+            // Геометрия НУЖНА: ключ ячейки строится из её юго-западного угла. Пока
+            // сторож запрашивал returnGeometry:false и брал id из OBJECTID, он
+            // сравнивал номера строк в базе публикатора — они меняются при каждой
+            // перепубликации, отсюда и ложный «дрейф». Девять ячеек, объём ничтожен.
+            outFields: "CEILING,MAP_EFF,APT1_ICAO",
+            returnGeometry: "true",
+            f: "json",
+        });
+        const res = await fetch(`${FEED_QUERY}?${params}`, { signal: AbortSignal.timeout(30000) });
+        if (!res.ok)
+            throw new Error(`http ${res.status}`);
+        const data = (await res.json());
+        if (data.error)
+            throw new Error("feed error");
+        const live = data.features ?? [];
+        if (!live.length)
+            throw new Error("feed returned no cells");
+        const diff = compareSnapshot(src, live.map((f) => {
+            const ring = f.geometry?.rings?.[0] ?? [];
+            return {
+                id: (0, airspaceCellId_1.stableCellId)({
+                    minLat: Math.min(...ring.map((p) => p[1])),
+                    minLon: Math.min(...ring.map((p) => p[0])),
+                    airportIcao: f.attributes.APT1_ICAO ?? null,
+                }),
+                ceilingFt: f.attributes.CEILING,
+                effective: f.attributes.MAP_EFF ?? null,
+            };
+        }));
+        verdicts.set(cityId, {
+            checked: true,
+            ...diff,
+            snapshotEffective: src.effective,
+            checkedAt: new Date().toISOString(),
+            error: null,
+        });
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[qskyway] airspace freshness check failed for ${cityId}:`, message);
+        // Keep whatever we last knew; only the error and timestamp move.
+        verdicts.set(cityId, { ...prev, checkedAt: prev.checkedAt, error: message });
+    }
+}
+async function checkAll() {
+    for (const [cityId, src] of Object.entries(qskyway_airspace_1.AIRSPACE)) {
+        await checkCity(cityId, src);
+    }
+}
+// setTimeout/setInterval callbacks must never throw here — an unhandled rejection
+// inside a timer has taken this backend down before.
+setTimeout(() => { void checkAll(); }, FIRST_CHECK_DELAY_MS).unref?.();
+setInterval(() => { void checkAll(); }, CHECK_INTERVAL_MS).unref?.();
+function airspaceFreshness(cityId) {
+    const src = qskyway_airspace_1.AIRSPACE[cityId];
+    if (!src)
+        return null;
+    return verdicts.get(cityId) ?? blank(src);
+}
+/** Test hook: run one check now instead of waiting for the timer. */
+async function checkAirspaceFreshnessNow() {
+    await checkAll();
+}

@@ -1,0 +1,562 @@
+"use strict";
+/**
+ * Lemon Squeezy: ссылка заказа → переменная окружения с id варианта товара.
+ *
+ * С 15.09.2026 тариф — это СРОК (data/pricing.ts, TERM_*). Продаются:
+ *
+ *   tier_<ступень>              вся планета: LEMON_SQUEEZY_VARIANT_LITE … _MAX
+ *   app_<приложение>_<ступень>  отдельное приложение: LEMON_SQUEEZY_VARIANT_CYBERCHESS_PRO
+ *
+ * Ступени: lite 1 мес, medium 3, pro 6, full 9, max 12. Вариант в магазине —
+ * подписка с интервалом «каждые N месяцев» и ценой ЗА ВЕСЬ СРОК. Цена варианта
+ * обязана совпадать с priceForReference ниже: этот файл меняет то, что показывает
+ * и считает витрина, но не то, что спишет уже заведённый вариант.
+ *
+ * Прежние ссылки (tier_lite_monthly … app_devhub) больше НЕ продаются, но
+ * понимаются при продлении и отмене: по ним уже могли купить (LEGACY_VARIANT_ENV).
+ *
+ * Названия товаров витрины — STOREFRONT_NAME_TO_REFERENCE: заводить ровно так.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.STOREFRONT_NAME_TO_REFERENCE = exports.PILOT_490_USD = exports.PILOT_490_VARIANT_DEFAULT = exports.PILOT_490_VARIANT_ENV = exports.PILOT_490_REFERENCE = exports.BUREAU_VERIFIED_VARIANT_ENV = exports.BUREAU_VERIFIED_REFERENCE = exports.PLANET_MONTHLY_VARIANT_ENV = exports.TERM_REFERENCES = void 0;
+exports.variantMappingStatus = variantMappingStatus;
+exports.pilot490VariantId = pilot490VariantId;
+exports.resolveLemonSqueezyVariant = resolveLemonSqueezyVariant;
+exports.fallbackVariantForReference = fallbackVariantForReference;
+exports.planetCheckoutVariant = planetCheckoutVariant;
+exports.planetBillingSellable = planetBillingSellable;
+exports.expectedPlanetChargeUsd = expectedPlanetChargeUsd;
+exports.lemonSqueezyTiersConfigured = lemonSqueezyTiersConfigured;
+exports.lemonSqueezyVariantStatus = lemonSqueezyVariantStatus;
+exports.referenceForVariantId = referenceForVariantId;
+exports.tierForLemonSqueezyReference = tierForLemonSqueezyReference;
+exports.isAppReference = isAppReference;
+exports.appSlugForReference = appSlugForReference;
+exports.appSlugHasOwnGate = appSlugHasOwnGate;
+exports.allAppSlugs = allAppSlugs;
+exports.moduleIdForAppSlug = moduleIdForAppSlug;
+exports.appSlugForModuleId = appSlugForModuleId;
+exports.продаётсяНаЭтомСроке = продаётсяНаЭтомСроке;
+exports.lemonSqueezySellable = lemonSqueezySellable;
+exports.priceForReference = priceForReference;
+exports.devHubVariantIds = devHubVariantIds;
+exports.legacyStudioProVariantId = legacyStudioProVariantId;
+const pricing_1 = require("./pricing");
+const billingPeriod_1 = require("../lib/payment/billingPeriod");
+/** Всё, что продаётся сейчас: пять ступеней планеты и пять ступеней каждого приложения. */
+exports.TERM_REFERENCES = [
+    ...pricing_1.TERM_TIERS.map((t) => `tier_${t}`),
+    ...pricing_1.STANDALONE_APPS.flatMap((a) => pricing_1.TERM_TIERS.map((t) => `app_${a.slug}_${t}`)),
+];
+/** tier_lite → LEMON_SQUEEZY_VARIANT_LITE; app_ip_bureau_max → LEMON_SQUEEZY_VARIANT_IP_BUREAU_MAX. */
+function variantEnvKey(ref) {
+    return `LEMON_SQUEEZY_VARIANT_${ref.replace(/^(tier|app)_/, "").toUpperCase()}`;
+}
+/** reference → env var holding the LS variant id — ТОЛЬКО то, что продаётся. */
+const TIER_VARIANT_ENV = Object.fromEntries(exports.TERM_REFERENCES.map((r) => [r, variantEnvKey(r)]));
+/** Прежние варианты: не продаются (их нет в TIER_VARIANT_ENV), но узнаются вебхуком. */
+const LEGACY_VARIANT_ENV = {
+    tier_lite_monthly: "LEMON_SQUEEZY_VARIANT_LITE_MONTHLY",
+    tier_lite_annual: "LEMON_SQUEEZY_VARIANT_LITE_ANNUAL",
+    tier_medium_monthly: "LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY",
+    tier_medium_annual: "LEMON_SQUEEZY_VARIANT_MEDIUM_ANNUAL",
+    tier_full_monthly: "LEMON_SQUEEZY_VARIANT_FULL_MONTHLY",
+    tier_full_annual: "LEMON_SQUEEZY_VARIANT_FULL_ANNUAL",
+    tier_planet_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_MONTHLY",
+    tier_planet_annual: "LEMON_SQUEEZY_VARIANT_PLANET_ANNUAL",
+    tier_pro_monthly: "LEMON_SQUEEZY_VARIANT_PRO_MONTHLY",
+    tier_pro_annual: "LEMON_SQUEEZY_VARIANT_PRO_ANNUAL",
+    app_qventure: "LEMON_SQUEEZY_VARIANT_QVENTURE",
+    app_qpaynet: "LEMON_SQUEEZY_VARIANT_QPAYNET",
+    app_qcontract: "LEMON_SQUEEZY_VARIANT_QCONTRACT",
+    app_constitution: "LEMON_SQUEEZY_VARIANT_CONSTITUTION",
+    app_ip_bureau: "LEMON_SQUEEZY_VARIANT_IP_BUREAU",
+    app_qrenew: "LEMON_SQUEEZY_VARIANT_QRENEW",
+    app_smeta: "LEMON_SQUEEZY_VARIANT_SMETA",
+    app_cyberchess: "LEMON_SQUEEZY_VARIANT_CYBERCHESS",
+    // DevHub Studio Pro продаётся в магазине ПОДПИСКОЙ ($149/мес, is_subscription:
+    // true, interval: month — проверено на витрине 12.08.2026), а не разовой
+    // покупкой. Переменная та же, что использовал разовый путь `order_created`, —
+    // новой настройки на Railway не требуется. Без этой строки обратный поиск
+    // возвращал null, и подписка за $149 провижинила тариф «lite» ($19).
+    app_devhub: "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO",
+};
+/*
+ * 🔴 20.10.2026: месячные варианты плана «Планета» (интервал month, цена месяца
+ * срока 225/200/175/150). Замер Продаж: помесячная касса через tier_lite показывала
+ * «AEVION Planet — Lite (1 mo)» и серую «$250.00 billed every month» при цене $150.
+ *
+ * Переменные НОВЫЕ (…_PLANET_<t>_MONTHLY), а не прежние …_MEDIUM_MONTHLY: замер
+ * `railway variables` 20.10 — LEMON_SQUEEZY_VARIANT_MEDIUM/PRO/FULL_MONTHLY на проде
+ * ЗАДАНЫ и указывают на товары до 15.09. Переписать их новыми id — продления старых
+ * покупок стали бы unmapped_variant (500), оставить — касса открыла бы старый товар.
+ *
+ * Ссылка та же форма tier_<t>_monthly: обратный поиск по новому и по прежнему id
+ * даёт одну ступень (billingPeriod.tierIdForReference), а продаётся — ТОЛЬКО новый.
+ */
+exports.PLANET_MONTHLY_VARIANT_ENV = {
+    tier_medium_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_MEDIUM_MONTHLY",
+    tier_pro_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_PRO_MONTHLY",
+    tier_full_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_FULL_MONTHLY",
+    tier_max_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_MAX_MONTHLY",
+};
+function isPlanetMonthlyReference(s) {
+    return Object.prototype.hasOwnProperty.call(exports.PLANET_MONTHLY_VARIANT_ENV, s);
+}
+/**
+ * Сопоставлены ли ссылки товаров с идентификаторами вариантов магазина.
+ *
+ * Повод (28.08.2026). `/api/health/channels` отвечал `canPay: true`, потому что
+ * у Lemon Squeezy заданы ключ и магазин. Но выдача доступа висит НЕ на этом, а
+ * на переменной КОНКРЕТНОГО варианта: в вебхуке ветка товара берётся по
+ * `process.env[...VARIANT_X]`, и при незаданной переменной сравнение не
+ * совпадает, обработчик доходит до `return res.json({ ok: true, ignored })` —
+ * заплативший получает успешный ответ и НИ ОДНОГО права. Магазин при этом
+ * деньги принял.
+ *
+ * То есть имя поля `canPay` шире того, о чём оно отчитывалось: «провайдер
+ * настроен» и «покупка превращается в доступ» — разные вопросы, и второй
+ * снаружи спросить было нечем.
+ *
+ * СЕКРЕТОВ НЕ ОТДАЁМ: наружу идут только ссылки товаров (`app_devhub`) — это
+ * наши внутренние имена, а не значения. Идентификаторы вариантов и длины
+ * переменных здесь не появляются, как и во всей ручке состояния каналов.
+ */
+/**
+ * ⚠️ ПОПРАВКА 02.09.2026, находка соседнего окна с контролем.
+ *
+ * Поле называлось `mapped` и считало ровно одно: переменная НЕПУСТА. То есть
+ * «mapped: 17» означало «17 переменных заданы», а не «17 верных
+ * идентификаторов». Опечатка или устаревшее значение — и состояние зелёное,
+ * а покупатель платит и не получает доступ при исправной с виду цепочке.
+ *
+ * Это тот же класс, ради которого функция и написана («имя поля шире того,
+ * о чём оно отчитывается»), только на уровень глубже: починив `canPay`, мы
+ * завели `mapped` с ровно тем же дефектом.
+ *
+ * СВЕРИТЬ С ЭТАЛОНОМ НЕЛЬЗЯ: идентификаторы вариантов живут ТОЛЬКО в
+ * переменных окружения, в каталоге товаров их нет. Поэтому «верный» здесь
+ * недостижим, и обещать его именем поля нечестно.
+ *
+ * ЧТО ПРОВЕРИТЬ МОЖНО — формат, и это не косметика. Значение уходит в
+ * `Number.parseInt(variantId, 10)` (lemonSqueezyProvider.ts:158), а
+ * документация в шапке того же файла требует ЧИСЛОВОЙ идентификатор. Любое
+ * нечисловое значение превращается в `NaN` и уезжает в кассу: плейсхолдер
+ * из инструкции, UUID из адресной строки (это ДРУГОЙ идентификатор,
+ * встречается в ссылке чекаута и легко перепутать), лишние кавычки.
+ *
+ * Поэтому теперь три числа вместо одного, и каждое означает ровно себя:
+ *
+ *   varsSet    переменная задана и непуста
+ *   malformed  задана, но НЕ число — до кассы доедет NaN
+ *   unmapped   не задана вовсе
+ *
+ * `mapped` убран намеренно, а не переименован с сохранением синонима: два
+ * указателя на одно расходятся молча, и мы это уже проходили. Единственный
+ * читатель (`routes/channelsHealth.ts`) поправлен тем же коммитом.
+ *
+ * СЕКРЕТОВ НЕ ОТДАЁМ по-прежнему: наружу идут ТОЛЬКО счётчики и наши
+ * внутренние имена ссылок. Значения переменных не появляются ни здесь, ни в
+ * ручке состояния.
+ */
+function variantMappingStatus() {
+    const refs = Object.keys(TIER_VARIANT_ENV);
+    const unmapped = refs.filter((r) => !process.env[TIER_VARIANT_ENV[r]]?.trim());
+    const malformed = refs.filter((r) => {
+        const raw = process.env[TIER_VARIANT_ENV[r]]?.trim();
+        if (!raw)
+            return false; // это уже unmapped, второй раз не считаем
+        return !/^[0-9]+$/.test(raw) || Number.parseInt(raw, 10) <= 0;
+    });
+    return { total: refs.length, varsSet: refs.length - unmapped.length, malformed, unmapped };
+}
+function isReference(s) {
+    // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, и
+    // isReference("constructor") возвращал true.
+    //
+    // ПРОВЕРЕНО 28.07.2026: прямо сейчас это НЕ дефект — дальше идёт
+    // process.env[TIER_VARIANT_ENV[ref]], а TIER_VARIANT_ENV["constructor"] — это
+    // функция, поэтому поиск в env даёт undefined и результат null, тот же, что у
+    // неизвестной ссылки. Замерено: constructor/__proto__/toString/hasOwnProperty
+    // → null, настоящая ссылка → свой id.
+    //
+    // Защита стоит здесь не от сегодняшнего поведения, а от завтрашнего: она
+    // держится ТОЛЬКО на том, что значения словаря — имена переменных окружения.
+    // Начни он хранить сами идентификаторы вариантов — и ключ прототипа поехал бы
+    // дальше по платёжному пути как настоящая ссылка.
+    return Object.prototype.hasOwnProperty.call(TIER_VARIANT_ENV, s);
+}
+/**
+ * Resolve the LS variant id for a checkout reference ("tier_lite_monthly").
+ * Returns null if the reference is unknown or its variant env isn't set yet.
+ *
+ * 🔴 05.10.2026: прежняя версия этого описания обещала, что «провайдер подставит
+ * LEMON_SQUEEZY_DEFAULT_VARIANT_ID». ЭТО БОЛЬШЕ НЕВЕРНО, и неверность опасная:
+ * ровно такое поведение 14.09 списало бы $149 за DevHub вместо отметки бюро, потому
+ * что несопоставленная ссылка брала чужой товар. Провайдер теперь ОТКАЗЫВАЕТ
+ * (lemonSqueezyProvider.ts), а переменная осталась только у DevHub для его
+ * собственной покупки. Описание, обещающее подстановку, однажды вернуло бы её
+ * обратно руками доверчивого читателя.
+ */
+/**
+ * Ссылка товара «отметка Verified» в бюро.
+ *
+ * 🔴 05.10.2026, находка окна кассы, проверенная по коду. Бюро звало кассу со
+ * ссылкой = verificationId, то есть РАЗНОЙ на каждую покупку. Вариант товара так
+ * не находится никогда: resolveLemonSqueezyVariant знает только перечисленные
+ * ссылки. Провайдер при этом отказывает честно (не подставляет товар по умолчанию —
+ * иначе человек заплатил бы чужую сумму), поэтому апгрейд за $29 просто не
+ * начинался: на проде BUREAU_PAYMENT_PROVIDER не задан и работает заглушка.
+ *
+ * Ссылка обязана быть ПОСТОЯННОЙ: вариант — это товар, а не номер покупки. Связь
+ * платежа с конкретной проверкой держится не на ней, а на собственном intentId
+ * провайдера, который бюро хранит в BureauVerification.paymentIntentId и по которому
+ * вебхук находит строку. Проверено по коду: провайдер кладёт свой intentId в
+ * custom_data.bureauIntentId, parseWebhook читает оттуда же.
+ */
+exports.BUREAU_VERIFIED_REFERENCE = "bureau_verified";
+/** Переменная с вариантом этого товара. Заводит основатель в кабинете кассы. */
+exports.BUREAU_VERIFIED_VARIANT_ENV = "LEMON_SQUEEZY_VARIANT_BUREAU_VERIFIED";
+/**
+ * Пилот $490 с /proof (волна 129б, 13.10.2026): свой разовый товар вне лестницы
+ * сроков. Заведён в кабинете кассы оркестратором 13.10: товар 1436015, вариант
+ * 2242340, 49 000 центов. Id публичный (он же в ссылке checkout/buy), поэтому
+ * лежит в коде умолчанием; переменная ниже позволяет подменить его без выкатки.
+ * Покупка — вебхук order_created по этому варианту: письмо на data@ + журнал
+ * заявок (routes/proofPilot.ts), доступов не выдаёт.
+ */
+exports.PILOT_490_REFERENCE = "pilot_490";
+exports.PILOT_490_VARIANT_ENV = "LEMON_SQUEEZY_VARIANT_PILOT_490";
+exports.PILOT_490_VARIANT_DEFAULT = "2242340";
+exports.PILOT_490_USD = 490;
+function pilot490VariantId() {
+    return process.env[exports.PILOT_490_VARIANT_ENV]?.trim() || exports.PILOT_490_VARIANT_DEFAULT;
+}
+function resolveLemonSqueezyVariant(reference) {
+    // Отметка Verified — свой товар, вне лестницы сроков: у неё нет ни ступени, ни
+    // периода, поэтому в TERM_REFERENCES она не входит и спрашивается отдельно.
+    if (reference === exports.BUREAU_VERIFIED_REFERENCE) {
+        return process.env[exports.BUREAU_VERIFIED_VARIANT_ENV]?.trim() || null;
+    }
+    if (reference === exports.PILOT_490_REFERENCE)
+        return pilot490VariantId();
+    // Месячный вариант плана: только НОВАЯ переменная, прежний товар не продаётся.
+    if (isPlanetMonthlyReference(reference))
+        return process.env[exports.PLANET_MONTHLY_VARIANT_ENV[reference]]?.trim() || null;
+    if (!isReference(reference))
+        return null;
+    const id = process.env[TIER_VARIANT_ENV[reference]]?.trim();
+    return id || null;
+}
+/**
+ * Запасной товар для отдельного приложения, у которого своего товара НЕТ.
+ *
+ * 🔴 21.09.2026. qright, qsign, startup_exchange и qskyway имеют цену на
+ * витрине, а купить их нельзя: касса отвечает 503, потому что варианта в
+ * LemonSqueezy у них нет. Завести пачкой нельзя — API кассы на создание
+ * товаров отвечает 405. Значит продаём их ВАРИАНТОМ ТАРИФА lite, а цену
+ * передаём custom_price.
+ *
+ * Нового смысла нет: этим же путём со страницы цен покупают «lite + один
+ * модуль на выбор», и вебхук его умеет — tier lite плюс module в custom_data
+ * даёт права ровно на один модуль.
+ *
+ * 🔴 ТОЛЬКО срок lite. У medium/full/max вебхук custom_data.module НЕ читает
+ * и выдаёт набор ступени целиком: qskyway за свою цену открыл бы всю планету
+ * на год. Это тот же класс, из-за которого 16.09 снимали товары с публикации.
+ *
+ * ⚠️ Предикат ОДИН на всех намеренно. Его спрашивают двое: касса (какой
+ * вариант открыть) и витрина (зажигать ли кнопку). Разойдись они — получится
+ * худший из возможных исходов: кнопка серая при работающей кассе либо живая
+ * кнопка при 503. Второй способ отвечать на тот же вопрос здесь не заводить.
+ */
+function fallbackVariantForReference(reference) {
+    // Свой товар есть — запасной путь не нужен и не должен подменять цену.
+    if (resolveLemonSqueezyVariant(reference))
+        return null;
+    const m = /^app_([a-z_]+)_lite$/.exec(reference);
+    if (!m)
+        return null;
+    if (!pricing_1.STANDALONE_APPS.some((a) => a.slug === m[1]))
+        return null;
+    return resolveLemonSqueezyVariant("tier_lite");
+}
+function planetCheckoutVariant(term, billing) {
+    // Без срока «вперёд» не отличается от помесячного: скидки нет, интервал — месяц.
+    const режим = term === "lite" ? "monthly" : billing;
+    // 20.10.2026: помесячно — свой месячный вариант срока, если он заведён; иначе
+    // прежний запасной tier_lite. custom_price и custom_data идут в ОБОИХ путях
+    // (checkout.ts): списание важнее показа.
+    const месячный = term === "lite" ? null : `tier_${term}_monthly`;
+    const reference = режим === "prepaid" ? `tier_${term}`
+        : месячный && resolveLemonSqueezyVariant(месячный) ? месячный
+            : "tier_lite";
+    return {
+        reference,
+        variantId: resolveLemonSqueezyVariant(reference),
+        chargeUsd: режим === "monthly" ? pricing_1.PLANET_TERM_PRICE[term] : (0, pricing_1.planetPrepayTotal)(term),
+        customData: { term, billing: режим },
+    };
+}
+/** Что из двух режимов можно купить сейчас: задана переменная нужного варианта. */
+function planetBillingSellable(term) {
+    return {
+        monthly: Boolean(planetCheckoutVariant(term, "monthly").variantId),
+        prepaid: term !== "lite" && Boolean(resolveLemonSqueezyVariant(`tier_${term}`)),
+    };
+}
+/** Сумма, которую вебхук ждёт при custom_data {term, billing}; null — такой пары нет. */
+function expectedPlanetChargeUsd(term, billing) {
+    if (typeof term !== "string" || !(0, pricing_1.isTermTier)(term))
+        return null;
+    if (billing !== "monthly" && billing !== "prepaid")
+        return null;
+    const v = planetCheckoutVariant(term, billing);
+    // Пара «lite + prepaid» в кассу не уходит (planetCheckoutVariant сводит её к monthly).
+    if (v.customData.billing !== billing)
+        return null;
+    return v.chargeUsd;
+}
+/** True when at least one tier variant id is configured (LS checkout is live). */
+function lemonSqueezyTiersConfigured() {
+    return Object.values(TIER_VARIANT_ENV).some((k) => Boolean(process.env[k]?.trim()));
+}
+/**
+ * Название товара на витрине магазина → ссылка в коде.
+ *
+ * ЗАЧЕМ. Витрина `aevion.lemonsqueezy.com` перечисляет живые товары, а код
+ * знает ссылки — но связать одно с другим было нечем: 13.08.2026 я сопоставлял
+ * семнадцать товаров вручную, глазами. Пока такой таблицы нет, вопрос «этот
+ * товар вообще кто-нибудь выдаёт?» решается только покупкой.
+ *
+ * Сопоставляем по НАЗВАНИЮ, а не по идентификатору варианта: идентификаторы
+ * живут в переменных Railway, и держать их копию в коде значило бы завести
+ * второго писателя для одного числа. Названия мы задаём сами, и они устойчивы.
+ *
+ * Товар, которого здесь нет, — не ошибка сам по себе, но и выдать его нечем:
+ * сверка скажет об этом до того, как его кто-то купит.
+ */
+exports.STOREFRONT_NAME_TO_REFERENCE = Object.fromEntries([
+    // Порядок важен для Gumroad: при общем товаре первой узнаётся самая короткая ступень.
+    ...pricing_1.TERM_TIERS.map((t) => [`AEVION Planet — ${pricing_1.TERM_NAME[t]} (${pricing_1.TERM_MONTHS[t]} mo)`, `tier_${t}`]),
+    ...pricing_1.STANDALONE_APPS.flatMap((a) => pricing_1.TERM_TIERS.map((t) => [`AEVION ${a.name} — ${pricing_1.TERM_NAME[t]} (${pricing_1.TERM_MONTHS[t]} mo)`, `app_${a.slug}_${t}`])),
+]);
+/**
+ * Какие товары РЕАЛЬНО можно выдать: у каких ссылок задан вариант в окружении.
+ *
+ * Зачем наружу. Соответствие «товар → модуль» держится на переменных Railway.
+ * Снаружи не видно, какие из них заданы, поэтому вопрос «что случится, если это
+ * купят» до сих пор не имел ответа иначе как покупкой. Отдаём ТОЛЬКО признаки,
+ * сами идентификаторы остаются в процессе.
+ *
+ * Отсюда же считается сверка с витриной магазина: товар в продаже, у которого
+ * здесь `false`, — это будущий отказ на живом покупателе.
+ */
+function lemonSqueezyVariantStatus() {
+    const out = {};
+    for (const ref of Object.keys(TIER_VARIANT_ENV)) {
+        out[ref] = Boolean(process.env[TIER_VARIANT_ENV[ref]]?.trim());
+    }
+    // Пилот $490 — вне лестницы, но /health обязан показывать, что товар в каталоге.
+    out[exports.PILOT_490_REFERENCE] = Boolean(pilot490VariantId());
+    return out;
+}
+/**
+ * Reverse lookup: a numeric LS variant_id from a webhook payload → the
+ * checkout reference it belongs to. Returns null for an unrecognised id.
+ */
+function referenceForVariantId(variantId) {
+    if (variantId == null)
+        return null;
+    const id = String(variantId);
+    // Прежние варианты тоже: продление и отмена по старой покупке приходят с ними.
+    for (const [ref, env] of [
+        ...Object.entries(TIER_VARIANT_ENV),
+        ...Object.entries(exports.PLANET_MONTHLY_VARIANT_ENV),
+        ...Object.entries(LEGACY_VARIANT_ENV),
+    ]) {
+        if (process.env[env]?.trim() === id)
+            return ref;
+    }
+    return null;
+}
+/** A checkout reference → tier id. Defaults to "lite" (safest paid entry). */
+function tierForLemonSqueezyReference(ref) {
+    // Тариф решает общее правило ссылок (lib/payment/billingPeriod): лестница сроков
+    // и прежние tier_<тариф>_<период>. Подстрокой не ищем — «promo» содержит «pro».
+    // Незнакомое — lite, самый короткий срок: умолчание безопасное, а не щедрое.
+    if (!ref)
+        return "lite";
+    return (0, billingPeriod_1.tierIdForReference)(ref) ?? "lite";
+}
+/** True when the reference is for an individual app (not a platform tier). */
+function isAppReference(ref) {
+    return ref?.startsWith("app_") ?? false;
+}
+/** Extract the app slug from an app reference ("app_qventure" → "qventure"). */
+function appSlugForReference(ref) {
+    if (!ref?.startsWith("app_"))
+        return null;
+    return ref.slice(4).replace(/_(lite|medium|pro|full|max)$/, "");
+}
+/**
+ * Slug купленной подписки (то, что вебхук пишет в `AppSubscription`) → id модуля
+ * в реестре и в политике пейволла. Совпадают не все: `ip_bureau` против
+ * `aevion-ip-bureau`, `smeta` против `smeta-trainer`.
+ *
+ * Держим ОДНОЙ таблицей рядом со ссылками на товары. Второй такой список
+ * (в гейте, в отчёте, в UI) через месяц разошёлся бы с этим — и разошёлся бы
+ * молча, потому что расхождение видно только на пересечении.
+ */
+const APP_SLUG_TO_MODULE_ID = {
+    ip_bureau: "aevion-ip-bureau",
+    multichat: "multichat-engine",
+    smeta: "smeta-trainer",
+    // Найдено 13.08.2026 сверкой с реестром модулей: в `MODULES_PRICING` он
+    // называется `qpaynet-embedded`. Без этой строки гейт не нашёл бы покупку и
+    // развернул бы заплатившего за QPayNet — ровно тот же класс дефекта, ради
+    // которого таблица и заведена. Охраняется тестом appSlugModuleIds.
+    qpaynet: "qpaynet-embedded",
+    // Найдено 20.09.2026 тем же тестом, в тот же час, когда бирже назначили цену:
+    // слаг кассы пишется через подчёркивание (иначе имя переменной стало бы
+    // LEMON_SQUEEZY_VARIANT_STARTUP-EXCHANGE_LITE, с дефисом), а модуль в реестре
+    // зовётся через дефис. Без этой строки `moduleIdForAppSlug` возвращал сам слаг,
+    // в реестре такого модуля нет, и обратный поиск давал null — то есть заплативший
+    // за Биржу стартапов не опознавался бы там, где доступ ищут по модулю.
+    startup_exchange: "startup-exchange",
+};
+/**
+ * Модули со СВОИМ механизмом доступа, мимо `MODULES_PRICING` и общего гейта.
+ * Их отсутствие в реестре — не ошибка сопоставления.
+ */
+const OWN_GATE_SLUGS = new Set(["devhub"]);
+/** Продаётся ли модуль поштучно и не имеет ли он собственного гейта. */
+function appSlugHasOwnGate(slug) {
+    return OWN_GATE_SLUGS.has(slug);
+}
+/** Все slug'и, которые продаются отдельной подпиской. */
+function allAppSlugs() {
+    const slugs = new Set();
+    for (const r of [...Object.keys(TIER_VARIANT_ENV), ...Object.keys(LEGACY_VARIANT_ENV)]) {
+        const slug = appSlugForReference(r);
+        if (slug)
+            slugs.add(slug);
+    }
+    return [...slugs];
+}
+/** "ip_bureau" → "aevion-ip-bureau"; для совпадающих имён вернёт как есть. */
+function moduleIdForAppSlug(slug) {
+    const прямо = APP_SLUG_TO_MODULE_ID[slug];
+    if (прямо)
+        return прямо;
+    // 🔴 20.09.2026: таблица выше ведётся РУКАМИ, и каталог её обогнал. В этот день
+    // добавили QRight, QSign, QSkyway и Startup Exchange; у последнего slug и
+    // moduleId различаются (`startup_exchange` против `startup-exchange`), строки в
+    // таблице нет — и обратный поиск возвращал null. Практически это «деньги взяли,
+    // выдать нечего»: гейт не находит покупку и разворачивает заплатившего.
+    //
+    // Спрашиваем сам каталог: у позиции уже есть moduleId, и он источник правды.
+    // Так следующий новый модуль не сломает сопоставление молча.
+    const из_каталога = pricing_1.STANDALONE_APPS.find((a) => a.slug === slug);
+    return из_каталога?.moduleId ?? slug;
+}
+/** Обратное: id модуля → slug подписки, если такой модуль вообще продаётся. */
+function appSlugForModuleId(moduleId) {
+    for (const [slug, id] of Object.entries(APP_SLUG_TO_MODULE_ID)) {
+        if (id === moduleId)
+            return slug;
+    }
+    const app = pricing_1.STANDALONE_APPS.find((a) => a.moduleId === moduleId);
+    if (app)
+        return app.slug;
+    // Прежние отдельные подписки (smeta, qcontract …) — чтобы уже купленное не пропало.
+    return Object.prototype.hasOwnProperty.call(LEGACY_VARIANT_ENV, `app_${moduleId}`) ? moduleId : null;
+}
+/**
+ * Что реально можно купить прямо сейчас.
+ *
+ * ЗАЧЕМ. `/api/pricing/checkout/healthz` отвечал `lemonsqueezy.configured:
+ * true`, глядя только на ключ API и магазин. Но начать покупку нельзя без
+ * ВАРИАНТА товара, а варианты задаются отдельными переменными. То есть
+ * «настроен» и «покупку можно начать» — разные вопросы под одним словом,
+ * и второй снаружи был не виден вовсе.
+ *
+ * Замечено 29.08.2026 накануне запуска модуля: проверка готовности
+ * говорила «цена $19», а можно ли эту цену заплатить — не отвечал никто.
+ *
+ * Возвращаем ИМЕНА переменных, не значения: имя не секрет, значение —
+ * идентификатор товара в чужой панели, ему в ответе не место.
+ */
+/**
+ * Продаётся ли ссылка на ЭТОМ сроке по замыслу прайса (19.10.2026): у годового
+ * приложения — только `max`. Ступени планеты и legacy-ссылки — всегда да.
+ */
+function продаётсяНаЭтомСроке(ref) {
+    const a = /^app_([a-z_]+?)_(lite|medium|pro|full|max)$/.exec(ref);
+    if (!a)
+        return true;
+    const app = pricing_1.STANDALONE_APPS.find((x) => x.slug === a[1]);
+    if (!app)
+        return true;
+    return (0, pricing_1.appSellableTerms)(app).includes(a[2]);
+}
+function lemonSqueezySellable() {
+    const configured = [];
+    const missing = [];
+    for (const [ref, env] of Object.entries(TIER_VARIANT_ENV)) {
+        // 19.10.2026: срок, на котором приложение НЕ продаётся (шахматы — только 12 мес),
+        // в «настроено» не попадает, даже если переменная варианта задана: витрина и
+        // JSON-LD по этому списку зажигают кнопки, а касса на таком сроке отвечает 400.
+        if (!продаётсяНаЭтомСроке(ref))
+            continue;
+        // Своего товара нет — но продать всё равно можем, если есть запасной путь
+        // (см. fallbackVariantForReference). Витрина зажигает кнопку ИМЕННО по
+        // этому списку, поэтому молчать здесь значит оставить серую кнопку при
+        // исправной кассе — человек увидит «оформить онлайн пока нельзя» и уйдёт
+        // писать письмо, которого мы не просили.
+        const можно = Boolean(process.env[env]?.trim()) || Boolean(fallbackVariantForReference(ref));
+        (можно ? configured : missing).push(ref);
+    }
+    return { configured: configured.sort(), missing: missing.sort() };
+}
+/**
+ * Платёж за срок по ссылке, USD — сколько касса обязана списать, не больше.
+ * null — ссылка прежняя или не наша: для неё потолка нет, и вебхук не поднимет
+ * ложную тревогу о переплате.
+ */
+function priceForReference(ref) {
+    if (!ref)
+        return null;
+    const t = /^tier_(lite|medium|pro|full|max)$/.exec(ref);
+    if (t)
+        return pricing_1.TIERS.find((x) => x.id === t[1])?.priceTermTotal ?? null;
+    // Прежняя ссылка тарифа (tier_lite_monthly …) выдаётся тарифом новой лестницы —
+    // её потолок и есть платёж за срок этого тарифа. Цена прежнего товара в магазине
+    // ниже, ложной тревоги не будет, а списание сверх нового тарифа видно.
+    if (/^tier_[a-z]+_(monthly|annual)$/.test(ref)) {
+        const legacy = (0, billingPeriod_1.tierIdForReference)(ref);
+        return legacy ? pricing_1.TIERS.find((x) => x.id === legacy)?.priceTermTotal ?? null : null;
+    }
+    const a = /^app_([a-z_]+?)_(lite|medium|pro|full|max)$/.exec(ref);
+    if (!a)
+        return null;
+    const app = pricing_1.STANDALONE_APPS.find((x) => x.slug === a[1]);
+    // 19.10.2026: годовое приложение — его сумма только на max, иначе null.
+    return app ? (0, pricing_1.appTermTotal)(app, a[2]) : null;
+}
+/**
+ * Все варианты, которые выдают DevHub Pro: прежний «DevHub Studio Pro» и ступени
+ * app_devhub_*. Нужен замку пользовательских ссылок оплаты (routes/devhub.ts):
+ * ссылка на любом из них выдала бы Pro за произвольную цену.
+ */
+function devHubVariantIds() {
+    const envs = [
+        LEGACY_VARIANT_ENV.app_devhub,
+        ...exports.TERM_REFERENCES.filter((r) => r.startsWith("app_devhub_")).map((r) => TIER_VARIANT_ENV[r]),
+    ];
+    return envs.map((k) => process.env[k]?.trim()).filter((v) => Boolean(v));
+}
+/** Вариант прежнего разового товара «DevHub Studio Pro» (событие order_created). */
+function legacyStudioProVariantId() {
+    return process.env[LEGACY_VARIANT_ENV.app_devhub]?.trim() || null;
+}

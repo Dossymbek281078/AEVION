@@ -1,0 +1,845 @@
+"use strict";
+/**
+ * QGood — charity / good-deeds campaign platform + AI Psychology platform.
+ *
+ * Working v1 MVP — transparent campaigns with Stripe/QPayNet payment chain
+ * and QRight audit trail. Per AEVION manifest: ecosystem-native economy
+ * layer for contribution-based value flows.
+ *
+ * Extended with Psychology MVP: mood tracking, AI therapeutic chat, exercises.
+ *
+ * Architecture:
+ *  - Identity:  reuses AEVION JWT (verifyBearerOptional)
+ *  - Wallet:    donations route through QPayNet → Stripe (paymentRef)
+ *  - Security:  email hashed (SHA-256), admin gate via QGOOD_ADMIN_EMAILS
+ *  - Audit:     every donation written, never mutated; campaign roll-ups atomic
+ *  - Scaling:   pure Postgres, no in-memory state; rate-limited per IP
+ *
+ * Endpoints (Charity):
+ *   GET    /api/qgood/health
+ *   GET    /api/qgood/campaigns           — list active (filterable by category)
+ *   GET    /api/qgood/campaigns/:id       — detail + recent donations
+ *   POST   /api/qgood/campaigns           — create (starts as draft, needs approval)
+ *   POST   /api/qgood/campaigns/:id/approve — admin only
+ *   POST   /api/qgood/campaigns/:id/donations — record donation (anonymous-friendly)
+ *   GET    /api/qgood/stats               — ecosystem-wide roll-up
+ *
+ * Endpoints (Psychology MVP):
+ *   POST   /api/qgood/mood                — log mood entry (score 1-10, emotion, context)
+ *   GET    /api/qgood/mood                — list mood entries (?limit=30&userId=me)
+ *   GET    /api/qgood/mood/trends         — 7-day average + emotion frequency
+ *   POST   /api/qgood/chat                — AI therapeutic chat (empathic, ≤150 words)
+ *   GET    /api/qgood/exercises           — list 5 built-in exercises
+ *   POST   /api/qgood/exercises/:id/complete — log exercise completion, return streak
+ */
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.qgoodRouter = void 0;
+const express_1 = require("express");
+const _________1 = require("../lib/\u0434\u0435\u0448\u0451\u0432\u044B\u0439\u0418\u0418");
+const node_crypto_1 = __importDefault(require("node:crypto"));
+const dbPool_1 = require("../lib/dbPool");
+const conceptBoardStore_1 = require("../lib/conceptBoardStore");
+const authJwt_1 = require("../lib/authJwt");
+const ecosystemEvents_1 = require("../lib/ecosystemEvents");
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const ensureQGoodTables_1 = require("../lib/ensureQGoodTables");
+const platform_1 = require("../lib/sentry/platform");
+const queryDate_1 = require("../lib/queryDate");
+exports.qgoodRouter = (0, express_1.Router)();
+const captureQGoodError = (0, platform_1.makeServiceCapture)("qgood");
+const createLimit = (0, express_rate_limit_1.default)({ windowMs: 60000, max: 10, standardHeaders: true, legacyHeaders: false });
+const donateLimit = (0, express_rate_limit_1.default)({ windowMs: 60000, max: 30, standardHeaders: true, legacyHeaders: false });
+const readLimit = (0, express_rate_limit_1.default)({ windowMs: 60000, max: 240, standardHeaders: true, legacyHeaders: false });
+const CAMPAIGN_STATUSES = new Set(["draft", "active", "closed", "rejected"]);
+const CATEGORY_OPTIONS = new Set([
+    "health", "education", "disaster-relief", "environment",
+    "animals", "community", "tech-for-good", "other",
+]);
+function isAdmin(auth) {
+    if (!auth?.email)
+        return false;
+    const list = (process.env.QGOOD_ADMIN_EMAILS || "").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
+    return list.length === 0 ? false : list.includes(auth.email.toLowerCase());
+}
+let tablesReady = false;
+async function ensureTables() {
+    if (tablesReady)
+        return;
+    const pool = (0, dbPool_1.getPool)();
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QGoodCampaign" (
+      "id"            TEXT PRIMARY KEY,
+      "ownerUserId"   TEXT,
+      "ownerEmail"    TEXT,
+      "title"         TEXT NOT NULL,
+      "description"   TEXT NOT NULL,
+      "category"      TEXT NOT NULL DEFAULT 'other',
+      "country"       TEXT,
+      "targetCents"   BIGINT NOT NULL,
+      "raisedCents"   BIGINT NOT NULL DEFAULT 0,
+      "donorCount"    INT NOT NULL DEFAULT 0,
+      "currency"      TEXT NOT NULL DEFAULT 'USD',
+      "status"        TEXT NOT NULL DEFAULT 'draft',
+      "imageUrl"      TEXT,
+      "approvedAt"    TIMESTAMPTZ,
+      "closedAt"      TIMESTAMPTZ,
+      "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodCampaign_status_idx" ON "QGoodCampaign" ("status", "createdAt");`);
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QGoodDonation" (
+      "id"             TEXT PRIMARY KEY,
+      "campaignId"     TEXT NOT NULL,
+      "amountCents"    BIGINT NOT NULL,
+      "currency"       TEXT NOT NULL DEFAULT 'USD',
+      "donorName"      TEXT,
+      "donorEmailHash" TEXT,
+      "messageText"    TEXT,
+      "anonymous"      BOOLEAN NOT NULL DEFAULT FALSE,
+      "paymentRef"     TEXT,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodDonation_campaign_idx" ON "QGoodDonation" ("campaignId", "createdAt");`);
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QGoodMatchingPool" (
+      "id"               TEXT PRIMARY KEY,
+      "label"            TEXT NOT NULL,
+      "currency"         TEXT NOT NULL DEFAULT 'USD',
+      "totalCents"       BIGINT NOT NULL,
+      "remainingCents"   BIGINT NOT NULL,
+      "matchRatio"       DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+      "maxMatchPerDonationCents" BIGINT NOT NULL DEFAULT 10000,
+      "status"           TEXT NOT NULL DEFAULT 'active',
+      "createdBy"        TEXT,
+      "createdAt"        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodMatchingPool_status_idx" ON "QGoodMatchingPool" ("status");`);
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QGoodMatch" (
+      "id"             TEXT PRIMARY KEY,
+      "poolId"         TEXT NOT NULL,
+      "campaignId"     TEXT NOT NULL,
+      "donationId"     TEXT NOT NULL,
+      "amountCents"    BIGINT NOT NULL,
+      "currency"       TEXT NOT NULL,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("donationId")
+    );
+  `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodMatch_pool_idx" ON "QGoodMatch" ("poolId", "createdAt");`);
+    tablesReady = true;
+}
+exports.qgoodRouter.get("/health", async (_req, res) => {
+    // Состояние базы в ручке здоровья. Добавлено 19.08.2026: сторож
+    // запасного хранилища опрашивает модули и до этого видел 9 из 12 —
+    // остальные просто не публиковали поле, и их молчание читалось как
+    // благополучие. Поле дешёвое, а без него нельзя ответить на вопрос
+    // «пишет ли прод в память вместо базы».
+    // ПОПРАВКА 21.08.2026. Раньше здесь стоял isQGoodDbReady() — флаг из
+    // lib/ensureQGoodTables. Его ставит ровно одно место модуля (психологическая
+    // часть, initPsychTables), а десять основных ручек — кампании и пожертвования —
+    // работают через локальную ensureTables() и этот флаг не трогают. В итоге
+    // health отвечал "memory" при полностью исправной базе: сторож запасного
+    // хранилища поднял тревогу через минуту после выкатки, и она была ложной.
+    //
+    // Спрашиваем базу напрямую, как это делает qchaingov: один SELECT 1, ответ
+    // о том, что читатель и имеет в виду. Ошибка не роняет ручку — она и есть
+    // ответ «memory».
+    let db = "memory";
+    try {
+        await (0, dbPool_1.getPool)().query("SELECT 1");
+        db = "postgres";
+    }
+    catch {
+        // db остаётся "memory" — это и есть честный ответ: база не отвечает
+    }
+    res.json({ status: "ok", service: "qgood", db, timestamp: new Date().toISOString() });
+});
+exports.qgoodRouter.get("/campaigns", readLimit, async (req, res) => {
+    try {
+        await ensureTables();
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
+        const category = String(req.query.category ?? "").trim();
+        const status = String(req.query.status ?? "active").trim();
+        const pool = (0, dbPool_1.getPool)();
+        const where = [];
+        const params = [];
+        if (CAMPAIGN_STATUSES.has(status)) {
+            params.push(status);
+            where.push(`"status" = $${params.length}`);
+        }
+        if (CATEGORY_OPTIONS.has(category)) {
+            params.push(category);
+            where.push(`"category" = $${params.length}`);
+        }
+        params.push(limit);
+        const r = await pool.query(`
+      SELECT "id","title","description","category","country","targetCents","raisedCents","donorCount","currency","status","imageUrl","createdAt"
+      FROM "QGoodCampaign"
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ORDER BY "createdAt" DESC
+      LIMIT $${params.length}
+    `, params);
+        res.json({ campaigns: r.rows, total: r.rowCount });
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "GET /campaigns" });
+        console.error("[qgood] campaigns_list_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "campaigns_list_failed" });
+    }
+});
+exports.qgoodRouter.get("/campaigns/:id", readLimit, async (req, res) => {
+    try {
+        await ensureTables();
+        const id = String(req.params.id || "").trim();
+        if (!id)
+            return res.status(400).json({ error: "id required" });
+        const pool = (0, dbPool_1.getPool)();
+        const c = await pool.query(`SELECT "id","title","description","category","country","targetCents","raisedCents","donorCount","currency","status","imageUrl","approvedAt","closedAt","createdAt"
+       FROM "QGoodCampaign" WHERE "id" = $1 LIMIT 1`, [id]);
+        if (c.rowCount === 0)
+            return res.status(404).json({ error: "campaign_not_found" });
+        const donations = await pool.query(`SELECT "id","amountCents","currency","donorName","messageText","anonymous","createdAt"
+       FROM "QGoodDonation" WHERE "campaignId" = $1 ORDER BY "createdAt" DESC LIMIT 20`, [id]);
+        const safeDonations = donations.rows.map((d) => ({
+            ...d,
+            donorName: d.anonymous ? null : d.donorName,
+        }));
+        res.json({ campaign: c.rows[0], donations: safeDonations });
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "GET /campaigns/:id" });
+        console.error("[qgood] campaign_get_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "campaign_get_failed" });
+    }
+});
+exports.qgoodRouter.post("/campaigns", createLimit, async (req, res) => {
+    try {
+        await ensureTables();
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth required" });
+        const { title, description, category = "other", country, targetCents, currency = "USD", imageUrl } = req.body || {};
+        if (typeof title !== "string" || title.trim().length < 3 || title.length > 200) {
+            return res.status(400).json({ error: "title must be 3..200 chars" });
+        }
+        if (typeof description !== "string" || description.trim().length < 20 || description.length > 5000) {
+            return res.status(400).json({ error: "description must be 20..5000 chars" });
+        }
+        if (!CATEGORY_OPTIONS.has(category)) {
+            return res.status(400).json({ error: "invalid_category", allowed: Array.from(CATEGORY_OPTIONS) });
+        }
+        const target = parseInt(String(targetCents), 10);
+        if (!Number.isFinite(target) || target < 100 || target > 1000000000) {
+            return res.status(400).json({ error: "targetCents must be 100..1000000000 (1¢..10M$)" });
+        }
+        const id = node_crypto_1.default.randomUUID();
+        const pool = (0, dbPool_1.getPool)();
+        await pool.query(`INSERT INTO "QGoodCampaign" ("id","ownerUserId","ownerEmail","title","description","category","country","targetCents","currency","imageUrl","status")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft')`, [
+            id, auth.sub, auth.email || null,
+            title.trim(), description.trim(), category,
+            country ? String(country).slice(0, 80) : null,
+            target, String(currency).slice(0, 8).toUpperCase(),
+            imageUrl ? String(imageUrl).slice(0, 500) : null,
+        ]);
+        res.status(201).json({ id, status: "draft", message: "Submitted for review." });
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "POST /campaigns" });
+        console.error("[qgood] campaign_create_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "campaign_create_failed" });
+    }
+});
+exports.qgoodRouter.post("/campaigns/:id/approve", createLimit, async (req, res) => {
+    try {
+        await ensureTables();
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!isAdmin(auth))
+            return res.status(403).json({ error: "admin_only" });
+        const pool = (0, dbPool_1.getPool)();
+        const r = await pool.query(`UPDATE "QGoodCampaign" SET "status" = 'active', "approvedAt" = NOW()
+       WHERE "id" = $1 AND "status" = 'draft' RETURNING "id","status"`, [String(req.params.id || "")]);
+        if ((r.rowCount ?? 0) === 0)
+            return res.status(404).json({ error: "draft_campaign_not_found" });
+        res.json({ ok: true, campaign: r.rows[0] });
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "POST /campaigns/:id/approve" });
+        console.error("[qgood] campaign_approve_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "campaign_approve_failed" });
+    }
+});
+exports.qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
+    try {
+        await ensureTables();
+        const id = String(req.params.id || "").trim();
+        const { amountCents, currency = "USD", donorName, donorEmail, messageText, anonymous = false, paymentRef } = req.body || {};
+        const amount = parseInt(String(amountCents), 10);
+        if (!Number.isFinite(amount) || amount < 100 || amount > 100000000) {
+            return res.status(400).json({ error: "amountCents must be 100..100000000 ($1..$1M)" });
+        }
+        const pool = (0, dbPool_1.getPool)();
+        const c = await pool.query(`SELECT "status","currency" FROM "QGoodCampaign" WHERE "id" = $1 LIMIT 1`, [id]);
+        if (c.rowCount === 0)
+            return res.status(404).json({ error: "campaign_not_found" });
+        const row = c.rows[0];
+        if (row.status !== "active")
+            return res.status(400).json({ error: "campaign_not_active", status: row.status });
+        if (row.currency !== String(currency).toUpperCase()) {
+            return res.status(400).json({ error: "currency_mismatch", expected: row.currency });
+        }
+        const donationId = node_crypto_1.default.randomUUID();
+        const emailHash = donorEmail
+            ? node_crypto_1.default.createHash("sha256").update(String(donorEmail).toLowerCase().trim()).digest("hex").slice(0, 32)
+            : null;
+        await pool.query(`INSERT INTO "QGoodDonation" ("id","campaignId","amountCents","currency","donorName","donorEmailHash","messageText","anonymous","paymentRef")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [
+            donationId, id, amount, String(currency).slice(0, 8).toUpperCase(),
+            donorName ? String(donorName).slice(0, 100) : null,
+            emailHash,
+            messageText ? String(messageText).slice(0, 500) : null,
+            Boolean(anonymous),
+            paymentRef ? String(paymentRef).slice(0, 100) : null,
+        ]);
+        await pool.query(`UPDATE "QGoodCampaign"
+       SET "raisedCents" = "raisedCents" + $1, "donorCount" = "donorCount" + 1
+       WHERE "id" = $2`, [amount, id]);
+        // Matching fund — best-effort; never blocks the donation.
+        // Try to auto-match from an active pool (oldest first). Atomic: lock + check + decrement.
+        let matchedAmountCents = null;
+        let matchPoolId = null;
+        try {
+            const poolR = await pool.query(`SELECT "id","matchRatio","remainingCents","maxMatchPerDonationCents","currency"
+         FROM "QGoodMatchingPool"
+         WHERE "status" = 'active' AND "currency" = $1 AND "remainingCents" > 0
+         ORDER BY "createdAt" ASC LIMIT 1
+         FOR UPDATE SKIP LOCKED`, [String(currency).toUpperCase()]);
+            if ((poolR.rowCount ?? 0) > 0) {
+                const p = poolR.rows[0];
+                const proposed = Math.floor(amount * Number(p.matchRatio));
+                const capped = Math.min(proposed, Number(p.maxMatchPerDonationCents), Number(p.remainingCents));
+                if (capped > 0) {
+                    const matchId = node_crypto_1.default.randomUUID();
+                    await pool.query(`INSERT INTO "QGoodMatch" ("id","poolId","campaignId","donationId","amountCents","currency")
+             VALUES ($1,$2,$3,$4,$5,$6)`, [matchId, p.id, id, donationId, capped, p.currency]);
+                    await pool.query(`UPDATE "QGoodMatchingPool"
+             SET "remainingCents" = "remainingCents" - $1,
+                 "status" = CASE WHEN "remainingCents" - $1 <= 0 THEN 'exhausted' ELSE "status" END
+             WHERE "id" = $2 RETURNING "remainingCents"`, [capped, p.id]);
+                    await pool.query(`UPDATE "QGoodCampaign" SET "raisedCents" = "raisedCents" + $1 WHERE "id" = $2`, [capped, id]);
+                    matchedAmountCents = capped;
+                    matchPoolId = p.id;
+                }
+            }
+        }
+        catch (err) {
+            console.warn("[qgood] matching_failed:", err instanceof Error ? err.message : err);
+        }
+        // Fire-and-forget: record financial trail + reputation boost for donor.
+        const donorAuth = (0, authJwt_1.verifyBearerOptional)(req);
+        (0, ecosystemEvents_1.emitEcosystemEvent)({
+            module: "qgood",
+            ledger: {
+                kind: "donation",
+                fromIdentifier: emailHash || donorAuth?.sub || "anon",
+                toIdentifier: `qgood:${id}`,
+                amountCents: amount,
+                currency: String(currency).toUpperCase(),
+                meta: { campaignId: id, anonymous: Boolean(anonymous) },
+            },
+            reputation: donorAuth?.sub
+                ? { userId: donorAuth.sub, kind: "qgood-donation", meta: { campaignId: id } }
+                : undefined,
+        });
+        res.status(201).json({
+            id: donationId, campaignId: id, amountCents: amount,
+            match: matchedAmountCents !== null
+                ? { amountCents: matchedAmountCents, poolId: matchPoolId }
+                : null,
+        });
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "POST /campaigns/:id/donations" });
+        console.error("[qgood] donation_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "donation_failed" });
+    }
+});
+exports.qgoodRouter.post("/matching-pools", createLimit, async (req, res) => {
+    try {
+        await ensureTables();
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!isAdmin(auth))
+            return res.status(403).json({ error: "admin_only" });
+        const { label, totalCents, currency = "USD", matchRatio = 1, maxMatchPerDonationCents = 10000 } = req.body || {};
+        if (typeof label !== "string" || label.trim().length < 3 || label.length > 120) {
+            return res.status(400).json({ error: "label must be 3..120 chars" });
+        }
+        const total = parseInt(String(totalCents), 10);
+        if (!Number.isFinite(total) || total < 100 || total > 1000000000) {
+            return res.status(400).json({ error: "totalCents must be 100..1000000000" });
+        }
+        const ratio = Number(matchRatio);
+        if (!Number.isFinite(ratio) || ratio < 0 || ratio > 2) {
+            return res.status(400).json({ error: "matchRatio must be 0..2" });
+        }
+        const cap = parseInt(String(maxMatchPerDonationCents), 10);
+        if (!Number.isFinite(cap) || cap < 100 || cap > 100000000) {
+            return res.status(400).json({ error: "maxMatchPerDonationCents must be 100..100000000" });
+        }
+        const id = node_crypto_1.default.randomUUID();
+        const pool = (0, dbPool_1.getPool)();
+        const r = await pool.query(`INSERT INTO "QGoodMatchingPool" ("id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","createdBy")
+       VALUES ($1,$2,$3,$4,$4,$5,$6,$7)
+       RETURNING "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdBy","createdAt"`, [id, label.trim(), String(currency).slice(0, 8).toUpperCase(), total, ratio, cap, auth?.email || null]);
+        res.status(201).json(r.rows[0]);
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "POST /matching-pools" });
+        console.error("[qgood] matching_pool_create_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "matching_pool_create_failed" });
+    }
+});
+exports.qgoodRouter.get("/matching-pools", readLimit, async (_req, res) => {
+    try {
+        await ensureTables();
+        const pool = (0, dbPool_1.getPool)();
+        const r = await pool.query(`SELECT "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdAt"
+       FROM "QGoodMatchingPool" ORDER BY "createdAt" DESC LIMIT 20`);
+        res.json({ pools: r.rows, total: r.rowCount });
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "GET /matching-pools" });
+        console.error("[qgood] matching_pools_list_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "matching_pools_list_failed" });
+    }
+});
+/**
+ * GET /api/qgood/matching-pools/:id/matches — что этот пул уже софинансировал.
+ *
+ * ЗАЧЕМ. Таблица "QGoodMatch" до 28.08.2026 только заполнялась. Между тем
+ * запись в неё сопровождается ДВИЖЕНИЕМ ДЕНЕГ: у пула уменьшается
+ * remainingCents, у кампании растёт raisedCents, а строка QGoodMatch —
+ * единственная запись о том, из какого пула и за какое пожертвование ушла
+ * сумма. Прочитать её было нечем: ни ручки, ни выгрузки.
+ *
+ * То есть след движения денег существовал и был недоступен. При этом индекс
+ * "QGoodMatch_pool_idx" ON ("poolId","createdAt") создан — то есть запрос
+ * по пулу и времени задумывался и просто не был написан.
+ *
+ * Доступ — как у всех админских ручек этого модуля (isAdmin + QGOOD_ADMIN_EMAILS).
+ */
+exports.qgoodRouter.get("/matching-pools/:id/matches", async (req, res) => {
+    try {
+        await ensureTables();
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!isAdmin(auth))
+            return res.status(403).json({ error: "admin_only" });
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit || "100"), 10) || 100, 1), 500);
+        // Курсор проверяется ДО подстановки: произвольная строка ушла бы в SQL как
+        // время и уронила запрос пятисоткой вместо честного 400.
+        // ⚠️ 31.08.2026: здесь стоял свой Date.parse. Мусор он отклоняет, но
+        // `?before=1` пропускает как 2001 год, а `?before=2026` — как 1 января.
+        // Это не пятисотка и не ошибка: человек получает ТИХО неверную выборку и
+        // не узнаёт об этом. Платформенный queryDate проверяет ФОРМУ до разбора.
+        //
+        // Сторож queryDateGuard требовал именно его, и он был прав — я сперва
+        // прочитал его красное как ложную тревогу, потому что проверка тут ЕСТЬ.
+        // «Проверка есть» и «проверка не слабее платформенной» — разные утверждения.
+        const beforeIso = (0, queryDate_1.queryDate)(req.query.before);
+        if (beforeIso === undefined) {
+            return res.status(400).json({ error: "invalid_before", hint: "ISO-8601 timestamp" });
+        }
+        const before = beforeIso ? new Date(beforeIso) : null;
+        const poolId = String(req.params.id || "");
+        const pg = (0, dbPool_1.getPool)();
+        const args = [poolId];
+        let where = `WHERE "poolId" = $1`;
+        if (before) {
+            args.push(before);
+            where += ` AND "createdAt" < $${args.length}`;
+        }
+        args.push(limit);
+        const rows = await pg.query(`SELECT "id","campaignId","donationId","amountCents","currency","createdAt"
+         FROM "QGoodMatch" ${where}
+        ORDER BY "createdAt" DESC LIMIT $${args.length}`, args);
+        // Сумма и количество — по ВСЕМУ пулу, отдельно от показанной страницы.
+        // Число, равное пределу выборки, читается как весь список.
+        const totals = await pg.query(`SELECT COUNT(*)::int AS "n", COALESCE(SUM("amountCents"),0)::bigint AS "sum"
+         FROM "QGoodMatch" WHERE "poolId" = $1`, [poolId]);
+        res.json({
+            poolId,
+            matches: rows.rows,
+            returned: rows.rows.length,
+            total: totals.rows?.[0]?.n ?? null,
+            matchedCentsTotal: Number(totals.rows?.[0]?.sum ?? 0),
+            limit,
+        });
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "GET /matching-pools/:id/matches" });
+        console.error("[qgood] matches_read_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "matches_read_failed" });
+    }
+});
+exports.qgoodRouter.post("/matching-pools/:id/pause", createLimit, async (req, res) => {
+    try {
+        await ensureTables();
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!isAdmin(auth))
+            return res.status(403).json({ error: "admin_only" });
+        const pool = (0, dbPool_1.getPool)();
+        const r = await pool.query(`UPDATE "QGoodMatchingPool" SET "status" = 'paused'
+       WHERE "id" = $1 AND "status" = 'active'
+       RETURNING "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdAt"`, [String(req.params.id || "")]);
+        if ((r.rowCount ?? 0) === 0)
+            return res.status(404).json({ error: "active_pool_not_found" });
+        res.json(r.rows[0]);
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "POST /matching-pools/:id/pause" });
+        console.error("[qgood] matching_pool_pause_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "matching_pool_pause_failed" });
+    }
+});
+exports.qgoodRouter.post("/matching-pools/:id/resume", createLimit, async (req, res) => {
+    try {
+        await ensureTables();
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!isAdmin(auth))
+            return res.status(403).json({ error: "admin_only" });
+        const pool = (0, dbPool_1.getPool)();
+        const r = await pool.query(`UPDATE "QGoodMatchingPool" SET "status" = 'active'
+       WHERE "id" = $1 AND "status" = 'paused' AND "remainingCents" > 0
+       RETURNING "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdAt"`, [String(req.params.id || "")]);
+        if ((r.rowCount ?? 0) === 0)
+            return res.status(404).json({ error: "paused_pool_not_found_or_empty" });
+        res.json(r.rows[0]);
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "POST /matching-pools/:id/resume" });
+        console.error("[qgood] matching_pool_resume_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "matching_pool_resume_failed" });
+    }
+});
+exports.qgoodRouter.get("/stats", readLimit, async (_req, res) => {
+    try {
+        await ensureTables();
+        const pool = (0, dbPool_1.getPool)();
+        const totals = await pool.query(`SELECT
+         COUNT(*)::int                                              AS total_campaigns,
+         SUM(CASE WHEN "status"='active' THEN 1 ELSE 0 END)::int    AS active_campaigns,
+         COALESCE(SUM("raisedCents"),0)::bigint                     AS total_raised_cents,
+         COALESCE(SUM("donorCount"),0)::int                         AS total_donors
+       FROM "QGoodCampaign"`);
+        res.json({ ...totals.rows[0], service: "qgood", currency: "USD" });
+    }
+    catch (err) {
+        captureQGoodError(err, { route: "GET /stats" });
+        console.error("[qgood] stats_failed", err instanceof Error ? err.message : err);
+        res.status(500).json({ error: "stats_failed" });
+    }
+});
+let memMoodSeq = 1;
+let memCompletionSeq = 1;
+const memMoods = [];
+const memCompletions = [];
+// ── Rate limiters ────────────────────────────────────────────────────────────
+const chatLimit = (0, express_rate_limit_1.default)({ windowMs: 60000, max: 10, standardHeaders: true, legacyHeaders: false });
+const moodLimit = (0, express_rate_limit_1.default)({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false });
+// ── Exercise seed (static, no DB) ───────────────────────────────────────────
+const EXERCISES = [
+    {
+        id: "breathing-478",
+        title: "4-7-8 Дыхание",
+        description: "Вдох 4 сек → задержка 7 сек → выдох 8 сек. Успокаивает нервную систему.",
+        category: "breathing",
+        durationSec: 60,
+        steps: ["Вдох через нос — 4 секунды", "Задержка дыхания — 7 секунд", "Выдох через рот — 8 секунд", "Повторите 4 раза"],
+    },
+    {
+        id: "grounding-54321",
+        title: "5-4-3-2-1 Заземление",
+        description: "Осознайте 5 вещей, которые видите, 4 — слышите, 3 — чувствуете, 2 — обоняете, 1 — вкус.",
+        category: "grounding",
+        durationSec: 120,
+        steps: ["5 вещей, которые вы видите", "4 звука, которые слышите", "3 тактильных ощущения", "2 запаха", "1 вкус"],
+    },
+    {
+        id: "gratitude-list",
+        title: "Список благодарности",
+        description: "Запишите 3 вещи, за которые вы благодарны сегодня. Сдвигает фокус с негатива.",
+        category: "gratitude",
+        durationSec: 180,
+        steps: ["Возьмите блокнот или откройте заметки", "Напишите 3 конкретные вещи", "К каждой добавьте 1 предложение — почему это важно", "Перечитайте список вслух"],
+    },
+    {
+        id: "body-scan",
+        title: "Сканирование тела",
+        description: "Медленно пройдитесь вниманием от макушки до пяток, отмечая напряжение без осуждения.",
+        category: "mindfulness",
+        durationSec: 300,
+        steps: ["Закройте глаза, сядьте удобно", "Внимание на макушку — расслабьте", "Плечи, грудь, живот — отпустите напряжение", "Руки, ноги, ступни — полное расслабление"],
+    },
+    {
+        id: "positive-reframe",
+        title: "Позитивное переформулирование",
+        description: "Возьмите одну тревожную мысль и найдите для неё три более сбалансированные интерпретации.",
+        category: "cognitive",
+        durationSec: 120,
+        steps: ["Запишите тревожную мысль", "Найдите 3 аргумента «против» этой мысли", "Сформулируйте более сбалансированный взгляд", "Прочитайте новую формулировку 3 раза"],
+    },
+];
+// ── Helper: init psych tables on first use ──────────────────────────────────
+let psychTablesInit = false;
+async function initPsychTables() {
+    if (psychTablesInit)
+        return;
+    psychTablesInit = true;
+    try {
+        const pool = (0, dbPool_1.getPool)();
+        await (0, ensureQGoodTables_1.ensureQGoodTables)(pool);
+    }
+    catch {
+        // silent — in-memory fallback will be used
+    }
+}
+// ── Helper: callLlm — uses first available provider ─────────────────────────
+/**
+ * 🔴 07.10.2026: переведено на ОБЩИЙ РЕЕСТР провайдеров.
+ *
+ * Было: своя цепочка Anthropic → OpenAI, зашитая в этот файл. Два изъяна.
+ * Первый — Anthropic шёл ПЕРВЫМ, а это платный счёт, на котором 07.10
+ * оставалось $8.93 и который консоль пыталась автопополнить на $20. Второй —
+ * решение «каким поставщиком звонить» принималось здесь отдельно от
+ * остальных модулей, то есть при отключении поставщика его пришлось бы
+ * менять в четырёх местах и в одном из них забыть.
+ *
+ * Стало: `спроситьИИ` — порядок Gemini → OpenAI → Anthropic (платный
+ * последним), перебор при отказе, учёт стоимости и журнал переключений уже
+ * внутри реестра. Форма ответа прежняя: строка или исключение.
+ */
+async function callLlm(systemPrompt, userPrompt) {
+    const ответ = await (0, _________1.спроситьИИ)({
+        роль: systemPrompt,
+        вопрос: userPrompt,
+        максТокенов: 512,
+        // Психологический помощник: живее, чем рабочие ответы, но не выдумщик.
+        температура: 0.7,
+    });
+    return ответ.текст;
+}
+// ── POST /api/qgood/mood ─────────────────────────────────────────────────────
+exports.qgoodRouter.post("/mood", moodLimit, async (req, res) => {
+    await initPsychTables();
+    const body = req.body || {};
+    const score = parseInt(String(body.score ?? ""), 10);
+    if (!Number.isFinite(score) || score < 1 || score > 10) {
+        return res.status(400).json({ error: "score must be 1..10" });
+    }
+    const emotion = body.emotion ? String(body.emotion).slice(0, 50) : null;
+    const context = body.context ? String(body.context).slice(0, 500) : null;
+    // Bind mental-health data to the authenticated user (JWT sub) — never trust
+    // a client-supplied userId. No token → shared "anonymous" bucket (unchanged).
+    const userId = (0, authJwt_1.verifyBearerOptional)(req)?.sub ?? "anonymous";
+    if ((0, ensureQGoodTables_1.isQGoodDbReady)()) {
+        try {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`INSERT INTO qgood_moods (user_id, score, emotion, context) VALUES ($1,$2,$3,$4) RETURNING *`, [userId, score, emotion, context]);
+            return res.status(201).json({ ok: true, entry: r.rows[0], storage: "db" });
+        }
+        catch (err) {
+            console.error("[qgood] mood_insert_failed", err instanceof Error ? err.message : err);
+        }
+    }
+    // In-memory fallback
+    const entry = {
+        id: memMoodSeq++,
+        user_id: userId,
+        score,
+        emotion,
+        context,
+        logged_at: new Date().toISOString(),
+    };
+    memMoods.push(entry);
+    res.status(201).json({ ok: true, entry, storage: "memory" });
+});
+// ── GET /api/qgood/mood ──────────────────────────────────────────────────────
+exports.qgoodRouter.get("/mood", readLimit, async (req, res) => {
+    await initPsychTables();
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1), 100);
+    // Privacy: read only own (JWT sub) or anonymous moods — never another user's.
+    const userId = (0, authJwt_1.verifyBearerOptional)(req)?.sub ?? "anonymous";
+    if ((0, ensureQGoodTables_1.isQGoodDbReady)()) {
+        try {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT * FROM qgood_moods WHERE user_id = $1 ORDER BY logged_at DESC LIMIT $2`, [userId, limit]);
+            return res.json({ moods: r.rows, total: r.rowCount });
+        }
+        catch (err) {
+            console.error("[qgood] mood_list_failed", err instanceof Error ? err.message : err);
+        }
+    }
+    const filtered = memMoods.filter((m) => m.user_id === userId).slice(-limit).reverse();
+    res.json({ moods: filtered, total: filtered.length });
+});
+// ── GET /api/qgood/mood/trends ───────────────────────────────────────────────
+exports.qgoodRouter.get("/mood/trends", readLimit, async (req, res) => {
+    await initPsychTables();
+    // Privacy: trends only over own (JWT sub) or anonymous moods.
+    const userId = (0, authJwt_1.verifyBearerOptional)(req)?.sub ?? "anonymous";
+    if ((0, ensureQGoodTables_1.isQGoodDbReady)()) {
+        try {
+            const pool = (0, dbPool_1.getPool)();
+            const avgRow = await pool.query(`SELECT ROUND(AVG(score)::numeric, 1) AS avg_score, COUNT(*) AS count
+         FROM qgood_moods
+         WHERE user_id = $1 AND logged_at >= NOW() - INTERVAL '7 days'`, [userId]);
+            const emotionRow = await pool.query(`SELECT emotion, COUNT(*) AS freq
+         FROM qgood_moods
+         WHERE user_id = $1 AND emotion IS NOT NULL AND logged_at >= NOW() - INTERVAL '7 days'
+         GROUP BY emotion ORDER BY freq DESC LIMIT 5`, [userId]);
+            const dailyRow = await pool.query(`SELECT DATE(logged_at) AS day, ROUND(AVG(score)::numeric,1) AS avg_score
+         FROM qgood_moods
+         WHERE user_id = $1 AND logged_at >= NOW() - INTERVAL '7 days'
+         GROUP BY day ORDER BY day ASC`, [userId]);
+            return res.json({
+                period: "7d",
+                avg_score: avgRow.rows[0]?.avg_score ?? null,
+                total_entries: Number(avgRow.rows[0]?.count ?? 0),
+                emotion_frequency: emotionRow.rows,
+                daily: dailyRow.rows,
+            });
+        }
+        catch (err) {
+            console.error("[qgood] mood_trends_failed", err instanceof Error ? err.message : err);
+        }
+    }
+    // In-memory fallback trends
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const recent = memMoods.filter((m) => m.user_id === userId && m.logged_at >= cutoff);
+    const avg = recent.length ? +(recent.reduce((s, m) => s + m.score, 0) / recent.length).toFixed(1) : null;
+    const emotionFreq = {};
+    for (const m of recent) {
+        if (m.emotion)
+            emotionFreq[m.emotion] = (emotionFreq[m.emotion] || 0) + 1;
+    }
+    const emotion_frequency = Object.entries(emotionFreq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([emotion, freq]) => ({ emotion, freq }));
+    res.json({ period: "7d", avg_score: avg, total_entries: recent.length, emotion_frequency, daily: [] });
+});
+// ── POST /api/qgood/chat ─────────────────────────────────────────────────────
+const PSYCH_SYSTEM_PROMPT = "Ты — эмпатичный психолог-ассистент. Помогай мягко и поддерживающе. " +
+    "НЕ ставь диагнозы и не назначай лечение. " +
+    "Всегда напоминай, что при серьёзных проблемах стоит обратиться к специалисту. " +
+    "Ответ ≤150 слов. Пиши на том языке, на котором пишет пользователь.";
+exports.qgoodRouter.post("/chat", chatLimit, async (req, res) => {
+    const body = req.body || {};
+    const message = typeof body.message === "string" ? body.message.trim().slice(0, 1000) : "";
+    if (!message)
+        return res.status(400).json({ error: "message required" });
+    const history = Array.isArray(body.history)
+        ? body.history
+            .slice(-10)
+            .filter((m) => typeof m === "object" &&
+            m !== null &&
+            ("role" in m) &&
+            ("content" in m) &&
+            (m.role === "user" || m.role === "assistant") &&
+            typeof m.content === "string")
+        : [];
+    // Build user prompt with history context
+    const historyText = history
+        .map((m) => `${m.role === "user" ? "Пользователь" : "Ассистент"}: ${m.content}`)
+        .join("\n");
+    const userPrompt = historyText ? `${historyText}\nПользователь: ${message}` : message;
+    try {
+        const reply = await callLlm(PSYCH_SYSTEM_PROMPT, userPrompt);
+        return res.json({ reply, ok: true });
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === "not-configured") {
+            // 28.08.2026: в ответе стоял `hint` с ИМЕНАМИ переменных окружения —
+            // карта настройки для любого вызывающего. Человеку отвечает `reply`
+            // ниже, подсказка для нас — в журнал.
+            console.error("[qgood] ИИ не настроен: задайте ключ провайдера на сервере");
+            return res.status(503).json({
+                error: "llm-not-configured",
+                reply: "Я сейчас недоступен. Попробуйте позже или обратитесь к специалисту напрямую.",
+            });
+        }
+        console.error("[qgood] chat_failed", msg);
+        res.status(502).json({ error: "llm-failed", reply: "Произошла ошибка. Попробуйте ещё раз." });
+    }
+});
+// ── GET /api/qgood/exercises ─────────────────────────────────────────────────
+exports.qgoodRouter.get("/exercises", readLimit, (_req, res) => {
+    res.json({ exercises: EXERCISES, total: EXERCISES.length });
+});
+// ── POST /api/qgood/exercises/:id/complete ───────────────────────────────────
+exports.qgoodRouter.post("/exercises/:id/complete", moodLimit, async (req, res) => {
+    await initPsychTables();
+    const exerciseId = String(req.params.id || "").trim();
+    if (!EXERCISES.find((e) => e.id === exerciseId)) {
+        return res.status(404).json({ error: "exercise_not_found" });
+    }
+    // Bind completion to authenticated user (JWT sub); no token → anonymous.
+    const userId = (0, authJwt_1.verifyBearerOptional)(req)?.sub ?? "anonymous";
+    if ((0, ensureQGoodTables_1.isQGoodDbReady)()) {
+        try {
+            const pool = (0, dbPool_1.getPool)();
+            await pool.query(`INSERT INTO qgood_completions (user_id, exercise_id) VALUES ($1, $2)`, [userId, exerciseId]);
+            const statsRow = await pool.query(`SELECT COUNT(*) AS total_done FROM qgood_completions WHERE user_id = $1 AND exercise_id = $2`, [userId, exerciseId]);
+            const total_done = Number(statsRow.rows[0]?.total_done ?? 0);
+            // Streak: consecutive days with any exercise completion
+            const streakRow = await pool.query(`SELECT COUNT(DISTINCT DATE(completed_at)) AS streak_days
+         FROM qgood_completions
+         WHERE user_id = $1
+           AND completed_at >= NOW() - INTERVAL '30 days'`, [userId]);
+            const streak = Number(streakRow.rows[0]?.streak_days ?? 0);
+            return res.status(201).json({ ok: true, exercise_id: exerciseId, streak, total_done, storage: "db" });
+        }
+        catch (err) {
+            console.error("[qgood] exercise_complete_failed", err instanceof Error ? err.message : err);
+        }
+    }
+    // In-memory fallback
+    const entry = {
+        id: memCompletionSeq++,
+        user_id: userId,
+        exercise_id: exerciseId,
+        completed_at: new Date().toISOString(),
+    };
+    memCompletions.push(entry);
+    const total_done = memCompletions.filter((c) => c.user_id === userId && c.exercise_id === exerciseId).length;
+    const uniqueDays = new Set(memCompletions
+        .filter((c) => c.user_id === userId)
+        .map((c) => c.completed_at.slice(0, 10))).size;
+    res.status(201).json({ ok: true, exercise_id: exerciseId, streak: uniqueDays, total_done, storage: "memory" });
+});
+// ── MVP concept board surface ───────────────────────────────────────────────
+exports.qgoodRouter.get("/status", readLimit, (_req, res) => {
+    res.json({
+        module: "qgood",
+        code: "QGOOD",
+        status: "mvp",
+        description: "Psychology & mental health: mood log, AI therapist chat, 5 exercises + concept board.",
+        endpoints: {
+            mood: "/api/qgood/mood",
+            exercises: "/api/qgood/exercises",
+            stats: "/api/qgood/stats",
+            conceptMessages: "/api/qgood/concept/messages",
+            conceptStats: "/api/qgood/concept-stats",
+        },
+        timestamp: new Date().toISOString(),
+    });
+});
+(0, conceptBoardStore_1.mountConceptBoard)({ router: exports.qgoodRouter, moduleId: "qgood", defaultTag: "qgood", readLimit, writeLimit: createLimit });

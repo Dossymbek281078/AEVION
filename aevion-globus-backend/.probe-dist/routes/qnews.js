@@ -1,0 +1,578 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.qnewsRouter = void 0;
+const express_1 = require("express");
+const platform_1 = require("../lib/sentry/platform");
+const node_crypto_1 = __importDefault(require("node:crypto"));
+const authJwt_1 = require("../lib/authJwt");
+const rateLimit_1 = require("../lib/rateLimit");
+const conceptBoardStore_1 = require("../lib/conceptBoardStore");
+const dbPool_1 = require("../lib/dbPool");
+const ensureQNewsTables_1 = require("../lib/ensureQNewsTables");
+const WARN = "Хранилище временно недоступно. Это НЕ значит, что записи нет — повторите запрос позже.";
+const captureQNewsError = (0, platform_1.makeServiceCapture)("qnews");
+const pool = (0, dbPool_1.getPool)();
+(async () => {
+    try {
+        await (0, ensureQNewsTables_1.ensureQNewsTables)(pool);
+    }
+    catch { /* silent — in-memory fallback active */ }
+})();
+const submitLimiter = (0, rateLimit_1.rateLimit)({ windowMs: 60000, max: 5, keyPrefix: "qnews:submit", message: "rate_limited" });
+const aiLimiter = (0, rateLimit_1.rateLimit)({ windowMs: 60000, max: 3, keyPrefix: "qnews:ai", message: "rate_limited" });
+exports.qnewsRouter = (0, express_1.Router)();
+// ─── Static categories ────────────────────────────────────────────────────────
+const CATEGORIES = ["tech", "crypto", "ai", "business", "science", "world"];
+// ─── In-memory store ──────────────────────────────────────────────────────────
+const memNews = new Map();
+// key: `${userId}:${articleId}`
+const memBookmarks = new Map();
+// Seed with 10 realistic fake news items on startup
+const SEED = [
+    {
+        title: "OpenAI Releases GPT-5 Turbo with Extended Context Window",
+        summary: "OpenAI has announced GPT-5 Turbo featuring a 2M token context window, improved reasoning, and reduced hallucination rates. The model is now available via API to all Plus subscribers.",
+        url: "https://openai.com/blog/gpt5-turbo",
+        source: "OpenAI Blog",
+        category: "ai",
+        publishedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+        tags: ["openai", "gpt", "llm"],
+    },
+    {
+        title: "Bitcoin Surpasses $120,000 as Institutional Demand Accelerates",
+        summary: "Bitcoin reached a new all-time high of $122,400 driven by spot ETF inflows and renewed interest from sovereign wealth funds. Analysts cite regulatory clarity in the EU as a key catalyst.",
+        url: "https://coindesk.com/bitcoin-120k",
+        source: "CoinDesk",
+        category: "crypto",
+        publishedAt: new Date(Date.now() - 5 * 3600000).toISOString(),
+        tags: ["bitcoin", "btc", "crypto"],
+    },
+    {
+        title: "Google DeepMind Achieves Breakthrough in Protein Folding Accuracy",
+        summary: "DeepMind's latest AlphaFold 3.5 model achieves 97.2% accuracy on new protein structures, potentially accelerating drug discovery timelines by a decade according to researchers.",
+        url: "https://deepmind.google/alphafold-3-5",
+        source: "DeepMind",
+        category: "science",
+        publishedAt: new Date(Date.now() - 8 * 3600000).toISOString(),
+        tags: ["deepmind", "protein", "biology"],
+    },
+    {
+        title: "Apple Unveils Vision Pro 2 with Standalone Neural Processing",
+        summary: "Apple's second-generation Vision Pro features an M4 Ultra chip enabling fully local AI inference without cloud dependency. The device is priced at $2,999 and ships next quarter.",
+        url: "https://apple.com/vision-pro-2",
+        source: "Apple Newsroom",
+        category: "tech",
+        publishedAt: new Date(Date.now() - 12 * 3600000).toISOString(),
+        tags: ["apple", "vr", "hardware"],
+    },
+    {
+        title: "EU AI Act Enforcement Begins: Major Fines Expected in Q3",
+        summary: "The European Union's AI Act entered enforcement phase this week. Regulators are reviewing 47 high-risk AI deployments across healthcare and financial services with fines up to 6% of global revenue.",
+        url: "https://ec.europa.eu/ai-act-enforcement",
+        source: "EU Commission",
+        category: "business",
+        publishedAt: new Date(Date.now() - 24 * 3600000).toISOString(),
+        tags: ["regulation", "eu", "policy"],
+    },
+    {
+        title: "Ethereum Layer-2 Ecosystem Hits $80B Total Value Locked",
+        summary: "Combined TVL across Arbitrum, Optimism, Base, and zkSync surpassed $80 billion for the first time. Base, Coinbase's L2, leads monthly active users with 42 million unique addresses.",
+        url: "https://defillama.com/l2-tvl",
+        source: "DeFi Llama",
+        category: "crypto",
+        publishedAt: new Date(Date.now() - 30 * 3600000).toISOString(),
+        tags: ["ethereum", "layer2", "defi"],
+    },
+    {
+        title: "NVIDIA Reports Record Revenue of $36B in Q1 2026",
+        summary: "NVIDIA's data center segment accounted for 87% of total revenue as hyperscalers ramp H200 deployments. CEO Jensen Huang teased the Blackwell Ultra architecture for release in late 2026.",
+        url: "https://investor.nvidia.com/q1-2026",
+        source: "NVIDIA IR",
+        category: "business",
+        publishedAt: new Date(Date.now() - 48 * 3600000).toISOString(),
+        tags: ["nvidia", "gpu", "ai-chips"],
+    },
+    {
+        title: "MIT Researchers Develop Room-Temperature Quantum Memory",
+        summary: "Scientists at MIT have demonstrated quantum coherence at room temperature using nitrogen-vacancy centers in diamond. The breakthrough could enable practical quantum networks without cryogenic cooling.",
+        url: "https://news.mit.edu/quantum-memory",
+        source: "MIT News",
+        category: "science",
+        publishedAt: new Date(Date.now() - 60 * 3600000).toISOString(),
+        tags: ["quantum", "physics", "computing"],
+    },
+    {
+        title: "Anthropic Raises $4B Series E at $45B Valuation",
+        summary: "AI safety company Anthropic has secured $4 billion in its latest funding round led by Google and Amazon. The funds will be used to scale Claude's capabilities and expand safety research.",
+        url: "https://anthropic.com/series-e",
+        source: "Anthropic",
+        category: "ai",
+        publishedAt: new Date(Date.now() - 72 * 3600000).toISOString(),
+        tags: ["anthropic", "claude", "funding"],
+    },
+    {
+        title: "Global 5G Connections Exceed 3 Billion, Standalone Networks Dominate",
+        summary: "The GSMA reports that standalone 5G connections surpassed 3 billion worldwide in April 2026. Asia-Pacific leads with 1.9 billion connections; North America and Europe are accelerating rollouts.",
+        url: "https://gsma.com/5g-report-2026",
+        source: "GSMA",
+        category: "world",
+        publishedAt: new Date(Date.now() - 96 * 3600000).toISOString(),
+        tags: ["5g", "telecom", "global"],
+    },
+];
+for (const item of SEED) {
+    const id = node_crypto_1.default.randomUUID();
+    memNews.set(id, { id, ...item });
+}
+// ─── Helper ───────────────────────────────────────────────────────────────────
+function param(req, key) {
+    const v = req.params[key];
+    return Array.isArray(v) ? v[0] : String(v ?? "");
+}
+// ─── GET /api/qnews/health ───────────────────────────────────────────────────
+exports.qnewsRouter.get("/health", (_req, res) => {
+    // Состояние базы в ручке здоровья. Добавлено 19.08.2026: сторож
+    // запасного хранилища опрашивает модули и до этого видел 9 из 12 —
+    // остальные просто не публиковали поле, и их молчание читалось как
+    // благополучие. Поле дешёвое, а без него нельзя ответить на вопрос
+    // «пишет ли прод в память вместо базы».
+    res.json({ ok: true, service: "qnews", db: (0, ensureQNewsTables_1.isQNewsDbReady)() ? "postgres" : "memory" });
+});
+// ─── GET /api/qnews/categories ───────────────────────────────────────────────
+const QNEWS_STORAGE_DOWN = "Хранилище временно недоступно. Пустая лента сейчас НЕ значит, что новостей нет.";
+exports.qnewsRouter.get("/categories", async (_req, res) => {
+    const counts = {};
+    for (const cat of CATEGORIES)
+        counts[cat] = 0;
+    // Счёт идёт в SQL: тянуть все статьи ради подсчёта — лишняя работа, которая
+    // растёт вместе с лентой. Раньше здесь читалась ПАМЯТЬ, пустая на проде, и
+    // все разделы показывали ноль при полной базе.
+    if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+        try {
+            const { rows } = await pool.query(`SELECT "category", COUNT(*)::int AS n FROM "QNewsArticle" GROUP BY "category"`);
+            for (const r of rows) {
+                if (counts[r.category] !== undefined)
+                    counts[r.category] = Number(r.n);
+            }
+            res.json({ categories: CATEGORIES.map((cat) => ({ id: cat, count: counts[cat] ?? 0 })) });
+            return;
+        }
+        catch (e) {
+            console.error("[QNews] /categories DB error", e);
+            // Нули на отказе базы читаются как «новостей нет», поэтому отказ здесь
+            // называем отказом, а не показываем пустой рубрикатор.
+            res.status(503).json({ error: "storage_unavailable", warning: QNEWS_STORAGE_DOWN });
+            return;
+        }
+    }
+    for (const item of memNews.values()) {
+        if (counts[item.category] !== undefined)
+            counts[item.category] += 1;
+    }
+    res.json({ categories: CATEGORIES.map((cat) => ({ id: cat, count: counts[cat] ?? 0 })) });
+});
+// ─── GET /api/qnews/trending — top 5 most recently added ────────────────────
+exports.qnewsRouter.get("/trending", async (_req, res) => {
+    try {
+        if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+            const { rows } = await pool.query(`SELECT * FROM "QNewsArticle" ORDER BY "publishedAt" DESC LIMIT 5`);
+            return res.json({ articles: rows });
+        }
+    }
+    catch (e) {
+        console.error("[QNews] /trending DB error", e);
+    }
+    const articles = Array.from(memNews.values())
+        .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+        .slice(0, 5);
+    res.json({ articles });
+});
+// ─── GET /api/qnews/articles ─────────────────────────────────────────────────
+exports.qnewsRouter.get("/articles", async (req, res) => {
+    const { category, q, limit } = req.query;
+    // `|| 20` ловит NaN, но НЕ отрицательное: limit=-5 проходило дальше и
+    // уезжало в SQL как LIMIT -5, что Postgres отвергает пятисоткой. Проверено
+    // на проде 19.08.2026, и ровно эти ручки называл журнал ошибок
+    // («LIMIT must not be negative» x4 за неделю). Идиом — как в bureau.ts.
+    const limitN = Math.min(Math.max(parseInt(String(limit ?? "20"), 10) || 20, 1), 100);
+    try {
+        if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+            const conditions = [];
+            const args = [];
+            let idx = 1;
+            if (category && CATEGORIES.includes(category)) {
+                conditions.push(`"category"=$${idx++}`);
+                args.push(category);
+            }
+            if (q) {
+                conditions.push(`("title" ILIKE $${idx} OR "summary" ILIKE $${idx})`);
+                args.push(`%${q}%`);
+                idx++;
+            }
+            const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+            const [{ rows }, { rows: cnt }] = await Promise.all([
+                pool.query(`SELECT * FROM "QNewsArticle" ${where} ORDER BY "publishedAt" DESC LIMIT $${idx}`, [...args, limitN]),
+                pool.query(`SELECT COUNT(*)::int AS total FROM "QNewsArticle" ${where}`, args),
+            ]);
+            return res.json({ articles: rows, total: cnt[0]?.total ?? rows.length });
+        }
+    }
+    catch (e) {
+        console.error("[QNews] GET /articles DB error", e);
+    }
+    let articles = Array.from(memNews.values());
+    if (category && CATEGORIES.includes(category))
+        articles = articles.filter((a) => a.category === category);
+    if (q) {
+        const lq = q.toLowerCase();
+        articles = articles.filter((a) => a.title.toLowerCase().includes(lq) || a.summary.toLowerCase().includes(lq) || a.tags.some((t) => t.toLowerCase().includes(lq)));
+    }
+    articles = articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+    res.json({ articles: articles.slice(0, limitN), total: articles.length });
+});
+// ─── GET /api/qnews/articles/:id ─────────────────────────────────────────────
+exports.qnewsRouter.get("/articles/:id", async (req, res) => {
+    const id = param(req, "id");
+    try {
+        if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+            const { rows } = await pool.query(`SELECT * FROM "QNewsArticle" WHERE "id"=$1`, [id]);
+            if (rows[0])
+                return res.json({ article: rows[0] });
+            return res.status(404).json({ error: "not_found" });
+        }
+    }
+    catch (e) {
+        console.error("[QNews] GET /articles/:id DB error", e);
+        // База объявлена готовой и упала — ниже пустая в проде память, и оттуда
+        // ушёл бы 404 на существующую статью.
+        return res.status(503).json({ error: "storage_unavailable", warning: WARN });
+    }
+    const article = memNews.get(id);
+    if (!article)
+        return res.status(404).json({ error: "not_found" });
+    return res.json({ article });
+});
+// ─── POST /api/qnews/articles ────────────────────────────────────────────────
+exports.qnewsRouter.post("/articles", submitLimiter, async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    const { title, summary, url, source, category, tags } = req.body;
+    if (!title || !summary || !url || !source || !category) {
+        return res.status(400).json({ error: "title, summary, url, source, category required" });
+    }
+    if (!CATEGORIES.includes(category)) {
+        return res.status(400).json({ error: `category must be one of ${CATEGORIES.join(", ")}` });
+    }
+    const article = {
+        id: node_crypto_1.default.randomUUID(),
+        title: title.trim(),
+        summary: summary.trim(),
+        url: url.trim(),
+        source: source.trim(),
+        category,
+        publishedAt: new Date().toISOString(),
+        tags: Array.isArray(tags) ? tags.filter((t) => typeof t === "string") : [],
+    };
+    try {
+        if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+            await pool.query(`INSERT INTO "QNewsArticle" ("id","title","summary","url","source","category","tags","authorId","publishedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`, [article.id, article.title, article.summary, article.url, article.source, article.category, article.tags, auth.sub]);
+            return res.status(201).json({ article, storage: "db" });
+        }
+    }
+    catch (e) {
+        console.error("[QNews] POST /articles DB error", e);
+    }
+    memNews.set(article.id, article);
+    return res.status(201).json({ article, storage: "memory" });
+});
+// ─── POST /api/qnews/articles/:id/bookmark — toggle bookmark ─────────────────
+exports.qnewsRouter.post("/articles/:id/bookmark", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    const id = param(req, "id");
+    try {
+        if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+            const existing = await pool.query(`SELECT id FROM "QNewsBookmark" WHERE "userId"=$1 AND "articleId"=$2`, [auth.sub, id]);
+            if ((existing.rowCount ?? 0) > 0) {
+                await pool.query(`DELETE FROM "QNewsBookmark" WHERE "userId"=$1 AND "articleId"=$2`, [auth.sub, id]);
+                return res.json({ bookmarked: false });
+            }
+            else {
+                await pool.query(`INSERT INTO "QNewsBookmark"("id","userId","articleId") VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, [node_crypto_1.default.randomUUID(), auth.sub, id]);
+                return res.json({ bookmarked: true, storage: "db" });
+            }
+        }
+    }
+    catch (e) {
+        console.error("[QNews] bookmark DB error", e);
+        // Ниже закладка ставится в память, но сперва проверяется memNews — в проде
+        // она пуста, и человек получал «not_found» про существующую статью, а
+        // закладка молча не ставилась. Проверено контролем 21.08.2026: с живой
+        // базой ручка отвечает 200, с упавшей — 404.
+        return res.status(503).json({
+            error: "storage_unavailable",
+            warning: "Хранилище временно недоступно. Закладка не сохранена — повторите позже.",
+        });
+    }
+    if (!memNews.has(id))
+        return res.status(404).json({ error: "not_found" });
+    const key = `${auth.sub}:${id}`;
+    const bookmarked = !memBookmarks.get(key);
+    if (bookmarked)
+        memBookmarks.set(key, true);
+    else
+        memBookmarks.delete(key);
+    return res.json({ bookmarked, storage: "memory" });
+});
+// ─── GET /api/qnews/me/bookmarks — my bookmarked articles ────────────────────
+exports.qnewsRouter.get("/me/bookmarks", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth required" });
+    try {
+        if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+            const { rows } = await pool.query(`SELECT a.* FROM "QNewsArticle" a
+         JOIN "QNewsBookmark" b ON b."articleId" = a."id"
+         WHERE b."userId"=$1
+         ORDER BY b."createdAt" DESC LIMIT 50`, [auth.sub]);
+            return res.json({ articles: rows, total: rows.length });
+        }
+    }
+    catch (e) {
+        console.error("[QNews] /me/bookmarks DB error", e);
+    }
+    const prefix = `${auth.sub}:`;
+    const articles = [];
+    for (const [key] of memBookmarks) {
+        if (key.startsWith(prefix)) {
+            const article = memNews.get(key.slice(prefix.length));
+            if (article)
+                articles.push(article);
+        }
+    }
+    articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+    return res.json({ articles, total: articles.length });
+});
+// ─── GET /api/qnews/rss — RSS 2.0 feed of latest 20 articles ─────────────────
+exports.qnewsRouter.get("/rss", async (_req, res) => {
+    // Лента отдаётся читалкам и агрегаторам. Пустой RSS они запоминают: канал,
+    // который однажды отдал ноль записей, часть читалок опрашивает реже. Раньше
+    // здесь читалась память — на проде пустая.
+    let articles = [];
+    if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+        try {
+            const { rows } = await pool.query(`SELECT * FROM "QNewsArticle" ORDER BY "publishedAt" DESC LIMIT 20`);
+            articles = rows;
+        }
+        catch (e) {
+            console.error("[QNews] /rss DB error", e);
+            // Отдать пустую ленту на отказе базы нельзя — лучше честный отказ,
+            // читалка повторит попытку.
+            res.status(503).json({ error: "storage_unavailable", warning: QNEWS_STORAGE_DOWN });
+            return;
+        }
+    }
+    else {
+        articles = Array.from(memNews.values())
+            .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+            .slice(0, 20);
+    }
+    const escXml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const items = articles.map((a) => `    <item>\n      <title>${escXml(a.title)}</title>\n      <link>${escXml(a.url)}</link>\n      <description>${escXml(a.summary)}</description>\n      <pubDate>${new Date(a.publishedAt).toUTCString()}</pubDate>\n      <category>${escXml(a.category)}</category>\n      <guid>${escXml(a.id)}</guid>\n    </item>`).join("\n");
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n    <title>AEVION QNews</title>\n    <link>https://aevion.app/qnews</link>\n    <description>Latest news from AEVION QNews</description>\n    <language>en</language>\n    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>\n${items}\n  </channel>\n</rss>`;
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.send(xml);
+});
+// ─── POST /api/qnews/ai/digest — AI daily digest ─────────────────────────────
+exports.qnewsRouter.post("/ai/digest", aiLimiter, async (_req, res) => {
+    // Take last 5 articles per category — prefer Postgres, fallback to in-memory
+    let selectedArticles = [];
+    try {
+        if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+            const { rows } = await pool.query(`SELECT DISTINCT ON ("category") * FROM (
+           SELECT * FROM "QNewsArticle" ORDER BY "category", "publishedAt" DESC
+         ) sub ORDER BY "category", "publishedAt" DESC LIMIT 50`);
+            selectedArticles = rows;
+        }
+    }
+    catch (e) {
+        console.error("[QNews] digest DB error", e);
+    }
+    if (selectedArticles.length === 0) {
+        const byCategory = {};
+        for (const cat of CATEGORIES)
+            byCategory[cat] = [];
+        for (const article of memNews.values()) {
+            if (byCategory[article.category])
+                byCategory[article.category].push(article);
+        }
+        for (const cat of CATEGORIES) {
+            selectedArticles.push(...byCategory[cat].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 5));
+        }
+    }
+    const articlesText = selectedArticles
+        .map((a) => `[${a.category.toUpperCase()}] ${a.title}: ${a.summary}`)
+        .join("\n");
+    try {
+        const { callProvider: cp } = await Promise.resolve().then(() => __importStar(require("../services/qcoreai/providers")));
+        const result = await cp("openai", [{ role: "user", content: `Generate a concise daily news digest from these articles:\n\n${articlesText}\n\nWrite 2-3 sentences summarizing the most important trends.` }], "gpt-4o-mini", 0.4);
+        return res.json({ digest: result.reply, articlesUsed: selectedArticles.length });
+    }
+    catch (e) {
+        console.error("[QNews] AI digest provider error", e);
+        const stub = `Today's highlights: ${selectedArticles.slice(0, 3).map((a) => a.title).join("; ")}. Configure an AI provider for a full digest.`;
+        return res.status(502).json({ error: "ai_provider_error", message: e instanceof Error ? e.message : String(e), digest: stub, articlesUsed: selectedArticles.length });
+    }
+});
+// ─── POST /api/qnews/ai/summarize ────────────────────────────────────────────
+exports.qnewsRouter.post("/ai/summarize", aiLimiter, async (req, res) => {
+    const { articleId, text } = req.body;
+    let contentToSummarize = text ?? "";
+    if (articleId) {
+        try {
+            if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+                const { rows } = await pool.query(`SELECT * FROM "QNewsArticle" WHERE "id"=$1`, [articleId]);
+                if (rows[0])
+                    contentToSummarize = `${rows[0].title}\n\n${rows[0].summary}`;
+            }
+        }
+        catch { /* fallback */ }
+        if (!contentToSummarize) {
+            const article = memNews.get(articleId);
+            if (article)
+                contentToSummarize = `${article.title}\n\n${article.summary}`;
+        }
+    }
+    if (!contentToSummarize) {
+        return res.status(400).json({ error: "articleId or text required" });
+    }
+    // Try to use the QCoreAI provider; stub if unavailable
+    try {
+        const { callProvider } = await Promise.resolve().then(() => __importStar(require("../services/qcoreai/providers")));
+        const result = await callProvider("openai", [
+            {
+                role: "user",
+                content: `Summarize the following article in 2-3 sentences and provide 3 key bullet points.\n\nArticle:\n${contentToSummarize}\n\nRespond in JSON: {"summary": "...", "keyPoints": ["...", "...", "..."]}`,
+            },
+        ], "gpt-4o-mini", 0.3, undefined, undefined, { module: "qnews-summarize" });
+        const raw = result.reply ?? "";
+        try {
+            const parsed = JSON.parse(raw);
+            return res.json({
+                summary: parsed.summary ?? raw,
+                keyPoints: parsed.keyPoints ?? [],
+            });
+        }
+        catch {
+            return res.json({ summary: raw, keyPoints: [] });
+        }
+    }
+    catch (e) {
+        // Stub response when provider unavailable — surface the underlying error
+        console.error("[QNews] AI summarize provider error", e);
+        const words = contentToSummarize.split(/\s+/).slice(0, 30).join(" ");
+        return res.status(502).json({
+            error: "ai_provider_error",
+            message: e instanceof Error ? e.message : String(e),
+            summary: `${words}... (AI summarization requires a configured LLM provider)`,
+            keyPoints: [
+                "Key insight from the article",
+                "Secondary observation worth noting",
+                "Takeaway for further research",
+            ],
+        });
+    }
+});
+// ─── GET /api/qnews/stats ─────────────────────────────────────────────────────
+exports.qnewsRouter.get("/stats", async (_req, res) => {
+    // Сводка по ленте. Раньше считалась по памяти: на проде она пуста, значит
+    // «всего 0 статей» при полной базе. Ноль на витрине статистики читается как
+    // «модуль мёртв», и проверить это никто не идёт.
+    let articles;
+    if ((0, ensureQNewsTables_1.isQNewsDbReady)()) {
+        try {
+            const { rows } = await pool.query(`SELECT * FROM "QNewsArticle"`);
+            articles = rows;
+        }
+        catch (e) {
+            console.error("[QNews] /stats DB error", e);
+            res.status(503).json({ error: "storage_unavailable", warning: QNEWS_STORAGE_DOWN });
+            return;
+        }
+    }
+    else {
+        articles = Array.from(memNews.values());
+    }
+    const byCategory = CATEGORIES.reduce((acc, c) => {
+        acc[c] = articles.filter((a) => a.category === c).length;
+        return acc;
+    }, {});
+    const bySources = articles.reduce((acc, a) => {
+        acc[a.source] = (acc[a.source] ?? 0) + 1;
+        return acc;
+    }, {});
+    res.json({
+        total: articles.length,
+        byCategory,
+        topSources: Object.entries(bySources).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([source, count]) => ({ source, count })),
+        bookmarks: Array.from(memBookmarks.values()).filter(Boolean).length,
+        backend: "memory",
+    });
+});
+// ── MVP concept board surface ───────────────────────────────────────────────
+exports.qnewsRouter.get("/status", (_req, res) => {
+    res.json({
+        module: "qnews",
+        code: "QNEWS",
+        status: "mvp",
+        description: "Industry news aggregator with AI digest + concept board.",
+        endpoints: {
+            articles: "/api/qnews/articles",
+            digest: "/api/qnews/ai/digest",
+            stats: "/api/qnews/stats",
+            conceptMessages: "/api/qnews/concept/messages",
+            conceptStats: "/api/qnews/concept-stats",
+        },
+        timestamp: new Date().toISOString(),
+    });
+});
+(0, conceptBoardStore_1.mountConceptBoard)({ router: exports.qnewsRouter, moduleId: "qnews", defaultTag: "qnews", writeLimit: submitLimiter });

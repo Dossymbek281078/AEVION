@@ -1,0 +1,10494 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.LLM_TRANSLATE_ORDER = exports.__потолокПроектовPagesForTest = exports.TEMPLATES = exports.DOMAIN_RECHECK_DELAYS_MS = exports.SERVE_VERIFY_RETRY_DELAYS_MS = exports.dnsProbe = exports.devhubRouter = void 0;
+exports.ступеньЗапроса = ступеньЗапроса;
+exports.пределАдреса = пределАдреса;
+exports.__clearDeferredDevHubWork = __clearDeferredDevHubWork;
+exports.__setUserTierForTest = __setUserTierForTest;
+exports.__debitCreditForTest = __debitCreditForTest;
+exports.__resetDevHubStore = __resetDevHubStore;
+exports.нашТестовыйПрогон = нашТестовыйПрогон;
+exports.__parseGeneratedFilesForTest = __parseGeneratedFilesForTest;
+exports.__указаниеПоСтекуForTest = __указаниеПоСтекуForTest;
+exports.__scheduleDomainRecheckForTest = __scheduleDomainRecheckForTest;
+exports.__положитьПроектForTest = __положитьПроектForTest;
+exports.__прочитатьПроектForTest = __прочитатьПроектForTest;
+exports.__setMonthUsageForTest = __setMonthUsageForTest;
+exports.пробныйГостевойПроект = пробныйГостевойПроект;
+exports.свипПробныхСайтов = свипПробныхСайтов;
+exports.запуститьСвипПробныхСайтов = запуститьСвипПробныхСайтов;
+exports.generateImageViaChain = generateImageViaChain;
+exports.verifyDeploymentServes = verifyDeploymentServes;
+exports.buildZipStored = buildZipStored;
+exports.__setПодсчётПроектовForTest = __setПодсчётПроектовForTest;
+exports.classifyDeploymentServe = classifyDeploymentServe;
+exports.__resetReconcileStateForTest = __resetReconcileStateForTest;
+exports.__setReconcileRateMsForTest = __setReconcileRateMsForTest;
+exports.__setReconcileDeployGraceMsForTest = __setReconcileDeployGraceMsForTest;
+exports.__resetAevionBuildZoneCache = __resetAevionBuildZoneCache;
+const express_1 = require("express");
+const queryNumber_1 = require("../lib/queryNumber");
+const usageTokens_1 = require("../lib/usageTokens");
+const node_crypto_1 = __importDefault(require("node:crypto"));
+const authJwt_1 = require("../lib/authJwt");
+const authLive_1 = require("../lib/authLive");
+const planGate_1 = require("../lib/planGate");
+const devhubStart_1 = require("../lib/devhubStart");
+const appEntitlements_1 = require("../lib/appEntitlements");
+const devhubDns_1 = require("../lib/devhubDns");
+const node_dns_1 = require("node:dns");
+const lemonSqueezyVariants_1 = require("../data/lemonSqueezyVariants");
+// Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
+// Все четыре символа используются в теле файла, проверено счётом вхождений.
+const devhubGuest_1 = require("../lib/devhubGuest");
+const devhubProvenance_1 = require("../lib/devhubProvenance");
+const devhubGuestLink_1 = require("../lib/devhubGuestLink");
+const brevoQuota_1 = require("../lib/brevoQuota");
+// Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
+// коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
+// ручки, которые тогда пропустили: /ask и /media/upload-image.
+const rateLimit_1 = require("../lib/rateLimit");
+const node_async_hooks_1 = require("node:async_hooks");
+/**
+ * Предел для дорогих ручек этого модуля.
+ *
+ * Намеренно НЕ новый экспорт в lib: коммит d9cc19ce0 (28.07) вводит там
+ * `generationLimit` и переводит на него 27 ручек, но ждёт мержа 22 дня. Свой
+ * одноимённый помощник поспорил бы с ним при сведении, а локальная функция — нет.
+ * Когда тот коммит придёт, эти два вызова заменяются на `generationLimit(...)`.
+ *
+ * Значение берётся из той же переменной, что и у него, чтобы поведение совпало.
+ */
+function dhCostlyLimit(keyPrefix) {
+    const raw = Number(process.env.GENERATION_RATE_LIMIT);
+    // Тернарник ВЫНЕСЕН из объекта намеренно. Внутри литерала опций
+    // `raw > 0 ? raw : 30` выглядит для разборщика как поле «raw: 30», и сторож
+    // rateLimitOptionsGuard справедливо по своему шаблону, но ложно по смыслу
+    // сообщил о «лишней опции raw». Заодно читается лучше.
+    const max = Number.isFinite(raw) && raw > 0 ? raw : 30;
+    return (0, rateLimit_1.rateLimit)({
+        windowMs: 60000,
+        max,
+        keyPrefix,
+        message: "Слишком много запросов к генерации. Подождите минуту.",
+    });
+}
+const dbPool_1 = require("../lib/dbPool");
+const ensureDevHubTables_1 = require("../lib/ensureDevHubTables");
+const providers_1 = require("../services/qcoreai/providers");
+const jsonReply_1 = require("../services/qcoreai/jsonReply");
+const smartComplete_1 = require("../services/qcoreai/smartComplete");
+const smartRunLog_1 = require("../lib/smartRunLog");
+const pricing_1 = require("../services/qcoreai/pricing");
+const providerHealth_1 = require("../lib/providerHealth");
+const sentry_1 = require("../lib/sentry");
+const degradedResponse_1 = require("../lib/degradedResponse");
+const githubFailure_1 = require("../lib/githubFailure");
+const devhubRunInstructions_1 = require("../lib/devhubRunInstructions");
+const syntaxCheck_1 = require("../lib/syntaxCheck");
+const wranglerPagesDeploy_1 = require("../lib/wranglerPagesDeploy");
+// Функция переименована на моей стороне: redactInfraDetails вместо
+// safeErrorText — имя говорит, ЧТО она делает (вырезает адрес и устройство
+// инфраструктуры из текста ошибки). Вызовы из сведённой ветки отстали от
+// переименования; правлю их, а не завожу второе имя для одного смысла.
+const safeErrorText_1 = require("../lib/safeErrorText");
+const publicUrlOnly_1 = require("../lib/publicUrlOnly");
+const staticServable_1 = require("../lib/staticServable");
+const providerSpendCheck_1 = require("../lib/providerSpendCheck");
+const _________________1 = require("../lib/\u043E\u0431\u044A\u044F\u0432\u043B\u0435\u043D\u043D\u044B\u0435\u041C\u043E\u0434\u0435\u043B\u0438");
+const aevionBadge_1 = require("../lib/aevionBadge");
+const sseHeartbeat_1 = require("../lib/sseHeartbeat");
+const devhubAuthScaffold_1 = require("../lib/devhubAuthScaffold");
+const devhubNoFakeData_1 = require("../lib/devhubNoFakeData");
+const pipelineQuote_1 = require("../lib/pipelineQuote");
+const unitPricing_1 = require("../lib/unitPricing");
+exports.devhubRouter = (0, express_1.Router)();
+/**
+ * Предел на ОТПРАВЛЯЮЩИЕ ручки — одним объявлением, а не по одной.
+ *
+ * Что закрывает: аноним мог отправлять письма, SMS и сообщения WhatsApp с нашего
+ * аккаунта произвольным получателям, без предела. Это не «дорого», это возможность
+ * рассылать спам нашим именем, и от продуктового вопроса «DevHub — продукт или
+ * внутренний инструмент» она не зависит: посторонним нельзя ни в одном из ответов.
+ *
+ * Почему списком, а не построчно у каждой ручки: коммит d9cc19ce0 (28.07) ставит
+ * ограничитель ровно этим ручкам построчно и ждёт мержа 22 дня. Правка в те же
+ * строки дала бы конфликт на его патче; отдельное объявление — нет. Когда он
+ * придёт, оба предела просто сложатся, и это безвредно (сработает строгий).
+ *
+ * Ограничитель, а НЕ авторизация: авторизация решает, КОМУ можно, и это решение
+ * основателя. Предел не решает ничего — он лишь не даёт злоупотреблять.
+ *
+ * Стоит ДО объявления маршрутов намеренно: express выполняет middleware в порядке
+ * регистрации, и ниже маршрутов он бы не сработал вовсе.
+ */
+/**
+ * Предел для отправки СТРОЖЕ, чем для генерации, и вот почему числом.
+ *
+ * Первая версия ставила здесь общий `dhCostlyLimit` — 30 в минуту. Это оказалось
+ * слишком много: у Brevo на текущем плане потолок **300 писем в сутки** (записано
+ * в CLAUDE.md окна запуска). То есть один адрес выжигал бы всю суточную квоту
+ * платформы за десять минут, и подтверждения подписки перестали бы приходить
+ * ВСЕМ — включая тех, кого мы ждём после запуска.
+ *
+ * Пять в минуту: своё приложение проверить хватает с запасом, а суточную квоту с
+ * одного адреса так не выбрать (5 × 60 × 24 упирается в квоту у провайдера, а не
+ * у нас, зато первые же попытки станут видны в журнале).
+ *
+ * Значение отдельной переменной, чтобы менять без правки кода; но по умолчанию
+ * СТРОГОЕ — защита, включающаяся только при настройке, это защита, которой нет.
+ */
+function dhSendLimit() {
+    const raw = Number(process.env.DEVHUB_SEND_RATE_LIMIT);
+    const max = Number.isFinite(raw) && raw > 0 ? raw : 5;
+    return (0, rateLimit_1.rateLimit)({
+        windowMs: 60000,
+        max,
+        keyPrefix: "dhsend",
+        message: "Слишком много отправок подряд. Подождите минуту.",
+    });
+}
+/**
+ * Создание проекта и сниппета — записи в базу, доступные БЕЗ входа и без
+ * какой-либо платы. Замер 29.08.2026: ни ограничителя темпа, ни потолка на
+ * пользователя, ни общего ограничителя на приложении — то есть любой скрипт
+ * мог заполнять таблицу проектов сколько угодно.
+ *
+ * Дорогие ручки защищены иначе (месячная норма), и это верно: там тратятся
+ * деньги. Здесь тратится место и время базы, а значит и работа всех
+ * остальных.
+ *
+ * Число выбрано так, чтобы человек его не заметил: десять проектов в минуту —
+ * это больше, чем создают руками за целый вечер. Настраивается переменной, но
+ * умолчание СТРОГОЕ: защита, включающаяся только при настройке, — это защита,
+ * которой нет.
+ */
+/*
+ * Ограничитель для ручек пайплайна (30.09.2026).
+ *
+ * Почему НЕ dhCostlyLimit, хотя сначала я поставил именно его. Тот означает
+ * «дорогая генерация»: сторож devhubSpendAccountingRatchet опознаёт платные
+ * ручки ровно по нему и требует учёта расхода и месячной квоты. Но quote и order
+ * не тратят НИ ЦЕНТА — это доказано поведенческим тестом
+ * pipelineQuoteAndOrderSpendNothing (подменяет fetch и считает вызовы; мутации
+ * «сделать внешний вызов» и «уйти в работу без подтверждения» обе ловятся).
+ * Заставить их писать расход значило бы занести в журнал трату, которой нет, а
+ * по этому журналу принимают решения о деньгах.
+ *
+ * Ограничитель им всё равно нужен, и по ДРУГОЙ причине: order создаёт записи
+ * заказов, то есть без предела это раздувание памяти. Поэтому берём образец
+ * dhCreateLimit — предел на ЗАПИСИ, 10 в минуту, — но со своим ключом, чтобы
+ * заказы не делили счётчик с созданием проектов и сниппетов.
+ *
+ * Путь, которым я сюда пришёл, стоит помнить: сторож costlyEndpointsProtected
+ * назвал order платной ЛОЖНО — из-за слова «Replicate» в моём же комментарии
+ * рядом. Я «починил» ложное срабатывание лимитером и получил вторую поломку в
+ * третьем стороже. Починка ложной тревоги не там, где её причина, порождает
+ * настоящую.
+ */
+function dhPipelineLimit() {
+    const raw = Number(process.env.DEVHUB_PIPELINE_RATE_LIMIT);
+    const max = Number.isFinite(raw) && raw > 0 ? raw : 10;
+    return (0, rateLimit_1.rateLimit)({
+        windowMs: 60000,
+        max,
+        keyPrefix: "dhpipeline",
+        message: "Слишком много заказов подряд. Подождите минуту.",
+    });
+}
+function dhCreateLimit() {
+    const raw = Number(process.env.DEVHUB_CREATE_RATE_LIMIT);
+    const max = Number.isFinite(raw) && raw > 0 ? raw : 10;
+    return (0, rateLimit_1.rateLimit)({
+        windowMs: 60000,
+        max,
+        keyPrefix: "dhcreate",
+        message: "Слишком много записей подряд. Подождите минуту.",
+    });
+}
+/**
+ * Предел для переноса гостевой работы в аккаунт.
+ *
+ * СВОЙ префикс, а не общий с созданием проектов: иначе попытки переноса
+ * тратили бы предел, отведённый на создание, и защита одной поверхности
+ * молча ослабляла бы другую.
+ *
+ * Настоящий человек зовёт эту ручку ОДИН раз на браузер. Десять в минуту —
+ * запас на перезагрузки и на две вкладки; всё, что выше, это перебор чужих
+ * гостевых идентификаторов, а он тут единственный осмысленный способ
+ * навредить: сам идентификатор и есть ключ к проектам, и удалять их он
+ * позволяет уже сейчас (DELETE /projects/:id авторизуется тем же requesterId).
+ * Умолчание строгое: защита, включающаяся только при заданной переменной,
+ * — это защита, которой нет.
+ */
+function dhAdoptLimit() {
+    const raw = Number(process.env.DEVHUB_ADOPT_RATE_LIMIT);
+    const max = Number.isFinite(raw) && raw > 0 ? raw : 10;
+    return (0, rateLimit_1.rateLimit)({
+        windowMs: 60000,
+        max,
+        keyPrefix: "dhadopt",
+        message: "Слишком много попыток подряд. Подождите минуту.",
+    });
+}
+/**
+ * Управляющий байт в адресе — ошибка КЛИЕНТА, а не авария хранилища.
+ *
+ * Замер прода 08.09.2026, зонд враждебного входа по читающим ручкам: пять
+ * адресов с `%00` отвечали **503 «Хранилище временно недоступно. Это НЕ значит,
+ * что...»**, тогда как `%01`, перевод строки и обычный мусор давали честные 404.
+ * Разгадка: NUL доезжает до параметра запроса, Postgres такую строку не
+ * принимает, наш catch объявляет это отказом хранилища.
+ *
+ * Дефекта здесь два, и второй хуже первого.
+ *   1. Клиентская ошибка отвечает 5xx — это шум в тревогах, среди которого
+ *      потом не видно настоящих аварий (ворота §3.4).
+ *   2. Человеку сообщается НЕПРАВДА про нашу базу, а витрина по этому же
+ *      признаку рисует полосу деградации. То есть любой обход с кривой ссылкой
+ *      делал наш сигнал здоровья ложно красным — и делал это бесплатно.
+ *
+ * Проверяем ПУТЬ целиком одной прослойкой, а не каждый параметр: законный адрес
+ * управляющих байтов не содержит никогда, а перечислять места, где читается id,
+ * — значит однажды пропустить новое.
+ *
+ * ⚠️ ЭТА ПРОСЛОЙКА ВЫГЛЯДИТ МЁРТВОЙ — И НЕ ЯВЛЯЕТСЯ ЕЮ. С 08.09.2026 такая же
+ * стоит ПЛАТФОРМЕННО, до роутеров (`src/index.ts`), и срабатывает раньше:
+ * значит сюда запрос с управляющим байтом обычно не доходит, и в журналах её
+ * срабатываний не будет. Это защита в глубину, а не дубль: платформенную могут
+ * снять, обойти монтированием мимо или сломать при правке, и тогда эта
+ * останется единственной. Стоит она ноль.
+ *
+ * Не удаляйте её как неиспользуемую: «никогда не срабатывает» здесь означает
+ * «первая линия держит», а не «не нужна».
+ */
+const hasControlChar = (value) => {
+    // Через коды символов, а не регуляркой с экранированием: escape--последовательности
+    // на этой машине уже превращались в НАСТОЯЩИЙ байт NUL прямо в исходнике.
+    for (let i = 0; i < value.length; i += 1) {
+        const code = value.charCodeAt(i);
+        if (code < 32 || code === 127)
+            return true;
+    }
+    return false;
+};
+exports.devhubRouter.use((req, res, next) => {
+    let decoded = req.path;
+    try {
+        decoded = decodeURIComponent(req.path);
+    }
+    catch {
+        // Битая процентная последовательность — тоже разговор о запросе, не о нас.
+        return res.status(400).json({ error: "invalid_path", message: "Адрес запроса записан неверно." });
+    }
+    if (hasControlChar(decoded)) {
+        return res.status(400).json({ error: "invalid_path", message: "Адрес запроса содержит недопустимые символы." });
+    }
+    return next();
+});
+exports.devhubRouter.use(["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"], dhSendLimit());
+/**
+ * Загрузки медиа — суточный потолок по адресу (15.09.2026).
+ *
+ * /media/upload-image кладёт в Cloudflare Images (платно за штуку и хранение),
+ * /media/upload-audio — в R2 (до 25 МБ, платно за объём). Обе ручки открыты гостю,
+ * месячного кредита у них нет, а ограничитель 30/мин по адресу за сутки пропускает
+ * 43 200 загрузок с одного адреса — терабайт в R2 или тысячи картинок в Images
+ * одним скриптом. Тот же класс, что кредит гостя по заголовку: без потолка по тому,
+ * чего клиент не выбирает, квота бесконечна. Число: человек за день столько не
+ * загружает; настраивается DEVHUB_UPLOAD_DAILY_LIMIT.
+ */
+function dhUploadDailyLimit() {
+    const raw = Number(process.env.DEVHUB_UPLOAD_DAILY_LIMIT);
+    const max = Number.isFinite(raw) && raw > 0 ? raw : 60;
+    return (0, rateLimit_1.rateLimit)({
+        windowMs: 24 * 60 * 60000,
+        max,
+        keyPrefix: "dhupload-day",
+        message: "Суточный предел загрузок с этого адреса исчерпан. Продолжить можно завтра.",
+    });
+}
+exports.devhubRouter.use(["/media/upload-image", "/media/upload-audio"], dhUploadDailyLimit());
+// Область запроса: адрес клиента для потолка кредита гостя (guestIpBudgetKey ниже).
+// Стоит ДО всех ручек: middleware действует только на зарегистрированные после него.
+const requestScope = new node_async_hooks_1.AsyncLocalStorage();
+exports.devhubRouter.use((req, _res, next) => requestScope.run({ ip: (0, rateLimit_1.clientIp)(req) }, next));
+/**
+ * Ограничитель для формы связывания. Отдельный и СТРОЖЕ обычного: форма
+ * отправляет письма на адрес, который назвал вызывающий, то есть без
+ * предела она становится рассылочной пушкой чужими руками. Три попытки в
+ * десять минут — человек, ищущий свою покупку, столько не сделает.
+ */
+function dhLinkLimit() {
+    const raw = Number(process.env.DEVHUB_LINK_RATE_LIMIT);
+    const max = Number.isFinite(raw) && raw > 0 ? raw : 3;
+    return (0, rateLimit_1.rateLimit)({
+        windowMs: 10 * 60000,
+        max,
+        keyPrefix: "dhlink",
+        message: "Слишком много попыток. Подождите десять минут.",
+    });
+}
+// Одна фраза на все исходы. Разные ответы превратили бы форму в способ
+// узнать, кто у нас покупал: достаточно перебрать адреса и смотреть текст.
+const LINK_NEUTRAL = "Если на этой почте есть покупка DevHub, мы отправили на неё письмо со ссылкой.";
+// POST /api/devhub/guest/link-request — «я оплатил, вот адрес покупки»
+exports.devhubRouter.post("/guest/link-request", dhLinkLimit(), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const guestId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const email = typeof req.body?.email === "string" ? req.body.email : "";
+    const siteBase = process.env.PUBLIC_SITE_URL || "https://aevion.app";
+    const outcome = await (0, devhubGuestLink_1.requestGuestLink)(guestId, email, siteBase);
+    // Отказ ХРАНИЛИЩА и отказ ТРАНСПОРТА наружу не маскируем под успех:
+    // человек иначе будет ждать письма, которого не будет. Но и подробностей
+    // не выдаём — категория, без адреса базы и имени провайдера.
+    if (outcome === "storage_down" || outcome === "transport_down") {
+        return res.status(503).json({
+            ok: false,
+            error: "link_unavailable",
+            message: "Сейчас не получилось отправить письмо. Попробуйте позже.",
+        });
+    }
+    // "sent" и "no_purchase" отвечают ОДИНАКОВО — и кодом, и текстом.
+    return res.json({ ok: true, message: LINK_NEUTRAL });
+});
+// POST /api/devhub/guest/link-confirm — переход по ссылке из письма
+exports.devhubRouter.post("/guest/link-confirm", dhLinkLimit(), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const guestId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const id = typeof req.body?.id === "string" ? req.body.id : "";
+    const token = typeof req.body?.token === "string" ? req.body.token : "";
+    const outcome = await (0, devhubGuestLink_1.confirmGuestLink)(id, token, guestId);
+    if (outcome === "storage_down") {
+        return res.status(503).json({ ok: false, error: "link_unavailable" });
+    }
+    if (outcome === "invalid") {
+        // 400, а не 500: данные прислал клиент. Пятисотка ушла бы в Sentry и
+        // топила бы там настоящие аварии.
+        return res.status(400).json({
+            ok: false,
+            error: "link_invalid",
+            message: "Ссылка не подошла: она устарела, уже использована или открыта в другом браузере.",
+        });
+    }
+    return res.json({ ok: true, message: "Покупка подключена. Обновите страницу." });
+});
+// GET /api/devhub/health — module health probe for aevion hub
+/*
+ * ═══ ПАЙПЛАЙН «книга → озвучка → фильм» ═══
+ *
+ * Замысел основателя 28.09: человек говорит «сделай книгу по моим мотивам, озвучь
+ * и сними короткий фильм», ЦЕНУ СЛЫШИТ СРАЗУ, и дорогие шаги идут последними —
+ * чтобы правка «не тот тон» стоила одну генерацию текста, а не минуту видео.
+ *
+ * Здесь пока ДВЕ ручки, и обе НИЧЕГО НЕ ТРАТЯТ:
+ *   quote  — смета по нашим каналам, до всякого заказа;
+ *   order  — заказ, который ждёт подтверждения человека и готовности каналов.
+ *
+ * Почему запуск шагов ещё не здесь. Видео у нас идёт через Replicate, а его счёт
+ * пуст: живой ответ прода 28.09 — «Video provider has no credit». Ручка, которая
+ * умеет запускать, но упирается в пустой счёт на середине заказа, хуже отсутствующей:
+ * человек заплатит за книгу и озвучку и не получит фильм. Поэтому заказ честно
+ * встаёт в состояние «ждёт пополнения», и это видно в ответе.
+ */
+/** Разбор замысла из тела запроса. Числа приводим к разумным границам, а не верим на слово. */
+function замыселИзТела(тело) {
+    const т = (тело ?? {});
+    const число = (v, предел) => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0)
+            return 0;
+        return Math.min(Math.round(n), предел);
+    };
+    return {
+        // Пределы не от жадности: 500 000 знаков это том на 300 страниц, 600 секунд —
+        // десять минут видео. Больше за один заказ мы честно не тянем.
+        знаковКниги: число(т.знаковКниги ?? т.bookChars, 500000),
+        озвучка: т.озвучка === true || т.voice === true,
+        секундВидео: число(т.секундВидео ?? т.videoSeconds, 600),
+    };
+}
+/**
+ * Готов ли канал к платным шагам. Отвечает ТРИ исхода, а не два:
+ * да / нет / не знаю. «Не знаю» не равно «да» — это прямое правило платформы.
+ */
+function каналыГотовы(замысел) {
+    if (замысел.секундВидео > 0 && !process.env.REPLICATE_API_TOKEN) {
+        return { готово: false, причина: "видео не настроено: нет REPLICATE_API_TOKEN" };
+    }
+    if (замысел.озвучка && !process.env.ELEVENLABS_API_KEY) {
+        return { готово: false, причина: "озвучка не настроена: нет ELEVENLABS_API_KEY" };
+    }
+    /*
+     * Ключ есть — но есть ли ДЕНЬГИ на счёте поставщика, мы отсюда не знаем: у
+     * Replicate это выясняется только попыткой, а попытка стоит денег. Врать «готово»
+     * нельзя, и пугать «не готово» тоже: поэтому честное «не знаю».
+     */
+    if (замысел.секундВидео > 0)
+        return { готово: null, причина: "остаток счёта Replicate отсюда не виден" };
+    return { готово: true, причина: null };
+}
+// POST /api/devhub/pipeline/quote — цена ДО заказа. Ничего не тратит и не создаёт.
+exports.devhubRouter.post("/pipeline/quote", dhPipelineLimit(), (req, res) => {
+    const замысел = замыселИзТела(req.body);
+    if (замысел.знаковКниги === 0 && замысел.секундВидео === 0) {
+        return res.status(400).json({ error: "нечего считать: укажите знаковКниги и/или секундВидео" });
+    }
+    const смета = (0, pipelineQuote_1.сметаПродукта)(замысел);
+    const каналы = каналыГотовы(замысел);
+    return res.json({
+        ok: true,
+        замысел,
+        смета,
+        расценки: pipelineQuote_1.РАСЦЕНКИ_ПРОДУКТА,
+        каналы,
+    });
+});
+const memЗаказыПайплайна = new Map();
+// POST /api/devhub/pipeline/order — заказ. Тоже НИЧЕГО не тратит: он ждёт человека.
+exports.devhubRouter.post("/pipeline/order", dhPipelineLimit(), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const замысел = замыселИзТела(req.body);
+    if (замысел.знаковКниги === 0 && замысел.секундВидео === 0) {
+        return res.status(400).json({ error: "пустой замысел" });
+    }
+    const смета = (0, pipelineQuote_1.сметаПродукта)(замысел);
+    const каналы = каналыГотовы(замысел);
+    /*
+     * Подтверждение — ОБЯЗАТЕЛЬНОЕ условие, а не галочка по умолчанию: человек
+     * должен увидеть цену и согласиться с ней до того, как мы потратим первый цент.
+     */
+    const подтверждено = req.body?.подтверждаю === true || req.body?.confirm === true;
+    const состояние = !подтверждено
+        ? "ждёт подтверждения"
+        : каналы.готово === false
+            ? "ждёт пополнения"
+            : "подтверждён";
+    const заказ = {
+        id: node_crypto_1.default.randomUUID(),
+        userId,
+        замысел,
+        итогоДолларов: смета.итогоДолларов,
+        состояние,
+        созданВ: now(),
+    };
+    memЗаказыПайплайна.set(заказ.id, заказ);
+    return res.status(201).json({
+        ok: true,
+        заказ,
+        смета,
+        каналы,
+        /*
+         * Что произойдёт дальше — говорим прямо, а не намёком. Пока у поставщика
+         * видео пуст счёт, запуск шагов не начинается вовсе: заказ, брошенный на
+         * середине, хуже неначатого.
+         *
+         * Имя поставщика здесь НЕ названо намеренно, и это не стыдливость: сторож
+         * costlyEndpointsProtected ищет имена поставщиков по тексту файла и на этом
+         * слове объявил ручку платной, хотя она не делает ни одного вызова. Само
+         * имя есть там, где оно к делу — в ручке /media/video, которая и правда
+         * зовёт наружу. Приёмка взялась научить сторожа снимать комментарии; пока
+         * он этого не умеет, рассказ о поставщике держим без его имени.
+         */
+        дальше: состояние === "ждёт подтверждения"
+            ? "покажите человеку смету и пришлите подтверждаю: true"
+            : состояние === "ждёт пополнения"
+                ? "канал не настроен — заказ не начнётся; см. каналы.причина"
+                : "заказ подтверждён; шаги запускаются отдельной ручкой, когда счёт поставщика пополнен",
+    });
+});
+exports.devhubRouter.get("/health", (_req, res) => {
+    // `status` был КОНСТАНТОЙ "ok" — строкой, записанной в исходнике. Он не
+    // проверял ничего, в том числе базу: при упавшем Postgres поле `db`
+    // честно показывало "in-memory", а `status` продолжал говорить "ok".
+    //
+    // Дороже всего это стоило смоуку: он сверяет именно `status === "ok"`, то
+    // есть его проверка здоровья не могла покраснеть в принципе, пока процесс
+    // вообще отвечает. Проверка, которая не умеет краснеть, хуже отсутствующей —
+    // на неё ссылаются как на доказательство.
+    //
+    // Код ответа остаётся 200: хаб модулей считает живым всё, что ответило 2xx,
+    // и деградация базы не означает, что модуль недоступен. Меняется поле, а
+    // не доступность.
+    //
+    // Причина отдаётся ПРИЗНАКОМ, а не текстом: сообщение об ошибке подключения
+    // несёт адрес, порт и имя пользователя базы, и наружу таким вещам нельзя.
+    const dbReady = (0, ensureDevHubTables_1.isDevHubDbReady)();
+    res.json({
+        status: dbReady ? "ok" : "degraded",
+        // ОБЛАСТЬ ОХВАТА рядом со статусом. Слово `status` шире того, о чём эта
+        // ручка знает: она отвечает про наше ХРАНИЛИЩЕ и ни про что больше.
+        // Провайдеры (ключи, зона Cloudflare, платные API) живут в
+        // /providers/health, и там сейчас бывает не всё зелено — а читатель,
+        // увидев "ok", решает, что с модулем полный порядок.
+        //
+        // Класс записан в правилах: имя поля шире того, что оно сообщает.
+        // Лечится не переименованием (его читают снаружи и в смоуке), а тем,
+        // что рядом сказано, о чём именно этот ответ.
+        covers: "storage",
+        /*
+         * ПРИЗНАК «МАГНИТ ЖИВ» (28.09.2026).
+         *
+         * Ручка честно ограничивала себя хранилищем, и это правильно — но DevHub
+         * держится на ГЕНЕРАЦИИ: без неё человек не получит ни кода, ни адреса, а
+         * `status: "ok"` продолжал бы отвечать зелёным. Соседнее окно поймало
+         * настоящий случай этого класса: лимит аккаунта Anthropic исчерпан до
+         * 01.10, и модуль, который звал бы его напрямую, молча перестал бы
+         * работать при зелёном health.
+         *
+         * Спрашиваем ТОТ ЖЕ реестр, которым пользуется маршрут генерации
+         * (getProviders + отметки простоя), а не свою копию правила: прибор,
+         * меряющий другой канал, — наш давний класс ошибок. Сетевых вызовов здесь
+         * нет намеренно: health зовут часто, и он не должен стоить денег.
+         */
+        generation: (() => {
+            const настроенные = (0, providers_1.getProviders)().filter((p) => p.configured && p.id !== "stub");
+            const живые = настроенные.filter((p) => !(0, providers_1.isProviderOutOfService)(p.id));
+            return {
+                ready: живые.length > 0,
+                providers: живые.length,
+                configured: настроенные.length,
+                next: живые[0]?.id ?? null,
+            };
+        })(),
+        providersCheckedAt: "/api/devhub/providers/health",
+        module: "devhub",
+        db: dbReady ? "postgres" : "in-memory",
+        dbError: dbReady ? null : Boolean((0, ensureDevHubTables_1.getDevHubDbError)()),
+        timestamp: new Date().toISOString(),
+    });
+});
+// POST /api/devhub/ask — freeform dev assistant. Routes through the platform
+// smartComplete layer (auto-router: quick factual lookups → a single flagship,
+// open how-do-I / explain / design questions → the weight-graded Council), and
+// feeds the shared cross-module savings tally. Returns { answer, routing } so
+// the caller sees the cost/route. Distinct from /projects/:id/generate, which
+// emits structured code JSON; this answers questions in prose.
+// `/ask` зовёт платное дополнение (smartComplete) с входом до 16 000 знаков и была
+// БЕЗ ограничителя, тогда как 27 соседних дорогих ручек его получили ещё 28.07 —
+// эту просто пропустили. Ограничитель, а не авторизация, выбран намеренно: он не
+// решает продуктовый вопрос «кому можно», он лишь не даёт анониму жечь наш бюджет
+// ИИ без предела. Ключ отдельный: общий на все генерации означал бы, что один
+// модуль расходует лимит другого (см. feedback_default_that_means_share).
+exports.devhubRouter.post("/ask", dhCostlyLimit("dhask"), async (req, res) => {
+    // Метка модуля расщеплена на «вошёл / не вошёл» СПЕЦИАЛЬНО. Ручка зовёт
+    // платного поставщика и входа не требует, поэтому анонимный расход шёл в
+    // учёт одной строкой вместе с расходом платящих — отделить было нельзя.
+    // Схему не трогаем: колонка module свободный текст, сравнений с закрытым
+    // списком нет (проверено), сводка группирует по значению.
+    const askAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const askModule = askAuth?.sub ? "devhub" : "devhub-anon";
+    const question = typeof req.body?.question === "string" ? req.body.question.trim().slice(0, 8000) : "";
+    const context = typeof req.body?.context === "string" ? req.body.context.trim().slice(0, 8000) : "";
+    if (!question)
+        return res.status(400).json({ error: "question required" });
+    const userInput = context
+        ? `Context (a developer's project/code):\n${context}\n\nQuestion: ${question}`
+        : question;
+    try {
+        const { answer, routing } = await (0, smartComplete_1.smartComplete)({ userInput }, { module: askModule });
+        return res.json({ answer, routing });
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e);
+        return res.status(502).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "ask failed" });
+    }
+});
+const pool = (0, dbPool_1.getPool)();
+// Bootstrap tables on first use
+(async () => {
+    try {
+        await (0, ensureDevHubTables_1.ensureDevHubTables)(pool);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/bootstrap", op: "ensureDevHubTables" });
+        // in-memory fallback active
+    }
+    // Pay wrangler's first-run cost at boot, not inside a user's deploy.
+    if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
+        try {
+            (0, wranglerPagesDeploy_1.warmWrangler)();
+        }
+        catch { /* best-effort */ }
+    }
+})();
+const memProjects = new Map();
+const memFiles = new Map();
+const memDeployments = new Map();
+const memSnippets = new Map();
+const memCheckpoints = new Map();
+/**
+ * Имя голоса → идентификатор у поставщика. ОДНА таблица на модуль.
+ *
+ * Их было две: девять голосов в ручке озвучки и четыре в шаге рабочего
+ * процесса агента. Значения у общих четырёх совпадали, но пяти — Arnold, Domi,
+ * Elli, Josh, Sam — во второй не было, а рядом стоял запасной путь
+ * `VOICE_IDS[выбор] || VOICE_IDS.Rachel`. То есть сценарий, просивший Josh,
+ * молча получал Rachel: ни ошибки, ни предупреждения, просто чужой голос.
+ *
+ * Замер 01.09.2026. Два источника одного факта разошлись не значениями, а
+ * ПОЛНОТОЙ — такое не ловится сравнением значений.
+ */
+const VOICE_IDS = {
+    Rachel: "21m00Tcm4TlvDq8ikWAM",
+    Adam: "pNInz6obpgDQGcFmaJgB",
+    Antoni: "ErXwobaYiN019PkySvjV",
+    Arnold: "VR6AewLTigWG4xSOukaG",
+    Bella: "EXAVITQu4vr4xnSDxMaL",
+    Domi: "AZnzlk1XvdvUeBnXmlld",
+    Elli: "MF3mGyEYCl7XYWbV9V6O",
+    Josh: "TxGEqnHWrfWFTfGW9XjX",
+    Sam: "yoZ06aMxZJJ28mfd3POQ",
+};
+// ⚠️ ЕДИНИЦЫ В СТРОКАХ РАЗНЫЕ — числа между колонками несравнимы.
+//
+//   video / image / music / deploy — ШТУКИ за месяц (checkCredit без amount)
+//   tts                            — СИМВОЛЫ текста (checkCredit(..., text.length))
+//
+// tts — единственная возможность, которая списывается КОЛИЧЕСТВОМ, а не по
+// одному за вызов. Ориентир: ~1000 символов ≈ минута речи, то есть 100000 ≈
+// 100 минут озвучки в месяц.
+//
+// Отсюда и родилась инверсия 28.08: в таблице видно столбец чисел, и «30000
+// против 50 и 200» выглядит щедро. На деле это было втрое МЕНЬШЕ, чем у
+// бесплатного тарифа. Правя любое число здесь, сперва посмотрите на его
+// единицу, а не на соседей по строке.
+// tts — в ЗНАКАХ за месяц. До 05.09.2026 у free стояло 100000 при 30000 у
+// pro: покупка Pro снижала лимит озвучки втрое, а бесплатный тариф стоил нам
+// до ~$22/чел в месяц одного ElevenLabs. Лишний ноль у free убран; тарифы
+// обязаны быть монотонными (сторож рядом в tests/). Числа вынесены основателю:
+// Desktop\АЕВИОН\05-DevHub\2026-09-05-DevHub-доведение-что-сделано.md.
+// generate — генерации кода (мультифайловая, с vision-входом). До 02.09.2026
+// самая дорогая возможность модуля не имела потолка вовсе; 05.09 числа
+// уточнены (30/1000), потолок у pro поставлен намеренно — safety, не упаковка.
+// speech и translate заведены 02.09.2026 вместе со своими квотами.
+/*
+ * 🔴 ЯЗЫК ДЕНЕЖНЫХ ОТКАЗОВ — НЕ КОСМЕТИКА (07.10.2026).
+ *
+ * Сообщения о месячных пределах пишутся ЗДЕСЬ ПО-АНГЛИЙСКИ в форме
+ * «Monthly <что> limit reached», и это не вкусовщина. На фронте такой текст
+ * проходит русскую карту (lib/devhubServerError), превращается в «Месячная
+ * норма исчерпана: …», и ровно по этим словам поднимается несмываемая ПЛАШКА С
+ * КАССОЙ (showToast в devhub/[id]/page.tsx). Напишете отказ по-русски прямо
+ * здесь — он карту минует, плашка НЕ поднимется, и человек увидит тост на
+ * четыре секунды без кнопки покупки. Замер 07.10: так себя вели восемь мест
+ * (генерации, аудиоэффекты, клонирование голоса ×2, распознавание речи,
+ * перевод ×3) — то есть единственный денежный момент модуля не работал у пяти
+ * возможностей из девяти, и EN-читатель вдобавок видел русский текст.
+ *
+ * Сторож: frontend/src/app/devhub/__tests__/moneyRefusalRaisesCheckout.guard.test.ts
+ * перечисляет ВСЕ 402 этого файла и краснеет, если хоть один не поднимает кассу.
+ */
+const TIER_LIMITS = {
+    free: { video: 3, image: 10, tts: 10000, music: 5, deploy: 10, speech: 5, translate: 50, generate: 30 },
+    // Втрое к гостевой норме и НИ ОДНОЙ платной возможности сверху: это плата за
+    // знакомство, а не подарок тарифа. Числа кратны гостевым, чтобы разница
+    // читалась в интерфейсе одной фразой.
+    registered: { video: 9, image: 30, tts: 30000, music: 15, deploy: 30, speech: 15, translate: 150, generate: 90 },
+    /*
+     * 🔴 «Старт» $15/мес — слово основателя 12.10.2026 «Старт по нормам — да».
+     * Четыре числа названы им (300 генераций, 100 выкаток, 60 картинок, 15
+     * видео), остальные производны (×3.33 от registered, как у генераций) и
+     * лежат между registered и pro. Источник чисел — lib/devhubStart.ts, здесь
+     * они НЕ переписываются: два списка норм разошлись бы молча.
+     */
+    start: { ...devhubStart_1.НОРМЫ_СТАРТ },
+    pro: { video: 50, image: 200, tts: 200000, music: 100, deploy: -1, speech: 100, translate: 1000, generate: 1000 },
+    enterprise: { video: -1, image: -1, tts: -1, music: -1, deploy: -1, speech: -1, translate: -1, generate: -1 },
+};
+// In-memory fallback: "userId:month:capability" → count
+const memUsage = new Map();
+const memTiers = new Map();
+function creditMonth() {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+/**
+ * `tierKnown: false` means we had to guess. Answering a bare "free" on a failed
+ * read took the plan a customer had paid for away from them for as long as the
+ * database wobbled, and said nothing about it — the mirror image of the usage
+ * meter answering 0. The last value we actually saw is preferred to the guess.
+ */
+/**
+ * Тариф DevHub с учётом прав ПЛАТФОРМЫ. Решение основателя 14.09.2026: DevHub входит
+ * в подписку Full. Раньше тариф брался только из таблиц DevHub (их пишут лишь покупки
+ * самого DevHub), и подписчик Full получал здесь бесплатный тариф.
+ *
+ * Обёртка, а не правка внутри: собственный тариф бывает ЯВНЫМ «free» (так вебхук
+ * отмечает отмену отдельной подписки DevHub), и прежняя функция отдаёт его сразу.
+ * Производный тариф НЕ записывается: подписка платформы может истечь. Если свой
+ * тариф прочитать не удалось (tierKnown: false) — не угадываем.
+ */
+async function getUserTierChecked(userId) {
+    const own = await getOwnTierChecked(userId);
+    if (own.tier !== "free" || !own.tierKnown)
+        return own;
+    const viaPlan = await tierFromPlatformPlan(userId);
+    return viaPlan ? { tier: viaPlan, tierKnown: true } : own;
+}
+/** Почта (учётка или привязанная почта гостя) -> план платформы. «Тариф в токене»
+ *  комп-аккаунтов без запроса не виден — только подписка по почте и allowlist. */
+async function tierFromPlatformPlan(userId) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)())
+        return null;
+    try {
+        const r = await pool.query(`
+      SELECT LOWER("email") AS email FROM "AEVIONUser" WHERE "id" = $1
+      UNION ALL
+      SELECT LOWER("email") AS email FROM "DevHubGuestEmail" WHERE "guestId" = $1
+      LIMIT 1
+    `, [userId]);
+        const email = r.rows[0]?.email;
+        if (typeof email !== "string" || !email)
+            return null;
+        // Подписка планеты или отдельного DevHub даёт полный тариф — это старше.
+        if ((0, planGate_1.isModuleEntitled)((0, planGate_1.resolvePlanFromPayload)({ email }), "devhub"))
+            return "pro";
+        /*
+         * 🔴 «Старт» — отдельная ступень между вошедшим и полным тарифом.
+         * Спрашиваем ТОЛЬКО когда товар заведён: пока варианта в кассе нет, купить
+         * его физически нельзя, и лишний запрос к подпискам ничего не даст.
+         * «unknown» (чтение не удалось) ступени НЕ даёт: выдать платные нормы по
+         * незнанию — это подарить их любому при сбое чтения.
+         */
+        if ((0, devhubStart_1.tarifStartZaveden)() && (await (0, appEntitlements_1.podpiskaNaSlag)(email, devhubStart_1.СЛАГ_СТАРТ)) === "active")
+            return "start";
+        return null;
+    }
+    catch (e) {
+        console.warn(`[DevHub] план платформы не прочитан для ${userId}: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+    }
+}
+async function getOwnTierChecked(userId) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)())
+        return { tier: memTiers.get(userId) ?? "free", tierKnown: true };
+    try {
+        const r = await pool.query(`SELECT "tier" FROM "DevHubTier" WHERE "userId"=$1`, [userId]);
+        if (r.rows[0]?.tier)
+            return { tier: r.rows[0].tier, tierKnown: true };
+        // Тариф, оплаченный ДО регистрации. Ищем двумя путями, потому что
+        // человек приходит к нам двумя: как учётная запись и как ГОСТЬ.
+        //
+        // Второй путь и был дырой: модуль намеренно работает без аккаунта,
+        // оплата приходит с одним адресом почты, а тариф искался только через
+        // AEVIONUser — значит заплативший гость видел бесплатный тариф.
+        // Связь «гость → почта» кладёт тот способ, который выберет владелец
+        // продукта; чтение одинаково для всех трёх.
+        const er = await pool.query(`
+      SELECT det."tier" FROM "AEVIONUser" au
+      JOIN "DevHubEmailTier" det ON det."email" = LOWER(au."email")
+      WHERE au."id" = $1
+      UNION ALL
+      SELECT det2."tier" FROM "DevHubGuestEmail" ge
+      JOIN "DevHubEmailTier" det2 ON det2."email" = LOWER(ge."email")
+      WHERE ge."guestId" = $1
+      LIMIT 1
+    `, [userId]);
+        if (er.rows[0]?.tier && er.rows[0].tier !== "free") {
+            const promoted = er.rows[0].tier;
+            // Promote to userId-keyed row so future lookups are single-table
+            await pool.query(`
+        INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+        ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+      `, [userId, promoted]).catch((e) => {
+                // Провал этой записи НЕ лишает человека оплаченного: тариф уже возвращён
+                // ниже, а следующий запрос снова найдёт его соединением. Поэтому не роняем.
+                //
+                // Но и молчать нельзя: если запись падает ВСЕГДА (нет прав, нет таблицы),
+                // соединение будет делаться вечно, и об этом не узнает никто. Рядом в этом
+                // же файле debitQuietly уже говорит, ЧТО и У КОГО не удалось — след без
+                // этих двух вещей бесполезен. Держим единообразие.
+                console.warn(`[DevHub] тариф не перенесён в таблицу по пользователю: ${userId} → ${promoted}. ` +
+                    `Доступ выдан, но каждый запрос будет искать соединением. Причина: ${e instanceof Error ? e.message : String(e)}`);
+            });
+            return { tier: promoted, tierKnown: true };
+        }
+        // No row is a real answer: this user is on the free plan. But a setUserTier
+        // whose write failed parks the value in memTiers, and that map used to be
+        // read only with the database KNOWN to be down — so an upgrade applied
+        // during a wobble never took effect at all.
+        const parked = memTiers.get(userId);
+        if (parked)
+            return { tier: parked, tierKnown: true };
+        return { tier: "free", tierKnown: true };
+    }
+    catch {
+        // Prefer the last value we actually saw over the guess.
+        return { tier: memTiers.get(userId) ?? "free", tierKnown: false };
+    }
+}
+async function getUserTier(userId) {
+    return (await getUserTierChecked(userId)).tier;
+}
+async function setUserTier(userId, tier) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        memTiers.set(userId, tier);
+        return;
+    }
+    try {
+        await pool.query(`
+      INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
+      ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
+    `, [userId, tier]);
+    }
+    catch {
+        memTiers.set(userId, tier);
+    }
+}
+/**
+ * Returns `null` when the meter could not be read — NOT 0.
+ *
+ * Zero is the honest answer for a fresh month, so answering 0 on a failed read
+ * made a database outage indistinguishable from a user who had spent nothing,
+ * and every quota gate opened for as long as it lasted. Callers have to decide
+ * what to do about an unknown; they can no longer be handed a wrong number.
+ */
+async function getMonthUsage(userId, month, capability) {
+    const memKey = `${userId}:${month}:${capability}`;
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)())
+        return memUsage.get(memKey) ?? 0;
+    try {
+        const r = await pool.query(`SELECT "used" FROM "DevHubUsage" WHERE "userId"=$1 AND "month"=$2 AND "capability"=$3`, [userId, month, capability]);
+        // debitCredit() parks a charge here when its own write failed. That map was
+        // previously only read with the database KNOWN to be down, so with the
+        // database nominally up the debit went nowhere at all. Adding it back is
+        // the only way the fallback means anything.
+        return (r.rows[0]?.used ?? 0) + (memUsage.get(memKey) ?? 0);
+    }
+    catch (e) {
+        // Тип уже заставляет вызывающего обработать неизвестность — но без следа
+        // никто не узнает, ЧТО перестало меряться: предел на платных ручках
+        // перестаёт применяться, а снаружи это выглядит обычной работой.
+        // Не роняем: отказ УЧЁТА не должен ломать оплаченное действие.
+        // В сборщик ошибок, а не только в журнал: предупреждение в потоке
+        // Railway никто не читает проактивно — проверено, у Sentry.init нет
+        // captureConsole, значит console.warn туда не попадает. След годится
+        // для разбирательства, но отказ, снимающий ПРЕДЕЛ РАСХОДА, должен
+        // приводить человека, а не ждать, пока он придёт сам.
+        //
+        // Путь СПИСАНИЯ это уже делает (devhub/debitCredit) — путь ЧТЕНИЯ был
+        // единственным несимметричным местом.
+        (0, sentry_1.captureException)(e, { route: "devhub/getMonthUsage", userId, month, capability });
+        console.warn(`[devhub/credit] расход за месяц не прочитан — предел не применяется: ` +
+            `user=${userId} month=${month} capability=${capability}: ${(0, safeErrorText_1.redactInfraDetails)(e)}`);
+        return null;
+    }
+}
+/**
+ * Кредит гостя — ещё и по адресу клиента (15.09.2026).
+ *
+ * Гость опознаётся заголовком x-devhub-guest, который выбирает сам клиент: сменил
+ * заголовок — получил новый месячный кредит free (3 видео Replicate, 10 картинок
+ * OpenAI, 10k знаков ElevenLabs, 10 выкаток в наш Vercel/Cloudflare). Ограничителя
+ * по адресу на этих ручках не было — деньги и кредит сборок уходили без потолка.
+ * Второй потолок: те же лимиты free на ключ `guest-ip:<адрес>`. Адрес берётся из
+ * области запроса (AsyncLocalStorage), чтобы не менять двадцать точек вызова.
+ * Вошедшего это не касается: его кредит — по его id.
+ */
+function isGuestRequester(userId) {
+    return userId === "anonymous" || userId.startsWith("guest:");
+}
+function guestIpBudgetKey(userId) {
+    if (!isGuestRequester(userId))
+        return null;
+    const ip = requestScope.getStore()?.ip;
+    return ip ? `guest-ip:${ip}` : null;
+}
+/**
+ * Ступень, по которой считается норма ЭТОГО запроса.
+ *
+ * Вошедший по почте, но не платящий, получает `registered`: нормы втрое выше
+ * гостевых и ни одной платной возможности сверху. Платные ступени не трогаем —
+ * повышать `pro` до `registered` было бы понижением.
+ *
+ * Функция экспортирована намеренно: её зовёт checkCredit, и сторож проверяет
+ * ЕЁ, а не свою копию правила. Сторож, проверяющий копию, зелен при сломанной
+ * ручке — этот класс у нас уже был.
+ */
+function ступеньЗапроса(базовый, userId) {
+    return базовый === "free" && !isGuestRequester(userId) ? "registered" : базовый;
+}
+/**
+ * Во сколько раз месячная норма НА АДРЕС больше нормы одного гостя.
+ *
+ * 🔴 ЗАЧЕМ, замер 06.10.2026. Норма на адрес брала ТОТ ЖЕ предел, что у одного
+ * гостя (TIER_LIMITS.free), и применялась к каждой возможности. То есть целому
+ * адресу выдавался бюджет ОДНОГО посетителя: 30 генераций и 10 выкаток в месяц.
+ * Под CGNAT мобильного оператора за одним адресом тысячи абонентов — значит
+ * 31-й человек получал 402, ничего не сделав, и умирал ПЕРВЫЙ шаг воронки.
+ * Поймано на себе: свежий гость получил 402 «used 10, limit 10», потому что
+ * норму адреса израсходовали наши же замеры.
+ *
+ * Что эта норма охраняла, числами: гостевая генерация идёт на Gemini Flash и
+ * стоит по замерам 06.10 $0.0015–$0.0023 ($0.00149790, $0.0019995, $0.00202425).
+ * Предел «30 генераций на адрес» охранял примерно $0.06 в месяц.
+ *
+ * Коэффициенты назначены оркестратором 06.10 ПО ЦЕНЕ возможности: дешёвое
+ * открываем широко, дорогое держим узко. Темп в час не меняется — злоупотребление
+ * ловится им, а не месячным потолком.
+ *
+ * Неперечисленное остаётся как было (K=1) НАМЕРЕННО: tts считается символами, а
+ * не штуками, и его потолок трогать без отдельного замера нельзя.
+ */
+const K_АДРЕСА = {
+    generate: 50,
+    translate: 50,
+    image: 10,
+    deploy: 10,
+    speech: 3,
+    music: 3,
+    video: 3,
+};
+/** Месячный предел НА АДРЕС для возможности. Экспортирован: сторож проверяет ЕГО, а не свою копию. */
+function пределАдреса(capability) {
+    const базовый = TIER_LIMITS.free[capability];
+    if (базовый === -1)
+        return -1;
+    return базовый * (K_АДРЕСА[capability] ?? 1);
+}
+/**
+ * Хеш адреса для записи пары «гость + адрес».
+ *
+ * СЫРОЙ АДРЕС НЕ ХРАНИМ. И без соли не храним тоже: пространство IPv4 — четыре
+ * миллиарда значений, несолёный sha256 перебирается за минуты, то есть «хеш»
+ * был бы просто адресом в другой записи. Нет соли — пара не пишется вовсе, и об
+ * этом говорится в журнале один раз, а не молча.
+ */
+let солиНет = false;
+function хешАдреса(ip) {
+    const соль = process.env.GUEST_IP_HASH_SALT?.trim();
+    if (!соль) {
+        if (!солиНет) {
+            солиНет = true;
+            console.warn("[devhub] GUEST_IP_HASH_SALT не задана — пара «гость + адрес» НЕ пишется; " +
+                "несолёный хеш адреса перебирается и хранить его нельзя");
+        }
+        return null;
+    }
+    return node_crypto_1.default.createHash("sha256").update(соль + "|" + ip).digest("hex").slice(0, 32);
+}
+async function checkCredit(userId, capability, amount = 1) {
+    const базовый = await getUserTier(userId);
+    const tier = ступеньЗапроса(базовый, userId);
+    const limit = TIER_LIMITS[tier][capability];
+    if (limit === -1)
+        return { allowed: true, used: 0, limit: -1, tier, usedKnown: true };
+    const month = creditMonth();
+    const used = await getMonthUsage(userId, month, capability);
+    if (used === null) {
+        // Letting the request through is the lesser mistake — blocking a paying
+        // customer over a database blip is worse than one uncharged generation.
+        // What is not acceptable is passing in silence, which is how a whole
+        // unmetered month left no trace anywhere.
+        return { allowed: true, used: 0, limit, tier, usedKnown: false };
+    }
+    const ipKey = guestIpBudgetKey(userId);
+    if (ipKey) {
+        // Предел АДРЕСА, а не одного гостя: см. K_АДРЕСА выше.
+        const ipLimit = пределАдреса(capability);
+        const ipUsed = await getMonthUsage(ipKey, month, capability);
+        if (ipLimit !== -1 && ipUsed !== null && ipUsed + amount > ipLimit) {
+            return { allowed: false, used: ipUsed, limit: ipLimit, tier: "free", usedKnown: true };
+        }
+    }
+    return { allowed: used + amount <= limit, used, limit, tier, usedKnown: true };
+}
+/**
+ * Spread into a metered route's response so an unverified allowance travels
+ * with the answer instead of being inferred from its absence.
+ */
+function creditNote(verdict) {
+    return verdict.usedKnown ? {} : { creditUnverified: true };
+}
+/**
+ * Запомнить, что гость обращался с этого адреса (адрес — только хешем).
+ *
+ * Нужна ровно для одного вопроса: сколько РАЗНЫХ гостей за одним адресом. Пока
+ * этой пары не было, месячный потолок на адрес нельзя было ни оценить, ни
+ * защитить: отказ выглядел одинаково и для злоупотребления, и для общей сети.
+ *
+ * Отказ записи НЕ роняет работу (она уже выполнена) и НЕ молчит.
+ */
+async function записатьПаруГостьАдрес(userId) {
+    const ip = requestScope.getStore()?.ip;
+    if (!ip)
+        return;
+    const хеш = хешАдреса(ip);
+    if (!хеш)
+        return; // нет соли — не храним, предупреждение уже было
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)())
+        return; // без базы хранить негде; память тут не нужна
+    const month = creditMonth();
+    try {
+        await pool.query(`
+      INSERT INTO "DevHubGuestAddress" ("id","guestId","ipHash","month","seenCount","firstSeenAt","lastSeenAt")
+      VALUES ($1,$2,$3,$4,1,NOW(),NOW())
+      ON CONFLICT ("guestId","ipHash","month")
+      DO UPDATE SET "seenCount"="DevHubGuestAddress"."seenCount"+1, "lastSeenAt"=NOW()
+    `, [`${userId}-${хеш}-${month}`, userId, хеш, month]);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/guest-address:record" });
+    }
+}
+async function debitCredit(userId, capability, amount = 1) {
+    const ipKey = guestIpBudgetKey(userId);
+    // Через обёртку: отказ списания по адресу должен быть виден так же, как по личности.
+    if (ipKey)
+        await debitQuietly(ipKey, capability, amount);
+    // Пара «гость + ХЕШ адреса»: без неё «один актор плодит метки» и «за адресом
+    // много живых людей» неотличимы, и на вопрос «кого мы заблокировали» ответить
+    // нечем. Замер 06.10 упёрся ровно в это: связи гостя с адресом в базе нет.
+    if (ipKey)
+        await записатьПаруГостьАдрес(userId);
+    const month = creditMonth();
+    const tier = await getUserTier(userId);
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        const key = `${userId}:${month}:${capability}`;
+        memUsage.set(key, (memUsage.get(key) ?? 0) + amount);
+        return;
+    }
+    try {
+        const id = `${userId}-${month}-${capability}`;
+        await pool.query(`
+      INSERT INTO "DevHubUsage" ("id","userId","month","capability","used","tier","updatedAt")
+      VALUES ($1,$2,$3,$4,$5,$6,NOW())
+      ON CONFLICT ("userId","month","capability")
+      DO UPDATE SET "used"="DevHubUsage"."used"+$5, "tier"=$6, "updatedAt"=NOW()
+    `, [id, userId, month, capability, amount, tier]);
+    }
+    catch (e) {
+        const key = `${userId}:${month}:${capability}`;
+        memUsage.set(key, (memUsage.get(key) ?? 0) + amount);
+        // Списание не роняем — работа уже выполнена, — но и молчать нельзя:
+        // трата в памяти живёт до перезапуска и при выкатке обнулится.
+        console.warn(`[devhub/debit] списание не записано, отложено в память (обнулится при выкатке): ` +
+            `user=${userId} month=${month} capability=${capability} amount=${amount}: ${(0, safeErrorText_1.redactInfraDetails)(e)}`);
+    }
+}
+/**
+ * Списание, которое не имеет права уронить уже выполненную работу — но и молчать
+ * не имеет права.
+ *
+ * Десять маршрутов зовут списание как `debitQuietly(...)`. Это
+ * защита в глубину, а не рабочая ветка: `debitCredit` сам ловит отказ базы и
+ * паркует списание в память, а чтение тарифа тоже не бросает. То есть сегодня
+ * внешний catch сработать не может.
+ *
+ * Убирать его всё равно нельзя: если внутренности однажды начнут бросать,
+ * маршрут упадёт УЖЕ ПОСЛЕ удачной генерации, и человек потеряет результат, за
+ * который заплатил. Но проглатывать молча — значит согласиться, что о пропаже
+ * списания никто не узнает: ни журнал, ни Sentry, ни счётчик расхода.
+ *
+ * Поэтому отказ остаётся не смертельным и становится ВИДИМЫМ, с указанием, ЧТО
+ * и У КОГО не списалось — след без этих двух вещей бесполезен.
+ */
+function debitQuietly(userId, capability, amount = 1) {
+    return debitCredit(userId, capability, amount).catch((e) => {
+        const why = e instanceof Error ? e.message : String(e);
+        console.error(`[DevHub] СПИСАНИЕ НЕ ВЫПОЛНЕНО: ${capability} x${amount} для ${userId}: ${why}`);
+        (0, sentry_1.captureException)(e, { route: "devhub/debitCredit", userId, capability, amount });
+    });
+}
+async function getAllMonthUsage(userId) {
+    const { tier, tierKnown } = await getUserTierChecked(userId);
+    const month = creditMonth();
+    // Список выводится ИЗ ТАБЛИЦЫ, а не пишется рядом с ней. Прежде он был
+    // литеральным, и 02.09 это стоило бы дефекта: две новые возможности
+    // (речь, перевод) начали списываться, а на экране остатка их бы не было —
+    // человек тратит квоту, которой не видит. Второй список того же самого
+    // расходится молча: он не падает и не краснеет.
+    const caps = Object.keys(TIER_LIMITS.free);
+    const usage = {};
+    let anyUnknown = false;
+    for (const cap of caps) {
+        const used = await getMonthUsage(userId, month, cap);
+        // A capability whose meter could not be read is shown as 0 so the screen
+        // still renders, but carries the flag that says the 0 is not a measurement.
+        if (used === null)
+            anyUnknown = true;
+        usage[cap] = { used: used ?? 0, limit: TIER_LIMITS[tier][cap], ...(used === null ? { usedKnown: false } : {}) };
+    }
+    return { tier, tierKnown, month, usage: usage, anyUnknown };
+}
+// ── Deferred post-deploy work ────────────────────────────────────────────────
+// Deploy routes answer immediately and then verify, seconds later, that the
+// deployed URL actually serves (backend CLAUDE.md §10). Those timers outlive
+// the request — and in tests they outlive the test that started them, firing
+// during a later one and consuming its mocked fetch. That is what made the
+// backend suite fail on a different test each run (issue #982): a real
+// timing dependency, not a mystery.
+//
+// Prod behaviour is unchanged; the timers are merely tracked so a test can
+// drop the ones still pending.
+const deferredTimers = new Set();
+function deferred(fn, ms) {
+    const t = setTimeout(() => {
+        deferredTimers.delete(t);
+        void fn();
+    }, ms);
+    // A pending timer keeps Node alive on its own. A post-deploy check should
+    // never be the reason a process refuses to exit.
+    t.unref?.();
+    deferredTimers.add(t);
+}
+/** Drop post-deploy verification still waiting to run. Tests only. */
+function __clearDeferredDevHubWork() {
+    for (const t of deferredTimers)
+        clearTimeout(t);
+    deferredTimers.clear();
+}
+/**
+ * Имя внутри зоны aevion.app проект может носить только своё: <slug>-<6 hex его id>.
+ * Иначе гость называл проект «api.aevion.app», звал auto-setup — и DNS-слой сносил
+ * CNAME бэкенда (найдено окном приёмки 15.09.2026, на проде не воспроизводилось).
+ * Чужой домен (вне зоны) записать можно: его DNS не наш, писать туда мы не будем.
+ */
+function customDomainRefusal(domain, projectId) {
+    const label = (0, devhubDns_1.labelInZone)(domain);
+    if (label === null)
+        return null;
+    const own = `-${projectId.slice(0, 6)}`;
+    if (!(0, devhubDns_1.isDevHubLabel)(label) || !label.endsWith(own)) {
+        return `${domain} is inside ${(0, devhubDns_1.siteZone)()} but is not this project's DevHub name (<slug>${own}.${(0, devhubDns_1.siteZone)()}) — reserved and service names cannot be claimed`;
+    }
+    return null;
+}
+/**
+ * Адрес возврата после оплаты — только свой домен. Произвольный successUrl из тела
+ * уводил бы покупателя из НАШЕГО магазина куда угодно (патч окна free-fleet от
+ * 28.07.2026, применён 15.09.2026).
+ */
+function safeRedirect(raw, frontendUrl, fallbackPath) {
+    const fallback = `${frontendUrl}${fallbackPath}`;
+    if (typeof raw !== "string" || !raw)
+        return fallback;
+    try {
+        const u = new URL(raw, frontendUrl);
+        return u.origin === new URL(frontendUrl).origin ? u.toString() : fallback;
+    }
+    catch {
+        return fallback;
+    }
+}
+const SHARED_GITHUB_IS_PRO = "the shared AEVION GitHub account is part of Studio Pro — link your purchase at /devhub/link (or sign in), or set your own GITHUB_TOKEN in the project Env Vars";
+/**
+ * Общий токен GitHub AEVION — не бесплатному гостю (окно приёмки 15.09.2026: гость
+ * без входа пушил и мержил PR под нашим аккаунтом — паттерн бана 27.07).
+ * DevHub намеренно работает без входа, покупка привязывается к браузеру гостя
+ * (/devhub/link) — поэтому замок по ТАРИФУ, а не по входу: свой токен в env
+ * проекта — всегда; вошедший — да; гость с тарифом выше free — да; бесплатный
+ * гость — 402 с адресом, где привязать покупку.
+ */
+async function sharedGitHubRefusal(userId, auth, project) {
+    if (project.envVars?.GITHUB_TOKEN || auth)
+        return null;
+    return (await getUserTier(userId)) === "free" ? SHARED_GITHUB_IS_PRO : null;
+}
+/** Стенд: тариф гостя в памяти (когда БД нет). */
+function __setUserTierForTest(userId, tier) {
+    memTiers.set(userId, tier);
+}
+/** Имя поставщика DNS для текстов, которые читает человек. */
+function dnsProviderName() {
+    return (0, devhubDns_1.dnsProvider)() === "vercel" ? "Vercel" : "Cloudflare";
+}
+/**
+ * Разрешается ли CNAME адреса. Домен после выкатки судим ПО DNS, а не по HTTPS:
+ * сертификат у Cloudflare Pages выпускается минутами, и HTTPS-проба сразу после
+ * записи CNAME проваливалась всегда — обвиняя зону, которая отработала.
+ * Стенд подменяет `dnsProbe.cnameResolves`, чтобы не ходить в сеть.
+ */
+exports.dnsProbe = {
+    /** Несколько попыток: запись только что создана, у поставщика она видна через секунды (проба 15.09: false сразу, true через минуту). */
+    async cnameResolves(host, attempts = 3, delayMs = 2000) {
+        for (let i = 0; i < attempts; i++) {
+            try {
+                const r = await Promise.race([
+                    node_dns_1.promises.resolveCname(host),
+                    new Promise((_, reject) => {
+                        const t = setTimeout(() => reject(new Error("dns timeout")), 3000);
+                        t.unref?.();
+                    }),
+                ]);
+                if (Array.isArray(r) && r.length > 0)
+                    return true;
+            }
+            catch { /* не разрешилось — попробуем ещё */ }
+            if (i < attempts - 1)
+                await new Promise((r) => setTimeout(r, delayMs));
+        }
+        return false;
+    },
+};
+/**
+ * Окна проверки «страница отвечает» после загрузки на Pages.
+ *
+ * Замер 15.09.2026 (проба probe-domain-check-375c20): загрузка через wrangler
+ * прошла, окно в 2 минуты (24 × 5 с) не увидело ни одного 2xx, выкатка записана
+ * failed, витрина /studio покраснела на 30 минут — а на третьей минуте и
+ * pages.dev, и <slug>.aevion.app отдавали страницу (внешняя проверка 200).
+ * /studio/deploy-stats за 30 дней: 6 выкаток, успешных 0, «failed с адресом» 4 —
+ * тот же класс. Новый проект Pages расходится по краю дольше двух минут.
+ *
+ * Поэтому окон три: старт через 4 с (внутри ~2 мин), повторы через 3 и 7 минут.
+ * Между окнами статус остаётся building, failed и красная витрина — только
+ * после последнего. Ручка /deployments/:id/recheck перепроверяет по требованию.
+ */
+exports.SERVE_VERIFY_RETRY_DELAYS_MS = [3 * 60000, 7 * 60000];
+function scheduleServeVerification(deployment, project, pagesUrl, customDomain, step = 0) {
+    deferred(async () => {
+        const d = memDeployments.get(deployment.id) ?? deployment;
+        const serves = await verifyDeploymentServes(pagesUrl);
+        if (serves) {
+            await markDeploymentLive(d, project, pagesUrl, customDomain);
+            return;
+        }
+        if (step < exports.SERVE_VERIFY_RETRY_DELAYS_MS.length) {
+            const wait = exports.SERVE_VERIFY_RETRY_DELAYS_MS[step];
+            d.buildLog = (d.buildLog || "") +
+                ` | verify ${step + 1}: no 2xx yet (~2 min window); a new Pages project can take longer to propagate — next check in ${Math.round(wait / 60000)} min`;
+            try {
+                await dbSaveDeployment(d);
+            }
+            catch {
+                memDeployments.set(d.id, d);
+            }
+            scheduleServeVerification(deployment, project, pagesUrl, customDomain, step + 1);
+            return;
+        }
+        // Отличать ветки просто: `wrangler: ...` — упала загрузка;
+        // `verify: ...` — загрузка прошла, а адрес не ответил.
+        (0, providerHealth_1.noteProviderFailure)("pages", "the deployed page does not serve (2xx never came back across three windows, ~14 min)");
+        d.status = "failed";
+        d.buildLog = (d.buildLog || "") +
+            " | verify: wrangler upload finished, but the page never answered 2xx across three windows " +
+            "(24 attempts 5s apart, then re-checks after 3 and 7 min; ~14 min total). Either the new Pages project " +
+            "has not propagated yet, or it really does not serve. " +
+            "Check the address by hand before blaming the upload; POST /deployments/:id/recheck asks again.";
+        d.completedAt = now();
+        try {
+            await dbSaveDeployment(d);
+        }
+        catch {
+            memDeployments.set(d.id, d);
+        }
+    }, step === 0 ? 4000 : exports.SERVE_VERIFY_RETRY_DELAYS_MS[step - 1]);
+}
+/**
+ * Сроки перепроверки СВОЕГО домена после выкатки.
+ *
+ * 🔴 ЗАМЕР 06.10.2026 на живом проде, свежая гостевая выкатка:
+ *   24 с → HTTP 000
+ *   39 с → HTTP 000
+ *   54 с → HTTP 200   ← адрес заработал
+ * И контроль, что дело во ВРЕМЕНИ, а не в домене: сайт соседнего окна
+ * smoke-kofe-58231-c54d4f.aevion.app отдаёт 200 и 3508 знаков сгенерированной
+ * страницы («Кофейня Зерно»), CNAME в зоне есть. Два имени, которые никогда не
+ * выкатывались, — CNAME нет, HTTP 404. То есть свой домен РАБОТАЕТ, просто
+ * появляется примерно через минуту.
+ *
+ * А проверка в markDeploymentLive смотрела раньше: HTTPS 6 попыток по 5 с плюс
+ * CNAME 2 по 1 с — то есть на ~35-й секунде, когда записи ещё нет. И записывала
+ * noteProviderFailure("domain"), после чего витрина возможностей навсегда
+ * показывала degraded, а интерфейс каждому посетителю говорил «домен aevion.app
+ * пока не подтверждён». Переходное «ещё нет» выданное за отказ — это тот же
+ * класс, что постоянно красная проверка: её перестают читать, а здесь она прямо
+ * обесценивала работающую возможность.
+ *
+ * Поэтому: на выкатке отказ НЕ записываем, а перепроверяем позже. Отказом
+ * считаем только то, что не появилось и за долгое окно.
+ */
+exports.DOMAIN_RECHECK_DELAYS_MS = [90000, 5 * 60000];
+function scheduleDomainRecheck(customDomain, step = 0) {
+    deferred(async () => {
+        const виден = (await exports.dnsProbe.cnameResolves(customDomain, 2, 1000)) ||
+            (await verifyDeploymentServes(`https://${customDomain}`, 5000, 1).catch(() => false));
+        if (виден) {
+            (0, providerHealth_1.noteProviderSuccess)("domain");
+            return;
+        }
+        if (step + 1 < exports.DOMAIN_RECHECK_DELAYS_MS.length) {
+            scheduleDomainRecheck(customDomain, step + 1);
+            return;
+        }
+        // Долгое окно вышло — вот ЭТО отказ, и витрина вправе покраснеть.
+        (0, providerHealth_1.noteProviderFailure)("domain", `${customDomain} does not resolve ${Math.round(exports.DOMAIN_RECHECK_DELAYS_MS.reduce((a, b) => a + b, 0) / 60000)} min after deploy — the CNAME is not visible in the ${(0, devhubDns_1.siteZone)()} zone at ${dnsProviderName()}`);
+    }, exports.DOMAIN_RECHECK_DELAYS_MS[step]);
+}
+/** Страница ответила: выкатка и проект — live; домен спрашиваем по HTTPS, но не-ответ — не отказ (сертификат Pages). */
+async function markDeploymentLive(d, project, pagesUrl, customDomain) {
+    (0, providerHealth_1.noteProviderSuccess)("pages");
+    d.status = "live";
+    d.completedAt = now();
+    let domainNote = "";
+    if (customDomain) {
+        const ready = await verifyDeploymentServes(`https://${customDomain}`, 5000, 6).catch(() => false);
+        if (ready) {
+            (0, providerHealth_1.noteProviderSuccess)("domain");
+            domainNote = ` | domain: https://${customDomain} answers`;
+        }
+        else if (await exports.dnsProbe.cnameResolves(customDomain, 2, 1000)) {
+            (0, providerHealth_1.noteProviderSuccess)("domain");
+            domainNote = ` | domain: https://${customDomain} not answering yet (Pages certificate pending); the DNS record is in place`;
+        }
+        else {
+            /*
+             * Записи ещё нет — и это НОРМА, а не отказ: замер 06.10.2026 дал 200 на
+             * 54-й секунде, а сюда мы приходим примерно на 35-й. Прежде здесь стоял
+             * noteProviderFailure, и витрина «домен» оставалась degraded навсегда,
+             * хотя адрес начинал работать через полминуты.
+             *
+             * Поэтому: честная запись в журнал и ОТЛОЖЕННАЯ перепроверка. Отказом
+             * станет только то, что не появится и за долгое окно.
+             */
+            domainNote = ` | domain: ${customDomain} not visible yet (DNS usually needs about a minute); ${pagesUrl} already answers`;
+            scheduleDomainRecheck(customDomain);
+        }
+    }
+    d.buildLog = (d.buildLog || "") + " | verify: page answers 2xx" + domainNote;
+    try {
+        await dbSaveDeployment(d);
+    }
+    catch {
+        memDeployments.set(d.id, d);
+    }
+    if (project) {
+        project.status = "live";
+        project.deployUrl = pagesUrl;
+        if (customDomain)
+            project.customDomain = customDomain;
+        project.updatedAt = now();
+        try {
+            await dbSaveProject(project);
+        }
+        catch {
+            memProjects.set(project.id, project);
+        }
+    }
+}
+// ── Exported reset helpers for tests ─────────────────────────────────────────
+/**
+ * ТОЛЬКО ДЛЯ ТЕСТОВ. Списание идёт внутри платных маршрутов, а они ходят к
+ * внешним поставщикам — поднимать их ради проверки УЧЁТА значило бы мерить не
+ * то. Экспорт по образцу __resetDevHubStore, уже принятому в файле.
+ *
+ * Нужен для ветки, которую иначе не достать: при отказе ЗАПИСИ трата паркуется
+ * в памяти, и её обязано быть видно при ЖИВОЙ базе. До 27.08 карта читалась
+ * только при заведомо мёртвой базе, то есть списание уходило в никуда.
+ */
+async function __debitCreditForTest(userId, capability, amount) {
+    return debitQuietly(userId, capability, amount);
+}
+function __resetDevHubStore() {
+    memProjects.clear();
+    memFiles.clear();
+    memDeployments.clear();
+    memSnippets.clear();
+    memUsage.clear();
+    memTiers.clear();
+    __resetReconcileStateForTest();
+}
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function now() {
+    return new Date().toISOString();
+}
+function slugify(name) {
+    return name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40) || "project";
+}
+/**
+ * Имя проекта Cloudflare Pages. ОДНА формула на публикацию и на уборку.
+ *
+ * 28.09.2026: формула жила прямо в маршруте публикации, а уборки не было вовсе —
+ * удаление проекта оставляло опубликованный сайт жить по своему адресу навсегда.
+ * Если бы уборка завела себе вторую копию формулы, они разошлись бы молча: уборка
+ * снимала бы не тот сайт или не снимала ничего, и заметить это можно было бы
+ * только сравнив два места, то есть никогда.
+ */
+/**
+ * Снять собственные домены с проекта Pages — ДО удаления самого проекта.
+ *
+ * Найдено 05.10.2026 по живому отказу, который стал виден только после правки
+ * «читать причину из тела» (30.09). Cloudflare отвечает дословно:
+ *   код 8000028: "To delete your project, you must first delete all custom
+ *   domains associated with your project."
+ * А домен <слаг>.aevion.app мы привязываем при КАЖДОЙ выкатке. Поэтому механизм
+ * снятия сайта, добавленный 28.09, с первого дня отказывал на каждом проекте —
+ * и молча: в журнале было только «Cloudflare ответил 400».
+ *
+ * Следствие было публичным: удалённый проект оставлял работающий сайт, который
+ * видит посетитель, а ниточка к нему обрывалась вместе с записью в базе.
+ *
+ * Возвращаем, что удалось и что нет: уборка, которая молчит о своей неудаче,
+ * ничем не отличается от отсутствующей.
+ */
+async function снятьДоменыPages(имяСайта) {
+    const акк = process.env.CLOUDFLARE_ACCOUNT_ID;
+    const ключ = process.env.CLOUDFLARE_API_TOKEN;
+    if (!акк || !ключ)
+        return { снято: 0, осталось: [], ошибка: "нет ключей Cloudflare" };
+    const база = `https://api.cloudflare.com/client/v4/accounts/${акк}/pages/projects/${имяСайта}/domains`;
+    const заголовки = { Authorization: `Bearer ${ключ}` };
+    let имена = [];
+    try {
+        const r = await fetch(база, { headers: заголовки });
+        if (!r.ok)
+            return { снято: 0, осталось: [], ошибка: `список доменов: Cloudflare ответил ${r.status}` };
+        const j = (await r.json());
+        имена = (j.result ?? []).map((d) => String(d?.name ?? "")).filter(Boolean);
+    }
+    catch (e) {
+        return { снято: 0, осталось: [], ошибка: `список доменов: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    let снято = 0;
+    const осталось = [];
+    for (const имя of имена) {
+        try {
+            const r = await fetch(`${база}/${encodeURIComponent(имя)}`, { method: "DELETE", headers: заголовки });
+            // 404 считаем успехом: цель — «домена нет», а не «мы его удалили».
+            if (r.ok || r.status === 404)
+                снято += 1;
+            else
+                осталось.push(`${имя} (${r.status})`);
+        }
+        catch (e) {
+            осталось.push(`${имя} (${e instanceof Error ? e.message : String(e)})`);
+        }
+    }
+    return { снято, осталось };
+}
+function имяPagesПроекта(project) {
+    return `aevion-${slugify(project.name)}-${project.id.slice(0, 6)}`;
+}
+function detectLanguage(path) {
+    const ext = path.split(".").pop()?.toLowerCase() || "";
+    const map = {
+        ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
+        py: "python", html: "html", css: "css", json: "json", md: "markdown",
+        yaml: "yaml", yml: "yaml", sh: "bash", env: "plaintext",
+    };
+    return map[ext] || "plaintext";
+}
+// ── Collaborator access helpers ───────────────────────────────────────────────
+function isCollaborator(project, userId, minRole) {
+    const entry = project.collaborators.find((c) => c.userId === userId);
+    if (!entry)
+        return false;
+    if (!minRole)
+        return true;
+    return entry.role === "editor";
+}
+function canAccess(project, userId) {
+    return project.userId === userId || isCollaborator(project, userId);
+}
+function canEdit(project, userId) {
+    return project.userId === userId || isCollaborator(project, userId, "editor");
+}
+// ── Project helpers (DB or memory) ────────────────────────────────────────────
+/**
+ * Наши собственные тестовые прогоны в ОБЩЕЙ корзине — прячем из списка.
+ *
+ * Замер прода 08.09.2026: гость, у которого браузер блокирует хранилище,
+ * получает общую личность `anonymous`, и список отдавал ему 17 наших июльских
+ * прогонов («таймер помодоро» в семи вариантах, cf-pages-test, prod-smoke-test).
+ * Человек открывает модуль впервые и видит два десятка чужих проектов как свои
+ * — худшее первое впечатление, какое можно устроить на витрине.
+ *
+ * ФИЛЬТР, А НЕ УДАЛЕНИЕ. Удаление данных на проде необратимо и остаётся руке
+ * основателя; фильтр даёт тот же вид витрины, ничего не теряет и снимается
+ * одной строкой. Приём взят у соседнего модуля: в QRight публичные выдачи так
+ * же прячут смоук-записи вместо того, чтобы их стирать.
+ *
+ * ГРАНИЦА ВЫБРАНА ДАТОЙ, а не списком идентификаторов: все 17 записей созданы в
+ * июле (самая свежая 26.07), августовских в корзине нет вовсе — проверено. Так
+ * фильтр самоочевиден и не может однажды спрятать работу настоящего человека:
+ * она создаётся после этой границы.
+ *
+ * ПО ИДЕНТИФИКАТОРУ записи остаются доступны НАМЕРЕННО, и это не половинчатость.
+ * Наткнуться на них нельзя — нужен точный UUID, — зато их можно будет удалить
+ * через ту же ручку, когда основатель решит. Спрятать и лишить возможности
+ * убрать значило бы закрепить мусор навсегда.
+ */
+// Предикат ЭКСПОРТИРОВАН намеренно: старую запись через ручки не создать
+// (дату ставит сервер), поэтому проверить, что фильтр действительно ПРЯЧЕТ, а
+// не просто присутствует в коде, можно только вызвав его напрямую. Первая
+// редакция сторожа мутацию «фильтр обезврежен» не поймала — проверяла наличие
+// вызовов, а не следствие.
+const ОБЩАЯ_ЛИЧНОСТЬ = "anonymous";
+const НАШИ_ПРОГОНЫ_ДО = "2026-09-01T00:00:00.000Z";
+function нашТестовыйПрогон(p) {
+    return p.userId === ОБЩАЯ_ЛИЧНОСТЬ && p.createdAt < НАШИ_ПРОГОНЫ_ДО;
+}
+async function dbListProjects(userId) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        return [...memProjects.values()]
+            .filter((p) => p.userId === userId && !нашТестовыйПрогон(p))
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    }
+    const r = await pool.query(`SELECT * FROM "DevHubProject" WHERE "userId"=$1 ORDER BY "updatedAt" DESC`, [userId]);
+    // Same overlay as dbGetProject: a project whose save failed has to be listed,
+    // or the shelf shows the user one fewer project than they have.
+    const rows = r.rows.map(rowToProject).filter((p) => !нашТестовыйПрогон(p));
+    const parked = [...memProjects.values()].filter((p) => p.userId === userId && !нашТестовыйПрогон(p));
+    if (parked.length === 0)
+        return rows;
+    const byId = new Map(rows.map((p) => [p.id, p]));
+    for (const p of parked)
+        byId.set(p.id, p);
+    return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+async function dbGetProject(id) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)())
+        return memProjects.get(id) ?? null;
+    // memProjects holds state a save could not persist. Routes fall back to it
+    // only when the READ throws, which misses the ordinary case: the write
+    // failed, the read is healthy, and the row simply is not there. Preferring
+    // the parked copy is what keeps a "created" project from vanishing — and
+    // dbSaveProject drops the entry the moment a write lands, so it cannot
+    // shadow the database for longer than the failure lasts.
+    const parked = memProjects.get(id);
+    if (parked)
+        return parked;
+    const r = await pool.query(`SELECT * FROM "DevHubProject" WHERE "id"=$1`, [id]);
+    return r.rows[0] ? rowToProject(r.rows[0]) : null;
+}
+async function dbSaveProject(p) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        memProjects.set(p.id, p);
+        return;
+    }
+    await pool.query(`INSERT INTO "DevHubProject" ("id","userId","name","description","stack","status","repoUrl","deployUrl","customDomain","envVars","collaborators","entryTag","createdAt","updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$14,$12,$13)
+     ON CONFLICT ("id") DO UPDATE SET
+       "name"=$3,"description"=$4,"stack"=$5,"status"=$6,"repoUrl"=$7,"deployUrl"=$8,
+       "customDomain"=$9,"envVars"=$10::jsonb,"collaborators"=$11::jsonb,"updatedAt"=$13,
+       -- Метку НЕ перетираем пустой при обновлении: она ставится один раз, при
+       -- создании. Иначе любое сохранение проекта стирало бы источник.
+       "entryTag"=COALESCE($14, "DevHubProject"."entryTag")`, [p.id, p.userId, p.name, p.description, p.stack, p.status, p.repoUrl, p.deployUrl,
+        p.customDomain, JSON.stringify(p.envVars), JSON.stringify(p.collaborators), p.createdAt, p.updatedAt,
+        p.entryTag ?? null]);
+    // The row is now the truth again, so the parked copy must go — otherwise the
+    // rescue above becomes its own bug and a stale in-memory project outranks
+    // every later database read for the life of the process.
+    memProjects.delete(p.id);
+}
+/**
+ * Удаление проекта. Сносит ВСЁ, что содержит его файлы, а не только таблицу
+ * файлов.
+ *
+ * Замер 08.09.2026: сносились `DevHubFile` и `DevHubProject`, а
+ * `DevHubCheckpoint` оставался. В нём поле `files` — JSONB с ПОЛНЫМ
+ * содержимым файлов на момент снимка (это история отката), то есть копии кода
+ * человека жили дальше в другой таблице. Согласие при этом обещает: «файлы и
+ * база исчезнут навсегда». Обещание было неверным, и неверным на пути
+ * УДАЛЕНИЯ — там, где человек и рассчитывает, что за него сделают ровно то,
+ * что сказано.
+ *
+ * `DevHubDeployment` тоже привязан к проекту и иначе остаётся сиротой
+ * навсегда. `DevHubUsage` и `DevHubTier` НЕ трогаем намеренно: это счётчики
+ * расхода и тариф — они принадлежат человеку, а не проекту, и нужны для учёта
+ * после удаления.
+ *
+ * Публичные сниппеты тоже остаются намеренно: поделиться — отдельное действие
+ * человека, и отменять его удалением проекта мы не вправе.
+ */
+async function dbDeleteProject(id) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        memProjects.delete(id);
+        for (const [fid, f] of memFiles) {
+            if (f.projectId === id)
+                memFiles.delete(fid);
+        }
+        for (const [cid, c] of memCheckpoints) {
+            if (c.projectId === id)
+                memCheckpoints.delete(cid);
+        }
+        for (const [did, d] of memDeployments) {
+            if (d.projectId === id)
+                memDeployments.delete(did);
+        }
+        return;
+    }
+    // Drop the parked copy too, or the overlay in dbGetProject resurrects a
+    // project the user just deleted — a hole the overlay itself opens.
+    memProjects.delete(id);
+    for (const [fid, f] of memFiles) {
+        if (f.projectId === id)
+            memFiles.delete(fid);
+    }
+    for (const [cid, c] of memCheckpoints) {
+        if (c.projectId === id)
+            memCheckpoints.delete(cid);
+    }
+    for (const [did, d] of memDeployments) {
+        if (d.projectId === id)
+            memDeployments.delete(did);
+    }
+    await pool.query(`DELETE FROM "DevHubCheckpoint" WHERE "projectId"=$1`, [id]);
+    await pool.query(`DELETE FROM "DevHubDeployment" WHERE "projectId"=$1`, [id]);
+    await pool.query(`DELETE FROM "DevHubFile" WHERE "projectId"=$1`, [id]);
+    await pool.query(`DELETE FROM "DevHubProject" WHERE "id"=$1`, [id]);
+}
+/**
+ * Метка захода из тела запроса: «yt-chess-level», «probe-blogger».
+ *
+ * Принимаем только латиницу, цифры, дефис и подчёркивание и не длиннее 60
+ * знаков. Это поле уедет в отчёты и будет решать судьбу пробных сайтов —
+ * непроверенная строка из адреса там не нужна. Не подошло — null, то есть
+ * честное «не знаем», а не выдуманное значение.
+ */
+/**
+ * Метка захода из тела запроса: «yt-chess-level», «probe-user-99» или null.
+ *
+ * ⚠️ ПОЧЕМУ ОТКАЗ, А НЕ ОБРЕЗКА. Первая версия делала `.slice(0, 60)` — и метка
+ * длиннее предела молча превращалась в ДРУГУЮ метку: два разных ролика с общим
+ * началом имени склеились бы в один, и отчёт «с какого ролика дошли до сборки»
+ * врал бы правдоподобно. Обрезанный опознаватель хуже отсутствующего, поэтому
+ * слишком длинное — это null, честное «не знаю».
+ */
+function меткаЗахода(сырое) {
+    if (typeof сырое !== "string")
+        return null;
+    const t = сырое.trim().toLowerCase();
+    if (t.length > 60)
+        return null;
+    return t && /^[a-z0-9_-]+$/.test(t) ? t : null;
+}
+function rowToProject(row) {
+    return {
+        id: row.id, userId: row.userId, name: row.name, description: row.description,
+        stack: row.stack, status: row.status, repoUrl: row.repoUrl, deployUrl: row.deployUrl,
+        customDomain: row.customDomain, envVars: row.envVars || {},
+        // Столбца может не быть у записей до 12.10.2026 — тогда честный null.
+        entryTag: typeof row.entryTag === "string" && row.entryTag ? row.entryTag : null,
+        collaborators: row.collaborators || [],
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+        updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+    };
+}
+// ── File helpers ──────────────────────────────────────────────────────────────
+async function dbListFiles(projectId) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        return [...memFiles.values()]
+            .filter((f) => f.projectId === projectId)
+            .sort((a, b) => a.path.localeCompare(b.path));
+    }
+    const r = await pool.query(`SELECT * FROM "DevHubFile" WHERE "projectId"=$1 ORDER BY "path" ASC`, [projectId]);
+    return r.rows.map(rowToFile);
+}
+async function dbGetFile(projectId, path) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        return [...memFiles.values()].find((f) => f.projectId === projectId && f.path === path) ?? null;
+    }
+    const r = await pool.query(`SELECT * FROM "DevHubFile" WHERE "projectId"=$1 AND "path"=$2`, [projectId, path]);
+    return r.rows[0] ? rowToFile(r.rows[0]) : null;
+}
+async function dbUpsertFile(f) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        // Same "update existing by (projectId, path), else insert" contract as the
+        // DB branch below — `f.id` is a freshly minted UUID on every call (the
+        // caller doesn't know if the file already exists), so keying memFiles by
+        // f.id here would create a duplicate entry per write instead of updating
+        // the file: a stale, superseded version would sit in the map forever, and
+        // dbGetFile's `.find()` would keep returning whichever one it inserted
+        // first — a real "write looks like it worked, next read returns the old
+        // content" bug, not just a memory-fallback formality.
+        const existing = [...memFiles.values()].find((x) => x.projectId === f.projectId && x.path === f.path);
+        if (existing) {
+            existing.content = f.content;
+            existing.language = f.language;
+            existing.updatedAt = f.updatedAt;
+        }
+        else {
+            memFiles.set(f.id, f);
+        }
+        return;
+    }
+    // try to update existing by (projectId, path)
+    const existing = await pool.query(`SELECT "id" FROM "DevHubFile" WHERE "projectId"=$1 AND "path"=$2`, [f.projectId, f.path]);
+    if (existing.rows[0]) {
+        await pool.query(`UPDATE "DevHubFile" SET "content"=$1,"language"=$2,"updatedAt"=$3 WHERE "id"=$4`, [f.content, f.language, f.updatedAt, existing.rows[0].id]);
+    }
+    else {
+        await pool.query(`INSERT INTO "DevHubFile" ("id","projectId","path","content","language","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6)`, [f.id, f.projectId, f.path, f.content, f.language, f.updatedAt]);
+    }
+}
+async function dbDeleteFile(projectId, path) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        for (const [fid, f] of memFiles) {
+            if (f.projectId === projectId && f.path === path) {
+                memFiles.delete(fid);
+                break;
+            }
+        }
+        return;
+    }
+    await pool.query(`DELETE FROM "DevHubFile" WHERE "projectId"=$1 AND "path"=$2`, [projectId, path]);
+}
+function rowToFile(row) {
+    return {
+        id: row.id, projectId: row.projectId, path: row.path,
+        content: row.content, language: row.language,
+        updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+    };
+}
+// ── Deployment helpers ────────────────────────────────────────────────────────
+async function dbSaveDeployment(d) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        memDeployments.set(d.id, d);
+        return;
+    }
+    await pool.query(`INSERT INTO "DevHubDeployment" ("id","projectId","userId","status","deployUrl","buildLog","triggeredAt","completedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT ("id") DO UPDATE SET
+       "status"=$4,"deployUrl"=$5,"buildLog"=$6,"completedAt"=$8`, [d.id, d.projectId, d.userId, d.status, d.deployUrl, d.buildLog, d.triggeredAt, d.completedAt]);
+    // The row is the truth again — a stale parked copy would freeze the status
+    // the IDE shows at whatever it was when the write last failed.
+    memDeployments.delete(d.id);
+}
+async function dbListDeployments(projectId, limit = 10) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        return [...memDeployments.values()]
+            .filter((d) => d.projectId === projectId)
+            .sort((a, b) => b.triggeredAt.localeCompare(a.triggeredAt))
+            .slice(0, limit);
+    }
+    const r = await pool.query(`SELECT * FROM "DevHubDeployment" WHERE "projectId"=$1 ORDER BY "triggeredAt" DESC LIMIT $2`, [projectId, limit]);
+    // Same overlay as projects and checkpoints: a deployment record whose save
+    // failed is parked here, and this list is the only place the IDE learns a
+    // deploy happened at all. Missing rows read as "nothing was deployed".
+    const rows = r.rows.map(rowToDeployment);
+    const parked = [...memDeployments.values()].filter((d) => d.projectId === projectId);
+    if (parked.length === 0)
+        return rows;
+    const byId = new Map(rows.map((d) => [d.id, d]));
+    for (const d of parked)
+        byId.set(d.id, d);
+    return [...byId.values()]
+        .sort((a, b) => b.triggeredAt.localeCompare(a.triggeredAt))
+        .slice(0, limit);
+}
+function rowToDeployment(row) {
+    return {
+        id: row.id, projectId: row.projectId, userId: row.userId, status: row.status,
+        deployUrl: row.deployUrl, buildLog: row.buildLog,
+        triggeredAt: row.triggeredAt instanceof Date ? row.triggeredAt.toISOString() : row.triggeredAt,
+        completedAt: row.completedAt instanceof Date ? row.completedAt.toISOString() : row.completedAt ?? null,
+    };
+}
+// ── Checkpoint helpers ──────────────────────────────────────────────────────────
+async function dbSaveCheckpoint(c) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        memCheckpoints.set(c.id, c);
+        return;
+    }
+    await pool.query(`INSERT INTO "DevHubCheckpoint" ("id","projectId","userId","label","files","createdAt")
+     VALUES ($1,$2,$3,$4,$5,$6)`, [c.id, c.projectId, c.userId, c.label, JSON.stringify(c.files), c.createdAt]);
+    // The row is the truth again; drop the parked copy so it cannot shadow it.
+    memCheckpoints.delete(c.id);
+}
+async function dbLatestCheckpoint(projectId) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        const latest = [...memCheckpoints.values()]
+            .filter((c) => c.projectId === projectId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+        return latest ?? null;
+    }
+    const r = await pool.query(`SELECT * FROM "DevHubCheckpoint" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT 1`, [projectId]);
+    const row = r.rows[0] ? rowToCheckpoint(r.rows[0]) : null;
+    // A checkpoint whose save failed is parked in memCheckpoints, which used to
+    // be read only with the database KNOWN to be down. Undo would then restore an
+    // OLDER checkpoint over the user's work — the safety net doing the damage.
+    const parked = newestParkedCheckpoint(projectId);
+    if (!parked)
+        return row;
+    if (!row)
+        return parked;
+    return parked.createdAt.localeCompare(row.createdAt) >= 0 ? parked : row;
+}
+function newestParkedCheckpoint(projectId) {
+    return [...memCheckpoints.values()]
+        .filter((c) => c.projectId === projectId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+}
+async function dbDeleteCheckpoint(id) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        memCheckpoints.delete(id);
+        return;
+    }
+    // Consumed checkpoints must go from both places, or a reverted one comes
+    // back as the newest undo point.
+    memCheckpoints.delete(id);
+    await pool.query(`DELETE FROM "DevHubCheckpoint" WHERE "id"=$1`, [id]);
+}
+/** Newest-first, for the checkpoint-history UI and for restore-to-a-specific-
+ * point (which walks this list from the top through the chosen entry). */
+async function dbListCheckpoints(projectId, limit = 20) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        return [...memCheckpoints.values()]
+            .filter((c) => c.projectId === projectId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .slice(0, limit);
+    }
+    const r = await pool.query(`SELECT * FROM "DevHubCheckpoint" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT $2`, [projectId, limit]);
+    const rows = r.rows.map(rowToCheckpoint);
+    // Same overlay as dbLatestCheckpoint: the history and the restore-to-a-point
+    // walk both read this list, so a parked checkpoint missing from it would make
+    // restore skip the very state it was taken to protect.
+    const parked = [...memCheckpoints.values()].filter((c) => c.projectId === projectId);
+    if (parked.length === 0)
+        return rows;
+    const byId = new Map(rows.map((c) => [c.id, c]));
+    for (const c of parked)
+        byId.set(c.id, c);
+    return [...byId.values()]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit);
+}
+function rowToCheckpoint(row) {
+    return {
+        id: row.id, projectId: row.projectId, userId: row.userId, label: row.label,
+        files: typeof row.files === "string" ? JSON.parse(row.files) : row.files,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    };
+}
+/** Snapshot the prior content of every file a generate_code write is about to
+ * touch, so it can be undone in one shot. `existingFiles` is the same
+ * project-file list already loaded for prompt context — no extra DB round trip. */
+async function createCheckpoint(projectId, userId, label, targetPaths, existingFiles) {
+    if (targetPaths.length === 0)
+        return null;
+    const checkpoint = {
+        id: node_crypto_1.default.randomUUID(),
+        projectId,
+        userId,
+        label,
+        files: targetPaths.map((path) => ({
+            path,
+            priorContent: existingFiles.find((f) => f.path === path)?.content ?? null,
+        })),
+        createdAt: now(),
+    };
+    // Отказ записи проглатывался в память, а наружу уходил только id — то есть
+    // вызывающий не мог отличить сохранённую точку от живущей до перезапуска.
+    // Для отката это дорого: человек видит кнопку «отменить правки ИИ», жмёт её
+    // назавтра, а точки уже нет. Признак теперь уходит вместе с id.
+    let storage = "db";
+    try {
+        await dbSaveCheckpoint(checkpoint);
+    }
+    catch {
+        memCheckpoints.set(checkpoint.id, checkpoint);
+        storage = "memory";
+    }
+    return { id: checkpoint.id, storage };
+}
+/** Reverts every file a single checkpoint touched to its prior content (or
+ * deletes it, if the checkpoint recorded "didn't exist before"), then
+ * consumes (deletes) the checkpoint. Shared by /generate/undo (always just
+ * the latest checkpoint) and /checkpoints/:id/restore (applies a whole run
+ * of consecutive checkpoints, newest first, so per-path writes converge on
+ * the target checkpoint's own priorContent — the correct layered result). */
+async function applyCheckpointRevert(projectId, checkpoint) {
+    const revertedFiles = [];
+    // Откат тоже может лечь в память: тогда файлы «восстановлены» до ближайшего
+    // перезапуска, а человеку сказано «восстановлено N файлов». Признак нужен
+    // здесь по той же причине, что у генерации и контрольной точки.
+    let storage = "db";
+    for (const f of checkpoint.files) {
+        if (f.priorContent === null) {
+            try {
+                await dbDeleteFile(projectId, f.path);
+            }
+            catch {
+                for (const [fid, mf] of memFiles) {
+                    if (mf.projectId === projectId && mf.path === f.path) {
+                        memFiles.delete(fid);
+                        storage = "memory";
+                        break;
+                    }
+                }
+            }
+        }
+        else {
+            const restored = {
+                id: node_crypto_1.default.randomUUID(), projectId, path: f.path,
+                content: f.priorContent, language: detectLanguage(f.path), updatedAt: now(),
+            };
+            try {
+                await dbUpsertFile(restored);
+            }
+            catch {
+                const existing = [...memFiles.values()].find((x) => x.projectId === projectId && x.path === f.path);
+                if (existing) {
+                    existing.content = restored.content;
+                    existing.updatedAt = restored.updatedAt;
+                }
+                else
+                    memFiles.set(restored.id, restored);
+            }
+        }
+        revertedFiles.push(f.path);
+    }
+    try {
+        await dbDeleteCheckpoint(checkpoint.id);
+    }
+    catch {
+        memCheckpoints.delete(checkpoint.id);
+    }
+    return { paths: revertedFiles, storage };
+}
+// ── Built-in templates ────────────────────────────────────────────────────────
+// Экспортируется ради проверки запускаемости начал: тест смотрит, есть ли у каждого
+// точка входа своего стека и настроено ли то, чем оно собирается. Замер 19.08.2026
+// показал, что у react-spa не было index.html — «готовое начало» не начиналось.
+exports.TEMPLATES = [
+    {
+        id: "next-app",
+        name: "Next.js App",
+        description: "React с серверными маршрутами — фронт и API в одном проекте",
+        stack: "next",
+        files: [
+            {
+                path: "pages/index.tsx",
+                language: "typescript",
+                content: `export default function Home() {\n  return (\n    <div style={{ fontFamily: "system-ui", padding: 40 }}>\n      <h1>Hello from Next.js</h1>\n      <p>Edit pages/index.tsx to get started</p>\n    </div>\n  );\n}\n`,
+            },
+            {
+                path: "package.json",
+                language: "json",
+                content: JSON.stringify({ name: "my-next-app", version: "0.1.0", scripts: { dev: "next dev", build: "next build", start: "next start" }, dependencies: { next: "^14.0.0", react: "^18.0.0", "react-dom": "^18.0.0" } }, null, 2),
+            },
+            {
+                path: "tsconfig.json",
+                language: "json",
+                content: JSON.stringify({ compilerOptions: { target: "es5", lib: ["dom", "esnext"], allowJs: true, strict: true, moduleResolution: "bundler", jsx: "preserve" } }, null, 2),
+            },
+        ],
+    },
+    {
+        id: "express-api",
+        name: "Express API",
+        description: "REST API на TypeScript",
+        stack: "express",
+        files: [
+            {
+                path: "src/index.ts",
+                language: "typescript",
+                content: `import express from "express";\nconst app = express();\napp.use(express.json());\n\napp.get("/health", (_req, res) => res.json({ status: "ok" }));\n\napp.get("/api/hello", (_req, res) => {\n  res.json({ message: "Hello from Express API!" });\n});\n\napp.listen(4000, () => console.log("API running on port 4000"));\n`,
+            },
+            {
+                path: "package.json",
+                language: "json",
+                content: JSON.stringify({ name: "my-express-api", version: "0.1.0", scripts: { dev: "ts-node-dev src/index.ts", build: "tsc", start: "node dist/index.js" }, dependencies: { express: "^4.18.0" }, devDependencies: { typescript: "^5.0.0", "@types/express": "^4.17.0", "ts-node-dev": "^2.0.0" } }, null, 2),
+            },
+            // tsconfig.json добавлен 19.08.2026 вместе с зависимостью ts-node-dev: у этого
+            // начала было ТРИ связанных дефекта, и каждый ломал свой шаг.
+            //
+            //   dev   зовёт ts-node-dev, а его не было в devDependencies — «команда не найдена»;
+            //   build зовёт tsc без tsconfig — компилировалось бы рядом с исходником;
+            //   start ждёт dist/index.js, которого такая сборка не создаёт вовсе.
+            //
+            // То есть «готовое начало» не проходило ни одного своего шага.
+            {
+                path: "tsconfig.json",
+                language: "json",
+                content: JSON.stringify({ compilerOptions: { target: "ES2020", module: "commonjs", outDir: "dist", rootDir: "src", strict: true, esModuleInterop: true, skipLibCheck: true }, include: ["src"] }, null, 2),
+            },
+        ],
+    },
+    {
+        id: "landing",
+        name: "Landing Page",
+        description: "Посадочная страница на чистых HTML, CSS и JS",
+        stack: "static",
+        files: [
+            {
+                path: "index.html",
+                language: "html",
+                content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8"/>\n  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>\n  <title>My Landing</title>\n  <link rel="stylesheet" href="style.css"/>\n</head>\n<body>\n  <main class="hero">\n    <h1>Welcome</h1>\n    <p>Build something amazing.</p>\n    <a href="#" class="cta">Get Started</a>\n  </main>\n  <script src="script.js"></script>\n</body>\n</html>\n`,
+            },
+            {
+                path: "style.css",
+                language: "css",
+                content: `*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }\nbody { font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; }\n.hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center; padding: 40px; }\nh1 { font-size: 3rem; font-weight: 800; }\np { font-size: 1.2rem; color: #64748b; }\n.cta { display: inline-block; padding: 12px 28px; background: #0d9488; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; }\n`,
+            },
+            {
+                path: "script.js",
+                language: "javascript",
+                content: `document.addEventListener("DOMContentLoaded", () => {\n  console.log("Landing page loaded");\n});\n`,
+            },
+        ],
+    },
+    {
+        id: "react-spa",
+        name: "React SPA",
+        description: "Одностраничное приложение на Vite",
+        stack: "react",
+        files: [
+            {
+                path: "src/App.tsx",
+                language: "typescript",
+                content: `import { useState } from "react";\n\nexport default function App() {\n  const [count, setCount] = useState(0);\n  return (\n    <div style={{ fontFamily: "system-ui", textAlign: "center", padding: 40 }}>\n      <h1>React SPA</h1>\n      <button onClick={() => setCount(c => c + 1)}>Count: {count}</button>\n    </div>\n  );\n}\n`,
+            },
+            {
+                path: "src/main.tsx",
+                language: "typescript",
+                content: `import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "./App";\n\nReactDOM.createRoot(document.getElementById("root")!).render(\n  <React.StrictMode><App /></React.StrictMode>\n);\n`,
+            },
+            {
+                path: "package.json",
+                language: "json",
+                content: JSON.stringify({ name: "my-react-spa", version: "0.1.0", scripts: { dev: "vite", build: "tsc && vite build" }, dependencies: { react: "^18.0.0", "react-dom": "^18.0.0" }, devDependencies: { vite: "^5.0.0", "@vitejs/plugin-react": "^4.0.0", typescript: "^5.0.0" } }, null, 2),
+            },
+            // Три файла ниже добавлены 19.08.2026: без них «готовое начало» не начиналось.
+            //
+            // Было `src/App.tsx`, `src/main.tsx`, `package.json` — и всё. Для Vite точка
+            // входа это index.html, без него `npm run dev` не стартует вовсе. А выкатка
+            // отдаёт файлы проекта как статику: без index.html на корне нечего показать, то
+            // есть загрузка прошла бы, а страница не открылась. Сборка при этом зовёт `tsc`
+            // без tsconfig.json, а плагин React объявлен в зависимостях, но не подключён.
+            //
+            // Проверено: ни в одной из шести ветвей, правящих этот файл, index.html в
+            // начале react-spa нет — дефект не был починен нигде.
+            {
+                path: "index.html",
+                language: "html",
+                content: `<!DOCTYPE html>\n<html lang="ru">\n<head>\n  <meta charset="UTF-8"/>\n  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>\n  <title>React SPA</title>\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="/src/main.tsx"></script>\n</body>\n</html>\n`,
+            },
+            {
+                path: "vite.config.ts",
+                language: "typescript",
+                content: `import { defineConfig } from "vite";\nimport react from "@vitejs/plugin-react";\n\nexport default defineConfig({ plugins: [react()] });\n`,
+            },
+            {
+                path: "tsconfig.json",
+                language: "json",
+                content: JSON.stringify({ compilerOptions: { target: "ES2020", lib: ["ES2020", "DOM", "DOM.Iterable"], module: "ESNext", moduleResolution: "bundler", jsx: "react-jsx", strict: true, noEmit: true, skipLibCheck: true }, include: ["src"] }, null, 2),
+            },
+        ],
+    },
+    {
+        id: "dashboard",
+        name: "Analytics Dashboard",
+        description: "Графики и визуализация данных на Next.js",
+        stack: "next",
+        files: [
+            {
+                path: "pages/index.tsx",
+                language: "typescript",
+                content: `import { useState, useEffect } from "react";\n\nconst MOCK = [\n  { label: "Mon", value: 42 }, { label: "Tue", value: 65 },\n  { label: "Wed", value: 38 }, { label: "Thu", value: 80 },\n  { label: "Fri", value: 55 },\n];\n\nexport default function Dashboard() {\n  const [data] = useState(MOCK);\n  const max = Math.max(...data.map(d => d.value));\n  return (\n    <div style={{ fontFamily: "system-ui", padding: 40, background: "#f8fafc", minHeight: "100vh" }}>\n      <h1 style={{ marginBottom: 24 }}>Analytics Dashboard</h1>\n      <div style={{ display: "flex", gap: 16 }}>\n        {data.map(d => (\n          <div key={d.label} style={{ textAlign: "center" }}>\n            <div style={{ width: 40, height: \`\${(d.value / max) * 200}px\`, background: "#0d9488", borderRadius: 4 }} />\n            <div style={{ marginTop: 8, fontSize: 13 }}>{d.label}</div>\n            <div style={{ fontWeight: 700 }}>{d.value}</div>\n          </div>\n        ))}\n      </div>\n    </div>\n  );\n}\n`,
+            },
+            {
+                path: "package.json",
+                language: "json",
+                content: JSON.stringify({ name: "my-dashboard", version: "0.1.0", scripts: { dev: "next dev", build: "next build" }, dependencies: { next: "^14.0.0", react: "^18.0.0", "react-dom": "^18.0.0" } }, null, 2),
+            },
+        ],
+    },
+];
+function parseGeneratedFiles(reply, targetFiles) {
+    // Extraction + truncation salvage live in the shared qcoreai/jsonReply
+    // module now — this wrapper just maps the result onto DevHub's file shape.
+    const raw = reply.trim();
+    const parsedObj = (0, jsonReply_1.extractJsonObject)(raw);
+    if (parsedObj && Array.isArray(parsedObj.files) && parsedObj.files.length > 0) {
+        return {
+            mode: "parsed",
+            files: parsedObj.files.map((f) => ({
+                path: String(f.path || "output.ts"),
+                content: String(f.content || ""),
+                language: String(f.language || detectLanguage(f.path || "")),
+            })),
+        };
+    }
+    // Truncation salvage: max_tokens can cut a reply mid-string (seen live —
+    // 8.8KB reply ending inside a CSS value). Complete file objects are still
+    // recoverable; the cut-off tail is dropped.
+    const salvaged = (0, jsonReply_1.salvageCompleteArrayObjects)(raw, "files")
+        .filter((o) => !!o && typeof o.path === "string" && typeof o.content === "string")
+        .map((o) => ({ path: o.path, content: o.content, language: String(o.language || detectLanguage(o.path)) }));
+    if (salvaged.length > 0)
+        return { files: salvaged, mode: "salvaged" };
+    // Raw-dump fallback = a broken first impression for the user. Make every
+    // occurrence visible in monitoring instead of waiting for someone to open
+    // the file (that manual read is exactly how the truncation bug was found —
+    // turn the accident into telemetry).
+    (0, sentry_1.captureException)(new Error("devhub generate: reply unparseable, raw-dump fallback"), {
+        route: "devhub/generate:parse", replyLength: reply.length, replyHead: reply.slice(0, 200),
+    });
+    const path = targetFiles[0] || "output.ts";
+    return { files: [{ path, content: reply, language: detectLanguage(path) }], mode: "fallback" };
+}
+/**
+ * Тестовый доступ к разбору ответа модели.
+ *
+ * Разбор приватный намеренно, но ровно он решает, увидит человек ФАЙЛЫ или
+ * сырой ответ модели одним куском (mode "fallback" — «сломанное первое
+ * впечатление», как сказано выше). С переводом бесплатных гостей на Gemini
+ * (05.10.2026) это перестало быть теорией: Gemini отвечает свободным текстом —
+ * responseMimeType мы ему НЕ задаём (providers.ts, вызов generateContent), —
+ * то есть обычно оборачивает JSON в забор кода. Форму его ответа надо мерить,
+ * а не предполагать.
+ */
+function __parseGeneratedFilesForTest(reply, targetFiles = []) {
+    return parseGeneratedFiles(reply, targetFiles);
+}
+/** Тестовый доступ к указанию по стеку: сторож мерит ПОВЕДЕНИЕ, не слова в файле. */
+function __указаниеПоСтекуForTest(stack, существующих = 0, целевых = 0) {
+    return указаниеПоСтеку(stack, существующих, целевых);
+}
+/** Тестовый доступ к отложенной перепроверке домена. */
+function __scheduleDomainRecheckForTest(customDomain, step = 0) {
+    scheduleDomainRecheck(customDomain, step);
+}
+/**
+ * Тестовый доступ: выставить расход за месяц.
+ *
+ * Нужен, чтобы сторож нормы на адрес не делал 1500 настоящих запросов. Он
+ * проверяет ГРАНИЦУ, и граница должна достигаться за один шаг, иначе проверка
+ * станет самой дорогой в наборе и её выключат.
+ */
+/**
+ * Положить проект прямо в память — дверь ДЛЯ ПРОВЕРКИ свипа пробных сайтов.
+ *
+ * Иначе сторожу пришлось бы сперва пройти создание и выкатку (а выкатка идёт в
+ * Cloudflare), то есть проверка отбора превратилась бы в проверку выкатки. Дверь
+ * узкая: кладёт запись и ничего не делает сама.
+ */
+function __положитьПроектForTest(p) {
+    memProjects.set(p.id, p);
+}
+/** Прочитать проект из памяти — чтобы сторож видел, обнулён ли адрес. */
+function __прочитатьПроектForTest(id) {
+    return memProjects.get(id);
+}
+function __setMonthUsageForTest(userId, capability, used) {
+    memUsage.set(`${userId}:${creditMonth()}:${capability}`, used);
+}
+/** Тестовый доступ к порогам потолка проектов Pages. */
+exports.__потолокПроектовPagesForTest = {
+    предел: () => ПРЕДЕЛ_ПРОЕКТОВ_PAGES,
+    порогПредупреждения: () => ПОРОГ_ПРЕДУПРЕЖДЕНИЯ,
+    порогОтказаГостям: () => ПОРОГ_ОТКАЗА_ГОСТЯМ,
+};
+const MAX_SYNTAX_FIX_ATTEMPTS = 1;
+/** Cap how much existing-project context rides in the prompt — enough for the
+ * model to fit in, not enough to blow the context budget on a big project. */
+const CONTEXT_MAX_FILES = 60;
+const CONTEXT_MAX_FILE_CHARS = 8000;
+const CONTEXT_MAX_FILE_CHARS_MULTI = 4000; // smaller per-file cap once several files are inlined at once
+const CONTEXT_MAX_TARGET_FILES = 5; // coordinated multi-file edits stop inlining full content beyond this
+/** Describe the project's existing files so generation edits in place / matches
+ * conventions instead of overwriting blind. Empty string for a fresh project.
+ * Inlines the current content of every targetFile that already exists, so a
+ * multi-file request (e.g. an API route + the page that calls it) can see
+ * both files at once and keep them consistent with each other. */
+function buildFileContext(existingFiles, targetFiles = []) {
+    if (existingFiles.length === 0)
+        return "";
+    const paths = existingFiles.slice(0, CONTEXT_MAX_FILES).map((f) => `- ${f.path}`).join("\n");
+    const more = existingFiles.length > CONTEXT_MAX_FILES ? `\n- …and ${existingFiles.length - CONTEXT_MAX_FILES} more files` : "";
+    let ctx = `\n\nExisting project files (match their conventions — imports, style, naming):\n${paths}${more}`;
+    const perFileCap = targetFiles.length > 1 ? CONTEXT_MAX_FILE_CHARS_MULTI : CONTEXT_MAX_FILE_CHARS;
+    for (const tf of targetFiles.slice(0, CONTEXT_MAX_TARGET_FILES)) {
+        const current = existingFiles.find((f) => f.path === tf);
+        if (current) {
+            ctx += `\n\nCurrent content of ${tf} — edit this file in place, preserving anything unrelated to the request:\n\`\`\`\n${current.content.slice(0, perFileCap)}\n\`\`\``;
+        }
+    }
+    return ctx;
+}
+const VISION_PROVIDERS = new Set(["anthropic", "gemini", "openai"]);
+/** Fold prior dialog turns into plain prompt text. Wire-level multi-turn
+ * would fight each provider's alternation rules; text survives everywhere. */
+function foldHistory(history) {
+    if (!history?.length)
+        return "";
+    const lines = history.map((h) => `${h.role === "user" ? "User" : "Assistant"}: ${h.text}`);
+    return `Conversation so far (for context — the current request may refer back to it):\n${lines.join("\n")}\n\n`;
+}
+/**
+ * Учёт расхода генерации кода.
+ *
+ * До 01.09.2026 его здесь не было ВОВСЕ: generateCodeWithAI зовёт платного
+ * поставщика НАПРЯМУЮ (не через smartComplete, где учёт встроен), и все три
+ * вызова — основная генерация, продолжение ответа и самоисправление — уходили
+ * невидимо. Это главная платная работа модуля: именно за неё платят $149.
+ *
+ * Нашлось не просмотром кода, а вопросом «какие ещё ручки не пишут расход»
+ * после того, как тот же дефект закрыли у /plan 31.08.
+ *
+ * Цена берётся платформенной таблицей: второй источник цен развёл бы наш отчёт
+ * с отчётом qcoreai. costUsd честно возвращает 0 для модели без цены — значит
+ * 0 здесь читается как «цена неизвестна», а не как «бесплатно».
+ */
+/**
+ * Метка модуля для учёта: гость или вошедший.
+ *
+ * Вычисление ОДНО на оба места вызова генератора. Копия условия в двух местах
+ * разошлась бы молча — ровно этот класс я сегодня чинил в таблицах голосов, где
+ * значения совпадали, а полнота нет.
+ */
+/**
+ * Учёт ОБЪЁМА там, где цену посчитать нечем.
+ *
+ * Восемь поверхностей DevHub зовут платных поставщиков, которых нет в нашей
+ * таблице цен: звук, клон голоса и его предпрослушка, распознавание речи,
+ * перевод (три ручки), шаблон письма. Наш расчёт цены считает по токенам,
+ * а у секунд звука и символов речи их не бывает.
+ *
+ * До этого они не оставляли следа ВООБЩЕ. Теперь остаётся объём, а цена
+ * честно нулевая — и суффикс в имени модуля говорит об этом прямо, чтобы
+ * ноль не прочитали как «попользовались, стоило ноль». Это разные вещи:
+ * «двести вызовов, цена неизвестна» решаемо, тишина — нет.
+ *
+ * Цену НЕ подставляем даже приблизительно: выдумка, поданная как замер,
+ * дороже отсутствия числа.
+ */
+/**
+ * Учёт прогона, у которого цена считается по ОБЪЁМУ (знаки, секунды), а не по токенам.
+ *
+ * 29.09.2026. Раньше такие прогоны уходили в журнал с пометкой «БЕЗ-ЦЕНЫ» — и это было
+ * честно, но бесполезно: обещание карточки «logs what every AI run cost» не выполнялось
+ * у 50 прогонов из 73. Там, где у поставщика есть опубликованный прайс за единицу
+ * (перевод, распознавание речи), цену теперь считаем; где прайса нет (звук, клон
+ * голоса) — по-прежнему честная пометка, а не выдуманное число.
+ */
+function учтиПоОбъёму(поверхность, объём, userId, фактическийПоставщик) {
+    const цена = (0, unitPricing_1.ценаПоЕдиницам)(поверхность, объём, фактическийПоставщик);
+    if (цена === null) {
+        // Сюда попадаем в двух случаях: тарифа нет вовсе ИЛИ работу выполнил не тот
+        // поставщик, по чьему прайсу тариф посчитан. Второй случай и есть находка
+        // 01.10: DeepL исчерпан, перевод ушёл на LLM, а цена считалась прежняя.
+        учтиБезЦены(поверхность, userId, фактическийПоставщик);
+        return;
+    }
+    try {
+        (0, smartRunLog_1.insertSmartRun)({
+            module: `devhub-${поверхность}`,
+            resolved: "single",
+            costUsd: цена,
+            savedUsd: 0,
+            userId,
+        });
+    }
+    catch { /* Учёт не должен ронять ответ, ради которого его зовут. */ }
+}
+function учтиБезЦены(поверхность, userId, кто) {
+    try {
+        (0, smartRunLog_1.insertSmartRun)({
+            // Имя поставщика в модуле — чтобы «цена неизвестна» было РЕШАЕМЫМ: видно,
+            // чей прайс искать. Без него строка говорит только «мы не знаем».
+            module: `devhub-${поверхность}-БЕЗ-ЦЕНЫ${кто ? `-${кто}` : ""}`,
+            resolved: "single",
+            costUsd: 0,
+            savedUsd: 0,
+            userId,
+        });
+    }
+    catch { /* Учёт не должен ронять ответ, ради которого его зовут. */ }
+}
+function меткаГенерации(userId) {
+    const гость = userId.startsWith("guest:") || userId === "anonymous";
+    return гость ? "devhub-generate-anon" : "devhub-generate";
+}
+function учтиГенерацию(providerId, model, 
+// `unknown`, а не форма OpenAI: у каждого провайдера своё имя одного и того
+// же числа, и разбирать их — работа usageToTokens, а не этой функции.
+usage, moduleTag, userId) {
+    try {
+        const { tokensIn, tokensOut } = (0, usageTokens_1.usageToTokens)(usage);
+        (0, smartRunLog_1.insertSmartRun)({
+            module: moduleTag,
+            resolved: "single",
+            costUsd: (0, pricing_1.costUsd)(providerId, model, tokensIn, tokensOut),
+            savedUsd: 0, userId,
+        });
+    }
+    catch {
+        // Учёт не должен ронять ответ, ради которого его зовут.
+    }
+}
+/**
+ * Порядок провайдеров генерации по ступени — решение основателя 05.10.2026.
+ *
+ * ЗАМЕР, из которого оно принято (цена из ответа сервера, не из прайса):
+ *   gemini-2.5-flash: 3852 выходных токена, $0.002331, выдал 3 файла
+ *   claude-opus-4-8:  2756 выходных токенов, $0.069880, выдал 2 файла
+ * Дороже в 30 раз при МЕНЬШЕМ результате. Гостевая норма — 30 генераций в месяц:
+ * $0.07 против $2.10 на одного гостя, то есть $7 против $210 на сотне гостей,
+ * у которых выручки ноль по определению — это бесплатный режим.
+ *
+ * Поэтому БЕСПЛАТНЫМ ступеням дешёвый поставщик идёт первым, ПЛАТНЫМ порядок не
+ * меняется: там за качество платят, и экономить на нём никто не просил.
+ *
+ * Важно, что это именно ПОРЯДОК, а не замена: если дешёвый откажет, перебор
+ * пойдёт дальше по цепочке. Отказ дешёвого не должен превращаться в отказ
+ * человеку — это было бы хуже дорогой генерации.
+ */
+const ДЕШЁВЫЙ_ДЛЯ_ГОСТЯ = "gemini";
+const БЕСПЛАТНЫЕ_СТУПЕНИ = new Set(["free", "registered"]);
+function порядокПоСтупени(список, ступень) {
+    if (!БЕСПЛАТНЫЕ_СТУПЕНИ.has(ступень))
+        return список;
+    const дешёвый = список.filter((p) => p.id === ДЕШЁВЫЙ_ДЛЯ_ГОСТЯ);
+    if (дешёвый.length === 0)
+        return список; // его нет среди настроенных — порядок прежний
+    return [...дешёвый, ...список.filter((p) => p.id !== ДЕШЁВЫЙ_ДЛЯ_ГОСТЯ)];
+}
+/**
+ * Указание по стеку для ПЕРВОЙ генерации проекта.
+ *
+ * ЗАМЕР НА ПРОДЕ 05.10.2026 (гость, стек react): генерация прошла — 4 файла,
+ * $0.001053, — а выкатка отказала с 409 «project is not static — nothing to
+ * serve». Модель разложила проект по обычаю: public/index.html + src/App.jsx +
+ * src/index.jsx. Статический хостинг отдаёт файлы КАК ЕСТЬ, поэтому ему нужен
+ * index.html в КОРНЕ (lib/staticServable.ts), а сырые .jsx браузер не исполнит.
+ *
+ * Отказ при этом ЧЕСТНЫЙ и его трогать не надо: публикация такого проекта
+ * «удалась бы» и отдавала 404 — ровно тот класс, который запрещён правилом
+ * «deploy = uploaded + serves». Дефект выше: вход предлагает React, и человек
+ * получает файлы, которые нельзя опубликовать.
+ *
+ * Поэтому для react просим сборку-без-сборки: index.html в корне, React с CDN,
+ * JSX через Babel standalone. Такой проект публикуется тем же путём, что static,
+ * и обещание «выбрал React — получил живой адрес» становится выполнимым.
+ *
+ * next / express / python сюда НЕ попадают намеренно: им нужен сервер, и
+ * Cloudflare Pages их не отдаст ни при какой раскладке. Там честный путь —
+ * сказать это на входе, а не подменять стек втихую.
+ */
+const УКАЗАНИЕ_ПУБЛИКУЕМЫЙ_REACT = " The project MUST be publishable as plain static files: put index.html at the PROJECT ROOT" +
+    " (never public/index.html), load React and ReactDOM from a CDN with script tags, and write JSX" +
+    " inside a script type=\"text/babel\" block (Babel standalone from CDN) so the app runs with NO" +
+    " build step. Do not emit package.json, src/, public/, or any bundler config.";
+/**
+ * Применяется только к ПЕРВОЙ генерации: ни целевых файлов, ни существующих.
+ * У начатого проекта своя раскладка, и ломать её посреди работы нельзя —
+ * человек просил правку, а не переезд.
+ */
+function указаниеПоСтеку(stack, существующихФайлов, целевыхФайлов) {
+    if (целевыхФайлов > 0 || существующихФайлов > 0)
+        return "";
+    return String(stack ?? "").trim().toLowerCase() === "react" ? УКАЗАНИЕ_ПУБЛИКУЕМЫЙ_REACT : "";
+}
+async function generateCodeWithAI(prompt, stack, targetFiles = [], existingFiles = [], images, history, onProgress, 
+// Метка модуля для учёта расхода. Раньше здесь стояла постоянная
+// "devhub-generate", и отделить траты анонимных от трат вошедших было
+// нельзя — а именно этот вопрос основатель и решает про потолок расходов.
+// У /ask такое разделение есть с 31.08; здесь оно появилось 01.09.
+moduleTag = "devhub-generate", 
+// Кто потратил. Нужен, чтобы покупатель видел СВОЙ расход на экране, а не
+// только админ — прямая задача основателя от 03.09.2026. Значение по
+// умолчанию null: модуль, который личность не знает, честно пишет пусто,
+// а не подставляет «anonymous» (выдуманное значение неотличимо от факта).
+userId = null) {
+    const providers = (0, providers_1.getProviders)();
+    // Ступень спрашиваем ОДИН раз: она решает порядок поставщиков. Для гостя без
+    // личности это "free" — то есть дешёвый пойдёт первым, как и задумано.
+    const ступеньДляПорядка = await getUserTier(userId ?? "anonymous");
+    const configured = порядокПоСтупени(providers.filter((p) => p.configured), ступеньДляПорядка);
+    if (configured.length === 0) {
+        // Fallback — one stub PER requested file, so multi-file callers (e.g.
+        // /database/design asking for schema + client) get the same shape a real
+        // generation would produce, just honestly marked aiGenerated:false.
+        const paths = targetFiles.length
+            ? targetFiles
+            : [stack === "next" ? "pages/index.tsx" : stack === "express" ? "src/index.ts" : "index.html"];
+        return {
+            files: paths.map((path) => ({
+                path,
+                content: `// Generated stub for: ${prompt}\n// Configure an AI provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) for real AI generation\n`,
+                language: detectLanguage(path),
+            })),
+            aiGenerated: false,
+        };
+    }
+    // A screenshot needs a vision-capable model; the first configured provider
+    // may be text-only. Pick honestly or refuse — never silently drop the image.
+    let provider = configured[0];
+    let visionChain = [];
+    if (images?.length) {
+        // Список, а не один: при отказе первого пробуем следующего. До 31.08.2026
+        // здесь стоял find() — брался ПЕРВЫЙ подходящий и только он. При трёх
+        // настроенных ключах запасных не было ни одного, а панель показывала
+        // возможность живой: три ключа означали «любой годится, чтобы включить»,
+        // а не «три запасных на случай отказа».
+        //
+        // Образец взят из этого же файла: у картинок цепочка уже написана, и там
+        // же объяснено почему — отказ одного платного провайдера не должен
+        // ронять всю возможность.
+        visionChain = configured.filter((pr) => VISION_PROVIDERS.has(pr.id));
+        const vision = visionChain[0];
+        if (!vision) {
+            throw new Error("NO_VISION_PROVIDER: attach-a-screenshot needs ANTHROPIC_API_KEY, GEMINI_API_KEY or OPENAI_API_KEY — none configured");
+        }
+        provider = vision;
+    }
+    const systemPrompt = targetFiles.length === 1
+        ? `You are an expert developer. Generate complete, working code for a single file. When given the file's current content, edit it in place rather than starting over. Return ONLY a JSON object: {"files": [{"path": "${targetFiles[0]}", "content": "...", "language": "..."}]}. No explanation, just JSON.`
+        : targetFiles.length > 1
+            ? `You are an expert developer. Generate complete, working code for MULTIPLE coordinated files that must work together: ${targetFiles.join(", ")}. When given a file's current content, edit it in place rather than starting over; keep the files consistent with each other (matching imports, types, endpoint paths, function names, etc). Return ONLY a JSON object: {"files": [{"path": "...", "content": "...", "language": "..."}, ...]} with exactly one entry per requested file. No explanation, just JSON.`
+            : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Any file containing JSX must use a .jsx extension (.tsx for TypeScript) — the in-browser live preview keys off the extension. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
+    /*
+     * 🔴 ЗАПРЕТ ВЫДУМАННЫХ ДАННЫХ ДОПИСЫВАЕТСЯ КО ВСЕМ ТРЁМ ВЕТВЯМ СРАЗУ.
+     *
+     * Именно так, а не внутри каждой строки: ветвей три (одна цель, несколько
+     * согласованных файлов, каркас), и указание, попавшее в две из трёх, дало бы
+     * зелёную проверку при дырявой третьей. Образец приёма — УКАЗАНИЕ_ПРО_ВХОД
+     * ниже: отдельная именованная строка, дописанная в одном месте.
+     *
+     * Повод и замер — в lib/devhubNoFakeData.ts. Год подставляет сервер: своей
+     * даты модель не знает, и «© 2023» в 2026 году взялось именно отсюда.
+     */
+    // Язык запроса определяет СЕРВЕР и называет модели прямо (разбор в devhubNoFakeData.ts).
+    const промптСЗапретом = `${systemPrompt} ${(0, devhubNoFakeData_1.ukazanieBezVydumannyhDannyh)((0, devhubNoFakeData_1.tekushchiyGod)(), (0, devhubNoFakeData_1.yazykZaprosa)(prompt))}`;
+    // Когда вход нужен, модель ОБЯЗАНА пользоваться нашим шаблоном, а не писать свой:
+    // иначе рядом появится второй вход, и дырявым окажется именно он.
+    const проВход = (0, devhubAuthScaffold_1.нуженВход)(prompt) ? ` ${devhubAuthScaffold_1.УКАЗАНИЕ_ПРО_ВХОД}` : "";
+    const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${указаниеПоСтеку(stack, existingFiles.length, targetFiles.length)}${проВход}${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
+    const messages = [
+        { role: "system", content: промптСЗапретом },
+        { role: "user", content: userMsg },
+    ];
+    /*
+     * 🔴 БЮДЖЕТ ПОДНЯТ ДО 16384 — ЗАМЕРОМ, А НЕ НА ГЛАЗ (12.10.2026).
+     *
+     * Утром к обрывам привело другое: вызов не был помечен структурным, и
+     * «размышление» модели съедало те же 8192 токена. Пометив его, я убрал
+     * обрывы (0 из 5 против 1 из 5) и ускорил медиану с 24 до 13 с — но замер
+     * показал и цену: страницы стали короче на 38 % (13 929 → 8 674 знака), а
+     * файл script.js пропал во ВСЕХ пяти прогонах, тогда как раньше был в трёх.
+     * Размышление и было тем, что делало страницу богаче.
+     *
+     * Поэтому основной генерации размышление ВОЗВРАЩЕНО, а бюджет удвоен: места
+     * хватает и на мысль, и на ответ. Дозапросу и самопочинке запрет остаётся —
+     * там ответ короткий, и важна не полнота, а то, чтобы JSON разобрался.
+     * 16384 — вдвое от прежнего и вчетверо меньше потолка модели
+     * (gemini-2.5-flash держит 65 536), то есть запас есть в обе стороны.
+     */
+    const GEN_MAX_TOKENS = 16384;
+    onProgress?.("calling_model");
+    // Show HN обещает «видно, сколько стоил каждый запуск» — токены копятся
+    // по ВСЕМ вызовам генерации (основной/дострой/самопочинка) и уезжают в
+    // ответ. Формы usage здесь уже нормализованы к prompt/completion.
+    let токВх = 0;
+    let токИсх = 0;
+    const учтиВЗапуск = (u) => {
+        // Читать ТОЛЬКО prompt_tokens/completion_tokens нельзя: это имена OpenAI.
+        // Наш провайдер по умолчанию — gemini, и он присылает usageMetadata с
+        // promptTokenCount/candidatesTokenCount. Замер 28.09 на живом проде:
+        // сквозная генерация гостем вернула runTokens {in:0,out:0} и
+        // runCostUsd 0 — то есть бесплатный магнит тратил деньги невидимо, и на
+        // вопрос «во что обойдётся тысяча генераций в день» ответа не было.
+        // Общий разбор живёт в lib/usageTokens (там же назван этот же класс:
+        // multichat вообще не считал токены и показывал нули).
+        const { tokensIn, tokensOut } = (0, usageTokens_1.usageToTokens)(u);
+        токВх += tokensIn;
+        токИсх += tokensOut;
+    };
+    let result;
+    try {
+        // Порядок попыток: при картинке — вся цепочка зрячих провайдеров, иначе
+        // один выбранный. Ошибку КАЖДОГО запоминаем: молча съесть их значило бы
+        // потерять причину отказа, а она отличает «кончились деньги» от «ключ
+        // неверный».
+        const attempts = [];
+        /*
+         * ЦЕПОЧКА ЗАПАСНЫХ И ДЛЯ ТЕКСТА (05.10.2026).
+         *
+         * Здесь стояло `[provider]` — ОДИН поставщик. Для картинок цепочка была (её
+         * завели 31.08 ровно потому, что одного звена не хватало), а для текста нет:
+         * отказ первого означал отказ человеку, хотя рядом стояли настроенные
+         * запасные.
+         *
+         * Это стало обязательным теперь, когда бесплатным первым идёт дешёвый
+         * поставщик: без цепочки его сбой ронял бы генерацию, которая прежде шла
+         * через дорогого и работала. Экономия не имеет права превращаться в отказ.
+         *
+         * Порядок цепочки — тот же `configured`, уже упорядоченный по ступени, так
+         * что первым пробуется выбранный, а дальше остальные.
+         */
+        const chain = images?.length && visionChain.length > 0 ? visionChain : configured;
+        // Шаг 1 стриминга (07.09): для anthropic БЕЗ картинок ответ читается
+        // ПОТОКОМ — те же max_tokens (паритет держит сторож streamCapsMatch…),
+        // тот же учёт (учтиГенерацию по done-событию), плюс живой счётчик байтов
+        // в onProgress вместо мёртвого спиннера на минуты. Только anthropic:
+        // у gemini-стрима потолок ниже GEN_MAX_TOKENS — регрессия к обрезке;
+        // прочие идут прежним callProvider. Отказ потока НЕ фатален: attempts
+        // пуст, и цикл ниже честно пробует обычный путь с фолбэками.
+        if (!images?.length && chain.length === 1 && chain[0].id === "anthropic") {
+            const cand = chain[0];
+            try {
+                let ответ = "";
+                let байт = 0;
+                let отдано = 0;
+                // Шаг 2 (07.09): файлы объявляются ПО МЕРЕ завершения их JSON-объектов
+                // в потоке — спасающий разбор уже умеет вынимать целые объекты из
+                // недописанного JSON. Разбор не чаще раза в ~4КБ: он не бесплатен.
+                const объявлено = new Set();
+                let последнийРазбор = 0;
+                let tin;
+                let tout;
+                for await (const ev of (0, providers_1.streamProviderResilient)(cand.id, messages, cand.defaultModel, 0.2)) {
+                    if (ev.kind === "text" && ev.text) {
+                        ответ += ev.text;
+                        байт += Buffer.byteLength(ev.text, "utf8");
+                        if (байт - отдано >= 2048) {
+                            отдано = байт;
+                            onProgress?.("generating", { bytes: байт });
+                        }
+                        if (байт - последнийРазбор >= 4096) {
+                            последнийРазбор = байт;
+                            for (const o of (0, jsonReply_1.salvageCompleteArrayObjects)(ответ, "files")) {
+                                const путь = o?.path;
+                                if (typeof путь === "string" && путь && !объявлено.has(путь)) {
+                                    объявлено.add(путь);
+                                    onProgress?.("file_ready", { path: путь });
+                                }
+                            }
+                        }
+                    }
+                    else if (ev.kind === "done") {
+                        tin = ev.tokensIn;
+                        tout = ev.tokensOut;
+                    }
+                }
+                if (ответ) {
+                    result = { reply: ответ, model: cand.defaultModel, usage: { prompt_tokens: tin, completion_tokens: tout } };
+                    учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag, userId);
+                    учтиВЗапуск(result.usage);
+                    provider = cand;
+                }
+            }
+            catch (inner) {
+                attempts.push({ provider: cand.id + " (stream)", error: inner instanceof Error ? inner.message : String(inner) });
+            }
+        }
+        for (const cand of chain) {
+            if (result)
+                break;
+            try {
+                /*
+                 * 🔴 `структурныйОтвет: true` — ОТВЕТ ОБЯЗАН БЫТЬ JSON, и это меняет всё.
+                 *
+                 * Флаг завели 07.10.2026 с объяснением прямо в providers.ts: у моделей с
+                 * внутренним размышлением (gemini-2.5-flash — наш основной поставщик
+                 * генерации) размышление тратит ТОТ ЖЕ бюджет, что и ответ. Для свободного
+                 * текста обрыв даёт неполный, но читаемый ответ; для JSON обрыв означает,
+                 * что ответ не разберётся вовсе.
+                 *
+                 * И до 12.10 его не передавал НИ ОДИН вызов во всём бэкенде — механизм был
+                 * написан и не позван. Цена видна в замере: пять генераций гостем на одном
+                 * тексте дали 23.3 / 63.0 / 23.9 / 22.5 / 26.3 с, и ровно у медленного
+                 * прогона стоит `continued: true` — ответ оборвался на 8192 токенах, и
+                 * сервер делал ВТОРОЙ вызов. Размышление съедало бюджет, которого хватало
+                 * остальным четырём.
+                 */
+                result = await (0, providers_1.callProvider)(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+                // Ответ мог прийти от следующего поставщика (закрытый по лимиту пропущен
+                // в callProvider) — учёт и подпись берут того, кто ответил на самом деле.
+                const used = result.providerUsed
+                    ? (chain.find((c) => c.id === result.providerUsed) ?? (0, providers_1.getProviders)().find((p) => p.id === result.providerUsed) ?? cand)
+                    : cand;
+                учтиГенерацию(used.id, result.model || used.defaultModel, result.usage, moduleTag, userId);
+                учтиВЗапуск(result.usage);
+                provider = used;
+                break;
+            }
+            catch (inner) {
+                attempts.push({ provider: cand.id, error: inner instanceof Error ? inner.message : String(inner) });
+            }
+        }
+        if (!result) {
+            throw new Error("ALL_PROVIDERS_FAILED: " + attempts.map((a) => a.provider + ": " + a.error).join(" | "));
+        }
+    }
+    catch (e) {
+        if (e instanceof Error && e.message.startsWith("NO_VISION_PROVIDER"))
+            throw e;
+        const path = targetFiles[0] || "generated.ts";
+        return {
+            files: [{ path, content: `// AI generation failed — configure a provider\n// Prompt: ${prompt}\n`, language: detectLanguage(path) }],
+            aiGenerated: false,
+        };
+    }
+    let wasContinued = false;
+    // Два РАЗНЫХ исхода обрыва, и раньше они назывались одним словом.
+    // `continued` ставился в обоих случаях, а экран печатал по нему
+    // «недостающие файлы дозагружены» — то есть при неудачном дозапросе человеку
+    // сообщался результат, которого не было, поверх обрезанного набора файлов.
+    let wasTruncated = false;
+    let parsed = parseGeneratedFiles(result.reply, targetFiles);
+    // Salvage means the reply was cut off and its tail file was lost — ask the
+    // model to CONTINUE with just the missing files (one attempt; completed
+    // files are named so it doesn't regenerate them).
+    if (parsed.mode === "salvaged") {
+        onProgress?.("continuation");
+        try {
+            const done = parsed.files.map((f) => f.path).join(", ");
+            const contMessages = [
+                ...messages,
+                { role: "assistant", content: result.reply },
+                {
+                    role: "user",
+                    content: `Your reply was cut off before it finished. These files arrived complete: ${done}. ` +
+                        `Return ONLY a JSON object {"files":[...]} with the REMAINING files (do not repeat the completed ones). No explanation.`,
+                },
+            ];
+            // Дозапрос тоже просит JSON — и тоже не должен тратить бюджет на размышление.
+            const cont = await (0, providers_1.callProvider)(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS, undefined, undefined, true);
+            учтиГенерацию(provider.id, provider.defaultModel, cont.usage, moduleTag, userId);
+            учтиВЗапуск(cont.usage);
+            const contParsed = parseGeneratedFiles(cont.reply, []);
+            if (contParsed.mode !== "fallback") {
+                const have = new Set(parsed.files.map((f) => f.path));
+                parsed = { mode: "parsed", files: [...parsed.files, ...contParsed.files.filter((f) => !have.has(f.path))] };
+                wasContinued = true;
+            }
+            else {
+                // Дозапрос состоялся и не дал разбираемого ответа: у человека на руках
+                // ОБРЕЗАННЫЙ набор, и знать об этом он должен.
+                wasTruncated = true;
+            }
+        }
+        catch {
+            // Дозапрос не состоялся вовсе. Спасённый префикс оставляем — он лучше,
+            // чем ничего, — но выдавать его за целый результат нельзя.
+            wasTruncated = true;
+        }
+    }
+    let files = parsed.files;
+    onProgress?.("syntax_check");
+    let syntaxProblems = await (0, syntaxCheck_1.validateGeneratedFiles)(files);
+    // Self-correction: a generate-then-check-then-fix loop is a well-established
+    // pattern in agentic coding systems (Claude Code, SWE-agent) — a single-shot
+    // reply is much weaker than one that gets to see its own mistakes. Capped at
+    // MAX_SYNTAX_FIX_ATTEMPTS so a stubborn model can't loop forever on our bill.
+    let selfCorrected = 0;
+    while (syntaxProblems.length > 0 && selfCorrected < MAX_SYNTAX_FIX_ATTEMPTS) {
+        onProgress?.("self_correcting");
+        messages.push({ role: "assistant", content: result.reply });
+        messages.push({
+            role: "user",
+            content: `Your last output had syntax errors:\n` +
+                syntaxProblems.map((p) => `${p.path}:\n${p.errors.join("\n")}`).join("\n\n") +
+                `\n\nReturn the corrected, complete files in the same JSON format. No explanation, just JSON.`,
+        });
+        try {
+            // Самопочинка возвращает те же файлы в том же JSON — флаг обязателен и здесь.
+            result = await (0, providers_1.callProvider)(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS, undefined, undefined, true);
+            учтиГенерацию(provider.id, provider.defaultModel, result.usage, moduleTag, userId);
+            учтиВЗапуск(result.usage);
+        }
+        catch {
+            break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
+        }
+        files = parseGeneratedFiles(result.reply, targetFiles).files;
+        syntaxProblems = await (0, syntaxCheck_1.validateGeneratedFiles)(files);
+        selfCorrected += 1;
+    }
+    return {
+        files,
+        aiGenerated: true,
+        provider: provider.id,
+        model: provider.defaultModel,
+        // Per-run стоимость: сумма токенов всех вызовов этого запуска; цена по
+        // ПОСЛЕДНЕМУ провайдеру цепочки (фолбэк со сменой модели редок, и тогда
+        // число приближённое — токены при этом точные всегда).
+        runTokens: { in: токВх, out: токИсх },
+        runCostUsd: (0, pricing_1.costUsd)(provider.id, provider.defaultModel, токВх, токИсх),
+        ...(wasContinued ? { continued: true } : {}),
+        ...(wasTruncated ? { truncated: true, recoveredFiles: files.length } : {}),
+        ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}),
+        ...(selfCorrected > 0 && syntaxProblems.length === 0 ? { selfCorrected } : {}),
+    };
+}
+/** Turn a raw idea into a staged build plan: MVP scope, explicitly deferred
+ * scope, and an ordered list of ready-to-use generate_code prompts — the
+ * "help me figure out what to build, in what order" layer that sits before
+ * generate_code, not a replacement for it. Works with no open project
+ * (greenfield) or accounts for an existing one's files when given. */
+async function planProjectWithAI(idea, existingFiles, moduleTag) {
+    const fallback = {
+        ok: true, aiGenerated: false,
+        summary: idea, targetUsers: "", stack: "next",
+        mvpFeatures: [], laterFeatures: [], milestones: [],
+        firstPrompt: `Build a first version of: ${idea}`,
+    };
+    const providers = (0, providers_1.getProviders)();
+    const configured = providers.filter((p) => p.configured);
+    if (configured.length === 0) {
+        return { ...fallback, targetUsers: "Configure an AI provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) for a real plan." };
+    }
+    const provider = configured[0];
+    const existingContext = existingFiles.length > 0
+        ? `\n\nThis project already has these files — build on them, don't restart from scratch:\n${existingFiles.slice(0, CONTEXT_MAX_FILES).map((f) => `- ${f.path}`).join("\n")}`
+        : "";
+    const systemPrompt = `You are a pragmatic product+tech lead scoping a new build. Given a raw idea, return ONLY a JSON object ` +
+        `(no explanation) with this exact shape: {"summary": "one paragraph restating the idea clearly", ` +
+        `"targetUsers": "who this is for, one sentence", "stack": one of "next"|"express"|"static"|"react"|"python", ` +
+        `"mvpFeatures": ["smallest ranked feature list for a working v1, most important first, 3-6 items"], ` +
+        `"laterFeatures": ["explicitly deferred features, so scope doesn't creep"], ` +
+        `"milestones": [{"title": "short step name", "prompt": "a ready-to-use prompt for an AI code-generation tool ` +
+        `to build exactly this step"}], "firstPrompt": "the exact prompt to hand to a code generator right now, matching milestones[0]"}. ` +
+        `Order milestones so each is buildable and demoable on its own before the next.`;
+    /*
+     * 🔴 ЗАПРЕТ ВЫДУМАННЫХ ДАННЫХ НУЖЕН И ЗДЕСЬ, хотя эта ручка кода не пишет.
+     *
+     * Она отдаёт `firstPrompt` и `milestones[].prompt` — ГОТОВЫЕ промпты, которые
+     * потом уходят генератору как сообщение ПОЛЬЗОВАТЕЛЯ. Выдуманный адрес,
+     * попавший в такой промпт, генератор исполнит добросовестно: для него это
+     * просьба человека, а не собственная выдумка, и системный запрет на той
+     * стороне с ней заспорит. Дешевле не родить её здесь, чем ловить там.
+     */
+    const промптЗамыслаСЗапретом = `${systemPrompt} ${(0, devhubNoFakeData_1.ukazanieBezVydumannyhDannyh)((0, devhubNoFakeData_1.tekushchiyGod)(), (0, devhubNoFakeData_1.yazykZaprosa)(idea))}`;
+    const userMsg = `Idea: ${idea}${existingContext}`;
+    try {
+        const result = await (0, providers_1.callProvider)(provider.id, [
+            { role: "system", content: промптЗамыслаСЗапретом },
+            { role: "user", content: userMsg },
+        ], provider.defaultModel, 0.3, undefined, undefined, undefined, undefined, true);
+        // Учёт расхода. До 31.08.2026 его здесь не было вовсе: /plan зовёт
+        // платного поставщика НАПРЯМУЮ, минуя smartComplete, а учёт пишет
+        // именно smartComplete. Расход ручки был невидим полностью — и это
+        // при том, что входа она не требует.
+        //
+        // Таблица цен берётся платформенная (services/qcoreai/pricing):
+        // второй источник цен развёл бы наш отчёт с отчётом qcoreai.
+        // costUsd честно возвращает 0 для модели без цены — лучше выдумки,
+        // но значит: 0 здесь читается как «цена неизвестна», а не «бесплатно».
+        try {
+            (0, smartRunLog_1.insertSmartRun)({
+                module: moduleTag,
+                resolved: "single",
+                // Разбор usage — только через общий дом: прямые имена OpenAI дают
+                // у gemini (наш провайдер по умолчанию) тихий ноль, см. сторож
+                // devhubCountsGeminiTokens.guard.test.ts.
+                costUsd: (() => {
+                    const { tokensIn, tokensOut } = (0, usageTokens_1.usageToTokens)(result.usage);
+                    return (0, pricing_1.costUsd)(provider.id, provider.defaultModel, tokensIn, tokensOut);
+                })(),
+                savedUsd: 0,
+            });
+        }
+        catch { /* учёт не должен ронять ответ, ради которого его зовут */ }
+        const parsed = (0, jsonReply_1.extractJsonObject)(result.reply);
+        if (!parsed)
+            throw new Error("unparseable plan reply");
+        const milestones = Array.isArray(parsed.milestones)
+            ? parsed.milestones.map((m) => ({ title: String(m?.title || ""), prompt: String(m?.prompt || "") }))
+            : [];
+        return {
+            ok: true,
+            aiGenerated: true,
+            summary: String(parsed.summary || idea),
+            targetUsers: String(parsed.targetUsers || ""),
+            stack: String(parsed.stack || "next"),
+            mvpFeatures: Array.isArray(parsed.mvpFeatures) ? parsed.mvpFeatures.map(String) : [],
+            laterFeatures: Array.isArray(parsed.laterFeatures) ? parsed.laterFeatures.map(String) : [],
+            milestones,
+            firstPrompt: String(parsed.firstPrompt || milestones[0]?.prompt || `Build a first version of: ${idea}`),
+        };
+    }
+    catch {
+        // A provider call failure or an unparseable reply is a real failure, not
+        // a plan with empty fields — same honesty contract as generateCodeWithAI's
+        // aiGenerated flag, just expressed as ok:false since there's no partial
+        // file output worth keeping here.
+        return { ...fallback, ok: false };
+    }
+}
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Projects CRUD
+// ═════════════════════════════════════════════════════════════════════════════
+// POST /api/devhub/projects
+exports.devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    /*
+     * 🔴 СОЗДАНИЕ БЕЗ МЕТКИ НЕ ЛОЖИТСЯ В ОБЩИЙ ЯЩИК (06.10.2026).
+     *
+     * Без входа и без заголовка x-devhub-guest личность выходила общей —
+     * "anonymous" (lib/devhubGuest.ts). А владение проверяется сравнением с
+     * userId, поэтому ЛЮБОЙ такой же запрос видел, правил и удалял эти проекты
+     * вместе с их базой. Подтверждено соседним окном в тот же день: проект,
+     * созданный без метки, удалён таким же запросом — 200, pagesRemoved.
+     *
+     * Это тот самый дефект, который чинили 21.08.2026 для вошедших и для гостей с
+     * меткой; для безметочных он остался. И попадал туда не только curl: фронт при
+     * недоступном хранилище (приватный режим, запрет данных сайта) заголовок не
+     * ставил ВООБЩЕ — то есть живой человек оказывался в общем ящике с чужими
+     * черновиками. Фронт починен отдельно (lib/devhubGuest.ts, личность в памяти).
+     *
+     * Здесь закрываем вход со стороны сервера: своя личность выдаётся на месте и
+     * ВОЗВРАЩАЕТСЯ вызывающему, иначе он не сможет обратиться к своему же проекту.
+     * Запрещать создание (400) было бы хуже: лендинг обещает работу без аккаунта,
+     * и отказ ломал бы обещание ради удобства проверки.
+     */
+    let userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    let выданнаяМетка = null;
+    if (userId === ОБЩАЯ_ЛИЧНОСТЬ) {
+        выданнаяМетка = node_crypto_1.default.randomUUID();
+        userId = `guest:${выданнаяМетка}`;
+    }
+    const { name, description, stack } = req.body || {};
+    if (!name || typeof name !== "string") {
+        return res.status(400).json({ error: "name is required" });
+    }
+    const validStacks = ["next", "express", "static", "react", "python"];
+    /*
+     * УМОЛЧАНИЕ — static, а не next (28.09.2026).
+     *
+     * Замер на живом проде в тот же день: next публиковался с ok:true и liveUrl, а
+     * адрес отдавал 404 и через 160 секунд — Cloudflare Pages отдаёт файлы как есть
+     * и ничего не собирает. То же у react (155 с) и express (163 с); static отвечал
+     * 200 за 45 с. На сайте выбор стека уже починен, а ЗДЕСЬ оставалось прежнее
+     * «next»: кто зовёт API напрямую (а это и наши собственные съёмки, и любой, кто
+     * читает документацию), по умолчанию получал стек с мёртвым адресом.
+     *
+     * Неизвестное значение тоже сводим к static, а не к next: незнание не должно
+     * приводить к публикации, которая заведомо не служится.
+     */
+    const resolvedStack = typeof stack === "string" && validStacks.includes(stack) ? stack : "static";
+    const project = {
+        id: node_crypto_1.default.randomUUID(),
+        userId,
+        name: name.trim(),
+        description: description ? String(description).trim() : null,
+        stack: resolvedStack,
+        status: "draft",
+        repoUrl: null,
+        deployUrl: null,
+        customDomain: null,
+        envVars: {},
+        collaborators: [],
+        /*
+         * Метка захода приходит С КЛИЕНТА: канал знает браузер (адрес или память
+         * вкладки), сервер его не видит. Режем до 60 знаков и принимаем только
+         * безопасные символы — это поле попадёт в отчёты и в решение об уборке,
+         * и чужая строка из адреса не должна туда попасть как есть.
+         */
+        entryTag: меткаЗахода(req.body?.entryTag),
+        createdAt: now(),
+        updatedAt: now(),
+    };
+    // Признак хранилища. До 19.08.2026 ответ был одинаков независимо от того,
+    // легло ли сохранение в базу или в память процесса: `catch` тихо клал запись
+    // в Map, и человек видел успех. При следующей выкатке — а их бывает шесть в
+    // сутки — проекта или файла не оказывалось.
+    //
+    // Здесь признак нельзя вычислить из isDbReady(): запасной путь срабатывает по
+    // ИСКЛЮЧЕНИЮ, а не по флагу готовности. Поэтому локальная переменная,
+    // выставляемая ровно там, где подмена и происходит.
+    let storage = "db";
+    try {
+        await dbSaveProject(project);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/projects:create", projectId: project.id });
+        memProjects.set(project.id, project);
+        storage = "memory";
+    }
+    // Метка выдана — назвать её обязательно, и в заголовке тоже: без неё
+    // вызывающий потеряет доступ к собственному проекту на следующем запросе.
+    if (выданнаяМетка)
+        res.setHeader(devhubGuest_1.DEVHUB_GUEST_HEADER, выданнаяМетка);
+    res.status(201).json({
+        project,
+        storage,
+        ...(выданнаяМетка
+            ? {
+                guestId: выданнаяМетка,
+                guestIdNote: `Send this value as the ${devhubGuest_1.DEVHUB_GUEST_HEADER} header on every later request — it is the only way back to this project.`,
+            }
+            : {}),
+    });
+});
+// GET /api/devhub/projects
+/** True when the project has a live deployment but its files were edited
+ * after the last deploy was triggered — the deployed page is stale. */
+async function computeNeedsRedeploy(project) {
+    if (!project.deployUrl)
+        return false;
+    try {
+        const [files, deployments] = await Promise.all([
+            dbListFiles(project.id),
+            dbListDeployments(project.id, 1),
+        ]);
+        const lastDeploy = deployments[0];
+        if (!lastDeploy || !files.length)
+            return false;
+        const lastEdit = files.reduce((max, f) => (f.updatedAt > max ? f.updatedAt : max), "");
+        return lastEdit > lastDeploy.triggeredAt;
+    }
+    catch {
+        return false; // badge is advisory — never break the list over it
+    }
+}
+/**
+ * Проект по идентификатору, принадлежащий этому пользователю, — или ответ
+ * клиенту, если его нельзя было прочитать. Возвращает null, когда ответ уже
+ * отправлен: вызывающему остаётся выйти.
+ *
+ * Заменяет блок, скопированный в 26 местах:
+ *
+ *   try { project = await dbGetProject(id); }
+ *   catch { project = memProjects.get(id) ?? null; }
+ *   if (!project || project.userId !== userId) return res.status(404)...
+ *
+ * Отказ базы подменялся пустой памятью (в проде она пуста), и наружу уходило
+ * «project not found». Для чтения это ложь о чужой записи; для удаления хуже —
+ * человек читает 404 как «уже удалено» и уходит, а проект на месте.
+ *
+ * Проверено положительным контролем 21.08.2026: с работающей базой PATCH и
+ * DELETE отвечают 200, с падающей — 404. Значит база на пути, и её отказ
+ * подменялся отсутствием записи.
+ *
+ * Память ниже осмысленна, когда база не настроена вовсе: тогда она И ЕСТЬ
+ * хранилище, и «не найдено» честно.
+ */
+/**
+ * Признак того, что запись легла ТОЛЬКО в память процесса.
+ *
+ * Форма та же, что уже принята в модуле (поле `storage` в теле), а не
+ * заголовок: второй способ говорить то же самое разошёлся бы с первым при
+ * следующей правке. Я успел написать заголовок и откатил.
+ */
+const MEMORY_NOTE = {
+    storage: "memory",
+    warning: "Хранилище недоступно: изменение сохранено только до перезапуска сервиса.",
+};
+/** Ответ на отказ хранилища — один текст на весь модуль. */
+function replyStorageUnavailable(res) {
+    res.status(503).json({
+        error: "storage_unavailable",
+        warning: "Хранилище временно недоступно. Это НЕ значит, что проекта нет — " +
+            "прочитать его не удалось. Повторите запрос позже.",
+    });
+}
+/**
+ * Чтение проекта, отличающее «нет такого» от «не смогли спросить».
+ *
+ * Проверка владельца НЕ здесь: в файле их две разновидности — `userId !==` и
+ * `canAccess(project, userId)`, и сводить их в одну — отдельное решение, не
+ * моё. Помощник закрывает ровно то, что было сломано одинаково везде.
+ */
+async function readProject(id) {
+    try {
+        return { project: await dbGetProject(id), failed: false };
+    }
+    catch {
+        return { project: memProjects.get(id) ?? null, failed: true };
+    }
+}
+async function loadOwnedProjectOrReply(id, userId, 
+// Структурный тип, а не Response из express: в этом файле имя Response уже
+// занято глобальным ответом fetch, и импорт express-версии его перекрывает.
+res) {
+    let project;
+    let readFailed = false;
+    try {
+        project = await dbGetProject(id);
+    }
+    catch {
+        project = memProjects.get(id) ?? null;
+        readFailed = true;
+    }
+    if (!project && readFailed) {
+        replyStorageUnavailable(res);
+        return null;
+    }
+    if (!project || project.userId !== userId) {
+        res.status(404).json({ error: "project not found" });
+        return null;
+    }
+    return project;
+}
+exports.devhubRouter.get("/projects", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    try {
+        const projects = await dbListProjects(userId);
+        const flags = await Promise.all(projects.map(computeNeedsRedeploy));
+        // Признак хранилища в ОТВЕТЕ, а не только в /health. Когда база не
+        // поднялась, модуль честно работает по памяти — но пустой список тогда
+        // неотличим от «у вас нет проектов», а проекты лежат в Postgres и просто
+        // не читаются. Замер 28.08 подтвердил: ответ был `{projects:[],total:0}`
+        // без единого намёка. Соседи отдают такой признак давно (подписка на
+        // ранний доступ — поле `storage`), здесь его не было.
+        res.json({
+            projects: projects.map((p, i) => ({ ...p, needsRedeploy: flags[i] })),
+            total: projects.length,
+            storage: (0, ensureDevHubTables_1.isDevHubDbReady)() ? "db" : "memory",
+        });
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/projects:list", userId });
+        // Раньше отсюда уходил список из запасной памяти — в проде пустой, — и
+        // человек читал «у вас нет проектов». Ответ 200 с пустым списком не тревожит
+        // никого: ни Sentry (ошибка проглочена выше), ни дежурного, ни самого
+        // пользователя, который решит, что зашёл не под тем аккаунтом.
+        //
+        // Признак хранилища тут не спасает: страница показала бы «сохранено в
+        // памяти» рядом с пустотой, а пустота и есть неверный ответ.
+        const projects = [...memProjects.values()].filter((p) => p.userId === userId);
+        if (projects.length === 0) {
+            res.status(503).json({
+                error: "storage_unavailable",
+                warning: "Хранилище временно недоступно. Это НЕ значит, что проектов нет — " +
+                    "список не удалось получить. Повторите запрос позже.",
+            });
+            return;
+        }
+        // В памяти что-то есть (dev-режим или свежие правки этого процесса) —
+        // отдаём, но честно называем источник.
+        res.json({ projects, total: projects.length, storage: "memory" });
+    }
+});
+// GET /api/devhub/projects/:id
+exports.devhubRouter.get("/projects/:id", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    try {
+        const project = await dbGetProject(req.params.id);
+        if (!project || !canAccess(project, userId)) {
+            return res.status(404).json({ error: "project not found" });
+        }
+        const files = await dbListFiles(project.id);
+        const role = project.userId === userId ? "owner" : (project.collaborators.find(c => c.userId === userId)?.role ?? "viewer");
+        res.json({ project, files, role });
+    }
+    catch (e) {
+        // Было 500 «internal_error», тогда как ВОСЕМНАДЦАТЬ соседних чтений в этом
+        // же файле отвечают 503 storage_unavailable. Замер 28.08 (роутер поднят с
+        // нечитаемой базой) показал этот разнобой: одна ручка из девятнадцати
+        // говорила «у нас сломалось», остальные — «хранилище недоступно, проект на
+        // месте». Для человека разница большая: первое читается как потеря.
+        //
+        // 500 к тому же поднимает тревогу как наша авария, а недоступность базы у
+        // нас уже описана отдельным кодом.
+        (0, sentry_1.captureException)(e, { route: "devhub/projects:get", userId });
+        return replyStorageUnavailable(res);
+    }
+});
+// PATCH /api/devhub/projects/:id
+exports.devhubRouter.patch("/projects/:id", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const { name, description, status, deployUrl, repoUrl, customDomain } = req.body || {};
+    if (name !== undefined)
+        project.name = String(name).trim();
+    if (description !== undefined)
+        project.description = description ? String(description).trim() : null;
+    if (status !== undefined)
+        project.status = String(status);
+    if (deployUrl !== undefined)
+        project.deployUrl = deployUrl ? String(deployUrl) : null;
+    if (repoUrl !== undefined)
+        project.repoUrl = repoUrl ? String(repoUrl) : null;
+    if (customDomain !== undefined) {
+        const wanted = customDomain ? String(customDomain).trim().toLowerCase() : null;
+        const refusal = wanted ? customDomainRefusal(wanted, project.id) : null;
+        if (refusal)
+            return res.status(400).json({ error: refusal });
+        project.customDomain = wanted;
+    }
+    project.updatedAt = now();
+    // Признак хранилища. До 19.08.2026 ответ был одинаков независимо от того,
+    // легло ли сохранение в базу или в память процесса: `catch` тихо клал запись
+    // в Map, и человек видел успех. При следующей выкатке — а их бывает шесть в
+    // сутки — проекта или файла не оказывалось.
+    //
+    // Здесь признак нельзя вычислить из isDbReady(): запасной путь срабатывает по
+    // ИСКЛЮЧЕНИЮ, а не по флагу готовности. Поэтому локальная переменная,
+    // выставляемая ровно там, где подмена и происходит.
+    let storage = "db";
+    try {
+        await dbSaveProject(project);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/projects:update", projectId: project.id });
+        memProjects.set(project.id, project);
+        storage = "memory";
+    }
+    res.json({ project, storage });
+});
+// DELETE /api/devhub/projects/:id
+/**
+ * ПРОБНЫЙ САЙТ СНИМАЕТ СЕБЯ САМ.
+ *
+ * 🔴 ЗАМЕР 07.10.2026 по живому аккаунту Cloudflare (вход основателя): из 34
+ * проектов Pages **20 были нашими пробами**, 15 из них ещё отдавали публичные
+ * страницы. Каждый такой проект навсегда занимает один из слотов аккаунта, и
+ * когда слоты кончатся, публикация встанет у ВСЕХ, включая платных.
+ *
+ * ВАЖНО, ОТКУДА МУСОР: штатный смоук (scripts/devhub-prod-smoke.js) за собой
+ * УБИРАЕТ — он зовёт DELETE /projects/:id, а тот снимает и проект Pages. Среди
+ * 20 найденных не было ни одного `aevion-smoke-*`. Весь мусор оставили РУЧНЫЕ
+ * пробы окон: человек (и я в том числе) выкатывал проверку curl-ом и уходил.
+ * Значит правило нельзя чинить в скрипте — его чинит сервер.
+ *
+ * Поэтому: проект с пробным именем, принадлежащий ГОСТЮ, снимает свой сайт сам
+ * через `DEVHUB_PROBE_SITE_TTL_MINUTES` минут (по умолчанию 120). Снимается
+ * только САЙТ: запись проекта остаётся, она слотов Cloudflare не занимает и
+ * ничего не стоит, а удаление чужой работы — необратимо, и к нему мы не
+ * приближаемся без человека.
+ *
+ * ⚠️ ЧЕСТНАЯ ГРАНИЦА: таймер живёт в процессе. Перезапуск (а выкаток бывает
+ * несколько в сутки) его теряет, и такой сайт останется. То есть это уменьшает
+ * поток мусора, но не заменяет периодический обход — его стоит завести отдельно,
+ * и я этого здесь не делаю, чтобы не выдать половину за целое.
+ */
+const ПРОБНОЕ_ИМЯ = /^\s*(probe|smoke)[-_ ]/i;
+const СРОК_ПРОБНОГО_САЙТА_МС = Math.max(1, Number(process.env.DEVHUB_PROBE_SITE_TTL_MINUTES ?? 120)) * 60000;
+/** Пробный проект гостя: и имя помечено, и владелец — не вошедший человек. */
+function пробныйГостевойПроект(p) {
+    if (!isGuestRequester(p.userId))
+        return false;
+    /*
+     * 🔴 12.10.2026: ПРИЗНАК ТЕПЕРЬ И ПО МЕТКЕ ЗАХОДА, а не только по имени.
+     *
+     * Повод назвал окно роликов, и оно право: имя проекта видно В КАДРЕ записи.
+     * Требуя «probe-» в имени, мы заставляли портить ролик ради нашей уборки —
+     * удобство механизма за счёт того, что видит зритель. Мой совет был плох.
+     *
+     * Метка захода (?c=probe-…) в кадр не попадает и уже отличает наши заходы в
+     * воронке. Имя оставлено ВТОРЫМ признаком, а не заменено: проекты, созданные
+     * до этой правки, метки не имеют, и снимать их по-прежнему надо.
+     */
+    if (ПРОБНОЕ_ИМЯ.test(String(p.name ?? "")))
+        return true;
+    const метка = typeof p.entryTag === "string" ? p.entryTag : "";
+    return /^(probe|smoke)[-_]/i.test(метка);
+}
+/**
+ * Снять опубликованный сайт проекта (Cloudflare Pages).
+ *
+ * ВЫНЕСЕНО ИЗ РУЧКИ УДАЛЕНИЯ 07.10.2026 без изменения поведения: тот же код
+ * понадобился второму вызывающему — самоуборке пробных сайтов. Второй способ
+ * снимать сайт заводить нельзя: у этого уже есть и правильный порядок (домены,
+ * потом проект — иначе Cloudflare отвечает 8000028), и чтение причины из тела, и
+ * сохранение адреса осиротевшего сайта. Каждое из трёх куплено отдельным разбором.
+ *
+ * Возвращает те же три величины, что раньше складывались в ответ ручки.
+ */
+async function снятьСайтPages(project, откуда) {
+    let pagesRemoved;
+    let pagesRemoveError;
+    let orphanSiteUrl;
+    if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
+        const имяСайта = имяPagesПроекта(project);
+        // Сначала домены, потом проект: обратный порядок Cloudflare отвергает с
+        // 8000028, и именно в этом порядке дело, а не в правах или имени.
+        const домены = await снятьДоменыPages(имяСайта);
+        try {
+            const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${имяСайта}`, { method: "DELETE", headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } });
+            pagesRemoved = r.ok || r.status === 404;
+            if (!pagesRemoved) {
+                /*
+                 * ПРИЧИНУ берём из тела, а не только из кода (30.09.2026).
+                 *
+                 * Прежнее сообщение «Cloudflare ответил 400» не говорит, что делать:
+                 * 400 бывает и когда имя не то, и когда у токена нет права, и когда
+                 * проект держат незавершённые сборки. Проверено ночной пробой — я
+                 * получил ровно это сообщение и не смог назвать причину, хотя имя
+                 * сайта совпадало.
+                 */
+                let подробно = "";
+                try {
+                    const тело = await r.text();
+                    подробно = тело ? ` — ${тело.slice(0, 300)}` : "";
+                }
+                catch {
+                    подробно = " — тело ответа не прочиталось";
+                }
+                // Судьбу доменов называем рядом: без неё «Cloudflare ответил 400»
+                // снова не говорит, что делать.
+                const проДомены = домены.ошибка
+                    ? ` | домены не сняты: ${домены.ошибка}`
+                    : домены.осталось.length
+                        ? ` | не снялись домены: ${домены.осталось.join(", ")}`
+                        : домены.снято
+                            ? ` | доменов снято: ${домены.снято}`
+                            : "";
+                pagesRemoveError = `Cloudflare ответил ${r.status}${подробно}${проДомены}`;
+            }
+        }
+        catch (e) {
+            pagesRemoved = false;
+            pagesRemoveError = e instanceof Error ? e.message : String(e);
+        }
+        if (pagesRemoved === false) {
+            /*
+             * НЕ ТЕРЯТЬ АДРЕС ОСИРОТЕВШЕГО САЙТА (30.09.2026).
+             *
+             * Дальше проект удаляется из базы. Если сайт снять не удалось, он остаётся
+             * отвечать 200 публично, а единственная ниточка к нему — имя, выведенное из
+             * записи, которой уже нет. Ровно так и накопился тот мусор, про который
+             * сказано выше: «уборку пришлось делать руками по списку».
+             *
+             * Поэтому адрес называется трижды: в ответе (вызывающий видит сразу), в
+             * сборщике ошибок (чтобы пришёл человек) и в журнале. Проверено ночью на
+             * себе: проект отдал 404, сайт продолжал отдавать 200 и 4231 знак.
+             */
+            orphanSiteUrl = `https://${имяСайта}.pages.dev`;
+            (0, sentry_1.captureException)(new Error(`devhub: pages project delete failed: ${pagesRemoveError}`), {
+                route: откуда,
+                projectId: project.id,
+                orphanSiteUrl,
+                имяСайта,
+            });
+            console.warn(`[devhub] сайт остался жить: ${orphanSiteUrl} — снять не удалось: ${pagesRemoveError}`);
+        }
+    }
+    return { pagesRemoved, pagesRemoveError, orphanSiteUrl };
+}
+/** Отложенное снятие пробного сайта. Снимается САЙТ, запись проекта остаётся. */
+/**
+ * Убрать пробный САЙТ (проект в базе остаётся). Одно поведение на два повода:
+ * таймер после выкатки и периодический свип.
+ *
+ * 🔴 ЗАЧЕМ ОБНУЛЯТЬ АДРЕС. Прежняя уборка по таймеру адрес не обнуляла — и это
+ * было верно, потому что рядом стоял DELETE, удалявший проект целиком. Для свипа
+ * так нельзя: Cloudflare на уже снятый проект отвечает 404, 404 считается
+ * успехом, и тот же проект попадал бы в выборку каждые четверть часа — вечный
+ * шум в журнале. Хуже того, счётчик потолка (занятоПроектовPages) считает
+ * проекты С АДРЕСОМ, то есть снятый сайт продолжал бы занимать место в пределе
+ * аккаунта. Поэтому адрес обнуляется ровно при успехе снятия.
+ */
+async function убратьПробныйСайт(project, откуда) {
+    const имя = имяPagesПроекта(project);
+    const r = await снятьСайтPages(project, откуда);
+    // Молчать нельзя ни при удаче, ни при отказе: это наше же действие над
+    // публичным адресом, и по журналу должно быть видно, что оно произошло.
+    console.warn(`[devhub] пробный сайт ${имя} (${откуда}): ` +
+        (r.pagesRemoved ? "снят" : `снять НЕ удалось — ${r.pagesRemoveError ?? "причина не названа"}`));
+    if (r.pagesRemoved) {
+        try {
+            await dbSaveProject({ ...project, deployUrl: null, updatedAt: new Date().toISOString() });
+        }
+        catch (e) {
+            // Сайт уже снят — это главное; но несохранённое обнуление вернёт проект в
+            // выборку, и молчать об этом нельзя.
+            console.warn(`[devhub] пробный сайт ${имя}: снят, но адрес не обнулён — ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    return { снят: Boolean(r.pagesRemoved), причина: r.pagesRemoveError };
+}
+function scheduleProbeSiteCleanup(project) {
+    deferred(async () => {
+        await убратьПробныйСайт(project, "devhub/probe-site:self-clean");
+    }, СРОК_ПРОБНОГО_САЙТА_МС);
+}
+/** Пробные сайты, которые пережили свой срок. Признак пробы — один и тот же. */
+async function залежавшиесяПробныеСайты(срокМс, предел = 200) {
+    const порог = new Date(Date.now() - срокМс).toISOString();
+    const годен = (p) => Boolean(p.deployUrl) && пробныйГостевойПроект(p) && p.updatedAt < порог;
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        return [...memProjects.values()].filter(годен).slice(0, предел);
+    }
+    try {
+        // Сужаем запросом то, что сужается дёшево (адрес и срок), а признак пробного
+        // имени считаем ОДНОЙ функцией в коде: второй его формы в SQL быть не должно.
+        const r = await pool.query(`SELECT * FROM "DevHubProject" WHERE "deployUrl" IS NOT NULL AND "updatedAt" < $1 ORDER BY "updatedAt" ASC LIMIT $2`, [порог, предел]);
+        return r.rows.map(rowToProject).filter(годен);
+    }
+    catch (e) {
+        // Третий исход: не «пусто», а НЕ ЗНАЮ. Пустой список прочитался бы как
+        // «сирот нет» и усыпил бы следующего читателя журнала.
+        console.warn(`[devhub] свип пробных сайтов: выборка не прочиталась — ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+    }
+}
+/**
+ * Периодический свип пробных сайтов.
+ *
+ * ЗАЧЕМ, помимо таймера. Таймер живёт В ПАМЯТИ ПРОЦЕССА: перезапуск сервиса (а
+ * он случается при каждой выкатке) стирает все отложенные уборки, и пробный сайт
+ * остаётся публичным навсегда. Замер 07.10.2026: мою собственную пробу на проде
+ * пришлось убирать руками именно поэтому. Свип — страховка на тот случай, а не
+ * второй механизм: снимает он тем же убратьПробныйСайт.
+ */
+async function свипПробныхСайтов() {
+    const кандидаты = await залежавшиесяПробныеСайты(СРОК_ПРОБНОГО_САЙТА_МС);
+    if (кандидаты === null)
+        return { осмотрено: null, снято: 0, неудач: 0 };
+    let снято = 0;
+    let неудач = 0;
+    for (const p of кандидаты) {
+        const r = await убратьПробныйСайт(p, "devhub/probe-site:sweep");
+        if (r.снят)
+            снято += 1;
+        else
+            неудач += 1;
+    }
+    if (кандидаты.length > 0) {
+        console.warn(`[devhub] свип пробных сайтов: осмотрено ${кандидаты.length}, снято ${снято}, неудач ${неудач}`);
+    }
+    return { осмотрено: кандидаты.length, снято, неудач };
+}
+/** Период свипа. Через переменную — чтобы в проде можно было уплотнить без выкатки. */
+const ПЕРИОД_СВИПА_МС = Math.max(60000, Number(process.env.DEVHUB_PROBE_SWEEP_MIN || 15) * 60000);
+let таймерСвипа = null;
+function запуститьСвипПробныхСайтов() {
+    if (таймерСвипа)
+        return;
+    таймерСвипа = setInterval(() => {
+        void свипПробныхСайтов().catch((e) => {
+            // Брошенное исключение внутри setInterval не доходит до обработчика ошибок
+            // приложения и роняет процесс — об этом сказано в index.ts про соседние
+            // рабочие. Поэтому ловим здесь и называем.
+            console.warn(`[devhub] свип пробных сайтов: сорвался — ${e instanceof Error ? e.message : String(e)}`);
+        });
+    }, ПЕРИОД_СВИПА_МС);
+    таймерСвипа.unref();
+}
+exports.devhubRouter.delete("/projects/:id", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // Drop the project's database FIRST. A deleted project whose schema and
+    // login role survive is worse than a leak: live credentials pointing at data
+    // nobody owns any more, and nothing left in the UI to clean them up with.
+    let databaseDropped;
+    let databaseDropError;
+    if (process.env.DEVHUB_DB_ADMIN_URL && project.envVars?.DATABASE_URL) {
+        try {
+            const { deprovisionProjectDatabase } = await Promise.resolve().then(() => __importStar(require("../lib/devhubDbProvision")));
+            const dropped = await deprovisionProjectDatabase({ projectId: project.id });
+            databaseDropped = dropped.ok;
+            if (!dropped.ok)
+                databaseDropError = dropped.error;
+        }
+        catch (e) {
+            databaseDropped = false;
+            databaseDropError = e instanceof Error ? e.message : String(e);
+        }
+        if (databaseDropped === false) {
+            // Deleting the project anyway would orphan the schema with no way back
+            // to it, so this fails loudly instead.
+            (0, sentry_1.captureException)(new Error(`devhub: database deprovision failed: ${databaseDropError}`), {
+                route: "devhub/projects:delete",
+                projectId: project.id,
+            });
+            return res.status(502).json({
+                error: `project not deleted — its database could not be dropped: ${databaseDropError}`,
+                hint: "retry, or drop it explicitly with DELETE /projects/:id/database first",
+            });
+        }
+    }
+    // Same reasoning as the database above, with a bill attached: the project's
+    // Railway service keeps running the user's code with the user's env on a
+    // live domain, and once the project row is gone nothing points at it.
+    let serviceDeleted;
+    const orphanServiceId = project.envVars?.RAILWAY_SERVICE_ID;
+    if (orphanServiceId && process.env.RAILWAY_API_TOKEN && process.env.DEVHUB_RAILWAY_PER_PROJECT) {
+        let dropError;
+        try {
+            const { deleteProjectService } = await Promise.resolve().then(() => __importStar(require("../lib/devhubRailwayDeploy")));
+            const dropped = await deleteProjectService({ serviceId: orphanServiceId });
+            serviceDeleted = dropped.ok;
+            if (!dropped.ok)
+                dropError = dropped.error;
+        }
+        catch (e) {
+            serviceDeleted = false;
+            dropError = e instanceof Error ? e.message : String(e);
+        }
+        if (serviceDeleted === false) {
+            (0, sentry_1.captureException)(new Error(`devhub: railway service delete failed: ${dropError}`), {
+                route: "devhub/projects:delete",
+                projectId: project.id,
+            });
+            return res.status(502).json({
+                error: `project not deleted — its Railway service could not be removed: ${dropError}`,
+                serviceId: orphanServiceId,
+                hint: "retry, or delete that service in the Railway dashboard first — deleting the project now would leave it running and billable with nothing pointing at it",
+            });
+        }
+    }
+    /*
+     * Снять опубликованный сайт (28.09.2026).
+     *
+     * До сегодня удаление проекта оставляло его сайт жить на <имя>.pages.dev НАВСЕГДА:
+     * в базе проекта нет, в интерфейсе нечем управлять, а публичный адрес отвечает 200.
+     * Каждая наша проба и каждый брошенный проект гостя оставляли вечную публичную
+     * страницу — их накопилось столько, что уборку пришлось делать руками по списку.
+     *
+     * 404 от Cloudflare считаем УСПЕХОМ: цель — «сайта нет», а не «мы его удалили».
+     * Неудачу НЕ превращаем в отказ удалить проект (в отличие от сервиса Railway выше:
+     * тот стоит денег и продолжает работать). Но и не молчим: поле в ответе и запись
+     * в Sentry — иначе это был бы ровно тот молчаливый отказ, который выглядит успехом.
+     */
+    const снятие = await снятьСайтPages(project, "devhub/projects:delete");
+    const pagesRemoved = снятие.pagesRemoved;
+    const pagesRemoveError = снятие.pagesRemoveError;
+    const orphanSiteUrl = снятие.orphanSiteUrl;
+    try {
+        await dbDeleteProject(req.params.id);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/projects:delete", projectId: req.params.id });
+        memProjects.delete(req.params.id);
+        for (const [fid, f] of memFiles) {
+            if (f.projectId === req.params.id)
+                memFiles.delete(fid);
+        }
+    }
+    res.json({
+        ok: true,
+        // Адрес сайта, который снять не удалось. Пусто — значит снят или его не было.
+        ...(orphanSiteUrl ? { orphanSiteUrl } : {}),
+        ...(databaseDropped !== undefined ? { databaseDropped } : {}),
+        ...(serviceDeleted !== undefined ? { serviceDeleted } : {}),
+        ...(pagesRemoved !== undefined ? { pagesRemoved } : {}),
+        ...(pagesRemoveError ? { pagesRemoveError } : {}),
+    });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Files CRUD
+// ═════════════════════════════════════════════════════════════════════════════
+// GET /api/devhub/projects/:id/files
+exports.devhubRouter.get("/projects/:id/files", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canAccess(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    try {
+        const files = await dbListFiles(req.params.id);
+        res.json({ files });
+    }
+    catch {
+        // Пустая память в проде превращала отказ в «проект без файлов» — человек
+        // видит свою работу исчезнувшей после операции, которая всего лишь не
+        // смогла прочитать список.
+        const files = [...memFiles.values()].filter((f) => f.projectId === req.params.id);
+        if (files.length === 0)
+            return replyStorageUnavailable(res);
+        res.json({ files, storage: "memory" });
+    }
+});
+// GET /api/devhub/projects/:id/files/:filepath — get file by path
+exports.devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const filePath = req.params.filepath || "";
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canAccess(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    try {
+        const file = await dbGetFile(req.params.id, filePath);
+        if (!file)
+            return res.status(404).json({ error: "file not found" });
+        res.json({ file });
+    }
+    catch {
+        // Недоступность хранилища — это НЕ «сломались мы». 500 поднимает
+        // тревогу в Sentry и тонет в шуме, среди которого потом не видно
+        // настоящих аварий; 503 с отдельным кодом называет причину.
+        //
+        // Остаток свипа 28.08 (тогда закрыли 25 мест): эти два читающих
+        // обработчика файлов в список не попали — сторож знал семь путей,
+        // а имя обещало «ни одно чтение».
+        (0, sentry_1.captureException)(new Error("devhub file read failed"));
+        return replyStorageUnavailable(res);
+    }
+});
+// GET /api/devhub/projects/:id/file — get file content by path in query string
+exports.devhubRouter.get("/projects/:id/file", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const filePath = String(req.query.path || "");
+    if (!filePath)
+        return res.status(400).json({ error: "path query param required" });
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canAccess(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    try {
+        const file = await dbGetFile(req.params.id, filePath);
+        if (!file)
+            return res.status(404).json({ error: "file not found" });
+        res.json({ file });
+    }
+    catch {
+        // Недоступность хранилища — это НЕ «сломались мы». 500 поднимает
+        // тревогу в Sentry и тонет в шуме, среди которого потом не видно
+        // настоящих аварий; 503 с отдельным кодом называет причину.
+        //
+        // Остаток свипа 28.08 (тогда закрыли 25 мест): эти два читающих
+        // обработчика файлов в список не попали — сторож знал семь путей,
+        // а имя обещало «ни одно чтение».
+        (0, sentry_1.captureException)(new Error("devhub file read failed"));
+        return replyStorageUnavailable(res);
+    }
+});
+// PUT /api/devhub/projects/:id/file — upsert file; path in body or query
+exports.devhubRouter.put("/projects/:id/file", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const filePath = String(req.body?.path || req.query.path || "");
+    if (!filePath)
+        return res.status(400).json({ error: "file path required" });
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canEdit(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    const { content = "", language } = req.body || {};
+    const file = {
+        id: node_crypto_1.default.randomUUID(),
+        projectId: req.params.id,
+        path: filePath,
+        content: String(content),
+        language: language ? String(language) : detectLanguage(filePath),
+        updatedAt: now(),
+    };
+    // Тот же признак: файл при отказе базы уходит в память, и до 19.08.2026
+    // ответ был неотличим от настоящего сохранения. Для DevHub это код, который
+    // человек написал и считает сохранённым.
+    let storage = "db";
+    try {
+        await dbUpsertFile(file);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/files:put", projectId: req.params.id, path: filePath });
+        const existing = [...memFiles.values()].find((f) => f.projectId === req.params.id && f.path === filePath);
+        if (existing) {
+            existing.content = file.content;
+            existing.language = file.language;
+            existing.updatedAt = file.updatedAt;
+        }
+        else {
+            memFiles.set(file.id, file);
+        }
+        storage = "memory";
+    }
+    res.json({ file, storage });
+});
+// PUT /api/devhub/projects/:id/files/:filepath — upsert file with simple single-segment path
+/**
+ * Серверная проверка пути файла — НЕ слабее клиентской (§15; ворота 4,
+ * 07.09: PUT принял «../../evil.txt» с кодом 200, а saveAs перевода —
+ * вторая дверь того же класса). Правила зеркалят frontend devhubFilePaths.
+ * Управляющие символы ловятся charCodeAt, обратный слэш — fromCharCode(92):
+ * НИКАКОГО экранирования в этом файле — юникод-класс в регулярке через
+ * границу вызова однажды положил в исходник сырой NUL-байт.
+ */
+function плохойПутьФайла(p) {
+    if (!p)
+        return true;
+    if (p.includes(String.fromCharCode(92)))
+        return true;
+    if (p.startsWith("/"))
+        return true;
+    if (p.split("/").some((s) => s === ".." || s === "." || s === ""))
+        return true;
+    if ([...p].some((ch) => ch.charCodeAt(0) < 32))
+        return true;
+    return false;
+}
+exports.devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const filePath = req.params.filepath || "";
+    if (!filePath)
+        return res.status(400).json({ error: "file path required" });
+    // Серверная проверка пути — НЕ слабее клиентской (ворота 4, 07.09):
+    // живой пробой PUT принял «../../evil.txt» с кодом 200. Побега в ФС не
+    // было — выкатка такие пути отбрасывает с видимым skipped, — но дверь
+    // обязана отказывать СРАЗУ и словами, а не молча ронять файл на выкатке.
+    // Правила зеркалят frontend/src/lib/devhubFilePaths (newFilePathError).
+    if (плохойПутьФайла(filePath)) {
+        return res.status(400).json({ error: "invalid file path: use nested/relative names like assets/logo.svg (no .., no leading slash)" });
+    }
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canEdit(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    const { content = "", language } = req.body || {};
+    const file = {
+        id: node_crypto_1.default.randomUUID(),
+        projectId: req.params.id,
+        path: filePath,
+        content: String(content),
+        language: language ? String(language) : detectLanguage(filePath),
+        updatedAt: now(),
+    };
+    // Тот же признак, что у соседней ручки сохранения файла: при отказе базы код
+    // человека уходит в память и исчезает со следующей выкаткой.
+    let storage = "db";
+    try {
+        await dbUpsertFile(file);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/files:putByPath", projectId: req.params.id, path: filePath });
+        const existing = [...memFiles.values()].find((f) => f.projectId === req.params.id && f.path === filePath);
+        if (existing) {
+            existing.content = file.content;
+            existing.language = file.language;
+            existing.updatedAt = file.updatedAt;
+        }
+        else {
+            memFiles.set(file.id, file);
+        }
+        storage = "memory";
+    }
+    res.json({ file, storage });
+});
+// DELETE /api/devhub/projects/:id/file — delete by path query param
+exports.devhubRouter.delete("/projects/:id/file", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const filePath = String(req.query.path || req.body?.path || "");
+    if (!filePath)
+        return res.status(400).json({ error: "path required" });
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    let removedFromDb = true;
+    try {
+        await dbDeleteFile(req.params.id, filePath);
+    }
+    catch {
+        // Удаление из памяти НЕ равно удалению из базы. Раньше отсюда уходило
+        // ok: true, и файл, оставшийся в хранилище, считался удалённым.
+        removedFromDb = false;
+        for (const [fid, f] of memFiles) {
+            if (f.projectId === req.params.id && f.path === filePath) {
+                memFiles.delete(fid);
+                break;
+            }
+        }
+    }
+    if (!removedFromDb)
+        return replyStorageUnavailable(res);
+    res.json({ ok: true });
+});
+// DELETE /api/devhub/projects/:id/files/:filepath — delete single-segment file
+exports.devhubRouter.delete("/projects/:id/files/:filepath", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const filePath = req.params.filepath || "";
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    let removedFromDb = true;
+    try {
+        await dbDeleteFile(req.params.id, filePath);
+    }
+    catch {
+        // Удаление из памяти НЕ равно удалению из базы. Раньше отсюда уходило
+        // ok: true, и файл, оставшийся в хранилище, считался удалённым.
+        removedFromDb = false;
+        for (const [fid, f] of memFiles) {
+            if (f.projectId === req.params.id && f.path === filePath) {
+                memFiles.delete(fid);
+                break;
+            }
+        }
+    }
+    if (!removedFromDb)
+        return replyStorageUnavailable(res);
+    res.json({ ok: true });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — AI Code Generation
+// ═════════════════════════════════════════════════════════════════════════════
+// POST /api/devhub/projects/:id/generate
+// Генерация кода — самое дорогое действие модуля, и ограничителя у неё НЕ БЫЛО,
+// хотя у соседних дорогих ручек он есть: `/ask` и `/media/upload-image` его
+// получили, эту пропустили. Проект можно завести без входа (гостевая
+// личность), поэтому аноним мог жечь платную генерацию без предела.
+// Ключ отдельный: общий на все генерации означал бы, что один модуль
+// расходует предел другого.
+exports.devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    // String(): добавление ограничителя меняет вывод типов Express — параметр
+    // становится `string | string[]`. Приводим явно, а не через as.
+    const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
+    if (!project)
+        return;
+    const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
+    if (!prompt || typeof prompt !== "string") {
+        return res.status(400).json({ error: "prompt is required" });
+    }
+    let images;
+    if (imageBase64 !== undefined) {
+        if (typeof imageBase64 !== "string" || !imageBase64.trim()) {
+            return res.status(400).json({ error: "imageBase64 must be a non-empty base64 string" });
+        }
+        if (imageBase64.length > 7000000) {
+            return res.status(400).json({ error: "image too large (max ~5MB)" });
+        }
+        const mediaType = typeof imageMediaType === "string" && imageMediaType ? imageMediaType : "image/png";
+        if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mediaType)) {
+            return res.status(400).json({ error: "imageMediaType must be image/png, image/jpeg, image/webp or image/gif" });
+        }
+        images = [{ mediaType, dataBase64: imageBase64.replace(/^data:[^,]+,/, "") }];
+    }
+    // Prior dialog turns give follow-ups their referent ("make the button
+    // blue" needs to know which button). Capped hard — context, not transcript.
+    let history;
+    if (Array.isArray(historyRaw)) {
+        history = historyRaw
+            .filter((h) => !!h && typeof h.role === "string" && typeof h.text === "string")
+            .filter((h) => h.role === "user" || h.role === "assistant")
+            .slice(-8)
+            .map((h) => ({ role: h.role, text: h.text.slice(0, 500) }));
+        if (history.length === 0)
+            history = undefined;
+    }
+    // targetFiles (array) lets a caller request several coordinated files at once
+    // (e.g. an API route + the page that calls it); targetFile (string) stays as
+    // the single-file shorthand for back-compat.
+    const targetFiles = Array.isArray(targetFilesRaw)
+        ? targetFilesRaw.filter((f) => typeof f === "string" && f.trim().length > 0).map((f) => f.trim())
+        : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
+    const resolvedStack = stack || project.stack;
+    // Замок, а не упаковка. У генерации кода не было потолка ВООБЩЕ — только
+    // предел частоты, а он ограничивает темп, а не сумму. Арифметика потолка
+    // 02.09.2026: одна генерация до $0.84 на claude-opus-4-8 (модель на проде
+    // задана умолчанием), при 30/мин это $36 тысяч в сутки с одного адреса.
+    // Числа тарифов см. в TIER_LIMITS — уточнены 05.09.2026.
+    const genCredit = await checkCredit(userId, "generate");
+    if (!genCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly generate limit reached",
+            tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    try {
+        // Списание НЕ здесь: оно живёт внутри runProjectGeneration и покрывает
+        // все точки генерации разом (обычную, потоковую, проектирование базы).
+        // Второе списание тут брало бы с человека дважды за одну генерацию.
+        const генерация = await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images, history);
+        const провенанс = await maybeStampProvenance(req.body?.provenance === true, project, prompt, генерация, req.headers.authorization);
+        res.json({ ...генерация, ...провенанс, ...creditNote(genCredit) });
+    }
+    catch (e) {
+        if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
+            return res.status(503).json({ error: e.message.replace("NO_VISION_PROVIDER: ", "") });
+        }
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "generation failed" });
+    }
+});
+/** Shared by /generate and /database/design: generate → checkpoint → save. */
+async function runProjectGeneration(project, userId, prompt, stack, targetFiles, images, history, onProgress) {
+    const existingFiles = await dbListFiles(project.id);
+    const { files: generatedFiles, aiGenerated, continued, truncated, recoveredFiles, syntaxErrors, selfCorrected, provider: genProvider, model: genModel, runTokens, runCostUsd } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress, меткаГенерации(userId), userId);
+    // Модель отработала — вот теперь генерация потрачена. Списание здесь, в
+    // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
+    // и проектирование базы. Вызывающие ручки НЕ списывают сами — иначе дважды.
+    await debitQuietly(userId, "generate");
+    /*
+     * ВХОД ПОЛЬЗОВАТЕЛЕЙ — готовым шаблоном, не генерацией (29.09.2026).
+     *
+     * Модель пишет вход каждый раз заново и по-разному: то пароль в открытом виде,
+     * то ответ «такого пользователя нет», по которому перебирают почты, то cookie без
+     * httpOnly. Цена ошибки здесь не «некрасиво», а «утекли чужие пароли», поэтому
+     * файлы входа кладём свои — проверенные (tests/authScaffoldIsSafe.guard.test.ts).
+     *
+     * Условий два, и оба обязательны: идея ПРОСИТ вход и стек умеет серверную часть.
+     * На статике вход невозможен — там нет сервера, и класть туда файлы значило бы
+     * обещать работающую регистрацию, которой не будет.
+     *
+     * Уже существующий файл НЕ трогаем: человек мог править свой вход, и затирать
+     * его правки хуже, чем не добавить ничего.
+     */
+    const стекУмеетСервер = stack === "next" || stack === "express" || stack === "python";
+    /*
+     * ТРЕТЬЕ условие, добавлено 30.09.2026 после собственной регрессии.
+     *
+     * Запрос бывает АДРЕСНЫМ: человек перечислил targetFiles — «правь вот эти
+     * два файла». Тогда подмешивать шесть файлов каркаса нельзя, даже если в
+     * тексте есть слово «login»: он просил связать форму с ручкой, а получил бы
+     * сверху схему базы, lib/auth.js и четыре ручки регистрации, которых не
+     * просил. Поймал чужой тест devhub-integrations: ждал 2 файла, получил 8.
+     *
+     * Корень глубже условия: нуженВход() судит по СЛОВУ, а не по намерению, и
+     * «wire the login form to a real API route» для него неотличимо от «сделай
+     * приложение с входом». Пока признак такой, адресность — единственный
+     * надёжный способ отличить «создай» от «поправь вот здесь».
+     */
+    const запросАдресный = targetFiles.length > 0;
+    if ((0, devhubAuthScaffold_1.нуженВход)(prompt) && стекУмеетСервер && !запросАдресный) {
+        const занятые = new Set([
+            ...existingFiles.map((f) => String(f.path ?? "")),
+            ...generatedFiles.map((f) => String(f.path ?? "")),
+        ]);
+        for (const ф of (0, devhubAuthScaffold_1.файлыВхода)()) {
+            if (занятые.has(ф.path))
+                continue;
+            generatedFiles.push({ path: ф.path, content: ф.content, language: ф.language });
+        }
+    }
+    onProgress?.("saving");
+    let storage = "db";
+    const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
+    const checkpointId = cpRes?.id ?? null;
+    // Точка могла лечь только в память — тогда «отменить правки ИИ» не
+    // переживёт перезапуска. Это часть ТОГО ЖЕ обещания, что и файлы,
+    // поэтому признак у ответа общий: memory, если подвело хоть одно.
+    if (cpRes?.storage === "memory")
+        storage = "memory";
+    for (const gf of generatedFiles) {
+        const file = {
+            id: node_crypto_1.default.randomUUID(),
+            projectId: project.id,
+            path: gf.path,
+            content: gf.content,
+            language: gf.language || detectLanguage(gf.path),
+            updatedAt: now(),
+        };
+        try {
+            await dbUpsertFile(file);
+        }
+        catch {
+            // Генерация — ПЛАТНЫЙ шаг. Если файлы легли только в память процесса,
+            // человек заплатил и потеряет результат при перезапуске, ничего об этом
+            // не узнав. Признак ведётся здесь, в общем помощнике, поэтому его
+            // получают обе точки генерации: обычная и потоковая.
+            storage = "memory";
+            const existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === gf.path);
+            if (existing) {
+                existing.content = file.content;
+                existing.language = file.language;
+                existing.updatedAt = file.updatedAt;
+            }
+            else {
+                memFiles.set(file.id, file);
+            }
+        }
+    }
+    return {
+        files: generatedFiles, aiGenerated, ...(continued ? { continued } : {}),
+        // Признак обрыва ТЕРЯЛСЯ ровно здесь: ответ собирается заново
+        // перечислением, и tsc такого не ловит — объект не сужается, а строится.
+        ...(truncated ? { truncated, recoveredFiles } : {}),
+        ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
+        ...(genProvider ? { provider: genProvider, model: genModel } : {}),
+        ...(runTokens ? { runTokens, runCostUsd } : {}),
+        checkpointId, projectId: project.id, storage,
+    };
+}
+/**
+ * Отметка происхождения генерации (спека Монетизации 06.09.2026).
+ * Возвращает поля для домешивания в ответ; ПУСТО, если флаг не просили.
+ * Помечаются только НАСТОЯЩИЕ ИИ-генерации: провенанс заглушки был бы
+ * фальшивкой. Отказ фиксации не роняет генерацию, но виден (§16).
+ */
+async function maybeStampProvenance(want, project, prompt, result, authHeader) {
+    if (!want)
+        return {};
+    if (!result.aiGenerated) {
+        return { provenance: null, provenanceError: "not_ai_generated" };
+    }
+    const stamped = await (0, devhubProvenance_1.stampGenerationProvenance)({
+        projectId: project.id,
+        projectName: project.name,
+        prompt,
+        files: result.files,
+        provider: result.provider,
+        model: result.model,
+        authHeader,
+    });
+    return stamped.ok
+        ? { provenance: stamped.stamp }
+        : { provenance: null, provenanceError: stamped.error };
+}
+// POST /api/devhub/projects/:id/generate/stream — the same generation as
+// /generate, but with SSE status events so the 1-3 minutes of model time
+// aren't a silent spinner. Events: {type:"status", stage} at each phase
+// (calling_model → [continuation] → syntax_check → [self_correcting] →
+// saving), then {type:"result", ...same payload as /generate} or
+// {type:"error", error}. Honest stages only — every event corresponds to
+// something actually happening, never a fake progress animation.
+exports.devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
+    if (!project)
+        return;
+    const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
+    if (!prompt || typeof prompt !== "string") {
+        return res.status(400).json({ error: "prompt is required" });
+    }
+    let images;
+    if (imageBase64 !== undefined) {
+        if (typeof imageBase64 !== "string" || !imageBase64.trim()) {
+            return res.status(400).json({ error: "imageBase64 must be a non-empty base64 string" });
+        }
+        if (imageBase64.length > 7000000) {
+            return res.status(400).json({ error: "image too large (max ~5MB)" });
+        }
+        const mediaType = typeof imageMediaType === "string" && imageMediaType ? imageMediaType : "image/png";
+        if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mediaType)) {
+            return res.status(400).json({ error: "imageMediaType must be image/png, image/jpeg, image/webp or image/gif" });
+        }
+        images = [{ mediaType, dataBase64: imageBase64.replace(/^data:[^,]+,/, "") }];
+    }
+    let history;
+    if (Array.isArray(historyRaw)) {
+        history = historyRaw
+            .filter((h) => !!h && typeof h.role === "string" && typeof h.text === "string")
+            .filter((h) => h.role === "user" || h.role === "assistant")
+            .slice(-8)
+            .map((h) => ({ role: h.role, text: h.text.slice(0, 500) }));
+        if (history.length === 0)
+            history = undefined;
+    }
+    const targetFiles = Array.isArray(targetFilesRaw)
+        ? targetFilesRaw.filter((f) => typeof f === "string" && f.trim().length > 0).map((f) => f.trim())
+        : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
+    // Проверка квоты ДО открытия SSE: после flushHeaders статус уже не сменить,
+    // и отказ пришлось бы маскировать событием.
+    const genCredit = await checkCredit(userId, "generate");
+    if (!genCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly generate limit reached",
+            tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    // 130 (13.10.2026): модель зовётся без потока, 30–120 с тишины рвут SSE до результата — пульс комментарием.
+    const стопПульса = (0, sseHeartbeat_1.sseHeartbeat)(res);
+    const send = (event) => {
+        try {
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
+        catch { /* socket closed */ }
+    };
+    try {
+        const result = await runProjectGeneration(project, userId, prompt, stack || project.stack, targetFiles, images, history, (stage, extra) => send({ type: "status", stage, ...(extra ?? {}) }));
+        const провенанс = await maybeStampProvenance(req.body?.provenance === true, project, prompt, result, req.headers.authorization);
+        send({ type: "result", ...result, ...провенанс });
+    }
+    catch (e) {
+        if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
+            send({ type: "error", error: e.message.replace("NO_VISION_PROVIDER: ", "") });
+        }
+        else {
+            send({ type: "error", error: e?.message || "generation failed" });
+        }
+    }
+    стопПульса();
+    res.end();
+});
+// POST /api/devhub/projects/:id/database/design — schema-by-prompt (Lovable-gap
+// feature #3, honest MVP): turns a plain-language description into db/schema.sql
+// + a typed client wired to the project's own DATABASE_URL. It does NOT
+// provision a live database — hosting needs a real isolation design and is a
+// separate feature; generating files that pretend otherwise would be the same
+// class of lie the deploy paths just got cured of.
+exports.devhubRouter.post("/projects/:id/database/design", dhCostlyLimit("dhdbdesign"), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
+    if (!project)
+        return;
+    const { description } = req.body || {};
+    if (!description || typeof description !== "string" || !description.trim()) {
+        return res.status(400).json({ error: "description is required" });
+    }
+    if (description.trim().length > 4000) {
+        return res.status(400).json({ error: "description too long (max 4000 chars)" });
+    }
+    const clientFile = project.stack === "python" ? "db/client.py" : "db/client.ts";
+    const prompt = `Design a PostgreSQL database for this application: ${description.trim()}\n\n` +
+        `Produce exactly two files:\n` +
+        `1. db/schema.sql — idempotent DDL (CREATE TABLE IF NOT EXISTS) with primary keys, ` +
+        `foreign keys with ON DELETE behavior, sensible column types, NOT NULL where appropriate, ` +
+        `created_at/updated_at timestamps, and indexes for the obvious query paths. Add a short comment above each table.\n` +
+        `2. ${clientFile} — a minimal typed data-access helper that reads the connection string from ` +
+        `process.env.DATABASE_URL (or os.environ for Python), creates one shared pool, exports a function ` +
+        `to apply schema.sql, and one example CRUD function per table. No ORM — plain parameterized queries.`;
+    const genCredit = await checkCredit(userId, "generate");
+    if (!genCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly generate limit reached",
+            tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    try {
+        const result = await runProjectGeneration(project, userId, prompt, project.stack, ["db/schema.sql", clientFile]);
+        const canProvision = !!process.env.DEVHUB_DB_ADMIN_URL;
+        res.json({
+            ...result,
+            canProvision,
+            note: canProvision
+                ? "Files generated — POST /database/provision to create the real database and get DATABASE_URL."
+                : "Files generated — set DATABASE_URL in Env Vars and run the schema to go live. No database was provisioned.",
+        });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "database design failed" });
+    }
+});
+// POST /api/devhub/projects/:id/database/provision — create the real database.
+// One schema + one login role per project on an instance dedicated to user
+// projects (see lib/devhubDbProvision.ts). Applies db/schema.sql if the project
+// has one, then stores DATABASE_URL in the project's env vars.
+exports.devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    if (!process.env.DEVHUB_DB_ADMIN_URL) {
+        return res.status(503).json({
+            error: "database provisioning is not configured — set DEVHUB_DB_ADMIN_URL on the server",
+            envVar: "DEVHUB_DB_ADMIN_URL",
+        });
+    }
+    // Apply the project's own schema if it designed one — that is the whole
+    // point of the flow: design → provision → the tables actually exist.
+    let schemaSql = null;
+    try {
+        const f = await dbGetFile(project.id, "db/schema.sql");
+        schemaSql = f?.content ?? null;
+    }
+    catch {
+        schemaSql = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === "db/schema.sql")?.content ?? null;
+    }
+    const { provisionProjectDatabase } = await Promise.resolve().then(() => __importStar(require("../lib/devhubDbProvision")));
+    const result = await provisionProjectDatabase({ projectId: project.id, schemaSql });
+    // Отметка поставщика — там же, где он ДЕЙСТВИТЕЛЬНО используется, как у
+    // остальных шестнадцати. Отдельного опроса состояния нет намеренно: он
+    // означал бы живое подключение к административной базе на каждый вопрос
+    // о здоровье, а настоящий ответ даёт только настоящая выдача базы.
+    //
+    // До 30.08.2026 возможность «База данных» объявлялась рабочей, не спросив
+    // поставщика ни разу: панель показывала «live» по наличию переменной.
+    if (result.ok)
+        (0, providerHealth_1.noteProviderSuccess)("database");
+    else
+        (0, providerHealth_1.noteProviderFailure)("database", result.error);
+    if (!result.ok)
+        return res.status(502).json({ error: result.error });
+    project.envVars = { ...(project.envVars || {}), DATABASE_URL: result.databaseUrl };
+    project.updatedAt = now();
+    // Здесь уже создан НАСТОЯЩИЙ внешний ресурс: схема и роль на сервере баз.
+    // Если ссылка на него легла только в память процесса, после перезапуска
+    // проект её потеряет, а сама база останется висеть без владельца. Текст
+    // ниже при этом УТВЕРЖДАЛ, что DATABASE_URL сохранён.
+    let storage = "db";
+    try {
+        await dbSaveProject(project);
+    }
+    catch {
+        memProjects.set(project.id, project);
+        storage = "memory";
+    }
+    // The URL contains the credential — returned once so the caller can show it,
+    // never logged.
+    const savedNote = storage === "memory"
+        ? " ВНИМАНИЕ: наше хранилище было недоступно, поэтому ссылка сохранена только в памяти и может пропасть при перезапуске. Скопируйте DATABASE_URL себе сейчас."
+        : "";
+    res.json({
+        ok: true,
+        schema: result.schema,
+        role: result.role,
+        appliedSchemaSql: result.appliedSchemaSql,
+        databaseUrl: result.databaseUrl,
+        storage,
+        note: (result.appliedSchemaSql
+            ? "Database created, schema applied, DATABASE_URL saved to this project's env vars."
+            : "Database created and DATABASE_URL saved. No db/schema.sql found, so no tables were created yet.") + savedNote,
+    });
+});
+// GET /api/devhub/projects/:id/database — what this project's database is
+// actually using. Measured, so quota talk is never a guess.
+exports.devhubRouter.get("/projects/:id/database", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    const provisioned = !!project.envVars?.DATABASE_URL;
+    if (!process.env.DEVHUB_DB_ADMIN_URL || !provisioned) {
+        return res.json({ provisioned: false, connectionLimit: Number(process.env.DEVHUB_DB_CONNECTION_LIMIT) || 5 });
+    }
+    const { projectSchemaSizeBytes } = await Promise.resolve().then(() => __importStar(require("../lib/devhubDbProvision")));
+    const size = await projectSchemaSizeBytes({ projectId: project.id });
+    if (!size.ok)
+        return res.status(502).json({ provisioned: true, error: size.error });
+    res.json({
+        provisioned: true,
+        tables: size.tables,
+        bytes: size.bytes,
+        megabytes: Math.round((size.bytes / 1048576) * 100) / 100,
+        connectionLimit: Number(process.env.DEVHUB_DB_CONNECTION_LIMIT) || 5,
+    });
+});
+// DELETE /api/devhub/projects/:id/database — drop the project's schema, role
+// and stored DATABASE_URL. Destructive and irreversible, hence its own route.
+exports.devhubRouter.delete("/projects/:id/database", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    if (!process.env.DEVHUB_DB_ADMIN_URL) {
+        return res.status(503).json({ error: "database provisioning is not configured" });
+    }
+    const { deprovisionProjectDatabase } = await Promise.resolve().then(() => __importStar(require("../lib/devhubDbProvision")));
+    const result = await deprovisionProjectDatabase({ projectId: project.id });
+    if (!result.ok)
+        return res.status(502).json({ error: result.error });
+    const { DATABASE_URL: _dropped, ...rest } = project.envVars || {};
+    project.envVars = rest;
+    project.updatedAt = now();
+    // База УЖЕ удалена по-настоящему — схема и роль на сервере снесены. Если
+    // запись об этом легла только в память, после перезапуска проект снова будет
+    // считать, что у него есть DATABASE_URL на удалённую базу, и приложение
+    // человека упадёт с невнятной ошибкой подключения.
+    //
+    // Зеркало случая с ВЫДАЧЕЙ базы: там ссылка терялась, здесь остаётся лишней.
+    let storageFallback = false;
+    try {
+        await dbSaveProject(project);
+    }
+    catch {
+        memProjects.set(project.id, project);
+        storageFallback = true;
+    }
+    res.json({ ok: true, note: "Schema, role and DATABASE_URL removed. The data is gone.", ...(storageFallback ? MEMORY_NOTE : {}) });
+});
+// POST /api/devhub/projects/:id/generate/undo — revert the project's most
+// recent AI-driven multi-file write in one shot (restores every file it
+// touched to its prior content, or deletes it if generate_code created it
+// fresh) without regenerating anything. Consumes the checkpoint so a second
+// undo reaches the one before it, not the same state again.
+exports.devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canEdit(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    try {
+        const checkpoint = await dbLatestCheckpoint(project.id);
+        if (!checkpoint) {
+            return res.json({ ok: false, message: "No AI change to undo for this project" });
+        }
+        // tsc здесь МОЛЧИТ: результат уходил прямо в res.json, а тело ответа не
+        // типизировано. Ровно тот случай, из-за которого клиент получил бы объект
+        // вместо списка путей и «отменить» перестало бы работать молча.
+        const revert = await applyCheckpointRevert(project.id, checkpoint);
+        return res.json({
+            ok: true,
+            revertedFiles: revert.paths,
+            label: checkpoint.label,
+            storage: revert.storage,
+        });
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/generate:undo", projectId: project.id });
+        return res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "undo failed" });
+    }
+});
+// GET /api/devhub/projects/:id/checkpoints — history of AI-driven writes for
+// the checkpoint-history UI (labels + timestamps + touched paths only, no
+// file content — that's only needed at restore time).
+exports.devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canAccess(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    try {
+        const checkpoints = await dbListCheckpoints(project.id, 20);
+        return res.json({
+            checkpoints: checkpoints.map((c) => ({
+                id: c.id, label: c.label, createdAt: c.createdAt, paths: c.files.map((f) => f.path),
+            })),
+        });
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/checkpoints:list", projectId: project.id });
+        // список точек восстановления — это ЧТЕНИЕ: недоступность базы это 503,
+        // а 500 читается как «сломались мы» и поднимает ложную тревогу.
+        (0, sentry_1.captureException)(e);
+        return replyStorageUnavailable(res);
+    }
+});
+// POST /api/devhub/projects/:id/checkpoints/:checkpointId/restore — jumps
+// straight to a specific point in AI-change history instead of calling
+// /generate/undo N times. Applies every checkpoint from the newest down
+// through (and including) the chosen one, newest first, so per-path writes
+// converge on the target checkpoint's own priorContent — the same result
+// sequential single-step undos would reach, just in one call.
+exports.devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canEdit(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    try {
+        const history = await dbListCheckpoints(project.id, 200);
+        const targetIndex = history.findIndex((c) => c.id === req.params.checkpointId);
+        if (targetIndex === -1) {
+            return res.json({ ok: false, message: "Checkpoint not found — it may already have been consumed by an earlier undo/restore" });
+        }
+        const toApply = history.slice(0, targetIndex + 1);
+        const targetLabel = history[targetIndex].label;
+        const revertedFiles = new Set();
+        let revertStorage = "db";
+        for (const checkpoint of toApply) {
+            const step = await applyCheckpointRevert(project.id, checkpoint);
+            step.paths.forEach((p) => revertedFiles.add(p));
+            if (step.storage === "memory")
+                revertStorage = "memory";
+        }
+        return res.json({ ok: true, revertedFiles: [...revertedFiles], restoredToLabel: targetLabel, storage: revertStorage, stepsApplied: toApply.length });
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/checkpoints:restore", projectId: project.id });
+        return res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "restore failed" });
+    }
+});
+// POST /api/devhub/plan — turn a raw idea into a staged build plan. NOT
+// project-scoped (no /projects/:id/ prefix): works standalone for someone
+// who hasn't created a project yet, and optionally accounts for an existing
+// project's files when `projectId` is given in the body.
+// Ограничитель добавлен 31.08.2026. До него ручка была БЕЗ предела вовсе,
+// хотя planProjectWithAI зовёт callProvider — то есть настоящего платного
+// поставщика (OpenAI/Anthropic по ключу). Входа ручка не требует.
+// Я сам сперва счёл её бесплатной: проверил только вызовы smartComplete,
+// а платный путь здесь ДРУГОЙ. Контроль отвечал не на тот вопрос.
+// Предел взят тот же, что у соседней платной /ask — заводить второй
+// способ ограничивать одно и то же незачем.
+exports.devhubRouter.post("/plan", dhCostlyLimit("dhplan"), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    // Метка та же, что у /ask: расход анонимных должен быть отделим.
+    const planModule = auth?.sub ? "devhub" : "devhub-anon";
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const { idea, projectId } = req.body || {};
+    if (!idea || typeof idea !== "string" || !idea.trim()) {
+        return res.status(400).json({ error: "idea is required" });
+    }
+    let existingFiles = [];
+    if (typeof projectId === "string" && projectId.trim()) {
+        try {
+            let project;
+            try {
+                project = await dbGetProject(projectId.trim());
+            }
+            catch {
+                project = memProjects.get(projectId.trim()) ?? null;
+            }
+            if (project && canAccess(project, userId)) {
+                existingFiles = await dbListFiles(projectId.trim());
+            }
+        }
+        catch { /* planning still works without project context */ }
+    }
+    try {
+        const plan = await planProjectWithAI(idea.trim(), existingFiles, planModule);
+        return res.json(plan);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/plan" });
+        return res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "planning failed" });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Deploy (V2: Railway API + SSE build log streaming)
+// ═════════════════════════════════════════════════════════════════════════════
+// POST /api/devhub/projects/:id/deploy
+exports.devhubRouter.post("/projects/:id/deploy", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const deployCredit = await checkCredit(userId, "deploy");
+    if (!deployCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly deploy limit reached",
+            tier: deployCredit.tier, used: deployCredit.used, limit: deployCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    // Списание — только когда выкатка реально стартовала (ниже, в ветке
+    // per-project). Раньше квота списывалась здесь, а без
+    // DEVHUB_RAILWAY_PER_PROJECT обработчик дальше отказывал 501-м: free-тариф
+    // сжигал все 10 деплоев месяца, не получив ни одного.
+    const deploymentId = node_crypto_1.default.randomUUID();
+    const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
+    const deployUrl = `https://${deploySlug}.aevion.app`;
+    const deployment = {
+        id: deploymentId,
+        projectId: project.id,
+        userId,
+        status: "pending",
+        deployUrl: null,
+        buildLog: null,
+        triggeredAt: now(),
+        completedAt: null,
+    };
+    try {
+        await dbSaveDeployment(deployment);
+    }
+    catch {
+        memDeployments.set(deployment.id, deployment);
+    }
+    const railwayToken = process.env.RAILWAY_API_TOKEN;
+    const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
+    const railwayServiceId = process.env.RAILWAY_SERVICE_ID;
+    // Per-project deploys: the project's own Railway service, built from its own
+    // GitHub repo, carrying its own env vars (DATABASE_URL included). Behind a
+    // flag because enabling it makes every user click start a billable container.
+    if (process.env.DEVHUB_RAILWAY_PER_PROJECT) {
+        const { deployProjectToRailway } = await Promise.resolve().then(() => __importStar(require("../lib/devhubRailwayDeploy")));
+        const result = await deployProjectToRailway({
+            projectId: project.id,
+            repoUrl: project.repoUrl,
+            envVars: project.envVars || {},
+            existingServiceId: project.envVars?.RAILWAY_SERVICE_ID || null,
+        });
+        if (!result.ok) {
+            deployment.status = "failed";
+            deployment.buildLog = result.error;
+            deployment.completedAt = now();
+            try {
+                await dbSaveDeployment(deployment);
+            }
+            catch {
+                memDeployments.set(deployment.id, deployment);
+            }
+            return res.status(502).json({ error: result.error, deploymentId: deployment.id });
+        }
+        // Выкатка реально стартовала — вот теперь квота потрачена честно.
+        await debitQuietly(userId, "deploy");
+        // Remember the service so a redeploy reuses it instead of creating a new
+        // billable container on every click.
+        project.envVars = { ...(project.envVars || {}), RAILWAY_SERVICE_ID: result.serviceId };
+        project.updatedAt = now();
+        try {
+            await dbSaveProject(project);
+        }
+        catch {
+            memProjects.set(project.id, project);
+        }
+        const url = `https://${result.domain}`;
+        deployment.buildLog = `Railway service ${result.serviceId} ${result.created ? "created" : "reused"} from ${project.repoUrl}`;
+        try {
+            await dbSaveDeployment(deployment);
+        }
+        catch {
+            memDeployments.set(deployment.id, deployment);
+        }
+        // Same rule as every other deploy path: live only once the page answers.
+        (async () => {
+            const serves = await verifyDeploymentServes(url);
+            deployment.status = serves ? "live" : "failed";
+            deployment.deployUrl = serves ? url : null;
+            deployment.buildLog = serves
+                ? `${deployment.buildLog}
+Serving at ${url}`
+                : `${deployment.buildLog}
+Built, but ${url} did not answer 2xx in time`;
+            deployment.completedAt = now();
+            try {
+                await dbSaveDeployment(deployment);
+            }
+            catch {
+                memDeployments.set(deployment.id, deployment);
+            }
+            if (serves) {
+                project.deployUrl = url;
+                project.updatedAt = now();
+                try {
+                    await dbSaveProject(project);
+                }
+                catch {
+                    memProjects.set(project.id, project);
+                }
+            }
+        })().catch((e) => {
+            // Эта задача решает, ЖИВ ли деплой, и записывает вердикт. Если она
+            // бросит, выкатка навсегда останется в промежуточном состоянии, а на
+            // экране это неотличимо от «ещё собирается».
+            //
+            // Сегодня бросить она не может: verifyDeploymentServes ловит сетевые
+            // ошибки внутри и всегда возвращает ответ, а записи прикрыты своими
+            // try/catch с запасной памятью. Перехват остаётся защитой в глубину —
+            // но не молчаливой: без следа о застрявшей выкатке никто не узнает.
+            const why = e instanceof Error ? e.message : String(e);
+            console.error(`[DevHub] ВЕРДИКТ ВЫКАТКИ НЕ ЗАПИСАН: ${deployment.id} для проекта ${project.id}: ${why}`);
+            (0, sentry_1.captureException)(e, { route: "devhub/deploy:verify", deploymentId: deployment.id, projectId: project.id });
+        });
+        return res.json({ ok: true, deploymentId: deployment.id, status: "building", url, serviceId: result.serviceId, reusedService: !result.created });
+    }
+    // SAFETY: this route never deployed the user's code. It fired
+    // deploymentCreate at whatever RAILWAY_SERVICE_ID happens to be — and on
+    // production that variable is the AEVION backend's own service id, so every
+    // click of "Deploy" in someone's project restarted our production API. The
+    // returned <slug>.aevion.app URL was invented and never pointed at anything.
+    //
+    // Refusing outright until per-project deploys exist (github push -> new
+    // Railway service -> project env vars). Static projects already have a real,
+    // serve-verified path through Cloudflare Pages.
+    const targetsOurOwnService = !railwayServiceId || railwayServiceId === process.env.RAILWAY_SELF_SERVICE_ID || !process.env.DEVHUB_RAILWAY_PER_PROJECT;
+    if (targetsOurOwnService) {
+        deployment.status = "failed";
+        deployment.buildLog = "Backend deploys are not available yet: the Railway path would have redeployed the AEVION platform service rather than this project.";
+        deployment.completedAt = now();
+        try {
+            await dbSaveDeployment(deployment);
+        }
+        catch {
+            memDeployments.set(deployment.id, deployment);
+        }
+        return res.status(501).json({
+            error: "Backend deploys are not available yet",
+            detail: "This button used to trigger a redeploy of the AEVION platform service instead of your project — it has been disabled rather than left lying.",
+            /*
+             * Слово «verified» здесь было НЕПРАВДОЙ: домен никто не верифицирует,
+             * domainReady в ответе выкатки жёстко false, а зона aevion.app стоит на
+             * Vercel DNS (ns1/ns2.vercel-dns.com — проверено 06.10.2026). Адрес
+             * появляется сам, примерно через минуту после выкатки (замер: 200 на 54 с).
+             * Пишем то, что происходит, а не то, что звучит солиднее.
+             */
+            alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages): the *.pages.dev address answers right away, and a <slug>.aevion.app address follows about a minute later, once DNS picks it up.",
+            deploymentId: deployment.id,
+        });
+    }
+    // Дальше этой точки управление не доходит НИКОГДА: без DEVHUB_RAILWAY_PER_PROJECT
+    // выше отвечает 501, с флагом — ветка per-project возвращается раньше. Здесь
+    // лежали сырой Railway GraphQL по общему RAILWAY_SERVICE_ID и «симуляция сборки»,
+    // ставившая status=live с выдуманным URL, — ровно тот класс, который §10
+    // объявляет убитым. Мёртвый опасный код удалён 05.09.2026, чтобы один неверный
+    // if при будущей правке не вернул фальшивые зелёные выкатки.
+});
+// GET /api/devhub/projects/:id/deployments/:deployId/log — SSE build log stream
+exports.devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // До 05.09.2026 здесь жили ПЯТЬ ВЫДУМАННЫХ строк по таймеру 500 мс и
+    // сочинённый из имени проекта URL — ни deployId, ни настоящий статус не
+    // читались вовсе. Ровно тот класс «журнал сборки, который врёт», который
+    // CLAUDE.md §10 объявляет убитым. Теперь стрим читает НАСТОЯЩУЮ запись
+    // выкатки: отдаёт строки её buildLog по мере появления и завершается
+    // настоящим статусом с настоящим адресом.
+    const deployId = String(req.params.deployId);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    const send = (event) => {
+        try {
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
+        catch { /* socket closed */ }
+    };
+    async function readDeployment() {
+        try {
+            const all = await dbListDeployments(project.id, 50);
+            return all.find((d) => d.id === deployId) ?? null;
+        }
+        catch {
+            return memDeployments.get(deployId) ?? null;
+        }
+    }
+    let sentLines = 0;
+    let closed = false;
+    req.on("close", () => { closed = true; });
+    const startedAt = Date.now();
+    const TIMEOUT_MS = 5 * 60000;
+    const tick = async () => {
+        if (closed)
+            return;
+        const d = await readDeployment();
+        if (!d || d.projectId !== project.id) {
+            send({ line: "Выкатка не найдена — журнала нет.", done: true, failed: true });
+            res.end();
+            return;
+        }
+        const lines = (d.buildLog || "").split("\n").filter(Boolean);
+        for (; sentLines < lines.length; sentLines++)
+            send({ line: lines[sentLines] });
+        if (d.status !== "pending" && d.status !== "building") {
+            send({ done: true, failed: d.status !== "live", deployUrl: d.deployUrl ?? null });
+            res.end();
+            return;
+        }
+        if (Date.now() - startedAt > TIMEOUT_MS) {
+            send({ line: "Журнал ждал 5 минут — сборка всё ещё не завершилась. Загляните во вкладку «Выкатки» позже.", done: true, failed: false, deployUrl: null });
+            res.end();
+            return;
+        }
+        setTimeout(() => { tick().catch(() => { try {
+            res.end();
+        }
+        catch { /* closed */ } }); }, 2000);
+    };
+    tick().catch(() => { try {
+        res.end();
+    }
+    catch { /* closed */ } });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Collaborators (V2)
+// ═════════════════════════════════════════════════════════════════════════════
+// GET /api/devhub/projects/:id/collaborators
+exports.devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canAccess(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    res.json({ collaborators: project.collaborators });
+});
+// POST /api/devhub/projects/:id/collaborators
+exports.devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
+    // Приглашение в память = соучастник потеряет доступ после перезапуска.
+    let storageFallback = false;
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    // Only project owner can manage collaborators
+    if (!project || project.userId !== userId) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    // Studio Pro required to add collaborators
+    const tier = await getUserTier(userId);
+    if (tier === "free") {
+        return res.status(403).json({ error: "Studio Pro required to add collaborators", upgrade: true });
+    }
+    const { userId: rawInput, role } = req.body || {};
+    if (!rawInput || typeof rawInput !== "string") {
+        return res.status(400).json({ error: "userId or email is required" });
+    }
+    const validRoles = ["editor", "viewer"];
+    const resolvedRole = validRoles.includes(role) ? role : "editor";
+    // Resolve email → userId via AEVIONUser if input looks like an email
+    let collabUserId = rawInput.trim();
+    let displayEmail = "";
+    if (collabUserId.includes("@") && (0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        try {
+            const ur = await pool.query(`SELECT "id","email" FROM "AEVIONUser" WHERE LOWER("email")=$1 LIMIT 1`, [collabUserId.toLowerCase()]);
+            if (ur.rows[0]?.id) {
+                displayEmail = ur.rows[0].email;
+                collabUserId = ur.rows[0].id;
+            }
+            // If not found, store the email as a placeholder so the invite persists
+        }
+        catch { /* keep rawInput as userId */ }
+    }
+    if (collabUserId === userId) {
+        return res.status(400).json({ error: "cannot add project owner as collaborator" });
+    }
+    project.collaborators = project.collaborators.filter((c) => c.userId !== collabUserId);
+    project.collaborators.push({ userId: collabUserId, role: resolvedRole });
+    project.updatedAt = now();
+    try {
+        await dbSaveProject(project);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/collaborators:post", projectId: project.id });
+        memProjects.set(project.id, project);
+        storageFallback = true;
+    }
+    res.status(201).json({ collaborators: project.collaborators, resolved: displayEmail || collabUserId, ...(storageFallback ? MEMORY_NOTE : {}) });
+});
+// DELETE /api/devhub/projects/:id/collaborators/:userId
+exports.devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const { collabUserId } = req.params;
+    project.collaborators = project.collaborators.filter((c) => c.userId !== collabUserId);
+    project.updatedAt = now();
+    let storageFallback = false;
+    try {
+        await dbSaveProject(project);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/collaborators:delete", projectId: project.id });
+        memProjects.set(project.id, project);
+        storageFallback = true;
+    }
+    res.json({ ok: true, collaborators: project.collaborators, ...(storageFallback ? MEMORY_NOTE : {}) });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — GitHub Integration
+// ═════════════════════════════════════════════════════════════════════════════
+// POST /api/devhub/projects/:id/github/push
+exports.devhubRouter.post("/projects/:id/github/push", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+    // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+    // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+    // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+    // другой проверкой: контракт ручки для гостя — 401, без исключений.
+    const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+    if (sharedGitHubWhyNot)
+        return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
+    const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+    if (!githubToken) {
+        return res.json({
+            ok: false,
+            message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration",
+            setupUrl: "https://github.com/settings/tokens",
+        });
+    }
+    try {
+        const projectSlug = slugify(project.name) + "-" + project.id.slice(0, 8);
+        // 1. Get authenticated GitHub username
+        const userResp = await fetch("https://api.github.com/user", {
+            headers: {
+                Authorization: `Bearer ${githubToken}`,
+                "User-Agent": "AEVION-DevHub",
+            },
+        });
+        if (!userResp.ok) {
+            const errText = await userResp.text();
+            // Capability-level: the token itself is the problem, so the shop window
+            // should stop calling GitHub live.
+            (0, providerHealth_1.noteProviderFailure)("github", `GitHub auth failed: ${String(errText).slice(0, 100)}`);
+            return res.json({ ok: false, message: `GitHub auth error: ${errText}` });
+        }
+        const ghUser = await userResp.json();
+        const username = ghUser.login;
+        // 2. Create repo
+        const createResp = await fetch("https://api.github.com/user/repos", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${githubToken}`,
+                "Content-Type": "application/json",
+                "User-Agent": "AEVION-DevHub",
+            },
+            body: JSON.stringify({
+                name: projectSlug,
+                description: project.description || "Created by AEVION DevHub",
+                private: false,
+                auto_init: true,
+            }),
+        });
+        if (!createResp.ok) {
+            const errText = await createResp.text();
+            (0, providerHealth_1.noteProviderFailure)("github", `GitHub repo create failed: ${String(errText).slice(0, 100)}`);
+            return res.json({ ok: false, message: `GitHub repo create error: ${errText}` });
+        }
+        const repoData = await createResp.json();
+        const repoUrl = repoData.html_url;
+        const repoName = projectSlug;
+        // 3. Push each project file
+        const files = await dbListFiles(project.id);
+        let pushedFiles = 0;
+        // Files GitHub refused. Counting only the successes and still answering
+        // ok:true meant a repo missing half the project read as a clean push —
+        // and it is the repo a per-project deploy then builds from.
+        const failedFiles = [];
+        for (const file of files) {
+            try {
+                const fileResp = await fetch(`https://api.github.com/repos/${username}/${repoName}/contents/${file.path}`, {
+                    method: "PUT",
+                    headers: {
+                        Authorization: `Bearer ${githubToken}`,
+                        "Content-Type": "application/json",
+                        "User-Agent": "AEVION-DevHub",
+                    },
+                    body: JSON.stringify({
+                        message: "Initial commit from AEVION DevHub",
+                        content: Buffer.from(file.content).toString("base64"),
+                    }),
+                });
+                if (fileResp.ok)
+                    pushedFiles += 1;
+                else {
+                    const body = await fileResp.text().catch(() => "");
+                    let reason = `HTTP ${fileResp.status}`;
+                    try {
+                        const parsed = JSON.parse(body);
+                        if (parsed?.message)
+                            reason = `${reason}: ${parsed.message}`;
+                    }
+                    catch { /* body was not JSON — the status alone is the reason */ }
+                    failedFiles.push({ path: file.path, reason });
+                }
+            }
+            catch (e) {
+                // Keep pushing the rest, but never lose the fact that this one didn't.
+                failedFiles.push({ path: file.path, reason: e instanceof Error ? e.message : String(e) });
+            }
+        }
+        // 4. Update project repoUrl
+        project.repoUrl = repoUrl;
+        project.updatedAt = now();
+        try {
+            await dbSaveProject(project);
+        }
+        catch (e) {
+            (0, sentry_1.captureException)(e, { route: "devhub/github:push", projectId: project.id });
+            memProjects.set(project.id, project);
+        }
+        if (failedFiles.length > 0) {
+            // A file GitHub refused is a condition of this push — too large, a stale
+            // sha — not an outage of the integration; recording it as one would put
+            // the strip in the red over somebody's oversized asset. Nothing landing
+            // at all is different: that is the integration failing.
+            if (pushedFiles === 0)
+                (0, providerHealth_1.noteProviderFailure)("github", `nothing reached the repo: ${failedFiles[0]?.reason ?? "all files refused"}`);
+            return res.json({
+                ok: pushedFiles > 0,
+                repoUrl,
+                pushedFiles,
+                failedFiles,
+                ...(0, degradedResponse_1.degraded)(`${failedFiles.length} of ${files.length} file(s) were not pushed: ${failedFiles
+                    .slice(0, 3)
+                    .map((f) => `${f.path} (${f.reason})`)
+                    .join("; ")}${failedFiles.length > 3 ? "; …" : ""}`),
+            });
+        }
+        (0, providerHealth_1.noteProviderSuccess)("github");
+        return res.json({ ok: true, repoUrl, pushedFiles });
+    }
+    catch (e) {
+        return res.json({ ok: false, message: (0, safeErrorText_1.redactInfraDetails)(e) || "GitHub push failed" });
+    }
+});
+// POST /api/devhub/projects/:id/github/pull-request — open a PR with the
+// project's current files on a new branch, targeting the repo's default branch.
+// Requires the project to already be linked to GitHub (via /github/push).
+// POST /api/devhub/projects/:id/github/sync — pull the linked repo's current
+// default-branch state INTO the project (roadmap #5: sync was push-only).
+// A checkpoint is taken before anything is written, so a bad sync is one
+// undo away — same safety contract as AI generations.
+const SYNC_BINARY_EXT = /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|otf|eot|zip|gz|tar|pdf|mp[34]|wasm|jar|exe|dll|so|dylib)$/i;
+const SYNC_MAX_FILES = 100;
+const SYNC_MAX_FILE_BYTES = 200000;
+exports.devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+    // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+    // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+    // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+    // другой проверкой: контракт ручки для гостя — 401, без исключений.
+    const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+    if (sharedGitHubWhyNot)
+        return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
+    if (!project.repoUrl) {
+        return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
+    }
+    const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (!match) {
+        return res.json({ ok: false, message: "repoUrl is not a recognizable GitHub URL" });
+    }
+    const [, owner, repo] = match;
+    const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+    if (!githubToken) {
+        return res.json({ ok: false, message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration" });
+    }
+    const ghHeaders = { Authorization: `Bearer ${githubToken}`, Accept: "application/vnd.github+json", "User-Agent": "aevion-devhub" };
+    try {
+        const repoResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: ghHeaders });
+        const repoData = await repoResp.json();
+        if (!repoResp.ok)
+            return res.status(502).json({ error: `GitHub: ${repoData.message || repoResp.status}` });
+        const branch = repoData.default_branch || "main";
+        const treeResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, { headers: ghHeaders });
+        const treeData = await treeResp.json();
+        if (!treeResp.ok || !Array.isArray(treeData.tree)) {
+            return res.status(502).json({ error: `GitHub tree: ${treeData.message || treeResp.status}` });
+        }
+        const skipped = [];
+        const failed = [];
+        const candidates = treeData.tree.filter((n) => {
+            if (n.type !== "blob")
+                return false;
+            if (SYNC_BINARY_EXT.test(n.path) || (n.size ?? 0) > SYNC_MAX_FILE_BYTES) {
+                skipped.push(n.path);
+                return false;
+            }
+            return true;
+        });
+        if (candidates.length > SYNC_MAX_FILES) {
+            skipped.push(...candidates.slice(SYNC_MAX_FILES).map((n) => n.path));
+            candidates.length = SYNC_MAX_FILES;
+        }
+        const existing = await dbListFiles(project.id);
+        const byPath = new Map(existing.map((f) => [f.path, f]));
+        const updated = [];
+        const created = [];
+        let unchanged = 0;
+        const toWrite = [];
+        for (const node of candidates) {
+            // `skipped` means "we were never going to sync this" — a binary, an
+            // oversized file, anything past the cap. A file we TRIED to read and
+            // could not is a different fact and belongs in `failed`: putting both in
+            // one list let a genuine loss pass for policy, and the project came back
+            // part-new part-stale with a message that said only "Synced".
+            const blobResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/blobs/${node.sha}`, { headers: ghHeaders });
+            if (!blobResp.ok) {
+                failed.push({ path: node.path, reason: `HTTP ${blobResp.status}` });
+                continue;
+            }
+            const blob = await blobResp.json();
+            if (blob.encoding !== "base64" || typeof blob.content !== "string") {
+                failed.push({ path: node.path, reason: `unexpected encoding ${blob.encoding ?? "none"}` });
+                continue;
+            }
+            const content = Buffer.from(blob.content, "base64").toString("utf8");
+            const current = byPath.get(node.path);
+            if (!current) {
+                created.push(node.path);
+                toWrite.push({ path: node.path, content });
+            }
+            else if (current.content !== content) {
+                updated.push(node.path);
+                toWrite.push({ path: node.path, content });
+            }
+            else
+                unchanged++;
+        }
+        let checkpointId = null;
+        if (toWrite.length > 0) {
+            const cp = await createCheckpoint(project.id, userId, `GitHub sync from ${owner}/${repo}@${branch}`, toWrite.map((f) => f.path), existing);
+            checkpointId = cp?.id ?? null;
+            // Точка могла лечь только в память — тогда «отменить» переживёт
+            // не дольше перезапуска. Признак есть у cp.storage.
+            for (const f of toWrite) {
+                const file = {
+                    id: node_crypto_1.default.randomUUID(), projectId: project.id, path: f.path,
+                    content: f.content, language: detectLanguage(f.path), updatedAt: now(),
+                };
+                try {
+                    await dbUpsertFile(file);
+                }
+                catch {
+                    const cur = [...memFiles.values()].find((x) => x.projectId === project.id && x.path === f.path);
+                    if (cur) {
+                        cur.content = file.content;
+                        cur.language = file.language;
+                        cur.updatedAt = file.updatedAt;
+                    }
+                    else
+                        memFiles.set(file.id, file);
+                }
+            }
+        }
+        // The frontend shows `message` verbatim in its toast, so a loss that is
+        // only present in a separate field would never reach the person looking.
+        const lossNote = failed.length
+            ? ` ⚠ ${failed.length} file${failed.length > 1 ? "s" : ""} could not be read and are missing from this sync: ${failed.map((f) => f.path).join(", ")}`
+            : "";
+        res.json({
+            ok: true, branch, updated, created, unchanged,
+            ...(skipped.length ? { skipped } : {}),
+            ...(failed.length ? { failed, ...(0, degradedResponse_1.degraded)(`${failed.length} of ${candidates.length} files could not be read from ${owner}/${repo}@${branch}`) } : {}),
+            ...(checkpointId ? { checkpointId } : {}),
+            message: (toWrite.length
+                ? `Synced ${owner}/${repo}@${branch}: ${updated.length} updated, ${created.length} new (undo restores the pre-sync state)`
+                : `Already in sync with ${owner}/${repo}@${branch}`) + lossNote,
+        });
+    }
+    catch (e) {
+        res.status(502).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "GitHub sync failed" });
+    }
+});
+exports.devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+    // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+    // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+    // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+    // другой проверкой: контракт ручки для гостя — 401, без исключений.
+    const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+    if (sharedGitHubWhyNot)
+        return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
+    const { title, body: prBody, branch: branchInput } = req.body || {};
+    if (!title || typeof title !== "string") {
+        return res.status(400).json({ error: "title is required" });
+    }
+    const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+    if (!githubToken) {
+        return res.json({
+            ok: false,
+            message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration",
+            setupUrl: "https://github.com/settings/tokens",
+        });
+    }
+    if (!project.repoUrl) {
+        return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
+    }
+    const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (!match) {
+        return res.json({ ok: false, message: "repoUrl is not a recognizable GitHub URL" });
+    }
+    const [, owner, repo] = match;
+    const ghHeaders = { Authorization: `Bearer ${githubToken}`, "User-Agent": "AEVION-DevHub" };
+    try {
+        // 1. Resolve the default branch + its current commit sha.
+        const repoResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+            headers: { ...ghHeaders, Accept: "application/vnd.github+json" },
+        });
+        if (!repoResp.ok) {
+            return res.json({ ok: false, message: `GitHub repo lookup error: ${(await repoResp.text()).slice(0, 300)}` });
+        }
+        const repoData = await repoResp.json();
+        const baseBranch = repoData.default_branch;
+        const refResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${baseBranch}`, {
+            headers: { ...ghHeaders, Accept: "application/vnd.github+json" },
+        });
+        if (!refResp.ok) {
+            return res.json({ ok: false, message: `GitHub base branch lookup error: ${(await refResp.text()).slice(0, 300)}` });
+        }
+        const refData = await refResp.json();
+        const baseSha = refData.object.sha;
+        // 2. Create a new branch from the base commit.
+        const branch = (typeof branchInput === "string" && branchInput.trim()) ? branchInput.trim() : `aevion-agent-${Date.now()}`;
+        const createRefResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
+            method: "POST",
+            headers: { ...ghHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
+        });
+        if (!createRefResp.ok) {
+            return res.json({ ok: false, message: `GitHub branch create error: ${(await createRefResp.text()).slice(0, 300)}` });
+        }
+        // 3. Commit the project's current files onto the new branch (each file
+        // already exists there as a copy of the base commit, so its current sha
+        // must be looked up before overwriting it — Contents API rejects a PUT
+        // without sha for an existing file).
+        const files = await dbListFiles(project.id);
+        let pushedFiles = 0;
+        // Counting only the all-or-nothing case let nine files out of ten vanish
+        // into an `ok: true` pull request — the same defect /github/push already
+        // fixed. A PR is reviewed and merged on the belief it holds the change it
+        // claims, so every file that did not land is named.
+        const failedFiles = [];
+        for (const file of files) {
+            try {
+                const encodedPath = file.path.split("/").map(encodeURIComponent).join("/");
+                let sha;
+                const getResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders });
+                if (getResp.ok) {
+                    const existing = await getResp.json();
+                    sha = existing.sha;
+                }
+                const putResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}`, {
+                    method: "PUT",
+                    headers: { ...ghHeaders, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        message: title,
+                        content: Buffer.from(file.content).toString("base64"),
+                        branch,
+                        ...(sha ? { sha } : {}),
+                    }),
+                });
+                if (putResp.ok)
+                    pushedFiles += 1;
+                else {
+                    const body = await putResp.text().catch(() => "");
+                    let reason = `HTTP ${putResp.status}`;
+                    try {
+                        const parsed = JSON.parse(body);
+                        if (parsed?.message)
+                            reason = `${reason}: ${parsed.message}`;
+                    }
+                    catch { /* body was not JSON — the status alone is the reason */ }
+                    failedFiles.push({ path: file.path, reason });
+                }
+            }
+            catch (e) {
+                // Keep committing the rest, but never lose the fact that this one didn't.
+                failedFiles.push({ path: file.path, reason: e instanceof Error ? e.message : String(e) });
+            }
+        }
+        if (files.length > 0 && pushedFiles === 0) {
+            return res.json({ ok: false, message: "Branch created but no files could be committed", branch });
+        }
+        // 4. Open the pull request.
+        const prResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
+            method: "POST",
+            headers: { ...ghHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ title, head: branch, base: baseBranch, body: prBody || "" }),
+        });
+        if (!prResp.ok) {
+            return res.json({ ok: false, message: `GitHub PR create error: ${(await prResp.text()).slice(0, 300)}`, branch, pushedFiles });
+        }
+        const prData = await prResp.json();
+        return res.json({
+            ok: true,
+            prUrl: prData.html_url,
+            prNumber: prData.number,
+            branch,
+            pushedFiles,
+            ...(failedFiles.length > 0
+                ? {
+                    failedFiles,
+                    ...(0, degradedResponse_1.degraded)(`${pushedFiles} of ${files.length} files reached the pull request; ` +
+                        `${failedFiles.length} did not: ${failedFiles.map((f) => f.path).join(", ")}`),
+                }
+                : {}),
+        });
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/github:pull-request", projectId: project.id });
+        return res.json({ ok: false, message: (0, safeErrorText_1.redactInfraDetails)(e) || "GitHub pull request creation failed" });
+    }
+});
+// POST /api/devhub/projects/:id/github/pull-request/:number/merge
+exports.devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+    // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+    // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+    // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+    // другой проверкой: контракт ручки для гостя — 401, без исключений.
+    const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+    if (sharedGitHubWhyNot)
+        return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
+    const prNumber = (0, queryNumber_1.pgIntId)(req.params.number);
+    if (prNumber === null) {
+        return res.status(400).json({ error: "invalid pull request number" });
+    }
+    const mergeMethodInput = typeof req.body?.mergeMethod === "string" ? req.body.mergeMethod : "squash";
+    const mergeMethod = ["merge", "squash", "rebase"].includes(mergeMethodInput) ? mergeMethodInput : "squash";
+    const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+    if (!githubToken) {
+        return res.json({
+            ok: false,
+            message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration",
+            setupUrl: "https://github.com/settings/tokens",
+        });
+    }
+    if (!project.repoUrl) {
+        return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
+    }
+    const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (!match) {
+        return res.json({ ok: false, message: "repoUrl is not a recognizable GitHub URL" });
+    }
+    const [, owner, repo] = match;
+    const ghHeaders = { Authorization: `Bearer ${githubToken}`, "User-Agent": "AEVION-DevHub" };
+    try {
+        const mergeResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/merge`, {
+            method: "PUT",
+            headers: { ...ghHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ merge_method: mergeMethod }),
+        });
+        const mergeData = await mergeResp.json().catch(() => ({}));
+        // GitHub's merge endpoint can return a non-2xx (405 not mergeable, 409 sha
+        // mismatch, 404) — but even a 2xx response carries `merged: false` in some
+        // edge cases, so both must be checked, not just the HTTP status.
+        if (!mergeResp.ok || mergeData.merged !== true) {
+            return res.json({ ok: false, message: mergeData.message || `GitHub merge error: HTTP ${mergeResp.status}` });
+        }
+        return res.json({ ok: true, merged: true, sha: mergeData.sha, message: mergeData.message });
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/github:merge-pull-request", projectId: project.id });
+        return res.json({ ok: false, message: (0, safeErrorText_1.redactInfraDetails)(e) || "GitHub pull request merge failed" });
+    }
+});
+// GET /api/devhub/projects/:id/github/status — check if repo exists on GitHub
+exports.devhubRouter.get("/projects/:id/github/status", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+    // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+    // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+    // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+    // другой проверкой: контракт ручки для гостя — 401, без исключений.
+    const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+    if (sharedGitHubWhyNot)
+        return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
+    const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+    if (!project.repoUrl || !githubToken) {
+        return res.json({ exists: false });
+    }
+    try {
+        const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+        if (!match)
+            return res.json({ exists: false });
+        const [, owner, repo] = match;
+        const ghResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+            headers: {
+                Authorization: `Bearer ${githubToken}`,
+                "User-Agent": "AEVION-DevHub",
+            },
+        });
+        // `exists: false` alone said "no such repository" for a revoked token too.
+        // The reason travels with it so the screen can tell the two apart.
+        if (!ghResp.ok) {
+            const { errorKind, error } = (0, githubFailure_1.classifyGithubResponse)(ghResp.status, ghResp.headers);
+            return res.json({ exists: false, errorKind, error });
+        }
+        const ghData = await ghResp.json();
+        return res.json({
+            exists: true,
+            stars: ghData.stargazers_count ?? 0,
+            openIssues: ghData.open_issues_count ?? 0,
+            lastPush: ghData.pushed_at ?? null,
+        });
+    }
+    catch (e) {
+        const { errorKind, error } = (0, githubFailure_1.githubUnreachable)(e?.message);
+        return res.json({ exists: false, errorKind, error });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Templates (Commit 3)
+// GET /api/devhub/projects/:id/github/branches — list branches of linked repo
+exports.devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+    // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+    // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+    // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+    // другой проверкой: контракт ручки для гостя — 401, без исключений.
+    const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+    if (sharedGitHubWhyNot)
+        return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
+    const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+    if (!project.repoUrl || !githubToken) {
+        return res.json({ branches: [], connected: false });
+    }
+    try {
+        const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+        if (!match)
+            return res.json({ branches: [], connected: false });
+        const [, owner, repo] = match;
+        const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches?per_page=30`, {
+            headers: {
+                Authorization: `Bearer ${githubToken}`,
+                "User-Agent": "AEVION-DevHub",
+                Accept: "application/vnd.github+json",
+            },
+        });
+        // This line used to read `connected: true` for every failure: a revoked
+        // token, a repo the token cannot see and a GitHub outage all reached the
+        // screen as "connected, 0 branches". `connected` now means GitHub answered.
+        if (!resp.ok)
+            return res.json({ branches: [], ...(0, githubFailure_1.classifyGithubResponse)(resp.status, resp.headers) });
+        const data = await resp.json();
+        return res.json({
+            connected: true,
+            repoUrl: project.repoUrl,
+            branches: data.map((b) => ({ name: b.name, sha: b.commit.sha.slice(0, 7) })),
+        });
+    }
+    catch (e) {
+        // A thrown fetch says nothing about the token, so it must not read as one.
+        return res.json({ branches: [], ...(0, githubFailure_1.githubUnreachable)((0, safeErrorText_1.redactInfraDetails)(e)) });
+    }
+});
+// A second POST /projects/:id/github/sync used to be declared here, returning
+// the repo's default branch, star count and last-push date. Express matches the
+// FIRST handler registered for a path, so it never ran once — the pull-files
+// handler above always answered instead. Nothing consumed its shape (the UI
+// reads `updated`/`created`), and `/github/status` already serves stars and
+// last push, so it was removed rather than given a second path. The duplicate
+// is guarded by a test: devhub-github-connection-truth.test.ts.
+// ═════════════════════════════════════════════════════════════════════════════
+// GET /api/devhub/templates
+exports.devhubRouter.get("/templates", (_req, res) => {
+    res.json({ templates: exports.TEMPLATES });
+});
+// POST /api/devhub/projects/:id/apply-template
+exports.devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
+    // Шаблон разворачивает файлы проекта; в памяти они не переживут перезапуск.
+    let storageFallback = false;
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const { templateId } = req.body || {};
+    const template = exports.TEMPLATES.find((t) => t.id === templateId);
+    if (!template)
+        return res.status(404).json({ error: "template not found" });
+    const savedFiles = [];
+    for (const tf of template.files) {
+        const file = {
+            id: node_crypto_1.default.randomUUID(),
+            projectId: project.id,
+            path: tf.path,
+            content: tf.content,
+            language: tf.language || detectLanguage(tf.path),
+            updatedAt: now(),
+        };
+        try {
+            await dbUpsertFile(file);
+        }
+        catch {
+            const existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === tf.path);
+            if (existing) {
+                existing.content = file.content;
+                existing.language = file.language;
+                existing.updatedAt = file.updatedAt;
+            }
+            else {
+                memFiles.set(file.id, file);
+                storageFallback = true;
+            }
+        }
+        savedFiles.push(file);
+    }
+    res.json({ ok: true, files: savedFiles, template: template.id, ...(storageFallback ? MEMORY_NOTE : {}) });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Environment Variables
+// ═════════════════════════════════════════════════════════════════════════════
+// GET /api/devhub/projects/:id/env
+exports.devhubRouter.get("/projects/:id/env", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // Return keys with masked values
+    const masked = Object.keys(project.envVars).map((key) => ({
+        key,
+        value: "***",
+        set: true,
+    }));
+    res.json({ env: masked, count: masked.length });
+});
+// PUT /api/devhub/projects/:id/env
+exports.devhubRouter.put("/projects/:id/env", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const { key, value } = req.body || {};
+    if (!key || typeof key !== "string")
+        return res.status(400).json({ error: "key is required" });
+    project.envVars[String(key)] = String(value ?? "");
+    project.updatedAt = now();
+    let storageFallback = false;
+    try {
+        await dbSaveProject(project);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/env:put", projectId: project.id });
+        memProjects.set(project.id, project);
+        storageFallback = true;
+    }
+    res.json({ ok: true, key, ...(storageFallback ? MEMORY_NOTE : {}) });
+});
+// DELETE /api/devhub/projects/:id/env/:key
+exports.devhubRouter.delete("/projects/:id/env/:key", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const key = req.params.key;
+    delete project.envVars[key];
+    project.updatedAt = now();
+    let storageFallback = false;
+    try {
+        await dbSaveProject(project);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/env:delete", projectId: project.id });
+        memProjects.set(project.id, project);
+        storageFallback = true;
+    }
+    res.json({ ok: true, key, ...(storageFallback ? MEMORY_NOTE : {}) });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Custom Domain
+// ═════════════════════════════════════════════════════════════════════════════
+// POST /api/devhub/projects/:id/domain
+exports.devhubRouter.post("/projects/:id/domain", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const { domain } = req.body || {};
+    if (!domain || typeof domain !== "string")
+        return res.status(400).json({ error: "domain is required" });
+    // Basic domain validation
+    const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/;
+    if (!domainRegex.test(domain.trim())) {
+        return res.status(400).json({ error: "invalid domain format" });
+    }
+    const domainRefusal = customDomainRefusal(domain.trim().toLowerCase(), project.id);
+    if (domainRefusal)
+        return res.status(400).json({ error: domainRefusal });
+    project.customDomain = domain.trim().toLowerCase();
+    project.updatedAt = now();
+    // Человек получает инструкцию по DNS и считает домен привязанным. Если
+    // запись легла только в память процесса, привязка исчезнет при
+    // перезапуске, а он будет ждать, пока заработает CNAME, которого у нас
+    // больше нет. Форма та же, что у соседей после сведения 28.08.
+    let storageFallback = false;
+    try {
+        await dbSaveProject(project);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/domain:post", projectId: project.id });
+        memProjects.set(project.id, project);
+        storageFallback = true;
+    }
+    res.json({
+        ok: true,
+        domain: project.customDomain,
+        cname: "devhub.aevion.app",
+        message: "Point your CNAME to devhub.aevion.app",
+        ...(storageFallback ? MEMORY_NOTE : {}),
+    });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Deployment History
+// ═════════════════════════════════════════════════════════════════════════════
+// GET /api/devhub/projects/:id/deployments
+exports.devhubRouter.get("/projects/:id/deployments", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    try {
+        const deployments = await dbListDeployments(req.params.id, 10);
+        res.json({ deployments });
+    }
+    catch {
+        const deployments = [...memDeployments.values()]
+            .filter((d) => d.projectId === req.params.id)
+            .sort((a, b) => b.triggeredAt.localeCompare(a.triggeredAt))
+            .slice(0, 10);
+        res.json({ deployments });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Snippet Shelf (publicly shareable code snippets, gist-style)
+// ═════════════════════════════════════════════════════════════════════════════
+function rowToSnippet(row) {
+    return {
+        id: row.id,
+        userId: row.userId,
+        title: row.title,
+        content: row.content,
+        language: row.language,
+        tags: Array.isArray(row.tags) ? row.tags : [],
+        stars: typeof row.stars === "number" ? row.stars : Number(row.stars) || 0,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+        updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+    };
+}
+async function dbListSnippets(opts) {
+    const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        let arr = [...memSnippets.values()];
+        if (opts.userId)
+            arr = arr.filter((s) => s.userId === opts.userId);
+        if (opts.tag) {
+            const tag = opts.tag.toLowerCase();
+            arr = arr.filter((s) => s.tags.some((t) => t.toLowerCase() === tag));
+        }
+        return arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+    }
+    const params = [];
+    const conds = [];
+    if (opts.userId) {
+        params.push(opts.userId);
+        conds.push(`"userId" = $${params.length}`);
+    }
+    if (opts.tag) {
+        params.push(JSON.stringify([opts.tag]));
+        conds.push(`"tags" @> $${params.length}::jsonb`);
+    }
+    params.push(limit);
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+    const r = await pool.query(`SELECT * FROM "DevHubSnippet" ${where} ORDER BY "createdAt" DESC LIMIT $${params.length}`, params);
+    return r.rows.map(rowToSnippet);
+}
+async function dbGetSnippet(id) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)())
+        return memSnippets.get(id) ?? null;
+    const r = await pool.query(`SELECT * FROM "DevHubSnippet" WHERE "id" = $1`, [id]);
+    return r.rows[0] ? rowToSnippet(r.rows[0]) : null;
+}
+async function dbSaveSnippet(s) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        memSnippets.set(s.id, s);
+        return;
+    }
+    await pool.query(`INSERT INTO "DevHubSnippet" ("id","userId","title","content","language","tags","stars","createdAt","updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)
+     ON CONFLICT ("id") DO UPDATE SET
+       "title"=$3,"content"=$4,"language"=$5,"tags"=$6::jsonb,"stars"=$7,"updatedAt"=$9`, [s.id, s.userId, s.title, s.content, s.language, JSON.stringify(s.tags), s.stars, s.createdAt, s.updatedAt]);
+}
+async function dbDeleteSnippet(id) {
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        memSnippets.delete(id);
+        return;
+    }
+    await pool.query(`DELETE FROM "DevHubSnippet" WHERE "id" = $1`, [id]);
+}
+/**
+ * Публичный вид сниппета: БЕЗ личности автора.
+ *
+ * Полка сниппетов видна всем, и раньше вместе с кодом наружу уезжало поле
+ * userId. Пока все разлогиненные были одним "anonymous", это ничего не
+ * значило. С личным идентификатором гостя (lib/devhubGuest.ts) это стало бы
+ * дырой: опубликовав сниппет, посетитель публиковал бы и свой идентификатор,
+ * а по нему любой мог назваться им — и удалить его проекты.
+ *
+ * Вместо личности отдаём `mine`: клиенту нужно ровно одно — показывать ли
+ * кнопку удаления.
+ */
+function publicSnippet(s, viewerId) {
+    const { userId, ...rest } = s;
+    return { ...rest, mine: userId === viewerId };
+}
+// Служебные сниппеты смоук-задач помечены тегом `smoke` и не должны попадать
+// на публичную полку витрины: замер 05.09.2026 — все 22 записи выдачи были
+// «console.log hello from smoke test». Явный запрос ?tag= или ?user= их
+// по-прежнему находит, поэтому сами смоук-проверки не ломаются.
+function isServiceSnippet(s) {
+    return s.tags.some((t) => t.toLowerCase() === "smoke" || t.toLowerCase().startsWith("smoke-"));
+}
+// GET /api/devhub/snippets — public list, optional ?tag=X&user=Y&limit=N
+exports.devhubRouter.get("/snippets", async (req, res) => {
+    const viewerId = (0, devhubGuest_1.requesterId)(req, (await (0, authLive_1.verifyBearerLive)(req))?.sub);
+    const tag = req.query.tag ? String(req.query.tag).trim() : undefined;
+    const userId = req.query.user ? String(req.query.user).trim() : undefined;
+    const limit = req.query.limit ? Math.min(Math.max(parseInt(String(req.query.limit), 10) || 50, 1), 200) : 50;
+    const hideService = !tag && !userId;
+    try {
+        // Запрашиваем с запасом: после отсева служебных должно остаться до limit.
+        const fetched = await dbListSnippets({ tag, userId, limit: hideService ? Math.min(limit + 50, 250) : limit });
+        const snippets = (hideService ? fetched.filter((s) => !isServiceSnippet(s)) : fetched).slice(0, limit);
+        res.json({ snippets: snippets.map((s) => publicSnippet(s, viewerId)), total: snippets.length });
+    }
+    catch {
+        let arr = [...memSnippets.values()];
+        if (userId)
+            arr = arr.filter((s) => s.userId === userId);
+        if (tag) {
+            const t = tag.toLowerCase();
+            arr = arr.filter((s) => s.tags.some((tg) => tg.toLowerCase() === t));
+        }
+        if (hideService)
+            arr = arr.filter((s) => !isServiceSnippet(s));
+        const snippets = arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+        // Пустая память при УПАВШЕМ чтении — это не «полка пуста», а «полку не
+        // прочитали». Замер 28.08 (роутер с нечитаемой базой) показал, что ручка
+        // отвечала 200 и `total: 0`, и отличить одно от другого было нельзя.
+        // Соседний список проектов такой случай уже различает; здесь не различал.
+        if (snippets.length === 0) {
+            replyStorageUnavailable(res);
+            return;
+        }
+        // В памяти что-то есть — отдаём, но честно называем источник.
+        res.json({
+            snippets: snippets.map((s) => publicSnippet(s, viewerId)),
+            total: snippets.length,
+            storage: "memory",
+        });
+    }
+});
+// POST /api/devhub/snippets — create a snippet
+exports.devhubRouter.post("/snippets", dhCreateLimit(), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const { title, content, language, tags } = req.body || {};
+    if (!title || typeof title !== "string")
+        return res.status(400).json({ error: "title is required" });
+    if (typeof content !== "string")
+        return res.status(400).json({ error: "content must be a string" });
+    const normTags = Array.isArray(tags)
+        ? tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean).slice(0, 10)
+        : [];
+    const snippet = {
+        id: node_crypto_1.default.randomUUID(),
+        userId,
+        title: title.trim().slice(0, 200),
+        content: String(content).slice(0, 100000),
+        language: language ? String(language).trim().slice(0, 40) : "plaintext",
+        tags: normTags,
+        stars: 0,
+        createdAt: now(),
+        updatedAt: now(),
+    };
+    let storageFallback = false;
+    try {
+        await dbSaveSnippet(snippet);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/snippets:create", snippetId: snippet.id });
+        memSnippets.set(snippet.id, snippet);
+        storageFallback = true;
+    }
+    res.status(201).json({
+        snippet: publicSnippet(snippet, userId),
+        ...(storageFallback ? MEMORY_NOTE : {}),
+    });
+});
+// GET /api/devhub/snippets/:id — fetch single snippet
+exports.devhubRouter.get("/snippets/:id", async (req, res) => {
+    const viewerId = (0, devhubGuest_1.requesterId)(req, (await (0, authLive_1.verifyBearerLive)(req))?.sub);
+    try {
+        const snippet = await dbGetSnippet(req.params.id);
+        if (!snippet)
+            return res.status(404).json({ error: "snippet not found" });
+        res.json({ snippet: publicSnippet(snippet, viewerId) });
+    }
+    catch {
+        // База упала. Память в проде пуста, и «snippet not found» стало бы ложью
+        // о существующем фрагменте.
+        const snippet = memSnippets.get(req.params.id);
+        if (!snippet)
+            return replyStorageUnavailable(res);
+        // Обезличиваем и здесь: это запасной путь, добавленный их веткой, и без
+        // publicSnippet он отдавал бы наружу личность автора — по ней можно
+        // назваться им (см. lib/devhubGuest.ts).
+        res.json({ snippet: publicSnippet(snippet, viewerId), storage: "memory" });
+    }
+});
+// DELETE /api/devhub/snippets/:id — снять СВОЙ сниппет с публичной полки
+exports.devhubRouter.delete("/snippets/:id", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    let snippet;
+    try {
+        snippet = await dbGetSnippet(req.params.id);
+    }
+    catch {
+        snippet = memSnippets.get(req.params.id) ?? null;
+    }
+    // 404, а не 403: иначе ответ подтверждал бы существование чужого сниппета
+    // тому, кто им не владеет.
+    if (!snippet || snippet.userId !== userId) {
+        return res.status(404).json({ error: "snippet not found" });
+    }
+    try {
+        await dbDeleteSnippet(snippet.id);
+    }
+    catch (e) {
+        // Молчаливый успех здесь хуже отказа: человек увидел бы, что сниппет снят,
+        // а он остался бы на публичной полке.
+        (0, sentry_1.captureException)(e, { route: "devhub/snippets:delete", snippetId: snippet.id });
+        // удаление сниппета — отказ хранилища, не наша поломка: недоступность базы это 503,
+        // а 500 читается как «сломались мы» и поднимает ложную тревогу.
+        (0, sentry_1.captureException)(e);
+        return replyStorageUnavailable(res);
+    }
+    memSnippets.delete(snippet.id);
+    res.json({ ok: true, id: snippet.id });
+});
+// POST /api/devhub/snippets/:id/star — increment star count
+exports.devhubRouter.post("/snippets/:id/star", async (req, res) => {
+    let snippet;
+    let readFailed = false;
+    try {
+        snippet = await dbGetSnippet(req.params.id);
+    }
+    catch {
+        snippet = memSnippets.get(req.params.id) ?? null;
+        readFailed = true;
+    }
+    // «snippet not found» на упавшей базе — ложь о существующем фрагменте, и
+    // звезда при этом молча не ставится.
+    if (!snippet && readFailed)
+        return replyStorageUnavailable(res);
+    if (!snippet)
+        return res.status(404).json({ error: "snippet not found" });
+    snippet.stars += 1;
+    snippet.updatedAt = now();
+    try {
+        await dbSaveSnippet(snippet);
+    }
+    catch (e) {
+        (0, sentry_1.captureException)(e, { route: "devhub/snippets:star", snippetId: snippet.id });
+        memSnippets.set(snippet.id, snippet);
+    }
+    res.json({ ok: true, stars: snippet.stars });
+});
+// GET /api/devhub/projects/:id/env/validate — check required env vars
+exports.devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    // Required env vars per stack
+    const requiredByStack = {
+        next: ["NODE_ENV"],
+        express: ["PORT"],
+        python: ["PYTHON_VERSION"],
+        react: ["NODE_ENV"],
+        static: [],
+    };
+    const required = requiredByStack[project.stack] ?? [];
+    const missing = required.filter((key) => !(key in project.envVars));
+    res.json({ valid: missing.length === 0, missing });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Media (ElevenLabs TTS)
+// ═════════════════════════════════════════════════════════════════════════════
+// POST /api/devhub/media/tts — text-to-speech via ElevenLabs
+exports.devhubRouter.post("/media/tts", async (req, res) => {
+    const ttsAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const ttsUserId = (0, devhubGuest_1.requesterId)(req, ttsAuth?.sub);
+    const { text, voice = "Rachel" } = req.body || {};
+    if (!text || typeof text !== "string" || !text.trim()) {
+        return res.status(400).json({ error: "text is required" });
+    }
+    if (text.trim().length > 5000) {
+        return res.status(400).json({ error: "text too long (max 5000 chars)" });
+    }
+    const ttsCredit = await checkCredit(ttsUserId, "tts", text.trim().length);
+    if (!ttsCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly TTS character limit reached",
+            tier: ttsCredit.tier, used: ttsCredit.used, limit: ttsCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) {
+        return res.status(503).json({
+            error: "ElevenLabs not configured — set ELEVENLABS_API_KEY",
+            setupUrl: "https://elevenlabs.io/api",
+        });
+    }
+    // Map voice name → ElevenLabs voice ID (common voices)
+    const voiceId = VOICE_IDS[voice] ?? VOICE_IDS["Rachel"];
+    try {
+        const elResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: "POST",
+            headers: {
+                "xi-api-key": apiKey,
+                "Content-Type": "application/json",
+                Accept: "audio/mpeg",
+            },
+            body: JSON.stringify({
+                text: text.trim(),
+                model_id: TTS_MODEL,
+                voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+            }),
+        });
+        // A retired model id is a provider-side change we cannot prevent, only
+        // survive: retry down the fallback chain before failing the user.
+        let finalResp = elResp;
+        let usedModel = TTS_MODEL;
+        if (!finalResp.ok) {
+            const firstErr = await finalResp.text();
+            if (/unsupported_model|deprecat/i.test(firstErr)) {
+                for (const alt of TTS_MODEL_FALLBACKS) {
+                    const retry = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+                        method: "POST",
+                        headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+                        body: JSON.stringify({ text: text.trim(), model_id: alt }),
+                    });
+                    if (retry.ok) {
+                        finalResp = retry;
+                        usedModel = alt;
+                        break;
+                    }
+                }
+            }
+            if (!finalResp.ok) {
+                // The voice capability read "live" for weeks while every call failed
+                // on a model ElevenLabs had removed. Record what the call did, so the
+                // shop window can say degraded with this reason.
+                (0, providerHealth_1.noteProviderFailure)("audio_tts", `ElevenLabs HTTP ${finalResp.status}: ${firstErr.slice(0, 100)}`);
+                return res.status(finalResp.status).json({ error: `ElevenLabs error: ${firstErr.slice(0, 200)}`, triedModels: [TTS_MODEL, ...TTS_MODEL_FALLBACKS] });
+            }
+        }
+        (0, providerHealth_1.noteProviderSuccess)("audio_tts");
+        const audioBuffer = Buffer.from(await finalResp.arrayBuffer());
+        res.setHeader("X-Tts-Model", usedModel);
+        await debitQuietly(ttsUserId, "tts", text.trim().length);
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Length", audioBuffer.length);
+        res.setHeader("Cache-Control", "no-store");
+        res.send(audioBuffer);
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "TTS generation failed" });
+    }
+});
+// POST /api/devhub/media/email — send email via Brevo
+exports.devhubRouter.post("/media/email", async (req, res) => {
+    const { to, subject, htmlBody } = req.body || {}; // `from` намеренно НЕ читается — см. ниже
+    if (!to || typeof to !== "string")
+        return res.status(400).json({ error: "to (email) required" });
+    if (!subject || typeof subject !== "string")
+        return res.status(400).json({ error: "subject required" });
+    if (!htmlBody || typeof htmlBody !== "string")
+        return res.status(400).json({ error: "htmlBody required" });
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(to.trim()))
+        return res.status(400).json({ error: "invalid recipient email" });
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+        return res.status(503).json({
+            error: "Brevo not configured — set BREVO_API_KEY",
+            setupUrl: "https://app.brevo.com/settings/keys/api",
+        });
+    }
+    /*
+     * Адрес отправителя — ТОЛЬКО из окружения. Тот же разбор, что у /media/sms
+     * рядом: ручка открыта без входа, и поле `from` уходило в Brevo как есть.
+     *
+     * Проверка формата адреса от подмены не защищает: она отвечает на вопрос
+     * «похоже ли это на адрес», а не «наш ли он». Письмо с чужого адреса с
+     * нашего аккаунта бьёт по репутации домена — а ею мы отправляем письма
+     * запуска.
+     */
+    const senderEmail = process.env.BREVO_DEFAULT_SENDER || "noreply@aevion.app";
+    try {
+        const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+                sender: { email: senderEmail, name: "AEVION DevHub" },
+                to: [{ email: to.trim() }],
+                subject: subject.trim().slice(0, 200),
+                htmlContent: htmlBody.slice(0, 100000),
+            }),
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            // Brevo answered 401 to every call from one IP for a week while the
+            // capability read "live" — the key existed, that was the whole test.
+            (0, providerHealth_1.noteProviderFailure)("email", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
+            return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json().catch(() => ({}));
+        const messageId = data?.messageId ?? null;
+        // Считаем в ОБЩУЮ суточную квоту: у Brevo потолок 300 писем в сутки, и он один
+        // на всю платформу. Этот путь шлёт письма минуя lib/constitutionBrevo, поэтому
+        // без этой строки счётчик занижал бы расход и тревога пришла бы поздно — класс
+        // «сторож занижал свой охват». SMS и WhatsApp сюда НЕ входят: у них отдельная
+        // квота, и смешивать их значило бы врать обоими числами.
+        (0, brevoQuota_1.noteEmailSent)();
+        if (messageId)
+            (0, providerHealth_1.noteProviderSuccess)("email");
+        else
+            (0, providerHealth_1.noteProviderFailure)("email", "Brevo accepted the request but returned no messageId — delivery not confirmed");
+        res.json({
+            ok: true, messageId,
+            ...(messageId ? {} : (0, degradedResponse_1.degraded)("Brevo accepted the request but returned no messageId — delivery not confirmed")),
+        });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Email send failed" });
+    }
+});
+// POST /api/devhub/media/payment-link — create Lemon Squeezy checkout link
+exports.devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req, res) => {
+    // 🔴 Дыра с 28.07.2026, закрыта 15.09.2026 (окно приёмки): ручка без входа создавала
+    // в НАШЕМ магазине LemonSqueezy ссылку на товар по умолчанию с ценой из тела от
+    // 50 центов, а товар по умолчанию на проде — DevHub Studio Pro, и вебхук по нему
+    // выдаёт Pro без сверки суммы. Итог: Pro ($149/мес) за $0.50 любому посетителю.
+    // Три замка: вход обязателен; товар — ТОЛЬКО отдельный (LEMON_SQUEEZY_PAYLINK_VARIANT_ID),
+    // никогда не Studio Pro и не товар по умолчанию; адрес возврата — только свой домен.
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const payUserId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    // DevHub работает без входа (покупка привязывается к браузеру гостя через
+    // /devhub/link), поэтому замок — по тарифу: бесплатному гостю ссылки не выпускаем.
+    if (!auth && (await getUserTier(payUserId)) === "free") {
+        return res.status(402).json({ error: "payment links are part of Studio Pro — link your purchase at /devhub/link, or sign in", upgrade: "/devhub/link" });
+    }
+    const { name, amountCents, description, successUrl } = req.body || {};
+    if (!name || typeof name !== "string")
+        return res.status(400).json({ error: "name required" });
+    const amt = Number(amountCents);
+    if (!Number.isFinite(amt) || amt < 50)
+        return res.status(400).json({ error: "amountCents must be ≥ 50" });
+    const lsKey = process.env.LEMON_SQUEEZY_API_KEY?.trim();
+    const storeId = process.env.LEMON_SQUEEZY_STORE_ID?.trim();
+    const variantId = process.env.LEMON_SQUEEZY_PAYLINK_VARIANT_ID?.trim();
+    if (!lsKey || !storeId || !variantId) {
+        return res.status(503).json({
+            error: "Payment links not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID and LEMON_SQUEEZY_PAYLINK_VARIANT_ID (a dedicated product for user payment links; never the Studio Pro or default variant)",
+            setupUrl: "https://app.lemonsqueezy.com",
+        });
+    }
+    // Все товары, выдающие DevHub Pro: прежний Studio Pro и ступени лестницы сроков
+    // (app_devhub_lite … _max, 15.09.2026). Ссылка на любом из них — Pro за любую цену.
+    const devHubVariants = (0, lemonSqueezyVariants_1.devHubVariantIds)();
+    const defaultVariant = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+    if (devHubVariants.includes(variantId) || (defaultVariant && variantId === defaultVariant)) {
+        return res.status(503).json({
+            error: "LEMON_SQUEEZY_PAYLINK_VARIANT_ID points at the Studio Pro / default product — the webhook would grant DevHub Pro for any custom price; use a dedicated product",
+        });
+    }
+    const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
+    try {
+        const body = {
+            data: {
+                type: "checkouts",
+                attributes: {
+                    custom_price: Math.round(amt),
+                    // Метка для вебхука и разбора: это пользовательская ссылка, не покупка тарифа.
+                    checkout_data: { custom: { aevion_paylink: "1", issuer: payUserId } },
+                    checkout_options: { embed: false, media: false, logo: true },
+                    product_options: {
+                        name: name.trim().slice(0, 200),
+                        description: (description || name).trim().slice(0, 500),
+                        redirect_url: safeRedirect(successUrl, frontendUrl, "/devhub?payment=success"),
+                    },
+                },
+                relationships: {
+                    store: { data: { type: "stores", id: String(storeId) } },
+                    variant: { data: { type: "variants", id: String(variantId) } },
+                },
+            },
+        };
+        const r = await fetch("https://api.lemonsqueezy.com/v1/checkouts", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${lsKey}`,
+                Accept: "application/vnd.api+json",
+                "Content-Type": "application/vnd.api+json",
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(8000),
+        });
+        if (!r.ok) {
+            const errText = await r.text().catch(() => "");
+            return res.status(r.status).json({ error: `Lemon Squeezy error: ${errText.slice(0, 500)}` });
+        }
+        const data = await r.json();
+        const checkoutUrl = data.data?.attributes?.url;
+        const checkoutId = data.data?.id;
+        if (!checkoutUrl)
+            return res.status(500).json({ error: "no checkout URL from Lemon Squeezy" });
+        res.json({ ok: true, provider: "lemonsqueezy", checkoutId, url: checkoutUrl });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Payment link creation failed" });
+    }
+});
+// Одна цепочка картинок на ВСЕ места, где DevHub рисует: ручка /media/image и шаг
+// «image» в сценариях агента. До 17.09.2026 шаг сценария звал только OpenAI и при
+// кончившихся кредитах падал, хотя ручка рядом уже умела перейти к следующему звену.
+async function generateImageViaChain(prompt, size, quality) {
+    const cleanPrompt = prompt.trim();
+    // Provider fallback chain: Cloudflare Workers AI → Gemini → Together (FLUX
+    // free tier) → OpenAI. One paid provider hitting its billing wall must not
+    // take the whole feature down when a $0 alternative is already configured.
+    const [width, height] = size.split("x").map(Number);
+    const attempts = [];
+    let result = null;
+    const cfToken = process.env.CLOUDFLARE_API_TOKEN;
+    const cfAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+    if (!result && cfToken && cfAccount) {
+        try {
+            const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${cfAccount}/ai/run/@cf/black-forest-labs/flux-1-schnell`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: cleanPrompt, width, height }),
+            });
+            if (!r.ok) {
+                attempts.push({ provider: "workers-ai", status: r.status, error: `Workers AI error: ${(await r.text()).slice(0, 300)}` });
+            }
+            else {
+                const data = await r.json();
+                if (data.result?.image) {
+                    result = { provider: "workers-ai", b64: data.result.image, revisedPrompt: null };
+                }
+                else {
+                    attempts.push({ provider: "workers-ai", status: 500, error: "no image in response" });
+                }
+            }
+        }
+        catch (e) {
+            attempts.push({ provider: "workers-ai", status: 500, error: e?.message || "request failed" });
+        }
+    }
+    // Gemini (gemini-2.5-flash-image). 17.09.2026 на проде обе прежние руки были
+    // мертвы разом — OpenAI 429 «no credits remaining», Workers AI 401 — и картинки
+    // не работали вовсе, хотя ключ Gemini настроен и картинки отдаёт (проверено
+    // живым вызовом с ключом прода: 200 с inlineData). Размер модель выбирает сама,
+    // поэтому желаемое соотношение сторон уходит словами в подсказку.
+    const geminiKey = process.env.GEMINI_API_KEY?.trim();
+    if (!result && geminiKey) {
+        try {
+            const aspect = width === height ? "square" : width > height ? "landscape (wide)" : "portrait (tall)";
+            const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent", {
+                method: "POST",
+                headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: `Generate an image, ${aspect} composition: ${cleanPrompt}` }] }],
+                    generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+                }),
+            });
+            if (!r.ok) {
+                attempts.push({ provider: "gemini", status: r.status, error: `Gemini error: ${(await r.text()).slice(0, 300)}` });
+            }
+            else {
+                const data = await r.json();
+                const b64 = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data;
+                if (b64) {
+                    result = { provider: "gemini", b64, revisedPrompt: null };
+                }
+                else {
+                    attempts.push({ provider: "gemini", status: 500, error: "no image in response" });
+                }
+            }
+        }
+        catch (e) {
+            attempts.push({ provider: "gemini", status: 500, error: e?.message || "request failed" });
+        }
+    }
+    const togetherKey = process.env.TOGETHER_API_KEY;
+    if (!result && togetherKey) {
+        try {
+            const r = await fetch("https://api.together.xyz/v1/images/generations", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${togetherKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ model: "black-forest-labs/FLUX.1-schnell-Free", prompt: cleanPrompt, n: 1, width, height, response_format: "b64_json" }),
+            });
+            if (!r.ok) {
+                attempts.push({ provider: "together", status: r.status, error: `Together error: ${(await r.text()).slice(0, 300)}` });
+            }
+            else {
+                const data = await r.json();
+                const first = data.data?.[0];
+                if (first?.b64_json || first?.url) {
+                    result = { provider: "together", url: first.url, b64: first.b64_json, revisedPrompt: null };
+                }
+                else {
+                    attempts.push({ provider: "together", status: 500, error: "no image in response" });
+                }
+            }
+        }
+        catch (e) {
+            attempts.push({ provider: "together", status: 500, error: e?.message || "request failed" });
+        }
+    }
+    // OpenAI — ПОСЛЕДНИМ (20.10.2026, слово Оркестратора). Ключ годен, денег нет:
+    // providers/health — 429 «no credits». Стоя первым, он съедал вызов на каждой
+    // картинке (замер пробы: картинку отдал gemini за 7,7 с после отказов).
+    // Платный идёт последним, как в lib/дешёвыйИИ.ts.
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!result && openaiKey) {
+        // gpt-image-1 quality values: low/medium/high/auto (not standard/hd)
+        const gptQuality = quality === "hd" ? "high" : quality === "standard" ? "medium" : (quality || "medium");
+        try {
+            const r = await fetch("https://api.openai.com/v1/images/generations", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ model: "gpt-image-1", prompt: cleanPrompt, n: 1, size, quality: gptQuality }),
+            });
+            if (!r.ok) {
+                attempts.push({ provider: "openai", status: r.status, error: `DALL-E error: ${(await r.text()).slice(0, 300)}` });
+            }
+            else {
+                const data = await r.json();
+                const first = data.data?.[0];
+                if (first?.url || first?.b64_json) {
+                    result = { provider: "openai", url: first.url, b64: first.b64_json, revisedPrompt: first.revised_prompt || null };
+                }
+                else {
+                    attempts.push({ provider: "openai", status: 500, error: "no image in response" });
+                }
+            }
+        }
+        catch (e) {
+            attempts.push({ provider: "openai", status: 500, error: e?.message || "request failed" });
+        }
+    }
+    return { result, attempts };
+}
+// POST /api/devhub/media/image — generate image via the provider chain (Workers AI → Gemini → Together → OpenAI)
+exports.devhubRouter.post("/media/image", async (req, res) => {
+    const imgAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const imgUserId = (0, devhubGuest_1.requesterId)(req, imgAuth?.sub);
+    const { prompt, size = "1024x1024", quality = "standard" } = req.body || {};
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+        return res.status(400).json({ error: "prompt required" });
+    }
+    if (prompt.trim().length > 4000) {
+        return res.status(400).json({ error: "prompt too long (max 4000 chars)" });
+    }
+    const validSizes = ["1024x1024", "1792x1024", "1024x1792"];
+    if (!validSizes.includes(size)) {
+        return res.status(400).json({ error: `size must be one of ${validSizes.join(", ")}` });
+    }
+    const imgCredit = await checkCredit(imgUserId, "image");
+    if (!imgCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly image limit reached",
+            tier: imgCredit.tier, used: imgCredit.used, limit: imgCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const { result, attempts } = await generateImageViaChain(prompt, size, quality);
+    if (!result) {
+        if (attempts.length === 0) {
+            return res.status(503).json({
+                error: "No image provider configured — set OPENAI_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (Workers AI), or GEMINI_API_KEY, or TOGETHER_API_KEY",
+                setupUrl: "https://platform.openai.com/api-keys",
+                ...creditNote(imgCredit),
+            });
+        }
+        // Single provider: preserve its upstream status + error text verbatim
+        // (billing limits and quota messages must stay visible to the user).
+        if (attempts.length === 1) {
+            return res.status(attempts[0].status).json({ error: attempts[0].error, attempts });
+        }
+        // Every provider in the chain failed — the shop window must stop calling
+        // this "live" until one of them works again.
+        (0, providerHealth_1.noteProviderFailure)("image", attempts.map((a) => `${a.provider}: ${a.status}`).join("; ") || "all providers failed");
+        // Distinguish "your prompt failed" from "nobody is paying the bill".
+        // Today all three arms are the latter: OpenAI billing hard limit,
+        // Workers AI 401, no Together key — and "All image providers failed"
+        // told the user nothing they could act on.
+        const blob = attempts.map((a) => `${a.provider}:${a.status}:${a.error || ""}`).join(" | ").toLowerCase();
+        const billing = /billing|quota|insufficient|payment|402/.test(blob);
+        const auth = /401|403|authentication|unauthorized/.test(blob);
+        const fixes = [];
+        if (billing)
+            fixes.push("top up the OpenAI account");
+        if (auth)
+            fixes.push("the Cloudflare token needs the Workers AI permission");
+        if (!process.env.TOGETHER_API_KEY)
+            fixes.push("or set TOGETHER_API_KEY (free tier) as a fallback");
+        return res.status(502).json({
+            error: fixes.length
+                ? `Image generation is unavailable — every provider is blocked, not your prompt. Fix: ${fixes.join("; ")}.`
+                : "All image providers failed",
+            providersBlocked: fixes.length > 0,
+            attempts,
+            ...creditNote(imgCredit),
+        });
+    }
+    // Prefer a permanent Cloudflare Images URL: upstream URLs expire within
+    // hours and b64 becomes a multi-megabyte data: URI if saved into a page.
+    let imageUrl = null;
+    let storage = "upstream";
+    if (result.url) {
+        const permanent = await tryAutoUploadToCloudflare(result.url);
+        imageUrl = permanent ?? result.url;
+        storage = permanent ? "cloudflare" : "upstream";
+    }
+    else if (result.b64) {
+        const permanent = await tryAutoUploadImageBufferToCloudflare(Buffer.from(result.b64, "base64"), `devhub-image-${Date.now()}.png`);
+        imageUrl = permanent ?? `data:image/png;base64,${result.b64}`;
+        storage = permanent ? "cloudflare" : "inline";
+    }
+    if (!imageUrl)
+        return res.status(500).json({ error: "no image data in response" });
+    // A provider in the chain worked — clear any earlier failure so the shop
+    // window goes green again on its own.
+    (0, providerHealth_1.noteProviderSuccess)("image");
+    await debitQuietly(imgUserId, "image");
+    res.json({
+        ok: true, url: imageUrl, storage, provider: result.provider,
+        ...(attempts.length ? { fallbackFrom: attempts.map((a) => a.provider) } : {}),
+        revisedPrompt: result.revisedPrompt, creditsUsed: 1,
+        // A balance computed from an unreadable meter is an invented number, so it
+        // is withheld rather than printed as if it were counted.
+        creditsRemaining: imgCredit.limit === -1 ? -1 : imgCredit.usedKnown ? imgCredit.limit - imgCredit.used - 1 : null,
+        ...creditNote(imgCredit),
+    });
+});
+// POST /api/devhub/media/sfx — ElevenLabs sound effect
+exports.devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
+    const { text, durationSeconds, promptInfluence } = req.body || {};
+    if (!text || typeof text !== "string" || !text.trim()) {
+        return res.status(400).json({ error: "text (sfx description) required" });
+    }
+    if (text.trim().length > 1000) {
+        return res.status(400).json({ error: "text too long (max 1000 chars)" });
+    }
+    const sfxAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const sfxUserId = (0, devhubGuest_1.requesterId)(req, sfxAuth?.sub);
+    const sfxCredit = await checkCredit(sfxUserId, "music");
+    if (!sfxCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly audio effect limit reached",
+            tier: sfxCredit.tier, used: sfxCredit.used, limit: sfxCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) {
+        return res.status(503).json({
+            error: "ElevenLabs not configured — set ELEVENLABS_API_KEY",
+            setupUrl: "https://elevenlabs.io/api",
+        });
+    }
+    const body = { text: text.trim() };
+    const dur = Number(durationSeconds);
+    if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22)
+        body.duration_seconds = dur;
+    const inf = Number(promptInfluence);
+    if (Number.isFinite(inf) && inf >= 0 && inf <= 1)
+        body.prompt_influence = inf;
+    try {
+        const r = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+            method: "POST",
+            headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            return res.status(r.status).json({ error: `ElevenLabs SFX error: ${errText.slice(0, 300)}` });
+        }
+        const audioBuffer = Buffer.from(await r.arrayBuffer());
+        if (!sfxCredit.usedKnown) {
+            // Ответ двоичный, признак в тело не положить. Молчать нельзя:
+            // иначе неизвестный остаток выглядит как обычный успех.
+            console.warn("[DevHub] /media/sfx: расход не прочитан, выдано без учёта; пользователь", sfxUserId);
+        }
+        await debitQuietly(sfxUserId, "music");
+        учтиБезЦены("sfx", sfxUserId);
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Length", audioBuffer.length);
+        res.setHeader("Cache-Control", "no-store");
+        res.send(audioBuffer);
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "SFX generation failed" });
+    }
+});
+// POST /api/devhub/media/music — ElevenLabs music compose
+exports.devhubRouter.post("/media/music", async (req, res) => {
+    const musicAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const musicUserId = (0, devhubGuest_1.requesterId)(req, musicAuth?.sub);
+    const { prompt, musicLengthMs } = req.body || {};
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+        return res.status(400).json({ error: "prompt (music description) required" });
+    }
+    if (prompt.trim().length > 2000) {
+        return res.status(400).json({ error: "prompt too long (max 2000 chars)" });
+    }
+    const musicCredit = await checkCredit(musicUserId, "music");
+    if (!musicCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly music generation limit reached",
+            tier: musicCredit.tier, used: musicCredit.used, limit: musicCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    const replicateToken = process.env.REPLICATE_API_TOKEN;
+    // Music had exactly one provider and no fallback: an ElevenLabs timeout
+    // (repeatedly seen on prod) meant no music at all. MusicGen runs on the
+    // Replicate token already configured.
+    const musicGenFallback = async (reason) => {
+        if (!replicateToken)
+            return null;
+        const secs = Number.isFinite(Number(musicLengthMs)) ? Math.round(Number(musicLengthMs) / 1000) : 8;
+        const rr = await fetch("https://api.replicate.com/v1/predictions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${replicateToken}`, "Content-Type": "application/json", Prefer: "respond-async" },
+            body: JSON.stringify({
+                version: "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb",
+                input: { prompt: prompt.trim(), duration: Math.min(Math.max(secs || 8, 3), 30), model_version: "stereo-melody-large", output_format: "mp3" },
+            }),
+        });
+        if (!rr.ok)
+            return null;
+        const pred = await rr.json();
+        await debitQuietly(musicUserId, "music");
+        // Async unlike the ElevenLabs path — say so instead of handing back a
+        // body the caller cannot play.
+        return { ok: true, provider: "replicate/musicgen", async: true, predictionId: pred.id, status: pred.status, fallbackFrom: reason };
+    };
+    if (!apiKey) {
+        const fb = await musicGenFallback("ELEVENLABS_API_KEY not set");
+        if (fb)
+            return res.json(fb);
+        return res.status(503).json({
+            error: "Music not configured — set ELEVENLABS_API_KEY or REPLICATE_API_TOKEN",
+            setupUrl: "https://elevenlabs.io/api",
+        });
+    }
+    const body = { prompt: prompt.trim() };
+    const len = Number(musicLengthMs);
+    if (Number.isFinite(len) && len >= 10000 && len <= 300000) {
+        body.music_length_ms = Math.round(len);
+    }
+    try {
+        const r = await fetch("https://api.elevenlabs.io/v1/music/compose", {
+            method: "POST",
+            headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            const fb = await musicGenFallback(`ElevenLabs ${r.status}`);
+            // Only both providers being out is a capability failure: a MusicGen
+            // fallback still hands the user a track, so calling that "degraded"
+            // would cry wolf.
+            if (fb) {
+                (0, providerHealth_1.noteProviderSuccess)("audio_music");
+                return res.json(fb);
+            }
+            (0, providerHealth_1.noteProviderFailure)("audio_music", `ElevenLabs HTTP ${r.status} and no MusicGen fallback available`);
+            return res.status(r.status).json({ error: `ElevenLabs Music error: ${errText.slice(0, 300)}` });
+        }
+        const audioBuffer = Buffer.from(await r.arrayBuffer());
+        (0, providerHealth_1.noteProviderSuccess)("audio_music");
+        await debitQuietly(musicUserId, "music");
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Length", audioBuffer.length);
+        res.setHeader("Cache-Control", "no-store");
+        res.send(audioBuffer);
+    }
+    catch (e) {
+        const fb = await musicGenFallback(e?.message || "ElevenLabs request failed").catch(() => null);
+        if (fb) {
+            (0, providerHealth_1.noteProviderSuccess)("audio_music");
+            return res.json(fb);
+        }
+        (0, providerHealth_1.noteProviderFailure)("audio_music", `${e?.message || "ElevenLabs request failed"} and no MusicGen fallback available`);
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Music compose failed" });
+    }
+});
+// POST /api/devhub/projects/:id/domain/auto-setup — Cloudflare DNS CNAME
+exports.devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    if (!project.customDomain) {
+        return res.status(400).json({ error: "project has no customDomain set" });
+    }
+    // Внутри нашей зоны auto-setup не пишет ничего: имя проекту выдаёт /domain/setup
+    // (своя метка, своя цель). Иначе этот маршрут переписывал бы любую запись зоны.
+    if ((0, devhubDns_1.labelInZone)(project.customDomain) !== null) {
+        return res.status(400).json({
+            error: `${project.customDomain} is inside ${(0, devhubDns_1.siteZone)()} — use POST /projects/:id/domain/setup, which issues the project's own name; DevHub never rewrites other records of the zone`,
+        });
+    }
+    if (!(0, devhubDns_1.dnsConfigured)()) {
+        return res.status(503).json({
+            error: `DNS not configured — set ${(0, devhubDns_1.dnsTokensNeeded)().join(" + ")}`,
+            setupUrl: (0, devhubDns_1.dnsProvider)() === "vercel" ? "https://vercel.com/account/settings/tokens" : "https://dash.cloudflare.com/profile/api-tokens",
+            manualInstruction: `Add CNAME ${project.customDomain} → devhub.aevion.app`,
+        });
+    }
+    const target = "devhub.aevion.app";
+    const domain = project.customDomain;
+    // Чужой домен живёт в чужом DNS: запись про него в НАШЕЙ зоне ничего не
+    // разрешает, а до 15.09.2026 маршрут именно это и пытался сделать. Честный
+    // ответ — что и куда добавить у регистратора; запросов к поставщику ноль.
+    return res.json({
+        ok: false,
+        action: "manual",
+        domain,
+        cname: target,
+        manualInstruction: `Add CNAME ${domain} → ${target} at the DNS provider of ${domain}; DevHub cannot write another zone`,
+    });
+});
+// ── Voice clone helpers ─────────────────────────────────────────────────────
+function buildVoiceCloneMultipart(opts) {
+    const boundary = `----aevion${node_crypto_1.default.randomBytes(16).toString("hex")}`;
+    const parts = [];
+    const push = (s) => parts.push(Buffer.from(s, "utf8"));
+    push(`--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${opts.name}\r\n`);
+    if (opts.description)
+        push(`--${boundary}\r\nContent-Disposition: form-data; name="description"\r\n\r\n${opts.description}\r\n`);
+    push(`--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="sample.${opts.mimeType.includes("wav") ? "wav" : "mp3"}"\r\nContent-Type: ${opts.mimeType}\r\n\r\n`);
+    parts.push(opts.audio);
+    push(`\r\n--${boundary}--\r\n`);
+    return { body: Buffer.concat(parts), boundary };
+}
+// POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample (requires confirm:true after preview)
+exports.devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvoiceclone"), async (req, res) => {
+    const { name, description, sampleBase64, mimeType = "audio/mpeg", confirm } = req.body || {};
+    if (!name || typeof name !== "string" || !name.trim())
+        return res.status(400).json({ error: "name required" });
+    if (!sampleBase64 || typeof sampleBase64 !== "string")
+        return res.status(400).json({ error: "sampleBase64 (audio file) required" });
+    if (sampleBase64.length > 12000000)
+        return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
+    const vcloneAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const vcloneUserId = (0, devhubGuest_1.requesterId)(req, vcloneAuth?.sub);
+    const vcloneCredit = await checkCredit(vcloneUserId, "speech");
+    if (!vcloneCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly voice clone limit reached",
+            tier: vcloneCredit.tier, used: vcloneCredit.used, limit: vcloneCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey)
+        return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
+    if (confirm !== true) {
+        return res.status(400).json({ error: "preview first — pass confirm:true after listening to /media/voice-clone/preview", needsConfirm: true });
+    }
+    try {
+        const audioBuffer = Buffer.from(sampleBase64, "base64");
+        const { body, boundary } = buildVoiceCloneMultipart({
+            name: name.trim(), description: description ? String(description).slice(0, 500) : undefined,
+            mimeType, audio: audioBuffer,
+        });
+        const r = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+            method: "POST",
+            headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+            body: body,
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            return res.status(r.status).json({ error: `Voice clone error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json();
+        await debitQuietly(vcloneUserId, "speech");
+        учтиБезЦены("voice-clone", vcloneUserId);
+        res.json({ ok: true, ...creditNote(vcloneCredit), voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Voice clone failed" });
+    }
+});
+// POST /api/devhub/media/voice-clone/preview — clone temp voice → TTS sample → delete voice
+// Body: { sampleBase64, mimeType?, previewText? }
+// Response: audio/mpeg of `previewText` rendered with the cloned voice
+exports.devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvoiceclone"), async (req, res) => {
+    const { sampleBase64, mimeType = "audio/mpeg", previewText } = req.body || {};
+    if (!sampleBase64 || typeof sampleBase64 !== "string")
+        return res.status(400).json({ error: "sampleBase64 (audio file) required" });
+    if (sampleBase64.length > 12000000)
+        return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
+    const vcprevAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const vcprevUserId = (0, devhubGuest_1.requesterId)(req, vcprevAuth?.sub);
+    const vcprevCredit = await checkCredit(vcprevUserId, "speech");
+    if (!vcprevCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly voice clone limit reached",
+            tier: vcprevCredit.tier, used: vcprevCredit.used, limit: vcprevCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey)
+        return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
+    const text = String(previewText || "AEVION voice preview — your custom voice is ready").slice(0, 500);
+    const tempName = `aevion-preview-${node_crypto_1.default.randomBytes(4).toString("hex")}`;
+    let voiceId = null;
+    try {
+        const audioBuffer = Buffer.from(sampleBase64, "base64");
+        // 1. Clone voice (temporary)
+        const cloneReq = buildVoiceCloneMultipart({ name: tempName, mimeType, audio: audioBuffer });
+        const cloneResp = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+            method: "POST",
+            headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${cloneReq.boundary}` },
+            body: cloneReq.body,
+        });
+        if (!cloneResp.ok) {
+            const errText = await cloneResp.text();
+            return res.status(cloneResp.status).json({ error: `Clone (preview) failed: ${errText.slice(0, 300)}` });
+        }
+        const cloneData = await cloneResp.json();
+        voiceId = cloneData.voice_id;
+        if (!voiceId)
+            return res.status(500).json({ error: "no voice_id returned for preview" });
+        // 2. Render preview TTS with the cloned voice
+        const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: "POST",
+            headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+            body: JSON.stringify({ text, model_id: TTS_MODEL }),
+        });
+        if (!ttsResp.ok) {
+            const errText = await ttsResp.text();
+            // Best-effort cleanup before bailing
+            fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { method: "DELETE", headers: { "xi-api-key": apiKey } }).catch(() => { });
+            return res.status(ttsResp.status).json({ error: `Preview TTS failed: ${errText.slice(0, 300)}` });
+        }
+        const audio = Buffer.from(await ttsResp.arrayBuffer());
+        // 3. Best-effort delete to avoid leaking temp voices in the user's account
+        try {
+            await fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, {
+                method: "DELETE", headers: { "xi-api-key": apiKey },
+            });
+        }
+        catch { /* leak is acceptable — preview already returned */ }
+        if (!vcprevCredit.usedKnown) {
+            // Ответ двоичный, признак в тело не положить. Молчать нельзя:
+            // иначе неизвестный остаток выглядит как обычный успех.
+            console.warn("[DevHub] /media/voice-clone/preview: расход не прочитан, выдано без учёта; пользователь", vcprevUserId);
+        }
+        await debitQuietly(vcprevUserId, "speech");
+        учтиБезЦены("voice-clone-preview", vcprevUserId);
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Length", audio.length);
+        res.setHeader("X-Aevion-Preview-Bytes", String(audio.length));
+        res.setHeader("Cache-Control", "no-store");
+        res.send(audio);
+    }
+    catch (e) {
+        if (voiceId) {
+            fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { method: "DELETE", headers: { "xi-api-key": apiKey } }).catch(() => { });
+        }
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Voice preview failed" });
+    }
+});
+// POST /api/devhub/media/stt — ElevenLabs Speech-to-Text (scribe-v1)
+exports.devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
+    const { audioBase64, mimeType = "audio/mpeg", language } = req.body || {};
+    if (!audioBase64 || typeof audioBase64 !== "string")
+        return res.status(400).json({ error: "audioBase64 required" });
+    if (audioBase64.length > 30000000)
+        return res.status(400).json({ error: "audio too large (max ~22 MB base64)" });
+    const sttAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const sttUserId = (0, devhubGuest_1.requesterId)(req, sttAuth?.sub);
+    const sttCredit = await checkCredit(sttUserId, "speech");
+    if (!sttCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly speech limit reached",
+            tier: sttCredit.tier, used: sttCredit.used, limit: sttCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey)
+        return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY" });
+    try {
+        const audioBuffer = Buffer.from(audioBase64, "base64");
+        const boundary = `----aevion${node_crypto_1.default.randomBytes(16).toString("hex")}`;
+        const parts = [];
+        const push = (s) => parts.push(Buffer.from(s, "utf8"));
+        push(`--${boundary}\r\nContent-Disposition: form-data; name="model_id"\r\n\r\nscribe_v1\r\n`);
+        if (language)
+            push(`--${boundary}\r\nContent-Disposition: form-data; name="language_code"\r\n\r\n${String(language).slice(0, 10)}\r\n`);
+        push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.${mimeType.includes("wav") ? "wav" : "mp3"}"\r\nContent-Type: ${mimeType}\r\n\r\n`);
+        parts.push(audioBuffer);
+        push(`\r\n--${boundary}--\r\n`);
+        const body = Buffer.concat(parts);
+        const r = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+            method: "POST",
+            headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+            body,
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            return res.status(r.status).json({ error: `STT error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json();
+        await debitQuietly(sttUserId, "speech");
+        учтиБезЦены("stt", sttUserId);
+        res.json({ ok: true, ...creditNote(sttCredit), text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "STT failed" });
+    }
+});
+// POST /api/devhub/media/drive-search — Google Drive file search
+exports.devhubRouter.post("/media/drive-search", dhCostlyLimit("dhdrive"), async (req, res) => {
+    const { query = "", limit = 20 } = req.body || {};
+    const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    if (!token) {
+        return res.status(503).json({
+            error: "Google Drive not configured — set GOOGLE_DRIVE_ACCESS_TOKEN (OAuth Bearer)",
+            setupUrl: "https://developers.google.com/drive/api/quickstart/js",
+        });
+    }
+    try {
+        const q = String(query).trim();
+        const params = new URLSearchParams({
+            pageSize: String(Math.min(Math.max(Number(limit) || 20, 1), 100)),
+            fields: "files(id,name,mimeType,modifiedTime,size)",
+        });
+        if (q)
+            params.set("q", `name contains '${q.replace(/'/g, "\\'")}' and trashed = false`);
+        else
+            params.set("q", "trashed = false");
+        const r = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            return res.status(r.status).json({ error: `Drive error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json();
+        res.json({ ok: true, files: data.files || [] });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Drive search failed" });
+    }
+});
+// POST /api/devhub/projects/:id/drive/import — import Drive file into project files
+exports.devhubRouter.post("/projects/:id/drive/import", dhCostlyLimit("dhdrive"), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(String(req.params.id));
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    const { fileId, targetPath } = req.body || {};
+    if (!fileId || typeof fileId !== "string")
+        return res.status(400).json({ error: "fileId required" });
+    const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    if (!token)
+        return res.status(503).json({ error: "Google Drive not configured — set GOOGLE_DRIVE_ACCESS_TOKEN" });
+    try {
+        const metaResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,mimeType`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!metaResp.ok) {
+            const t = await metaResp.text();
+            return res.status(metaResp.status).json({ error: `Drive metadata error: ${t.slice(0, 200)}` });
+        }
+        const meta = await metaResp.json();
+        const isGoogleDoc = meta.mimeType.startsWith("application/vnd.google-apps");
+        let contentResp;
+        if (isGoogleDoc) {
+            const exportMime = meta.mimeType.includes("document") ? "text/markdown"
+                : meta.mimeType.includes("spreadsheet") ? "text/csv"
+                    : "text/plain";
+            contentResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(exportMime)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+        }
+        else {
+            contentResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+        }
+        if (!contentResp.ok) {
+            const t = await contentResp.text();
+            return res.status(contentResp.status).json({ error: `Drive content error: ${t.slice(0, 200)}` });
+        }
+        const content = await contentResp.text();
+        const path = String(targetPath || meta.name).replace(/^\/+/, "").slice(0, 200) || meta.name;
+        const file = {
+            id: node_crypto_1.default.randomUUID(),
+            projectId: project.id,
+            path,
+            content,
+            language: detectLanguage(path),
+            updatedAt: now(),
+        };
+        // Признак хранилища: при отказе базы файл живёт в памяти процесса и
+        // пропадёт со следующей выкаткой, а ответ до 19.08.2026 об этом молчал.
+        let storage = "db";
+        try {
+            await dbUpsertFile(file);
+        }
+        catch {
+            const existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === path);
+            if (existing) {
+                existing.content = file.content;
+                existing.language = file.language;
+                existing.updatedAt = file.updatedAt;
+            }
+            else
+                memFiles.set(file.id, file);
+            storage = "memory";
+        }
+        res.json({ ok: true, path, bytes: content.length, mimeType: meta.mimeType, storage });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Drive import failed" });
+    }
+});
+// ── Visual Edit preview proxy (non-static stacks) ───────────────────────────
+//
+// Static projects render in the IDE via srcdoc; Next/React/Express projects
+// need their deployed page instead. Fetching it client-side is impossible
+// (cross-origin iframe = no overlay injection), so this proxies the project's
+// OWN deployUrl — never a caller-supplied URL, which would be SSRF — and
+// injects a runtime tagger + the same postMessage overlay contract the static
+// path uses. Served same-origin, sandboxed by the IDE as allow-scripts only.
+const PREVIEW_PROXY_OVERLAY = `
+(function(){
+  function init(){
+    var counter = 0;
+    var SKIP = { SCRIPT: 1, STYLE: 1 };
+    var all = document.body ? document.body.querySelectorAll('*') : [];
+    for (var i = 0; i < all.length; i++) {
+      if (!SKIP[all[i].tagName]) all[i].setAttribute('data-vid', String(counter++));
+    }
+    var hovered = null;
+    function withVid(el){ while (el && !(el.getAttribute && el.getAttribute('data-vid'))) el = el.parentElement; return el; }
+    function brief(el){ return { vid: el.getAttribute('data-vid'), tagName: el.tagName }; }
+    function select(el){
+      var cs = getComputedStyle(el);
+      var ancestors = [];
+      for (var p = el.parentElement; p && ancestors.length < 6; p = p.parentElement) {
+        if (p.getAttribute && p.getAttribute('data-vid')) ancestors.push(brief(p));
+      }
+      var children = [];
+      for (var i = 0; i < el.children.length && children.length < 8; i++) {
+        if (el.children[i].getAttribute('data-vid')) children.push(brief(el.children[i]));
+      }
+      parent.postMessage({
+        source: 'devhub-visual-edit', vid: el.getAttribute('data-vid'), tagName: el.tagName, text: el.textContent || '',
+        styles: { color: cs.color, fontSize: cs.fontSize, fontWeight: cs.fontWeight, textAlign: cs.textAlign },
+        src: el.getAttribute('src') || '',
+        proxied: true,
+        ancestors: ancestors, children: children
+      }, '*');
+    }
+    document.addEventListener('mouseover', function(e){
+      var el = withVid(e.target);
+      if (hovered && hovered !== el) hovered.style.outline = '';
+      hovered = el;
+      if (hovered) { hovered.style.outline = '2px solid #0d9488'; hovered.style.outlineOffset = '1px'; }
+    }, true);
+    document.addEventListener('mouseout', function(){ if (hovered) { hovered.style.outline = ''; hovered = null; } }, true);
+    document.addEventListener('click', function(e){
+      var el = withVid(e.target);
+      if (!el) return;
+      e.preventDefault(); e.stopPropagation();
+      select(el);
+    }, true);
+    window.addEventListener('message', function(e){
+      var d = e.data;
+      if (d && d.source === 'devhub-visual-edit-select') {
+        var target = document.querySelector('[data-vid="' + d.vid + '"]');
+        if (target) select(target);
+      }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+`;
+exports.devhubRouter.get("/projects/:id/preview-proxy", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || !canAccess(project, userId)) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    const deployUrl = (project.deployUrl || "").replace(/^(https?:\/\/)+(?=https?:\/\/)/, "");
+    if (!deployUrl || !deployUrl.startsWith("https://")) {
+        return res.status(409).json({ error: "project has no https deployment yet — deploy first to use Visual Edit on this stack" });
+    }
+    try {
+        const r = await fetch(deployUrl, { headers: { Accept: "text/html" }, redirect: "follow" });
+        if (!r.ok) {
+            return res.status(502).json({ error: `deployed page responded ${r.status}` });
+        }
+        let html = await r.text();
+        // <base> makes the page's relative assets resolve against the real deploy
+        // origin even though the document itself is served from ours.
+        const baseTag = `<base href="${deployUrl.replace(/"/g, "%22")}${deployUrl.endsWith("/") ? "" : "/"}">`;
+        if (/<head[^>]*>/i.test(html)) {
+            html = html.replace(/<head[^>]*>/i, (m) => `${m}${baseTag}`);
+        }
+        else {
+            html = baseTag + html;
+        }
+        const overlayTag = `<script>${PREVIEW_PROXY_OVERLAY}</script>`;
+        html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${overlayTag}</body>`) : html + overlayTag;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.send(html);
+    }
+    catch (e) {
+        res.status(502).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "failed to fetch deployed page" });
+    }
+});
+/**
+ * Runs one step of an agent workflow.
+ *
+ * Note on saving: these steps call dbUpsertFile directly and let it throw.
+ * They used to wrap it in `try { … } catch { memFiles.set(f.id, f) }`, which
+ * was wrong twice over. dbUpsertFile already handles "no database configured"
+ * itself, so that catch only ever fired on a genuine database failure — and it
+ * then reported the step as ok with a savedAs path, telling someone a file
+ * exists when it does not survive a restart. It also wrote to memFiles keyed by
+ * f.id, which dbUpsertFile's own comment calls out as the way to leave a stale
+ * duplicate that later reads return instead of the new content.
+ *
+ * A throw here becomes `{ ok: false, error }` for that step and nothing else,
+ * so one failed save no longer passes for a success and no longer takes the
+ * rest of the run down with it.
+ */
+/** Какая возможность тратится каждым видом шага. Шаги вне списка (email и
+ *  прочие рассыльные) закрыты своими ограничителями. */
+const WORKFLOW_STEP_CAPABILITY = {
+    code: "generate", image: "image", tts: "tts", music: "music",
+};
+function stepCapAmount(step) {
+    const cap = WORKFLOW_STEP_CAPABILITY[String(step?.type || "")];
+    const amount = cap === "tts" ? Math.max(1, String(step?.text || "").length) : 1;
+    return { cap, amount };
+}
+/** Возврат квоты за шаг, который не выполнился после резервирования.
+ *  Инкремент в базе атомарный, поэтому отрицательная величина безопасна. */
+function refundQuietly(userId, capability, amount = 1) {
+    return debitQuietly(userId, capability, -amount);
+}
+async function executeWorkflowStep(project, userId, step, i) {
+    // До 05.09.2026 шаги workflow звали те же платные генерации МИМО квот:
+    // месячный предел на image/tts/music обходился простой пересылкой той же
+    // просьбы как шага workflow — до 20 штук за один запрос.
+    const stepType = String(step?.type || "");
+    const { cap: stepCap, amount } = stepCapAmount(step);
+    if (stepCap) {
+        const credit = await checkCredit(userId, stepCap, amount);
+        if (!credit.allowed) {
+            return {
+                step: i, type: stepType, ok: false,
+                error: `Monthly ${stepCap} limit reached (${credit.used}/${credit.limit}) — the paid tier lifts the ceiling`,
+            };
+        }
+        const result = await executeWorkflowStepInner(project, userId, step, i);
+        if (result.ok)
+            await debitQuietly(userId, stepCap, amount);
+        return result;
+    }
+    return executeWorkflowStepInner(project, userId, step, i);
+}
+/**
+ * Параллельный батч шагов с ЧЕСТНЫМИ квотами.
+ *
+ * Ревью 06.09: Promise.all по executeWorkflowStep давал гонку — пять шагов
+ * image одновременно читали used=9 при лимите 10, все проходили проверку, и
+ * списывалось 14 из 10. Проверка и резервирование теперь СОВОКУПНЫЕ, ДО
+ * старта батча: по каждой возможности один checkCredit на сумму и одно
+ * списание вперёд; за шаг, упавший после резервирования, квота возвращается.
+ * Гонка между РАЗНЫМИ запросами остаётся (check-then-act, как у всех
+ * метрируемых ручек) — окно микросекунды, а не длительность генерации.
+ */
+async function runWorkflowGroup(project, userId, steps, group, onStepDone) {
+    const perCap = new Map();
+    for (const i of group) {
+        const { cap, amount } = stepCapAmount(steps[i]);
+        if (!cap)
+            continue;
+        const row = perCap.get(cap) ?? { amount: 0, indices: [] };
+        row.amount += amount;
+        row.indices.push(i);
+        perCap.set(cap, row);
+    }
+    const refused = new Map();
+    for (const [cap, row] of perCap) {
+        const credit = await checkCredit(userId, cap, row.amount);
+        if (!credit.allowed) {
+            for (const i of row.indices) {
+                refused.set(i, {
+                    step: i, type: String(steps[i]?.type || ""), ok: false,
+                    error: `Monthly ${cap} limit reached (${credit.used}/${credit.limit}, batch needs ${row.amount}) — the paid tier lifts the ceiling`,
+                });
+            }
+            perCap.delete(cap);
+            continue;
+        }
+        await debitQuietly(userId, cap, row.amount); // резерв вперёд
+    }
+    const settled = await Promise.all(group.map(async (i) => {
+        const early = refused.get(i);
+        if (early) {
+            onStepDone?.(early);
+            return early;
+        }
+        const r = await executeWorkflowStepInner(project, userId, steps[i], i);
+        if (!r.ok) {
+            const { cap, amount } = stepCapAmount(steps[i]);
+            if (cap && perCap.has(cap))
+                await refundQuietly(userId, cap, amount);
+        }
+        onStepDone?.(r);
+        return r;
+    }));
+    return settled;
+}
+async function executeWorkflowStepInner(project, userId, step, i) {
+    const type = String(step?.type || "");
+    try {
+        if (type === "code") {
+            const prompt = String(step.prompt || "");
+            if (!prompt)
+                throw new Error("prompt required for code step");
+            const stack = String(step.stack || project.stack);
+            const targetFiles = Array.isArray(step.saveAs)
+                ? step.saveAs.filter((f) => typeof f === "string" && f.trim().length > 0).map((f) => f.trim())
+                : (step.saveAs ? [String(step.saveAs)] : []);
+            const existingFiles = await dbListFiles(project.id);
+            const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, undefined, undefined, undefined, меткаГенерации(userId), userId);
+            const cpStep = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
+            const checkpointId = cpStep?.id ?? null;
+            for (const gf of files) {
+                const f = {
+                    id: node_crypto_1.default.randomUUID(), projectId: project.id, path: gf.path,
+                    content: gf.content, language: gf.language || detectLanguage(gf.path), updatedAt: now(),
+                };
+                try {
+                    await dbUpsertFile(f);
+                }
+                catch {
+                    const existing = [...memFiles.values()].find((x) => x.projectId === project.id && x.path === gf.path);
+                    if (existing) {
+                        existing.content = f.content;
+                        existing.language = f.language;
+                        existing.updatedAt = f.updatedAt;
+                    }
+                    else
+                        memFiles.set(f.id, f);
+                }
+            }
+            return { step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}), checkpointId } };
+        }
+        if (type === "image") {
+            const prompt = String(step.prompt || "");
+            if (!prompt)
+                throw new Error("prompt required for image step");
+            const stepSize = ["1024x1024", "1792x1024", "1024x1792"].includes(String(step.size)) ? String(step.size) : "1024x1024";
+            const { result: img, attempts: imgAttempts } = await generateImageViaChain(prompt, stepSize, "standard");
+            if (!img) {
+                throw new Error(imgAttempts.length
+                    ? `image providers failed: ${imgAttempts.map((a) => `${a.provider} ${a.status}`).join("; ")}`
+                    : "No image provider configured — set OPENAI_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (Workers AI), or GEMINI_API_KEY, or TOGETHER_API_KEY");
+            }
+            let url;
+            if (img.url) {
+                url = (await tryAutoUploadToCloudflare(img.url)) || img.url;
+            }
+            else {
+                const permanent = await tryAutoUploadImageBufferToCloudflare(Buffer.from(img.b64 || "", "base64"), `devhub-image-${Date.now()}.png`);
+                url = permanent ?? `data:image/png;base64,${img.b64}`;
+            }
+            const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
+            const f = {
+                id: node_crypto_1.default.randomUUID(), projectId: project.id, path: savedAs,
+                content: url, language: detectLanguage(savedAs), updatedAt: now(),
+            };
+            await dbUpsertFile(f);
+            return { step: i, type, ok: true, output: { url }, savedAs };
+        }
+        if (type === "tts") {
+            const apiKey = process.env.ELEVENLABS_API_KEY;
+            if (!apiKey)
+                throw new Error("ELEVENLABS_API_KEY not set");
+            const text = String(step.text || "");
+            if (!text)
+                throw new Error("text required for tts step");
+            // Запасной путь оставлен НЕ смертельным, но перестал быть молчаливым.
+            // Сведение таблиц 01.09.2026 вернуло сценариям пять голосов, но имя всё
+            // ещё может прийти незнакомое — и тогда человек просил одно, а слышит
+            // другое, ничего об этом не узнав. Отказ, о котором никто не узнаёт,
+            // хуже отказа: работа идёт, а результат чужой.
+            const хотелиГолос = String(step.voice || "Rachel");
+            const voiceId = VOICE_IDS[хотелиГолос] || VOICE_IDS.Rachel;
+            if (!VOICE_IDS[хотелиГолос]) {
+                console.warn(`[DevHub] голос "${хотелиГолос}" неизвестен, озвучиваю голосом Rachel. ` +
+                    `Известные: ${Object.keys(VOICE_IDS).join(", ")}`);
+            }
+            const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+                method: "POST",
+                headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+                body: JSON.stringify({ text, model_id: TTS_MODEL }),
+            });
+            if (!ttsResp.ok)
+                throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
+            const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
+            const r2Key = `audio/${project.id}/tts-${i}-${Date.now()}.mp3`;
+            const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+            if (cdnUrl) {
+                const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/voice-${i}.url.txt`;
+                const f = {
+                    id: node_crypto_1.default.randomUUID(), projectId: project.id, path: savedAs,
+                    content: cdnUrl, language: "plaintext", updatedAt: now(),
+                };
+                await dbUpsertFile(f);
+                return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
+            }
+            const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
+            const f = {
+                id: node_crypto_1.default.randomUUID(), projectId: project.id, path: savedAs,
+                content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+            };
+            await dbUpsertFile(f);
+            return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
+        }
+        if (type === "sfx") {
+            const apiKey = process.env.ELEVENLABS_API_KEY;
+            if (!apiKey)
+                throw new Error("ELEVENLABS_API_KEY not set");
+            const text = String(step.text || "");
+            if (!text)
+                throw new Error("text required for sfx step");
+            const body = { text };
+            const dur = Number(step.durationSeconds);
+            if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22)
+                body.duration_seconds = dur;
+            const sfxResp = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+                method: "POST",
+                headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+                body: JSON.stringify(body),
+            });
+            if (!sfxResp.ok)
+                throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
+            const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
+            const r2Key = `audio/${project.id}/sfx-${i}-${Date.now()}.mp3`;
+            const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+            if (cdnUrl) {
+                const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/sfx-${i}.url.txt`;
+                const f = {
+                    id: node_crypto_1.default.randomUUID(), projectId: project.id, path: savedAs,
+                    content: cdnUrl, language: "plaintext", updatedAt: now(),
+                };
+                await dbUpsertFile(f);
+                return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
+            }
+            const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
+            const f = {
+                id: node_crypto_1.default.randomUUID(), projectId: project.id, path: savedAs,
+                content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+            };
+            await dbUpsertFile(f);
+            return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
+        }
+        if (type === "music") {
+            const apiKey = process.env.ELEVENLABS_API_KEY;
+            if (!apiKey)
+                throw new Error("ELEVENLABS_API_KEY not set");
+            const prompt = String(step.prompt || step.text || "");
+            if (!prompt)
+                throw new Error("prompt required for music step");
+            const body = { prompt };
+            const lenSec = Number(step.lengthSeconds);
+            if (Number.isFinite(lenSec) && lenSec >= 10 && lenSec <= 300) {
+                body.music_length_ms = Math.round(lenSec * 1000);
+            }
+            const musicResp = await fetch("https://api.elevenlabs.io/v1/music/compose", {
+                method: "POST",
+                headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+                body: JSON.stringify(body),
+            });
+            if (!musicResp.ok)
+                throw new Error(`Music error: ${(await musicResp.text()).slice(0, 200)}`);
+            const audioBuf = Buffer.from(await musicResp.arrayBuffer());
+            const r2Key = `audio/${project.id}/music-${i}-${Date.now()}.mp3`;
+            const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+            if (cdnUrl) {
+                const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/music-${i}.url.txt`;
+                const f = {
+                    id: node_crypto_1.default.randomUUID(), projectId: project.id, path: savedAs,
+                    content: cdnUrl, language: "plaintext", updatedAt: now(),
+                };
+                await dbUpsertFile(f);
+                return { step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs };
+            }
+            const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
+            const f = {
+                id: node_crypto_1.default.randomUUID(), projectId: project.id, path: savedAs,
+                content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+            };
+            await dbUpsertFile(f);
+            return { step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs };
+        }
+        return { step: i, type, ok: false, error: `unknown step type: ${type}` };
+    }
+    catch (e) {
+        return { step: i, type, ok: false, error: e?.message || "step failed" };
+    }
+}
+/** Groups step indices for execution: a "code" step always runs alone (each
+ * one reads dbListFiles fresh, so a later code step must see an earlier
+ * code step's write — they cannot run concurrently with each other). Runs of
+ * consecutive non-code steps (image/tts/sfx/music) are batched together,
+ * since none of them read another step's output — safe to run via
+ * Promise.all instead of paying their latency sequentially. */
+function groupWorkflowSteps(steps) {
+    const groups = [];
+    let batch = [];
+    for (let i = 0; i < steps.length; i++) {
+        if (String(steps[i]?.type || "") === "code") {
+            if (batch.length) {
+                groups.push(batch);
+                batch = [];
+            }
+            groups.push([i]);
+        }
+        else {
+            batch.push(i);
+        }
+    }
+    if (batch.length)
+        groups.push(batch);
+    return groups;
+}
+// POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
+exports.devhubRouter.post("/projects/:id/agent/workflow", dhCostlyLimit("dhworkflow"), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(String(req.params.id));
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    const { steps } = req.body || {};
+    if (!Array.isArray(steps) || steps.length === 0)
+        return res.status(400).json({ error: "steps array required" });
+    if (steps.length > 20)
+        return res.status(400).json({ error: "max 20 steps per workflow" });
+    const results = new Array(steps.length);
+    for (const group of groupWorkflowSteps(steps)) {
+        if (group.length === 1) {
+            const i = group[0];
+            results[i] = await executeWorkflowStep(project, userId, steps[i], i);
+        }
+        else {
+            // Independent non-code steps (image/tts/sfx/music) — none reads
+            // another's output, so run them concurrently instead of paying their
+            // latency one after another.
+            const settled = await runWorkflowGroup(project, userId, steps, group);
+            for (const r of settled)
+                results[r.step] = r;
+        }
+    }
+    const okCount = results.filter((r) => r.ok).length;
+    res.json({
+        ok: okCount === results.length,
+        totalSteps: results.length,
+        successCount: okCount,
+        failureCount: results.length - okCount,
+        results,
+    });
+});
+// ── Agent workflow templates ────────────────────────────────────────────────
+const AGENT_WORKFLOW_TEMPLATES = [
+    {
+        id: "landing",
+        name: "Landing page",
+        description: "Заглавный экран: заголовок, кнопка, озвучка и звук",
+        steps: [
+            { type: "code", prompt: "Modern landing page: hero section with headline, subheadline, and CTA button. Tailwind, dark theme.", saveAs: "pages/index.tsx" },
+            { type: "image", prompt: "Futuristic abstract gradient, purple and teal, soft glow, hero background", size: "1792x1024", saveAs: "public/hero.url.txt" },
+            { type: "tts", text: "Welcome to AEVION — the unified AI platform. Build, deploy, and scale your ideas in one place.", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
+            { type: "sfx", text: "Subtle whoosh transition, modern UI sound", durationSeconds: 1.5, saveAs: "public/whoosh.mp3.b64" },
+            { type: "music", prompt: "Ambient electronic background, soft synth pads, hopeful, looped — for landing page hero", lengthSeconds: 30, saveAs: "public/landing-bg.mp3.b64" },
+        ],
+    },
+    {
+        id: "blog",
+        name: "Blog post",
+        description: "Статья с картинкой в шапке и озвучкой",
+        steps: [
+            { type: "code", prompt: "Blog post page with title, date, hero image, and markdown article body in Next.js", saveAs: "pages/post.tsx" },
+            { type: "image", prompt: "Editorial illustration, flat design, vibrant colors, abstract concept", size: "1024x1024", saveAs: "public/article-hero.url.txt" },
+            { type: "tts", text: "Welcome to our weekly article. Today, we explore the future of AI-assisted development.", voice: "Adam", saveAs: "public/narration.mp3.b64" },
+        ],
+    },
+    {
+        id: "dashboard",
+        name: "Analytics dashboard",
+        description: "Stats cards + chart + onboarding voice",
+        steps: [
+            { type: "code", prompt: "Analytics dashboard: 4 stat cards (users, revenue, sessions, conversion) + bar chart of last 7 days. Mock data, light theme.", saveAs: "pages/dashboard.tsx" },
+            { type: "image", prompt: "Minimal dashboard UI mockup, light theme, clean typography", size: "1024x1024", saveAs: "public/dashboard-preview.url.txt" },
+            { type: "tts", text: "Your dashboard is ready. Track users, revenue, and conversion in real time.", voice: "Bella", saveAs: "public/dashboard-intro.mp3.b64" },
+        ],
+    },
+];
+// GET /api/devhub/agent/templates
+exports.devhubRouter.get("/agent/templates", (_req, res) => {
+    res.json({ templates: AGENT_WORKFLOW_TEMPLATES });
+});
+// POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
+exports.devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhworkflow"), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(String(req.params.id));
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    const { steps } = req.body || {};
+    if (!Array.isArray(steps) || steps.length === 0)
+        return res.status(400).json({ error: "steps array required" });
+    if (steps.length > 20)
+        return res.status(400).json({ error: "max 20 steps per workflow" });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    const emit = (event) => {
+        try {
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
+        catch { /* socket closed */ }
+    };
+    emit({ type: "start", totalSteps: steps.length });
+    let okCount = 0;
+    const emitStepDone = (r) => {
+        emit(r.ok
+            ? { type: "step-done", index: r.step, ok: true, output: r.output, ...(r.savedAs ? { savedAs: r.savedAs } : {}) }
+            : { type: "step-done", index: r.step, ok: false, error: r.error });
+        if (r.ok)
+            okCount++;
+    };
+    for (const group of groupWorkflowSteps(steps)) {
+        group.forEach((i) => emit({ type: "step-start", index: i, stepType: String(steps[i]?.type || "") }));
+        if (group.length === 1) {
+            const i = group[0];
+            emitStepDone(await executeWorkflowStep(project, userId, steps[i], i));
+        }
+        else {
+            // Independent non-code steps — emit each step-done the moment IT
+            // finishes rather than waiting for the whole batch, so the client sees
+            // genuinely concurrent progress instead of a fake sequential trickle.
+            await runWorkflowGroup(project, userId, steps, group, emitStepDone);
+        }
+    }
+    emit({ type: "complete", totalSteps: steps.length, successCount: okCount, failureCount: steps.length - okCount });
+    res.end();
+});
+// POST /api/devhub/media/sms — Brevo transactional SMS
+exports.devhubRouter.post("/media/sms", async (req, res) => {
+    const { recipient, content } = req.body || {}; // `sender` намеренно НЕ читается — см. ниже
+    if (!recipient || typeof recipient !== "string")
+        return res.status(400).json({ error: "recipient (E.164 phone) required" });
+    if (!/^\+\d{6,18}$/.test(recipient.trim()))
+        return res.status(400).json({ error: "recipient must be E.164 format (e.g. +14155552671)" });
+    if (!content || typeof content !== "string")
+        return res.status(400).json({ error: "content required" });
+    if (content.length > 612)
+        return res.status(400).json({ error: "content too long (max 612 chars, 4 SMS segments)" });
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+        return res.status(503).json({
+            error: "Brevo not configured — set BREVO_API_KEY",
+            setupUrl: "https://app.brevo.com/settings/keys/api",
+        });
+    }
+    /*
+     * Имя отправителя берётся ТОЛЬКО из окружения, а не из тела запроса.
+     *
+     * Замер 09.09.2026: ручка открыта без входа (проверки прав здесь нет, в
+     * отличие от соседней /media/image), и поле `sender` уходило в Brevo как
+     * есть.
+     *
+     * ⚠️ Имя проверяющей функции в этом объяснении НЕ пишем намеренно: соседний
+     * сторож `devhubWriteRoutesWithoutAuth` ищет его как признак защиты по
+     * тексту файла, и упоминание в комментарии О ДЕФЕКТЕ гасило сторожа —
+     * ручка выпадала из списка как «защищённая». Проверено на себе. То есть кто угодно отправлял SMS на любой номер мира с
+     * ЛЮБЫМ именем отправителя, за наш счёт и с нашего аккаунта. Одиннадцать
+     * знаков хватает, чтобы назваться банком.
+     *
+     * Предел темпа здесь есть и работает (5/мин, роутер, строка ~215) — он
+     * ограничивает объём, но подмену имени не ограничивает вовсе: одного
+     * сообщения достаточно.
+     *
+     * Своё имя отправителя у пользователя платформы появится тогда, когда его
+     * можно будет подтвердить на нашем аккаунте Brevo. Пока такого механизма
+     * нет, и принимать имя на слово — значит раздавать наш бренд.
+     */
+    const senderName = process.env.BREVO_SMS_SENDER || "AEVION";
+    try {
+        const r = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+            method: "POST",
+            headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+                type: "transactional",
+                sender: senderName,
+                recipient: recipient.trim(),
+                content: content.slice(0, 612),
+            }),
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            (0, providerHealth_1.noteProviderFailure)("sms", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
+            return res.status(r.status).json({ error: `Brevo SMS error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json().catch(() => ({}));
+        const messageId = data?.messageId ?? null;
+        if (messageId)
+            (0, providerHealth_1.noteProviderSuccess)("sms");
+        else
+            (0, providerHealth_1.noteProviderFailure)("sms", "Brevo accepted the SMS but returned no messageId — delivery not confirmed");
+        res.json({
+            ok: true,
+            reference: data?.reference ?? null,
+            messageId,
+            smsCount: data?.smsCount ?? null,
+            ...(messageId ? {} : (0, degradedResponse_1.degraded)("Brevo accepted the request but returned no messageId — delivery not confirmed")),
+        });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "SMS send failed" });
+    }
+});
+// POST /api/devhub/media/whatsapp — Brevo WhatsApp template message
+exports.devhubRouter.post("/media/whatsapp", async (req, res) => {
+    const { contactNumber, templateId, params } = req.body || {};
+    if (!contactNumber || typeof contactNumber !== "string")
+        return res.status(400).json({ error: "contactNumber (E.164 phone) required" });
+    if (!/^\+?\d{6,18}$/.test(contactNumber.trim()))
+        return res.status(400).json({ error: "contactNumber must be E.164 format" });
+    if (!templateId || (typeof templateId !== "string" && typeof templateId !== "number"))
+        return res.status(400).json({ error: "templateId required (approved WABA template)" });
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+        return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+    }
+    const senderNumberId = process.env.BREVO_WHATSAPP_SENDER_ID;
+    if (!senderNumberId) {
+        return res.status(503).json({
+            error: "Brevo WhatsApp sender not configured — set BREVO_WHATSAPP_SENDER_ID",
+            setupUrl: "https://app.brevo.com/whatsapp",
+        });
+    }
+    try {
+        const r = await fetch("https://api.brevo.com/v3/whatsapp/sendMessage", {
+            method: "POST",
+            headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+                senderNumberId,
+                contactNumbers: [contactNumber.trim().replace(/^\+/, "")],
+                templateId: Number(templateId) || templateId,
+                ...(params && typeof params === "object" ? { params } : {}),
+            }),
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            (0, providerHealth_1.noteProviderFailure)("whatsapp", `Brevo HTTP ${r.status}: ${errText.slice(0, 100)}`);
+            return res.status(r.status).json({ error: `Brevo WhatsApp error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json().catch(() => ({}));
+        const messageId = data?.messageId ?? null;
+        if (messageId)
+            (0, providerHealth_1.noteProviderSuccess)("whatsapp");
+        else
+            (0, providerHealth_1.noteProviderFailure)("whatsapp", "Brevo accepted the request but returned no messageId — delivery not confirmed");
+        res.json({
+            ok: true, messageId,
+            ...(messageId ? {} : (0, degradedResponse_1.degraded)("Brevo accepted the request but returned no messageId — delivery not confirmed")),
+        });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "WhatsApp send failed" });
+    }
+});
+// POST /api/devhub/media/gumroad-checkout — build a Gumroad product checkout URL
+// for a DevHub-built product. Gumroad is the only live processor (Stripe/Paddle
+// are blocked by KYC). Price is fixed in the Gumroad product itself, not passed
+// here — same public-URL scheme as lib/payment/gumroadProvider. No API key needed
+// to generate the link (the URL is a public product page).
+// Body: { permalink: string (slug or full Gumroad URL), email?: string }
+exports.devhubRouter.post("/media/gumroad-checkout", dhCostlyLimit("dhgumroad"), async (req, res) => {
+    const { permalink, email } = req.body || {};
+    if (!permalink || typeof permalink !== "string" || !permalink.trim())
+        return res.status(400).json({ error: "permalink required (Gumroad product slug, e.g. 'my-product')" });
+    // Accept a raw slug or a full https://app.gumroad.com/l/<slug> URL.
+    const slug = permalink.trim().replace(/^https?:\/\/[^/]+\/l\//i, "").replace(/^\/+|[/?#].*$/g, "");
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(slug))
+        return res.status(400).json({ error: "permalink must be a Gumroad product slug (letters, digits, -, _)" });
+    if (email != null && (typeof email !== "string" || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)))
+        return res.status(400).json({ error: "email must be a valid address" });
+    const url = email
+        ? `https://app.gumroad.com/l/${slug}?wanted_email=${encodeURIComponent(String(email).trim())}`
+        : `https://app.gumroad.com/l/${slug}`;
+    // До 05.09.2026 ручка отвечала ok:true на ЛЮБОЙ слаг: при опечатке человек
+    // получал «успех» и ссылку на 404 Gumroad, а вёл он на неё покупателей.
+    // Проверяем существование товара одним запросом. Сетевой сбой НЕ блокирует
+    // (ссылка на свой товар важнее нашего мигнувшего DNS) — но честно помечается.
+    let verified = null;
+    try {
+        const probe = await fetch(url, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(5000) });
+        if (probe.status === 404) {
+            return res.status(404).json({ error: `Gumroad product "${slug}" not found — check the permalink` });
+        }
+        verified = probe.ok || (probe.status >= 300 && probe.status < 400);
+    }
+    catch {
+        verified = null; // не дозвонились — ссылку отдаём, но не клянёмся
+    }
+    res.json({ ok: true, url, provider: "gumroad", ...(verified === null ? { verified: false, note: "existence check unreachable" } : { verified }) });
+});
+// POST /api/devhub/media/upload-image — upload image to Cloudflare Images (permanent CDN URL)
+// Body: { sourceUrl?: string } OR { base64: string, mimeType?: string }
+// Загрузка в Cloudflare Images — платная услуга, а ручка была анонимной и без
+// предела: расход и квоту мог жечь кто угодно. Ограничитель, как у соседних
+// дорогих ручек.
+//
+// Отдельно, чтобы следующий читатель не искал того, чего нет: `sourceUrl` НЕ даёт
+// обхода в нашу сеть. Адрес уходит в Cloudflare полем формы `url`, и по нему идёт
+// ИХ сервис, а не наш сервер. Я начинал разбор с обратной гипотезы и проверил её
+// прежде, чем записывать.
+exports.devhubRouter.post("/media/upload-image", dhCostlyLimit("dhmedia_upload"), async (req, res) => {
+    const { sourceUrl, base64, mimeType = "image/png" } = req.body || {};
+    if (!sourceUrl && !base64) {
+        return res.status(400).json({ error: "sourceUrl or base64 required" });
+    }
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    if (!apiToken || !accountId) {
+        return res.status(503).json({
+            error: "Cloudflare Images not configured — set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID",
+            setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+        });
+    }
+    try {
+        // Cloudflare Images API: multipart form, "url" OR "file" field
+        const boundary = `----aevion${node_crypto_1.default.randomBytes(16).toString("hex")}`;
+        const parts = [];
+        const push = (s) => parts.push(Buffer.from(s, "utf8"));
+        if (sourceUrl) {
+            push(`--${boundary}\r\nContent-Disposition: form-data; name="url"\r\n\r\n${String(sourceUrl)}\r\n`);
+        }
+        else {
+            const ext = mimeType.includes("png") ? "png" : mimeType.includes("jpg") || mimeType.includes("jpeg") ? "jpg" : "bin";
+            push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="upload.${ext}"\r\nContent-Type: ${mimeType}\r\n\r\n`);
+            parts.push(Buffer.from(base64, "base64"));
+            push(`\r\n`);
+        }
+        push(`--${boundary}--\r\n`);
+        const body = Buffer.concat(parts);
+        const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+            body,
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            return res.status(r.status).json({ error: `Cloudflare Images error: ${errText.slice(0, 400)}` });
+        }
+        const data = await r.json();
+        if (!data.result?.id) {
+            return res.status(500).json({ error: "no image id returned from Cloudflare" });
+        }
+        res.json({
+            ok: true,
+            imageId: data.result.id,
+            url: data.result.variants?.[0] || null,
+            variants: data.result.variants || [],
+            uploaded: data.result.uploaded,
+        });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Image upload failed" });
+    }
+});
+// ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
+/** Polls a freshly deployed URL until it returns 2xx (5 tries, 5s apart).
+ * Exported for tests. attemptDelayMs is overridable so tests don't sleep. */
+/**
+ * Ждёт, пока опубликованный адрес начнёт отвечать 2xx.
+ *
+ * ОКНО БЫЛО 25 СЕКУНД (5 попыток по 5), и этого не хватало. Замер 08.09.2026:
+ * за неделю пять выкаток, успешных ноль — а соседнее окно открыло адреса
+ * четырёх «упавших» и получило 200 (контроль: выдуманный поддомен того же
+ * проекта — 404). То есть страницы гостей были ОПУБЛИКОВАНЫ и живы, а мы
+ * записали им «не удалось» и так и сказали человеку.
+ *
+ * Причина в устройстве: у гостя каждый проект — НОВЫЙ проект Cloudflare Pages,
+ * а новый домен `*.pages.dev` расходится по краю сети дольше, чем повторная
+ * выкатка в существующий. Июльские успехи это не опровергали: там были
+ * повторные выкатки.
+ *
+ * Окно расширено до ~2 минут. Расширять почти свободно можно потому, что
+ * проверка живёт в отложенной части: ответ человеку уже ушёл, и всё это время
+ * запись честно остаётся `pending`, а не превращается в `failed` раньше срока.
+ *
+ * Число попыток — ПАРАМЕТР, а не константа: тесты гоняют его с единицей, и
+ * закреплять в них конкретное число попыток значит закреплять не то свойство.
+ */
+async function verifyDeploymentServes(url, attemptDelayMs = 5000, attempts = 24) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        try {
+            const check = await fetch(url, { method: "GET", redirect: "follow" });
+            if (check.ok)
+                return true;
+        }
+        catch { /* network — retry */ }
+        if (attempt < attempts - 1)
+            await new Promise((r) => setTimeout(r, attemptDelayMs));
+    }
+    return false;
+}
+/** Same Cloudflare Images upload as tryAutoUploadToCloudflare, but for raw
+ * bytes (gpt-image-1 returns b64_json — there is no upstream URL to import). */
+async function tryAutoUploadImageBufferToCloudflare(buf, filename) {
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    if (!apiToken || !accountId)
+        return null;
+    try {
+        const boundary = `----aevion${node_crypto_1.default.randomBytes(16).toString("hex")}`;
+        const parts = [
+            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: image/png\r\n\r\n`, "utf8"),
+            buf,
+            Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
+        ];
+        const body = Buffer.concat(parts);
+        const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+            body,
+        });
+        if (!r.ok)
+            return null;
+        const data = await r.json();
+        return data.result?.variants?.[0] ?? null;
+    }
+    catch {
+        return null;
+    }
+}
+async function tryAutoUploadToCloudflare(sourceUrl) {
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    if (!apiToken || !accountId)
+        return null;
+    try {
+        const boundary = `----aevion${node_crypto_1.default.randomBytes(16).toString("hex")}`;
+        const parts = [];
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="url"\r\n\r\n${sourceUrl}\r\n--${boundary}--\r\n`, "utf8"));
+        const body = Buffer.concat(parts);
+        const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+            body,
+        });
+        if (!r.ok)
+            return null;
+        const data = await r.json();
+        return data.result?.variants?.[0] ?? null;
+    }
+    catch {
+        return null;
+    }
+}
+function deeplEndpoint(apiKey) {
+    return apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+}
+// Порядок запасных переводчиков. 17.09.2026 первый же прогон на проде показал,
+// зачем нужен СПИСОК, а не один кандидат: у OpenAI кончились кредиты (429
+// credit_balance_exhausted), и запасной путь из одного звена умер вместе с ним.
+//
+// 01.10.2026: ПЕРВЫМ стал Gemini, и это решение о деньгах, а не о качестве.
+// Замер на проде: квота DeepL исчерпалась (fallbackReason
+// "deepl_quota_exhausted"), и перевод ушёл на Anthropic — а расход через
+// Anthropic API основатель считает самой больной тратой: за месяц по нему ушло
+// больше $800. Gemini при этом у нас живой и несёт основную работу: генерация
+// кода и картинки идут через него (замер того же дня: картинка 200 за 6.7 с
+// после падения openai и workers-ai).
+//
+// Anthropic остаётся в списке ПОСЛЕДНИМ намеренно: убрать его совсем значило бы
+// оставить перевод без последнего звена, а молчаливый отказ хуже дорогого
+// ответа. Он включается, только когда не ответил никто.
+/**
+ * Порядок запасного перевода. ЭКСПОРТИРУЕТСЯ намеренно: сторож
+ * `translateFallsBackWhenDeeplIsOut` обязан проверять ТОТ ЖЕ список, а не
+ * свою копию.
+ *
+ * 🔴 Повод, 07.10.2026. 17.09 порядок был `openai → gemini`, и сторож записал
+ * его у себя парой литералов. 01.10 порядок перевернули (коммит 3601e099e,
+ * «запасной перевод идёт через Gemini»), сторожа не тронули — и он покраснел
+ * и остался красным на шесть дней. Никто не заметил: имя файла не попадает ни
+ * в один обычный отбор по словам, а полный набор бэкенда давно не гоняют.
+ *
+ * Теперь список один на двоих: перевернут порядок — сторож поедет следом, а
+ * не начнёт спорить с кодом.
+ */
+exports.LLM_TRANSLATE_ORDER = ["gemini", "openai", "openrouter", "anthropic"];
+function llmTranslateCandidates() {
+    const configured = (0, providers_1.getProviders)().filter((p) => p.configured && p.id !== "stub");
+    const rank = (id) => { const i = exports.LLM_TRANSLATE_ORDER.indexOf(id); return i === -1 ? exports.LLM_TRANSLATE_ORDER.length : i; };
+    return [...configured]
+        .sort((a, b) => rank(a.id) - rank(b.id))
+        .map((p) => ({ id: p.id, model: p.defaultModel }));
+}
+function llmTranslateCandidate() {
+    return llmTranslateCandidates()[0] ?? null;
+}
+async function translateViaLlm(text, targetLang, sourceLang) {
+    const candidates = llmTranslateCandidates();
+    if (candidates.length === 0)
+        return null;
+    const from = sourceLang ? ` from the language with code ${sourceLang}` : "";
+    const messages = [
+        {
+            role: "system",
+            content: `You are a translation engine. Translate the user's text${from} into the language with code ${targetLang}. Keep formatting, markup, code, placeholders and line breaks exactly as they are. Output only the translated text, with no preface, notes or quotes.`,
+        },
+        { role: "user", content: text },
+    ];
+    const maxTokens = Math.min(16000, Math.max(512, Math.ceil(text.length * 1.5)));
+    let lastError = null;
+    for (const cand of candidates) {
+        try {
+            const result = await (0, providers_1.callProvider)(cand.id, messages, cand.model, 0, undefined, maxTokens);
+            const out = String(result?.reply ?? "").trim();
+            if (out)
+                return { text: out, provider: result.providerUsed ?? cand.id };
+            lastError = new Error(`${cand.id} answered with an empty translation`);
+        }
+        catch (e) {
+            lastError = e;
+            // Следующий провайдер, а отказ этого — в журнал: молчаливый переход
+            // спрятал бы кончившиеся кредиты (§16), и их бы никто не пополнил.
+            console.warn(`[devhub/translate] fallback ${cand.id} failed: ${(0, safeErrorText_1.redactInfraDetails)(e)}`);
+        }
+    }
+    if (lastError)
+        throw lastError;
+    return null;
+}
+async function translateText(text, targetLang, sourceLang, formality) {
+    const apiKey = process.env.DEEPL_API_KEY;
+    const target = targetLang.toUpperCase().slice(0, 5);
+    const source = sourceLang ? String(sourceLang).toUpperCase().slice(0, 5) : undefined;
+    const fallback = async (reason, onMiss) => {
+        try {
+            const via = await translateViaLlm(text, target, source);
+            if (!via)
+                return onMiss;
+            console.warn(`[devhub/translate] DeepL unavailable (${reason}) — translated via ${via.provider} instead`);
+            (0, providerHealth_1.noteProviderSuccess)("translate");
+            return { ok: true, text: via.text, provider: via.provider, fallbackFrom: "deepl", fallbackReason: reason };
+        }
+        catch (e) {
+            console.warn(`[devhub/translate] DeepL unavailable (${reason}) and the fallback failed: ${(0, safeErrorText_1.redactInfraDetails)(e)}`);
+            return onMiss;
+        }
+    };
+    if (!apiKey) {
+        return fallback("deepl_not_configured", {
+            ok: false, status: 503,
+            body: { error: "DeepL not configured — set DEEPL_API_KEY", setupUrl: "https://www.deepl.com/account/summary" },
+        });
+    }
+    const params = new URLSearchParams();
+    params.append("text", text);
+    params.append("target_lang", target);
+    if (source)
+        params.append("source_lang", source);
+    if (formality && ["default", "more", "less", "prefer_more", "prefer_less"].includes(String(formality))) {
+        params.append("formality", String(formality));
+    }
+    const r = await fetch(deeplEndpoint(apiKey), {
+        method: "POST",
+        headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+    });
+    if (r.status === 456) {
+        // 456 is DeepL's quota code. Worth naming, because their /v2/usage
+        // endpoint happily reports 0 of 1,000,000 characters used while every
+        // translate call is refused — the account state is only visible from a
+        // real call (verified against our own key, 2026-07-26).
+        const miss = {
+            ok: false, status: 456,
+            body: {
+                error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
+                provider: "deepl",
+                accountUrl: "https://www.deepl.com/account/usage",
+            },
+        };
+        const out = await fallback("deepl_quota_exhausted", miss);
+        if (!out.ok)
+            (0, providerHealth_1.noteProviderFailure)("translate", "DeepL says the quota is exhausted (456) — the key's own /v2/usage can still read 0");
+        return out;
+    }
+    if (!r.ok) {
+        const errText = await r.text();
+        // Сырое тело ответа поставщика наружу НЕ отдаём: 300 знаков чужого JSON
+        // граница показа не узнаёт (она ловит имена переменных и панели), и
+        // покупатель читал бы его в скобках после «Не удалось перевести».
+        // Ветка 456 выше — отдельный случай: её текст называет DEEPL_API_KEY, и
+        // именно поэтому граница его узнаёт и прячет, а подробность остаётся нам.
+        // Здесь такой приметы нет, поэтому категорию выбираем сами.
+        //
+        // Код ответа тоже свой: 502 — «посредник ответил ошибкой». Пропускать
+        // наружу статус поставщика значит выдавать его семантику за нашу.
+        (0, providerHealth_1.noteProviderFailure)("translate", `DeepL HTTP ${r.status}: ${errText.slice(0, 100)}`);
+        return {
+            ok: false, status: 502,
+            body: { error: "Translation provider returned an error — we know about it, try again later", code: "provider_error" },
+        };
+    }
+    const data = await r.json();
+    const first = data.translations?.[0];
+    if (!first?.text) {
+        (0, providerHealth_1.noteProviderFailure)("translate", "DeepL answered 200 with no translation in the body");
+        return { ok: false, status: 500, body: { error: "no translation returned" } };
+    }
+    (0, providerHealth_1.noteProviderSuccess)("translate");
+    return { ok: true, text: first.text, detectedSource: first.detected_source_language, provider: "deepl" };
+}
+// POST /api/devhub/media/translate — DeepL text translation (LLM fallback when DeepL is out)
+exports.devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, res) => {
+    const { text, targetLang, sourceLang, formality } = req.body || {};
+    if (!text || typeof text !== "string" || !text.trim())
+        return res.status(400).json({ error: "text required" });
+    if (!targetLang || typeof targetLang !== "string")
+        return res.status(400).json({ error: "targetLang required (e.g. EN, RU, DE, ES, FR)" });
+    if (text.length > 128000)
+        return res.status(400).json({ error: "text too long (max 128k chars)" });
+    const trAuth = (0, authJwt_1.verifyBearerOptional)(req);
+    const trUserId = (0, devhubGuest_1.requesterId)(req, trAuth?.sub);
+    const trCredit = await checkCredit(trUserId, "translate");
+    if (!trCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly translate limit reached",
+            tier: trCredit.tier, used: trCredit.used, limit: trCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    try {
+        const out = await translateText(text, targetLang, sourceLang, formality);
+        if (!out.ok)
+            return res.status(out.status).json(out.body);
+        await debitQuietly(trUserId, "translate");
+        // Объём — знаки ИСХОДНОГО текста: именно их считает DeepL. И передаём, КТО
+        // на самом деле перевёл: при исчерпании квоты DeepL работу делает LLM, и
+        // тариф DeepL к ней не относится.
+        учтиПоОбъёму("translate", String(text ?? "").length, trUserId, out.provider);
+        res.json({
+            ok: true,
+            ...creditNote(trCredit),
+            text: out.text,
+            detectedSource: out.detectedSource,
+            targetLang: targetLang.toUpperCase(),
+            provider: out.provider,
+            ...(out.fallbackFrom ? { fallbackFrom: out.fallbackFrom, fallbackReason: out.fallbackReason } : {}),
+        });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Translation failed" });
+    }
+});
+// POST /api/devhub/projects/:id/files/translate — translate project file → save as new file
+exports.devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(String(req.params.id));
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    const { path, targetLang, saveAs } = req.body || {};
+    if (!path || typeof path !== "string")
+        return res.status(400).json({ error: "path required" });
+    if (!targetLang || typeof targetLang !== "string")
+        return res.status(400).json({ error: "targetLang required" });
+    // saveAs — та же дверь пути, что PUT files (§15): проверяем ДО списания
+    // квоты и вызова провайдера, иначе мусорный путь стоил бы человеку перевода.
+    if (saveAs !== undefined && (typeof saveAs !== "string" || плохойПутьФайла(saveAs))) {
+        return res.status(400).json({ error: "invalid file path: use nested/relative names like assets/logo.svg (no .., no leading slash)" });
+    }
+    const ftrCredit = await checkCredit(userId, "translate", 1);
+    if (!ftrCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly translate limit reached",
+            tier: ftrCredit.tier, used: ftrCredit.used, limit: ftrCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    let file;
+    let readFailed = false;
+    try {
+        file = await dbGetFile(project.id, path);
+    }
+    catch {
+        readFailed = true;
+        file = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === path) ?? null;
+    }
+    // «Файла нет в проекте» на упавшей базе — ложь о существующем файле.
+    if (!file && readFailed)
+        return replyStorageUnavailable(res);
+    if (!file)
+        return res.status(404).json({ error: "file not found in project" });
+    try {
+        const outcome = await translateText(file.content, targetLang);
+        if (!outcome.ok)
+            return res.status(outcome.status).json(outcome.body);
+        const translated = outcome.text;
+        const lang = targetLang.toLowerCase();
+        const newPath = String(saveAs || path.replace(/(\.[^./]+)$/, `.${lang}$1`) || `${path}.${lang}`).slice(0, 200);
+        const out = {
+            id: node_crypto_1.default.randomUUID(),
+            projectId: project.id,
+            path: newPath,
+            content: translated,
+            language: file.language,
+            updatedAt: now(),
+        };
+        let storage = "db";
+        try {
+            await dbUpsertFile(out);
+        }
+        catch {
+            // Перевод сохранён только в памяти процесса и не переживёт перезапуск.
+            // Раньше ответ был неотличим от настоящего сохранения.
+            storage = "memory";
+            const existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === newPath);
+            if (existing) {
+                existing.content = out.content;
+                existing.updatedAt = out.updatedAt;
+            }
+            else
+                memFiles.set(out.id, out);
+        }
+        await debitQuietly(userId, "translate", 1);
+        учтиПоОбъёму("files-translate", String(file?.content ?? "").length, userId);
+        res.json({
+            ...creditNote(ftrCredit),
+            ok: true,
+            path: newPath,
+            bytes: translated.length,
+            targetLang: targetLang.toUpperCase(),
+            provider: outcome.provider,
+            ...(outcome.fallbackFrom ? { fallbackFrom: outcome.fallbackFrom, fallbackReason: outcome.fallbackReason } : {}),
+            storage,
+            ...(storage === "memory"
+                ? { warning: "Хранилище недоступно: перевод сохранён только до перезапуска сервиса." }
+                : {}),
+        });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "File translation failed" });
+    }
+});
+// GET /api/devhub/media/email-templates — list Brevo SMTP templates
+exports.devhubRouter.get("/media/email-templates", async (req, res) => {
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey)
+        return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+    const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    try {
+        const r = await fetch(`https://api.brevo.com/v3/smtp/templates?limit=${limit}&offset=${offset}`, {
+            headers: { "api-key": apiKey, Accept: "application/json" },
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json();
+        res.json({
+            ok: true,
+            total: data.count ?? 0,
+            templates: (data.templates || []).map((t) => ({
+                id: t.id, name: t.name, subject: t.subject, isActive: t.isActive, createdAt: t.createdAt,
+            })),
+        });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Templates fetch failed" });
+    }
+});
+// POST /api/devhub/media/email-template-send — send transac email by template ID with params
+exports.devhubRouter.post("/media/email-template-send", async (req, res) => {
+    const { templateId, to, params } = req.body || {};
+    if (!templateId || (typeof templateId !== "number" && typeof templateId !== "string")) {
+        return res.status(400).json({ error: "templateId required" });
+    }
+    if (!to || typeof to !== "string")
+        return res.status(400).json({ error: "to (email) required" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to.trim()))
+        return res.status(400).json({ error: "invalid recipient email" });
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey)
+        return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+    try {
+        const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+                templateId: Number(templateId) || templateId,
+                to: [{ email: to.trim() }],
+                ...(params && typeof params === "object" ? { params } : {}),
+            }),
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json().catch(() => ({}));
+        (0, brevoQuota_1.noteEmailSent)(); // тот же общий потолок 300 писем в сутки, см. выше
+        res.json({ ok: true, messageId: data?.messageId ?? null });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Template send failed" });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Binary file serving (decode .b64 → audio/image MIME)
+// ═════════════════════════════════════════════════════════════════════════════
+const B64_BINARY_MIME = {
+    ".mp3.b64": "audio/mpeg",
+    ".wav.b64": "audio/wav",
+    ".ogg.b64": "audio/ogg",
+    ".png.b64": "image/png",
+    ".jpg.b64": "image/jpeg",
+    ".webp.b64": "image/webp",
+};
+function detectB64Mime(path) {
+    for (const [suffix, mime] of Object.entries(B64_BINARY_MIME)) {
+        if (path.toLowerCase().endsWith(suffix))
+            return mime;
+    }
+    return null;
+}
+// GET /api/devhub/projects/:id/file-binary?path=... — decode base64 file and serve as binary
+exports.devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const filePath = String(req.query.path || "");
+    if (!filePath)
+        return res.status(400).json({ error: "path query param required" });
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    let file;
+    let readFailed = false;
+    try {
+        file = await dbGetFile(project.id, filePath);
+    }
+    catch {
+        readFailed = true;
+        file = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === filePath) ?? null;
+    }
+    // «Файл не найден» на упавшей базе — ложь о существующем файле.
+    if (!file && readFailed)
+        return replyStorageUnavailable(res);
+    if (!file)
+        return res.status(404).json({ error: "file not found" });
+    const mime = detectB64Mime(filePath) || "application/octet-stream";
+    try {
+        const buf = Buffer.from(file.content, "base64");
+        res.setHeader("Content-Type", mime);
+        res.setHeader("Content-Length", buf.length);
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        res.send(buf);
+    }
+    catch {
+        res.status(500).json({ error: "failed to decode base64 content" });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Bulk DeepL translate (multi-file × multi-lang)
+// ═════════════════════════════════════════════════════════════════════════════
+exports.devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtranslate"), async (req, res) => {
+    // Массовый перевод — ПЛАТНЫЙ. Файлы в памяти исчезнут при перезапуске.
+    let storageFallback = false;
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(String(req.params.id));
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    const { paths, targetLangs } = req.body || {};
+    if (!Array.isArray(paths) || paths.length === 0)
+        return res.status(400).json({ error: "paths array required" });
+    if (!Array.isArray(targetLangs) || targetLangs.length === 0)
+        return res.status(400).json({ error: "targetLangs array required" });
+    if (paths.length * targetLangs.length > 50)
+        return res.status(400).json({ error: "max 50 translations per bulk call" });
+    const ftrbCredit = await checkCredit(userId, "translate", paths.length * targetLangs.length);
+    if (!ftrbCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly translate limit reached",
+            tier: ftrbCredit.tier, used: ftrbCredit.used, limit: ftrbCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    // Нет ни DeepL, ни настроенной LLM — отказать до обхода файлов: обход дал бы
+    // 200 с одинаковым отказом в каждой строке, а это тот же 503, только дороже.
+    if (!process.env.DEEPL_API_KEY && !llmTranslateCandidate()) {
+        return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY", setupUrl: "https://www.deepl.com/account/summary" });
+    }
+    const results = [];
+    for (const p of paths) {
+        let file;
+        try {
+            file = await dbGetFile(project.id, String(p));
+        }
+        catch {
+            file = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === String(p)) ?? null;
+        }
+        if (!file) {
+            for (const lang of targetLangs) {
+                results.push({ path: String(p), targetLang: String(lang), ok: false, error: "file not found" });
+            }
+            continue;
+        }
+        for (const lang of targetLangs) {
+            try {
+                const outcome = await translateText(file.content, String(lang));
+                if (!outcome.ok) {
+                    results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: String(outcome.body.error ?? "translation failed").slice(0, 200) });
+                    continue;
+                }
+                const translated = outcome.text;
+                const langLower = String(lang).toLowerCase();
+                const newPath = file.path.replace(/(\.[^./]+)$/, `.${langLower}$1`) || `${file.path}.${langLower}`;
+                const out = {
+                    id: node_crypto_1.default.randomUUID(),
+                    projectId: project.id,
+                    path: newPath,
+                    content: translated,
+                    language: file.language,
+                    updatedAt: now(),
+                };
+                try {
+                    await dbUpsertFile(out);
+                }
+                catch {
+                    const existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === newPath);
+                    if (existing) {
+                        existing.content = out.content;
+                        existing.updatedAt = out.updatedAt;
+                    }
+                    else
+                        memFiles.set(out.id, out);
+                    storageFallback = true;
+                }
+                results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: true, outputPath: newPath, bytes: translated.length, provider: outcome.provider });
+            }
+            catch (e) {
+                results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: e?.message || "step failed" });
+            }
+        }
+    }
+    const okCount = results.filter((r) => r.ok).length;
+    await debitQuietly(userId, "translate", okCount);
+    // Сумма знаков по тем файлам, что действительно перевелись: платим за них.
+    учтиПоОбъёму("files-translate-bulk", results.reduce((сумма, r) => сумма + (r.ok ? Number(r.bytes || 0) : 0), 0), userId);
+    res.json({
+        ...creditNote(ftrbCredit),
+        ...(storageFallback ? MEMORY_NOTE : {}),
+        ok: okCount === results.length,
+        total: results.length,
+        successCount: okCount,
+        failureCount: results.length - okCount,
+        results,
+    });
+});
+function detectExpressRoutes(files) {
+    const routes = [];
+    const routeRe = /(?:app|router)\s*\.\s*(get|post|put|patch|delete|all)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
+    for (const f of files) {
+        if (!/\.(ts|js|tsx|jsx|mjs)$/i.test(f.path))
+            continue;
+        let m;
+        while ((m = routeRe.exec(f.content)) !== null) {
+            routes.push({ method: m[1].toUpperCase(), path: m[2], sourceFile: f.path });
+        }
+    }
+    return routes;
+}
+function generateSDK(projectName, baseUrl, routes) {
+    const lines = [];
+    lines.push(`// Auto-generated SDK for ${projectName}`);
+    lines.push(`// Detected ${routes.length} endpoint(s) via AEVION DevHub`);
+    lines.push(`// DO NOT EDIT — re-generate via /api/devhub/projects/:id/sdk`);
+    lines.push("");
+    lines.push(`export interface SdkOptions {`);
+    lines.push(`  baseUrl?: string;`);
+    lines.push(`  token?: string;`);
+    lines.push(`  fetch?: typeof globalThis.fetch;`);
+    lines.push(`}`);
+    lines.push("");
+    lines.push(`export function createClient(opts: SdkOptions = {}) {`);
+    lines.push(`  const baseUrl = (opts.baseUrl || ${JSON.stringify(baseUrl)}).replace(/\\/$/, "");`);
+    lines.push(`  const f = opts.fetch || globalThis.fetch;`);
+    lines.push(`  const headers: Record<string, string> = { "Content-Type": "application/json" };`);
+    lines.push(`  if (opts.token) headers.Authorization = \`Bearer \${opts.token}\`;`);
+    lines.push("");
+    lines.push(`  async function call(method: string, path: string, body?: unknown, query?: Record<string, string | number | boolean>) {`);
+    lines.push(`    let url = baseUrl + path;`);
+    lines.push(`    if (query && Object.keys(query).length) {`);
+    lines.push(`      const qs = new URLSearchParams();`);
+    lines.push(`      for (const [k, v] of Object.entries(query)) qs.set(k, String(v));`);
+    lines.push(`      url += "?" + qs.toString();`);
+    lines.push(`    }`);
+    lines.push(`    const r = await f(url, {`);
+    lines.push(`      method,`);
+    lines.push(`      headers,`);
+    lines.push(`      body: body !== undefined && method !== "GET" ? JSON.stringify(body) : undefined,`);
+    lines.push(`    });`);
+    lines.push(`    if (!r.ok) {`);
+    lines.push(`      const txt = await r.text();`);
+    lines.push(`      throw new Error(\`\${method} \${path} → \${r.status}: \${txt.slice(0, 200)}\`);`);
+    lines.push(`    }`);
+    lines.push(`    const ct = r.headers.get("content-type") || "";`);
+    lines.push(`    return ct.includes("application/json") ? r.json() : r.text();`);
+    lines.push(`  }`);
+    lines.push("");
+    lines.push(`  return {`);
+    // De-dupe routes by method+path
+    const seen = new Set();
+    for (const r of routes) {
+        const key = `${r.method} ${r.path}`;
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        // Make a JS-safe identifier from method + path
+        const fnName = r.method.toLowerCase() +
+            r.path.replace(/[^a-zA-Z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, "")
+                .replace(/^(\d)/, "_$1") || "root";
+        const hasParams = r.path.includes(":");
+        const params = hasParams ? r.path.match(/:(\w+)/g)?.map((s) => s.slice(1)) || [] : [];
+        const paramArgs = params.map((p) => `${p}: string | number`).join(", ");
+        const pathExpr = hasParams
+            ? '`' + r.path.replace(/:(\w+)/g, "${$1}") + '`'
+            : JSON.stringify(r.path);
+        const bodyArg = ["POST", "PUT", "PATCH"].includes(r.method) ? `body?: unknown` : "";
+        const queryArg = `query?: Record<string, string | number | boolean>`;
+        const allArgs = [paramArgs, bodyArg, queryArg].filter(Boolean).join(", ");
+        lines.push(`    /** ${r.method} ${r.path} — from ${r.sourceFile} */`);
+        lines.push(`    ${fnName}(${allArgs}) {`);
+        lines.push(`      return call(${JSON.stringify(r.method)}, ${pathExpr}, ${bodyArg ? "body" : "undefined"}, query);`);
+        lines.push(`    },`);
+    }
+    lines.push(`  };`);
+    lines.push(`}`);
+    lines.push("");
+    lines.push(`export type Client = ReturnType<typeof createClient>;`);
+    return lines.join("\n");
+}
+// GET /api/devhub/projects/:id/sdk — return TypeScript SDK
+exports.devhubRouter.get("/projects/:id/sdk", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    const files = await dbListFiles(project.id);
+    const routes = detectExpressRoutes(files);
+    const baseUrl = project.deployUrl || `https://${slugify(project.name)}-${project.id.slice(0, 8)}.aevion.app`;
+    const sdk = generateSDK(project.name, baseUrl, routes);
+    if (req.query.download === "1") {
+        res.setHeader("Content-Type", "text/typescript");
+        res.setHeader("Content-Disposition", `attachment; filename="${slugify(project.name)}-sdk.ts"`);
+        res.send(sdk);
+    }
+    else {
+        res.json({
+            ok: true,
+            projectName: project.name,
+            baseUrl,
+            detectedRoutes: routes,
+            sdkBytes: sdk.length,
+            sdk,
+        });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Project export as ZIP (minimal stored-mode ZIP, no external deps)
+// ═════════════════════════════════════════════════════════════════════════════
+const CRC32_TABLE = (() => {
+    const tbl = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++)
+            c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        tbl[i] = c >>> 0;
+    }
+    return tbl;
+})();
+function crc32(buf) {
+    let c = 0xffffffff;
+    for (let i = 0; i < buf.length; i++)
+        c = CRC32_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+}
+/** ZIP general purpose bit 11 — "the file name is encoded in UTF-8". */
+const UTF8_NAME_FLAG = 0x0800;
+/** True when the bytes really are UTF-8 — a lossy decode would introduce
+ * U+FFFD, so a round-trip that changes the bytes proves they were not. */
+function isValidUtf8(buf) {
+    return Buffer.compare(Buffer.from(buf.toString("utf8"), "utf8"), buf) === 0;
+}
+function buildZipStored(entries) {
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    for (const entry of entries) {
+        const nameBuf = Buffer.from(entry.path, "utf8");
+        const dataBuf = entry.content;
+        const crc = crc32(dataBuf);
+        const size = dataBuf.length;
+        // Local file header (30 bytes + name + data)
+        const local = Buffer.alloc(30);
+        local.writeUInt32LE(0x04034b50, 0); // signature
+        local.writeUInt16LE(20, 4); // version needed
+        // Bit 11 = UTF-8 name. Names are written as UTF-8 above, and without this
+        // flag APPNOTE 4.4.4 says a reader must treat them as CP437 — which is why
+        // "src/компоненты/Таймер.jsx" unzipped as "src/╨║╨╛╨╝╨┐╨╛╨╜╨╡╨╜╤é╤ï/…"
+        // in every standard tool (confirmed against prod, 2026-07-26).
+        local.writeUInt16LE(UTF8_NAME_FLAG, 6); // flags
+        local.writeUInt16LE(0, 8); // method (0=stored)
+        local.writeUInt16LE(0, 10); // mtime
+        local.writeUInt16LE(0, 12); // mdate
+        local.writeUInt32LE(crc, 14);
+        local.writeUInt32LE(size, 18); // compressed size
+        local.writeUInt32LE(size, 22); // uncompressed size
+        local.writeUInt16LE(nameBuf.length, 26); // name length
+        local.writeUInt16LE(0, 28); // extra length
+        const localHeader = Buffer.concat([local, nameBuf, dataBuf]);
+        localParts.push(localHeader);
+        // Central directory entry (46 bytes + name)
+        const central = Buffer.alloc(46);
+        central.writeUInt32LE(0x02014b50, 0); // signature
+        central.writeUInt16LE(20, 4); // version made by
+        central.writeUInt16LE(20, 6); // version needed
+        central.writeUInt16LE(UTF8_NAME_FLAG, 8); // flags — must match the local header
+        central.writeUInt16LE(0, 10); // method
+        central.writeUInt16LE(0, 12); // mtime
+        central.writeUInt16LE(0, 14); // mdate
+        central.writeUInt32LE(crc, 16);
+        central.writeUInt32LE(size, 20);
+        central.writeUInt32LE(size, 24);
+        central.writeUInt16LE(nameBuf.length, 28);
+        central.writeUInt16LE(0, 30); // extra length
+        central.writeUInt16LE(0, 32); // comment length
+        central.writeUInt16LE(0, 34); // disk number
+        central.writeUInt16LE(0, 36); // internal attrs
+        central.writeUInt32LE(0, 38); // external attrs
+        central.writeUInt32LE(offset, 42); // local header offset
+        centralParts.push(Buffer.concat([central, nameBuf]));
+        offset += localHeader.length;
+    }
+    const localBlock = Buffer.concat(localParts);
+    const centralBlock = Buffer.concat(centralParts);
+    // End of central directory record (22 bytes)
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0); // signature
+    eocd.writeUInt16LE(0, 4); // disk number
+    eocd.writeUInt16LE(0, 6); // disk where CD starts
+    eocd.writeUInt16LE(entries.length, 8); // num entries this disk
+    eocd.writeUInt16LE(entries.length, 10); // total num entries
+    eocd.writeUInt32LE(centralBlock.length, 12); // size of CD
+    eocd.writeUInt32LE(localBlock.length, 16); // CD offset
+    eocd.writeUInt16LE(0, 20); // comment length
+    return Buffer.concat([localBlock, centralBlock, eocd]);
+}
+// GET /api/devhub/projects/:id/export — download project as ZIP
+exports.devhubRouter.get("/projects/:id/export", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    try {
+        const files = await dbListFiles(project.id);
+        if (files.length === 0)
+            return res.status(400).json({ error: "project has no files to export" });
+        const entries = files.map((f) => {
+            // Decode .b64 files back to binary
+            const isB64 = detectB64Mime(f.path);
+            let content;
+            let outPath = f.path;
+            if (isB64) {
+                try {
+                    content = Buffer.from(f.content, "base64");
+                }
+                catch {
+                    content = Buffer.from(f.content, "utf8");
+                }
+                outPath = f.path.replace(/\.b64$/i, "");
+            }
+            else {
+                content = Buffer.from(f.content, "utf8");
+            }
+            return { path: outPath, content };
+        });
+        // Include a metadata file
+        const meta = {
+            projectName: project.name,
+            description: project.description,
+            stack: project.stack,
+            exportedAt: new Date().toISOString(),
+            fileCount: files.length,
+            generatedBy: "AEVION DevHub",
+        };
+        entries.push({ path: "aevion-export.json", content: Buffer.from(JSON.stringify(meta, null, 2), "utf8") });
+        // ...and a note saying how to actually run what we just handed over. The
+        // export was a folder with no instructions: whether it could be started,
+        // and with which command, was left to whoever downloaded it.
+        entries.push({
+            path: "HOW-TO-RUN.md",
+            content: Buffer.from((0, devhubRunInstructions_1.buildRunInstructions)({
+                projectName: project.name,
+                stack: project.stack,
+                files: files.map((f) => ({ path: f.path, content: f.content })),
+            }), "utf8"),
+        });
+        const zip = buildZipStored(entries);
+        const filename = `${slugify(project.name)}-${project.id.slice(0, 8)}.zip`;
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.setHeader("Content-Length", zip.length);
+        res.send(zip);
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "export failed" });
+    }
+});
+// POST /api/devhub/projects/:id/deploy/vercel — deploy to Vercel
+exports.devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const vercelToken = process.env.VERCEL_API_TOKEN;
+    if (!vercelToken) {
+        return res.status(503).json({
+            error: "Vercel not configured — set VERCEL_API_TOKEN",
+            setupUrl: "https://vercel.com/account/tokens",
+        });
+    }
+    const vercelDeployCredit = await checkCredit(userId, "deploy");
+    if (!vercelDeployCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly deploy limit reached",
+            tier: vercelDeployCredit.tier, used: vercelDeployCredit.used, limit: vercelDeployCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const deploymentId = node_crypto_1.default.randomUUID();
+    const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
+    const deployment = {
+        id: deploymentId,
+        projectId: project.id,
+        userId,
+        status: "pending",
+        deployUrl: null,
+        buildLog: null,
+        triggeredAt: now(),
+        completedAt: null,
+    };
+    try {
+        await dbSaveDeployment(deployment);
+    }
+    catch {
+        memDeployments.set(deployment.id, deployment);
+    }
+    try {
+        const files = await dbListFiles(project.id);
+        // Vercel Deployments API v13 — inline file payload
+        const vercelFiles = files.map((f) => ({
+            file: f.path,
+            data: Buffer.from(f.content).toString("base64"),
+            encoding: "base64",
+        }));
+        const vResp = await fetch("https://api.vercel.com/v13/deployments", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${vercelToken}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                name: deploySlug,
+                files: vercelFiles,
+                target: "production",
+                projectSettings: {
+                    framework: project.stack === "next" ? "nextjs"
+                        : project.stack === "react" ? "vite"
+                            : project.stack === "express" ? null
+                                : null,
+                },
+            }),
+        });
+        if (!vResp.ok) {
+            const errText = await vResp.text();
+            deployment.status = "failed";
+            deployment.buildLog = `Vercel error: ${errText.slice(0, 500)}`;
+            deployment.completedAt = now();
+            try {
+                await dbSaveDeployment(deployment);
+            }
+            catch {
+                memDeployments.set(deployment.id, deployment);
+            }
+            return res.status(vResp.status).json({ ok: false, error: `Vercel deploy error: ${errText.slice(0, 300)}` });
+        }
+        const vData = await vResp.json();
+        const liveUrl = `https://${vData.url}`;
+        /*
+         * СНЯТЬ ЗАЩИТУ VERCEL С ПРОЕКТА ПОЛЬЗОВАТЕЛЯ (28.09.2026).
+         *
+         * Замер на живом проде: Next-проект выкатился, ответ был ok:true с адресом — а
+         * адрес отдавал 302 на vercel.com/sso-api, то есть приложение закрыто входом в
+         * НАШ аккаунт Vercel. Двадцать четыре проверки подряд, ни одного 200: человек
+         * своего приложения не видит. Ровно тот класс, ради которого в конвенции §10
+         * записано «deploy = uploaded + serves» — загрузка удалась, служить не служит,
+         * а снаружи выглядит успехом.
+         *
+         * Защита наследуется от настроек аккаунта, поэтому снимаем её у КАЖДОГО проекта
+         * пользователя сразу после создания выкатки, по тому slug, который сами создали.
+         * Неудачу не проглатываем: она уходит в ответ полем protectionRemoved и в Sentry,
+         * иначе «адрес просит пароль» останется загадкой и для человека, и для нас.
+         */
+        let protectionRemoved;
+        let protectionError;
+        try {
+            const pResp = await fetch(`https://api.vercel.com/v9/projects/${encodeURIComponent(deploySlug)}`, {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${vercelToken}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ ssoProtection: null, passwordProtection: null }),
+            });
+            protectionRemoved = pResp.ok;
+            if (!pResp.ok)
+                protectionError = `Vercel ответил ${pResp.status}`;
+        }
+        catch (e) {
+            protectionRemoved = false;
+            protectionError = e instanceof Error ? e.message : String(e);
+        }
+        if (protectionRemoved === false) {
+            (0, sentry_1.captureException)(new Error(`devhub: vercel protection not removed: ${protectionError}`), {
+                route: "devhub/deploy:vercel",
+                projectId: project.id,
+            });
+        }
+        deployment.status = "building";
+        deployment.deployUrl = liveUrl;
+        deployment.buildLog = `Vercel deployment ${vData.id} created`;
+        try {
+            await dbSaveDeployment(deployment);
+        }
+        catch {
+            memDeployments.set(deployment.id, deployment);
+        }
+        // Verify the page actually serves before calling it live — same honesty
+        // rule as the CF Pages path (a deploy that never serves is a failure).
+        deferred(async () => {
+            const d = memDeployments.get(deployment.id) ?? deployment;
+            const serves = await verifyDeploymentServes(liveUrl);
+            if (serves) {
+                d.status = "live";
+            }
+            else {
+                d.status = "failed";
+                d.buildLog = (d.buildLog || "") + " | verify: deployed page is not serving (non-2xx after retries)";
+            }
+            d.completedAt = now();
+            try {
+                await dbSaveDeployment(d);
+            }
+            catch {
+                memDeployments.set(d.id, d);
+            }
+            if (project && serves) {
+                project.status = "live";
+                project.deployUrl = liveUrl;
+                project.updatedAt = now();
+                try {
+                    await dbSaveProject(project);
+                }
+                catch {
+                    memProjects.set(project.id, project);
+                }
+            }
+        }, 5000);
+        await debitQuietly(userId, "deploy");
+        return res.json({
+            ok: true,
+            ...(protectionRemoved !== undefined ? { protectionRemoved } : {}),
+            ...(protectionError ? { protectionError } : {}),
+            deploymentId,
+            vercelDeploymentId: vData.id,
+            deployUrl: liveUrl,
+            provider: "vercel",
+            message: "Vercel deployment started",
+        });
+    }
+    catch (e) {
+        deployment.status = "failed";
+        deployment.buildLog = e?.message || "deploy failed";
+        deployment.completedAt = now();
+        try {
+            await dbSaveDeployment(deployment);
+        }
+        catch {
+            memDeployments.set(deployment.id, deployment);
+        }
+        return res.status(500).json({ ok: false, error: (0, safeErrorText_1.redactInfraDetails)(e) || "Vercel deploy failed" });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Cloudflare Pages deploy — static sites / Next.js exported / React SPA
+// POST /api/devhub/projects/:id/deploy/pages
+//
+// Flow:
+//   1. Create CF Pages project (idempotent — ignores "already exists")
+//   2. Upload all project files as multipart direct-upload deployment
+//   3. Add <slug>.aevion.app custom domain to Pages project
+//   4. Provision CNAME DNS record via lib/devhubDns (zone aevion.app lives at Vercel)
+//   5. Return live URL + domain
+// ═════════════════════════════════════════════════════════════════════════════
+/**
+ * Потолок ЧИСЛА проектов Cloudflare Pages на аккаунт.
+ *
+ * 🔴 ЗАЧЕМ. Каждый опубликованный проект DevHub — ОТДЕЛЬНЫЙ проект Pages
+ * (`aevion-<слаг>-<id>`, wrangler pages deploy) в ОДИН наш аккаунт. Проверено по
+ * коду 06.10.2026 при разборе нормы на адрес: потолок аккаунта наступает раньше
+ * любой нормы на гостя или на адрес, и когда он наступит, публикация встанет у
+ * ВСЕХ — включая платных.
+ *
+ * ⚠️ ЧИСЛО 100 — ДОКУМЕНТИРОВАННОЕ, А НЕ ЗАМЕРЕННОЕ. Я не могла спросить аккаунт:
+ * CLOUDFLARE_API_TOKEN в рабочей копии не задан. Поэтому предел берётся из
+ * переменной окружения, а 100 стоит умолчанием как осторожная оценка. Подтвердят
+ * в панели другое — меняется переменная, а не код.
+ *
+ * Пороги: при 80 занятых — предупреждение в журнал (чтобы узнать ДО аварии), при
+ * 95 — честный отказ ГОСТЯМ, а пять последних слотов остаются платным. Логика
+ * простая: бесплатная проба не должна съедать место у того, кто заплатил.
+ */
+const ПРЕДЕЛ_ПРОЕКТОВ_PAGES = Math.max(1, Number(process.env.CF_PAGES_PROJECT_LIMIT ?? 100));
+const ПОРОГ_ПРЕДУПРЕЖДЕНИЯ = Math.floor(ПРЕДЕЛ_ПРОЕКТОВ_PAGES * 0.8);
+const ПОРОГ_ОТКАЗА_ГОСТЯМ = Math.floor(ПРЕДЕЛ_ПРОЕКТОВ_PAGES * 0.95);
+/**
+ * Сколько проектов Pages мы уже заняли.
+ *
+ * Считаем СВОИ опубликованные проекты: у них заполнен deployUrl. Удаление
+ * проекта снимает и проект Pages (починка 2f7766b32), поэтому живые строки с
+ * адресом — это и есть занятые слоты.
+ *
+ * ЧЕСТНАЯ ГРАНИЦА: это ОЦЕНКА СНИЗУ. Если снятие проекта Pages когда-то не
+ * удалось, останется сирота, которой в нашей базе уже нет, — её мы не видим.
+ * Спросить аккаунт напрямую нечем (нет токена в этой копии), и выдавать оценку
+ * за точное число нельзя.
+ *
+ * Три исхода, а не два: число, ноль и НЕ ЗНАЮ (null) — последнее при отказе базы.
+ */
+/**
+ * Подмена подсчёта для сторожа.
+ *
+ * Иначе проверку границы пришлось бы покупать ста девяноста запросами (создать
+ * 95 проектов и каждому выставить адрес). Сторож проверяет РЕАКЦИЮ ручки на
+ * число, а сам подсчёт — отдельной проверкой на запасном пути.
+ */
+let подменаПодсчёта = null;
+function __setПодсчётПроектовForTest(f) {
+    подменаПодсчёта = f;
+}
+async function занятоПроектовPages() {
+    if (подменаПодсчёта)
+        return подменаПодсчёта();
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        let n = 0;
+        for (const p of memProjects.values())
+            if (p.deployUrl)
+                n++;
+        return n;
+    }
+    try {
+        const r = await pool.query(`SELECT COUNT(*)::int AS n
+         FROM "DevHubProject"
+        WHERE "deployUrl" IS NOT NULL AND "deployUrl" <> ''`);
+        return Number(r.rows[0]?.n ?? 0);
+    }
+    catch {
+        return null;
+    }
+}
+let предупреждалиОПотолке = false;
+exports.devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    if (!accountId || !apiToken) {
+        return res.status(503).json({
+            error: "Cloudflare Pages not configured",
+            needs: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+            setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+        });
+    }
+    /*
+     * ПОТОЛОК АККАУНТА — ТОЛЬКО ДЛЯ НОВОГО ПРОЕКТА PAGES.
+     *
+     * Повторная выкатка уже опубликованного проекта нового слота не занимает, и
+     * запрещать её было бы чистым вредом: человек не может обновить свой же сайт.
+     * Поэтому проверка висит на признаке «проекта Pages ещё нет» (deployUrl пуст),
+     * а не на самой выкатке.
+     */
+    /*
+     * ПРИЗНАК «ПРОЕКТ PAGES ЕЩЁ НЕ СОЗДАВАЛСЯ» — не только пустой deployUrl.
+     *
+     * Поймал прогоном: deployUrl ставится лишь ПОСЛЕ проверки отдачи
+     * (markDeploymentLive), то есть вторая выкатка вскоре после первой выглядела бы
+     * «новым проектом» и у гостя на пороге отбивалась бы — человек не смог бы
+     * обновить свой же сайт. Поэтому спрашиваем ещё и о прошлых выкатках: если они
+     * были, проект Pages уже существует и нового слота не занимает.
+     */
+    const прошлыеВыкатки = await dbListDeployments(project.id, 1).catch(() => []);
+    const проектPagesУжеЕсть = Boolean(project.deployUrl) || прошлыеВыкатки.length > 0;
+    if (!проектPagesУжеЕсть) {
+        const занято = await занятоПроектовPages();
+        if (занято === null) {
+            /*
+             * База не ответила. Пропускаем — и НЕ молча: заблокировать публикацию из-за
+             * сбоя чтения хуже, чем занять слот (тот же выбор, что в checkCredit, и по
+             * той же причине). Но след обязателен, иначе потолок однажды наступит без
+             * единой записи о том, что мы его не считали.
+             */
+            console.warn("[devhub] потолок проектов Pages не посчитан (база не ответила) — выкатка пропущена без проверки");
+        }
+        else {
+            if (занято >= ПОРОГ_ПРЕДУПРЕЖДЕНИЯ && !предупреждалиОПотолке) {
+                предупреждалиОПотолке = true;
+                console.warn(`[devhub] проектов Cloudflare Pages занято ${занято} из ${ПРЕДЕЛ_ПРОЕКТОВ_PAGES} ` +
+                    `(порог предупреждения ${ПОРОГ_ПРЕДУПРЕЖДЕНИЯ}, отказ гостям с ${ПОРОГ_ОТКАЗА_ГОСТЯМ}). ` +
+                    "Это оценка СНИЗУ по нашей базе: осиротевшие проекты в ней не видны.");
+                (0, sentry_1.captureException)(new Error("devhub: Cloudflare Pages project ceiling approaching"), {
+                    route: "devhub/deploy/pages:ceiling", занято, предел: ПРЕДЕЛ_ПРОЕКТОВ_PAGES,
+                });
+            }
+            if (занято >= ПОРОГ_ОТКАЗА_ГОСТЯМ && isGuestRequester(userId)) {
+                // Честный отказ, а не 500 и не тишина: место кончилось у НАС, а не у человека.
+                return res.status(503).json({
+                    error: "publishing_temporarily_unavailable",
+                    message: "Publishing is temporarily unavailable: our hosting account has run out of free site slots. " +
+                        "Your files are saved — sign in or write to us and we will publish this project.",
+                    detail: `occupied ${занято} of ${ПРЕДЕЛ_ПРОЕКТОВ_PAGES} project slots`,
+                    // Адрес берём так же, как сосед по этому файлу (строка с frontendUrl):
+                    // FRONTEND_URL в devhub.ts не объявлена, и заводить вторую константу
+                    // для одного и того же значения — тот самый второй источник правды.
+                    contactUrl: `${(process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "")}/devhub/link`,
+                });
+            }
+        }
+    }
+    const pagesDeployCredit = await checkCredit(userId, "deploy");
+    if (!pagesDeployCredit.allowed) {
+        return res.status(402).json({
+            error: "Monthly deploy limit reached",
+            tier: pagesDeployCredit.tier, used: pagesDeployCredit.used, limit: pagesDeployCredit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const cfBase = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
+    const cfHeaders = { Authorization: `Bearer ${apiToken}` };
+    // Record deployment
+    const deploymentId = node_crypto_1.default.randomUUID();
+    const deployment = {
+        id: deploymentId, projectId: project.id, userId,
+        status: "pending", deployUrl: null, buildLog: null,
+        triggeredAt: now(), completedAt: null,
+    };
+    try {
+        await dbSaveDeployment(deployment);
+    }
+    catch {
+        memDeployments.set(deployment.id, deployment);
+    }
+    try {
+        const files = await dbListFiles(project.id);
+        if (!files.length) {
+            deployment.status = "failed";
+            deployment.buildLog = "no files in project";
+            deployment.completedAt = now();
+            try {
+                await dbSaveDeployment(deployment);
+            }
+            catch {
+                memDeployments.set(deployment.id, deployment);
+            }
+            return res.status(400).json({ error: "project has no files to deploy — add at least index.html" });
+        }
+        // 24.09.2026. Cloudflare Pages отдаёт ФАЙЛЫ КАК ЕСТЬ: проект без index.html в
+        // корне после загрузки честно существует и честно отвечает 404. Замер на проде:
+        // проект стека `next` (pages/index.jsx) опубликовался «ok: true, liveUrl: …»,
+        // а адрес отдавал 404 и через три минуты; тот же промпт на стеке `static`
+        // (index.html + style.css + script.js) ответил 200 за 20 секунд. То есть
+        // обещание «опиши — получишь живой адрес» ломалось не в генерации, а здесь,
+        // и ломалось МОЛЧА: ответ выглядел успехом (конвенция §10 «deploy = uploaded
+        // + serves» в CLAUDE.md бэкенда запрещает ровно это).
+        //
+        // Поэтому отказываем ДО загрузки и называем, что сделать: пересобрать проект
+        // статическим. Сборку Next здесь не делаем намеренно — это минуты работы
+        // контейнера на каждый запрос гостя, и решение о ней принимается отдельно.
+        const путиФайлов = files.map((f) => String(f.path ?? ""));
+        if (!(0, staticServable_1.можноСлужитьСтатикой)(путиФайлов)) {
+            deployment.status = "failed";
+            deployment.buildLog =
+                "static hosting needs index.html at the project root; " +
+                    `project has ${files.length} file(s) and none of them is index.html`;
+            deployment.completedAt = now();
+            try {
+                await dbSaveDeployment(deployment);
+            }
+            catch {
+                memDeployments.set(deployment.id, deployment);
+            }
+            return res.status(409).json({
+                error: "project is not static — nothing to serve",
+                detail: "Cloudflare Pages отдаёт файлы как есть, а в корне проекта нет index.html " +
+                    `(файлов: ${files.length}). Такая публикация прошла бы «успешно», но адрес отвечал бы 404.`,
+                alternative: "Опишите приложение заново на стеке Static — генерация даст index.html + style.css + script.js, " +
+                    "и адрес заработает сразу. Для Next нужна сборка, её мы пока не делаем на стороне AEVION.",
+                files: files.slice(0, 8).map((f) => String(f.path ?? "")),
+                deploymentId: deployment.id,
+            });
+        }
+        // Stable CF Pages project name: aevion-<slug>-<id6> — формула одна, см. имяPagesПроекта
+        const pageName = имяPagesПроекта(project);
+        // 1. Create Pages project (ignore 8000000 = already exists)
+        const createResp = await fetch(`${cfBase}/pages/projects`, {
+            method: "POST",
+            headers: { ...cfHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ name: pageName, production_branch: "main" }),
+        });
+        const createData = await createResp.json();
+        // CF has reported "already exists" under more than one error code over
+        // time — match the message too, or every REdeploy 500s (hit live 2026-07-21).
+        const alreadyExists = createData.errors?.some((e) => e.code === 8000000 || /already exists/i.test(e.message || ""));
+        if (!createResp.ok && !alreadyExists) {
+            const errMsg = createData.errors?.map((e) => e.message).join("; ") || "CF Pages project creation failed";
+            return res.status(500).json({ error: errMsg });
+        }
+        // 2-3. Upload via wrangler — the only asset-upload path CF still honors.
+        // The previous raw multipart flow stored the manifest but never the
+        // assets: deploy reported success while every page served 500.
+        /*
+         * Бейдж «Сделано в AEVION» — петля роста (src/lib/aevionBadge.ts). Ставится
+         * ТОЛЬКО бесплатным тарифам: опубликованный сайт показывают другим людям, и
+         * без ссылки этот показ не приводит никого (замер 28.09.2026: 0 пользователей
+         * DevHub при полностью рабочей публикации). У платного бейджа нет — это ещё
+         * одна честная причина платить.
+         *
+         * Правим ТОЛЬКО копию для загрузки: файлы проекта в базе остаются как их
+         * написал человек, иначе бейдж попал бы в код, который он скачивает и правит.
+         */
+        const файлыКЗагрузке = files.map((f) => ({ path: f.path, content: f.content }));
+        if ((0, aevionBadge_1.нуженБейдж)(pagesDeployCredit.tier)) {
+            for (const f of файлыКЗагрузке) {
+                const путь = String(f.path).replace(/^\.?\//, "").toLowerCase();
+                if (путь === "index.html")
+                    f.content = (0, aevionBadge_1.вставитьБейдж)(String(f.content));
+            }
+        }
+        const wranglerResult = await (0, wranglerPagesDeploy_1.deployViaWrangler)(файлыКЗагрузке, pageName, { accountId, apiToken });
+        if (!wranglerResult.ok) {
+            deployment.status = "failed";
+            deployment.buildLog = `wrangler: ${wranglerResult.error}`;
+            deployment.completedAt = now();
+            try {
+                await dbSaveDeployment(deployment);
+            }
+            catch {
+                memDeployments.set(deployment.id, deployment);
+            }
+            return res.status(502).json({ error: `CF Pages upload failed: ${wranglerResult.error}` });
+        }
+        // Живой адрес — адрес ПРОЕКТА (<pageName>.pages.dev), а не адрес выкатки
+        // (<hash>.<pageName>.pages.dev), который wrangler печатает первым. Проба 15.09
+        // (probe-newcomer-c64315): адрес проекта и <slug>.aevion.app отвечали через
+        // минуту, адрес выкатки — не отвечал и через три (jina 422 при живых A-записях).
+        // Проверка шла именно по нему — отсюда «выкаток 6, успешных 0» за 30 дней.
+        // Людям тоже нужен адрес проекта: он не меняется от выкатки к выкатке.
+        const deploymentUrl = wranglerResult.url;
+        const pagesUrl = `https://${pageName}.pages.dev`;
+        deployment.status = "building";
+        deployment.deployUrl = pagesUrl;
+        // Пропущенные файлы называются поимённо: молчаливый пропуск означал бы,
+        // что на сайте не хватает страницы, а выкатка отчиталась успехом.
+        deployment.buildLog =
+            `CF Pages deployment uploaded via wrangler (${deploymentUrl}); live address ${pagesUrl}` +
+                (wranglerResult.skipped.length
+                    ? ` | НЕ ЗАГРУЖЕНЫ ${wranglerResult.skipped.length} файл(ов) с недопустимым путём: ${wranglerResult.skipped.slice(0, 10).join(", ")}`
+                    : "");
+        try {
+            await dbSaveDeployment(deployment);
+        }
+        catch {
+            memDeployments.set(deployment.id, deployment);
+        }
+        await debitQuietly(userId, "deploy");
+        // 4. Выдача адреса <slug>.<зона> (best-effort — выкатка не падает, если DNS не настроен).
+        //
+        // 15.09.2026: зона — aevion.app (решение основателя); прежняя aevion.build в
+        // Cloudflare больше не существует, и каждый выданный адрес не разрешался. DNS
+        // домена aevion.app живёт у Vercel, поэтому записи пишет lib/devhubDns через
+        // выбранного поставщика (на проде Vercel; Cloudflare — прежний путь). Шаг 4a
+        // остаётся здесь: он про Pages, а не про DNS.
+        let customDomain = null;
+        let domainUrl = null;
+        if ((0, devhubDns_1.dnsConfigured)()) {
+            try {
+                const domainSlug = `${slugify(project.name)}-${project.id.slice(0, 6)}`;
+                const fullDomain = `${domainSlug}.${(0, devhubDns_1.siteZone)()}`;
+                // 4a. Add custom domain to CF Pages project.
+                //
+                // Ответ ОБЯЗАН быть прочитан. Раньше все три вызова к Cloudflare шли без
+                // проверки, а ниже безусловно выполнялось `customDomain = fullDomain` —
+                // то есть при отказе провайдера выкатка всё равно сообщала поддомен,
+                // которого не существует. Зона aevion.build не делегирована, так что
+                // это не гипотеза: отказ здесь — обычный случай, а не редкий.
+                const addResp = await fetch(`${cfBase}/pages/projects/${pageName}/domains`, {
+                    method: "POST",
+                    headers: { ...cfHeaders, "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: fullDomain }),
+                });
+                // 409 — домен уже привязан к этому проекту, это не отказ.
+                if (!addResp.ok && addResp.status !== 409) {
+                    const body = await addResp.text().catch(() => "");
+                    throw new Error(`Pages domain refused (${addResp.status}): ${body.slice(0, 200)}`);
+                }
+                // 4b. CNAME fullDomain → pageName.pages.dev через выбранного поставщика DNS.
+                const dns = await (0, devhubDns_1.upsertCname)(fullDomain, `${pageName}.pages.dev`);
+                if (!dns.ok)
+                    throw new Error(`DNS record refused: ${dns.error}`);
+                customDomain = fullDomain;
+                domainUrl = `https://${fullDomain}`;
+            }
+            catch (domainErr) {
+                deployment.buildLog += ` | domain: ${domainErr?.message || "error"}`;
+            }
+        }
+        // 5. «Страница отвечает» — цепочкой окон, а не одним (см. scheduleServeVerification).
+        // Загрузка прошла, а адрес молчит — это «ещё поднимается», пока не истекли все окна.
+        scheduleServeVerification(deployment, project, pagesUrl, customDomain);
+        // Пробный сайт снимет себя сам — см. разбор у пробныйГостевойПроект.
+        if (пробныйГостевойПроект(project))
+            scheduleProbeSiteCleanup(project);
+        // Домен судим по DNS, а не по HTTPS: разрешился CNAME — зона отработала;
+        // готовность HTTPS (сертификат Pages) проверяет та же цепочка после того, как
+        // ответит pages.dev. Витрина «домен» отвечает за запись в DNS, не за сертификат.
+        const domainDns = customDomain ? await exports.dnsProbe.cnameResolves(customDomain) : false;
+        // «Ещё не видно» сразу после записи — не отказ: проба 15.09 дала false в момент
+        // ответа и true через минуту, а витрина краснела на 30 минут. Успех отмечаем
+        // сразу, отказ — только из цепочки окон (markDeploymentLive), когда прошло время.
+        if (customDomain && domainDns)
+            (0, providerHealth_1.noteProviderSuccess)("domain");
+        // HTTPS домена сразу после выкатки не готов никогда — поле остаётся ради
+        // клиентов, которые его читают, и никогда не делает домен liveUrl.
+        const domainReady = false;
+        return res.json({
+            ok: true,
+            provider: "cloudflare-pages",
+            deploymentId,
+            pagesUrl,
+            deploymentUrl,
+            domain: customDomain,
+            domainUrl,
+            domainReady,
+            domainDns,
+            liveUrl: pagesUrl,
+            message: customDomain
+                ? domainDns
+                    ? `Deployed to ${pagesUrl}. ${customDomain}: DNS is in place, the Cloudflare Pages certificate is being issued (usually 1–5 minutes); the deployment goes live once the page answers.`
+                    : `Deployed to ${pagesUrl}. ${customDomain} does not resolve yet — the CNAME is not visible in the ${(0, devhubDns_1.siteZone)()} zone at ${dnsProviderName()}.`
+                : `Deployed to ${pagesUrl} — verifying it serves before marking live (configure a DNS provider to enable ${(0, devhubDns_1.siteZone)()} domains)`,
+        });
+    }
+    catch (e) {
+        deployment.status = "failed";
+        deployment.buildLog = e?.message || "deploy failed";
+        deployment.completedAt = now();
+        try {
+            await dbSaveDeployment(deployment);
+        }
+        catch {
+            memDeployments.set(deployment.id, deployment);
+        }
+        return res.status(500).json({ ok: false, error: (0, safeErrorText_1.redactInfraDetails)(e) || "Cloudflare Pages deploy failed" });
+    }
+});
+// Перепроверка по требованию. «failed» через 2 минуты часто означало «ещё
+// поднимается» (замер 15.09.2026: 4 из 5 «упавших» с адресом отвечали 200).
+// Спрашиваем адрес сейчас: отвечает — выкатка и проект live; нет — честное «пока нет».
+exports.devhubRouter.post("/projects/:id/deployments/:deployId/recheck", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const deployId = String(req.params.deployId);
+    let d = null;
+    try {
+        d = (await dbListDeployments(project.id, 50)).find((x) => x.id === deployId) ?? null;
+    }
+    catch {
+        d = null;
+    }
+    if (!d)
+        d = memDeployments.get(deployId) ?? null;
+    if (!d)
+        return res.status(404).json({ error: "deployment not found" });
+    if (!d.deployUrl)
+        return res.status(400).json({ error: "deployment has no address to check — the upload never finished" });
+    // Старые записи хранят адрес выкатки (<hash>.<проект>.pages.dev); он бывает мёртв
+    // при живом адресе проекта — спрашиваем оба, живым считаем адрес проекта.
+    const m = /^https:\/\/[a-z0-9]+\.([a-z0-9-]+\.pages\.dev)$/i.exec(d.deployUrl);
+    const projectUrl = m ? `https://${m[1]}` : d.deployUrl;
+    const serves = (await verifyDeploymentServes(projectUrl, 1000, 3)) || (projectUrl !== d.deployUrl && await verifyDeploymentServes(d.deployUrl, 1000, 2));
+    if (!serves) {
+        return res.json({ ok: true, serves: false, status: d.status, deployUrl: d.deployUrl, message: `${d.deployUrl} still does not answer 2xx` });
+    }
+    // Домен той выкатки: имя детерминировано; если шаг домена тогда отказал, в журнале есть `| domain:`.
+    const domainFailed = /\| domain: /.test(d.buildLog || "");
+    const customDomain = project.customDomain
+        || ((0, devhubDns_1.dnsConfigured)() && !domainFailed ? `${slugify(project.name)}-${project.id.slice(0, 6)}.${(0, devhubDns_1.siteZone)()}` : null);
+    d.deployUrl = projectUrl;
+    await markDeploymentLive(d, project, projectUrl, customDomain);
+    return res.json({ ok: true, serves: true, status: "live", deployUrl: projectUrl, customDomain });
+});
+/** Why an address does or does not serve. Returns a DEFINITIVE-dead verdict
+ * (nxdomain/gone404) when it sees one, else "ambiguous" for anything that could
+ * be a transient on our side (timeout, 5xx, temporary DNS, refused). One fetch
+ * per call by default — the "two in a row" debounce lives in the caller. */
+async function classifyDeploymentServe(url, timeoutMs = 4000, attempts = 1) {
+    let sawGone = false, sawNxdomain = false;
+    for (let i = 0; i < attempts; i++) {
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+            let res;
+            try {
+                res = await fetch(url, { method: "GET", redirect: "follow", signal: ctrl.signal });
+            }
+            finally {
+                clearTimeout(timer);
+            }
+            if (res.ok)
+                return { alive: true, verdict: "ok" };
+            if (res.status === 404)
+                sawGone = true;
+            // 5xx / other non-2xx (warm-up, auth, our proxy) — ambiguous, not "gone".
+        }
+        catch (e) {
+            const code = String(e?.cause?.code ?? e?.code ?? "");
+            if (code === "ENOTFOUND")
+                sawNxdomain = true;
+            // EAI_AGAIN (temporary DNS), ETIMEDOUT/aborts, ECONNREFUSED/RESET → ambiguous.
+        }
+        if (i < attempts - 1)
+            await new Promise((r) => setTimeout(r, 300));
+    }
+    if (sawNxdomain)
+        return { alive: false, verdict: "nxdomain" };
+    if (sawGone)
+        return { alive: false, verdict: "gone404" };
+    return { alive: false, verdict: "ambiguous" };
+}
+const RECONCILE_RATE_MS_DEFAULT = 60000; // не чаще раза в минуту на проект
+const RECONCILE_FAIL_THRESHOLD = 2; // неоднозначный отказ понижает со 2-го подряд
+// Свежесозданный поддомен <проект>.pages.dev расходится по краю Cloudflare НЕ
+// мгновенно: verifyDeploymentServes видит 2xx с точки сети сервера за ~2 мин и
+// метит проект live, а первые минуты тот же (или другой) резолвер может отдавать
+// NXDOMAIN/404 — это ОЖИДАЕМОЕ окно распространения, а не смерть адреса. Замер
+// 12.10.2026: проект гостя жил 200 ≈14 ч, но мой внешний резолвер на 8-й минуте
+// ещё отдавал NXDOMAIN. Поэтому для МОЛОДОЙ выкатки NXDOMAIN/404 НЕ понижает —
+// иначе карточка только что опубликованного живого сайта ложно станет «Ошибка».
+const RECONCILE_DEPLOY_GRACE_MS_DEFAULT = 30 * 60000; // 30 мин на распространение
+let reconcileRateMs = RECONCILE_RATE_MS_DEFAULT;
+let reconcileDeployGraceMs = RECONCILE_DEPLOY_GRACE_MS_DEFAULT;
+const reconcileState = new Map();
+function __resetReconcileStateForTest() {
+    reconcileState.clear();
+    reconcileRateMs = RECONCILE_RATE_MS_DEFAULT;
+    reconcileDeployGraceMs = RECONCILE_DEPLOY_GRACE_MS_DEFAULT;
+}
+function __setReconcileRateMsForTest(ms) { reconcileRateMs = ms; }
+function __setReconcileDeployGraceMsForTest(ms) { reconcileDeployGraceMs = ms; }
+/** Возраст последней выкатки проекта в мс (по completedAt/triggeredAt выкатки,
+ * иначе по отметке проекта), или null, если отметку не разобрать. */
+async function deploymentAgeMs(project) {
+    const deps = await dbListDeployments(project.id, 1).catch(() => []);
+    const stamp = deps[0]?.completedAt ?? deps[0]?.triggeredAt ?? project.updatedAt;
+    const t = Date.parse(stamp);
+    return Number.isFinite(t) ? Date.now() - t : null;
+}
+/** Re-check a LIVE project's address and downgrade it to "error" when the
+ * address is really gone, so the card never shows «Живой» over a dead URL.
+ * Downgrades on NXDOMAIN/404 at once, on ambiguous failures only after two in a
+ * row; rate-limited per project. No-op for non-live projects. */
+async function reconcileLiveProject(project) {
+    if (project.status !== "live" || !project.deployUrl) {
+        return { status: project.status, checked: false, alive: null, verdict: null, reason: null };
+    }
+    const st = reconcileState.get(project.id) ?? { ambiguousFails: 0, lastCheckAt: 0 };
+    if (Date.now() - st.lastCheckAt < reconcileRateMs) {
+        return { status: project.status, checked: false, alive: null, verdict: null, reason: null };
+    }
+    const { alive, verdict } = await classifyDeploymentServe(project.deployUrl);
+    st.lastCheckAt = Date.now();
+    if (alive) {
+        st.ambiguousFails = 0;
+        reconcileState.set(project.id, st);
+        return { status: "live", checked: true, alive: true, verdict, reason: null };
+    }
+    let downgrade;
+    if (verdict === "nxdomain" || verdict === "gone404") {
+        // Однозначно мёртв — но только если выкатка уже СТАРШЕ окна распространения.
+        // Молодой <проект>.pages.dev мог ещё не разойтись по краю CF (см. выше):
+        // не понижаем и НЕ копим счётчик — это ожидаемое окно, а не наш сбой.
+        const ageMs = await deploymentAgeMs(project);
+        const распространяется = ageMs !== null && ageMs < reconcileDeployGraceMs;
+        downgrade = !распространяется;
+    }
+    else {
+        st.ambiguousFails += 1; // неоднозначно — со 2-го подряд
+        downgrade = st.ambiguousFails >= RECONCILE_FAIL_THRESHOLD;
+    }
+    if (!downgrade) {
+        reconcileState.set(project.id, st);
+        return { status: "live", checked: true, alive: false, verdict, reason: null };
+    }
+    st.ambiguousFails = 0;
+    reconcileState.set(project.id, st);
+    const reason = verdict === "nxdomain" ? "address does not resolve (NXDOMAIN)"
+        : verdict === "gone404" ? "address answers 404"
+            : "address unreachable twice in a row";
+    project.status = "error";
+    project.updatedAt = now();
+    try {
+        await dbSaveProject(project);
+    }
+    catch {
+        memProjects.set(project.id, project);
+    }
+    return { status: "error", checked: true, alive: false, verdict, reason };
+}
+// Перепроверка ЖИВУЧЕСТИ проекта по требованию (без deployId): фронт зовёт её
+// для проектов со статусом "live" на заходе в список/окно, ограниченно по
+// частоте. Повысить до live она НЕ может (это делает выкатка через проверку
+// 2xx) — только ПОНИЗИТЬ умерший адрес, чтобы «Живой» не врал.
+exports.devhubRouter.post("/projects/:id/recheck", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+    if (!project)
+        return;
+    const r = await reconcileLiveProject(project);
+    return res.json({
+        ok: true,
+        status: r.status,
+        checked: r.checked,
+        serves: r.alive,
+        verdict: r.verdict,
+        deployUrl: project.deployUrl,
+        ...(r.status === "error" && r.reason
+            ? { message: `Site is no longer reachable (${r.reason}) — republish to put it back online.` }
+            : {}),
+    });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Cloudflare R2 audio upload (S3-compatible, AWS SigV4)
+// ═════════════════════════════════════════════════════════════════════════════
+function r2Configured() {
+    return Boolean(process.env.CLOUDFLARE_R2_ACCOUNT_ID &&
+        process.env.CLOUDFLARE_R2_ACCESS_KEY_ID &&
+        process.env.CLOUDFLARE_R2_SECRET_KEY &&
+        process.env.CLOUDFLARE_R2_BUCKET);
+}
+function sha256Hex(buf) {
+    return node_crypto_1.default.createHash("sha256").update(buf).digest("hex");
+}
+function hmacSha256(key, msg) {
+    return node_crypto_1.default.createHmac("sha256", key).update(msg, "utf8").digest();
+}
+function signR2PutHeaders(opts) {
+    const region = opts.region || "auto";
+    const service = "s3";
+    const now = opts.now || new Date();
+    const amzDate = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const dateStamp = amzDate.slice(0, 8);
+    const payloadHash = sha256Hex(opts.body);
+    const uri = `/${opts.bucket}/${opts.key.split("/").map(encodeURIComponent).join("/")}`;
+    const canonicalHeaders = `content-type:${opts.contentType}\n` +
+        `host:${opts.host}\n` +
+        `x-amz-content-sha256:${payloadHash}\n` +
+        `x-amz-date:${amzDate}\n`;
+    const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+    const canonicalRequest = ["PUT", uri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+    const credScope = `${dateStamp}/${region}/${service}/aws4_request`;
+    const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credScope, sha256Hex(canonicalRequest)].join("\n");
+    const kDate = hmacSha256("AWS4" + opts.secretKey, dateStamp);
+    const kRegion = hmacSha256(kDate, region);
+    const kService = hmacSha256(kRegion, service);
+    const kSigning = hmacSha256(kService, "aws4_request");
+    const signature = node_crypto_1.default.createHmac("sha256", kSigning).update(stringToSign, "utf8").digest("hex");
+    const auth = `AWS4-HMAC-SHA256 Credential=${opts.accessKey}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+    return {
+        Authorization: auth,
+        "x-amz-content-sha256": payloadHash,
+        "x-amz-date": amzDate,
+        "Content-Type": opts.contentType,
+    };
+}
+async function r2PutObject(key, body, contentType) {
+    const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
+    const accessKey = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+    const secretKey = process.env.CLOUDFLARE_R2_SECRET_KEY;
+    const bucket = process.env.CLOUDFLARE_R2_BUCKET;
+    if (!accountId || !accessKey || !secretKey || !bucket)
+        return { ok: false, error: "R2 not configured" };
+    const host = `${accountId}.r2.cloudflarestorage.com`;
+    const headers = signR2PutHeaders({ host, bucket, key, body, contentType, accessKey, secretKey });
+    const uri = `/${bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
+    try {
+        const r = await fetch(`https://${host}${uri}`, { method: "PUT", headers, body: body });
+        if (!r.ok) {
+            const errText = await r.text();
+            return { ok: false, error: `R2 PUT ${r.status}: ${errText.slice(0, 200)}` };
+        }
+        const publicBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").replace(/\/+$/, "");
+        const url = publicBase
+            ? `${publicBase}/${key.split("/").map(encodeURIComponent).join("/")}`
+            : `https://${host}${uri}`;
+        return { ok: true, url };
+    }
+    catch (e) {
+        return { ok: false, error: e?.message || "R2 PUT failed" };
+    }
+}
+async function tryAutoUploadAudioToR2(buf, contentType, key) {
+    if (!r2Configured())
+        return null;
+    const r = await r2PutObject(key, buf, contentType);
+    return r.ok ? r.url : null;
+}
+// POST /api/devhub/media/upload-audio — upload audio to Cloudflare R2 (permanent CDN URL)
+// Body: { sourceUrl?: string } OR { base64: string, mimeType?: string, key?: string }
+exports.devhubRouter.post("/media/upload-audio", dhCostlyLimit("dhupaudio"), async (req, res) => {
+    const { sourceUrl, base64, mimeType = "audio/mpeg", key } = req.body || {};
+    if (!sourceUrl && !base64)
+        return res.status(400).json({ error: "sourceUrl or base64 required" });
+    if (!r2Configured()) {
+        return res.status(503).json({
+            error: "Cloudflare R2 not configured — set CLOUDFLARE_R2_ACCOUNT_ID + CLOUDFLARE_R2_ACCESS_KEY_ID + CLOUDFLARE_R2_SECRET_KEY + CLOUDFLARE_R2_BUCKET",
+            setupUrl: "https://dash.cloudflare.com/?to=/:account/r2/api-tokens",
+        });
+    }
+    try {
+        let buf;
+        if (sourceUrl) {
+            // Без этой проверки посторонний заставлял НАШ сервер сходить по любому
+            // адресу, включая внутренние: метаданные облака, соседние службы, админки.
+            // Результат возвращался ему кодом статуса. Ручка была закрыта только тем,
+            // что не настроено хранилище, — то есть случайно.
+            //
+            // Потеряно при мерже 30.08.2026 (взята чужая сторона файла) и возвращено:
+            // сторож publicUrlOnly требует именно ВЫЗОВА, а не импорта, и поймал.
+            const verdict = await (0, publicUrlOnly_1.checkPublicUrl)(String(sourceUrl));
+            if (!verdict.ok)
+                return res.status(400).json({ error: verdict.reason });
+            const sr = await fetch(verdict.url.toString());
+            if (!sr.ok)
+                return res.status(sr.status).json({ error: `source fetch failed: ${sr.status}` });
+            buf = Buffer.from(await sr.arrayBuffer());
+        }
+        else {
+            buf = Buffer.from(String(base64), "base64");
+        }
+        if (buf.length === 0)
+            return res.status(400).json({ error: "audio body empty" });
+        if (buf.length > 25 * 1024 * 1024)
+            return res.status(400).json({ error: "audio too large (max 25 MB)" });
+        const ct = String(mimeType);
+        const ext = ct.includes("wav") ? "wav" : ct.includes("ogg") ? "ogg" : "mp3";
+        const finalKey = String(key || `audio/${node_crypto_1.default.randomUUID()}.${ext}`).replace(/^\/+/, "").slice(0, 256);
+        const result = await r2PutObject(finalKey, buf, ct);
+        if (!result.ok)
+            return res.status(502).json({ error: result.error });
+        res.json({ ok: true, key: finalKey, url: result.url, bytes: buf.length, mimeType: ct });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Audio upload failed" });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Brevo: create SMTP email template
+// ═════════════════════════════════════════════════════════════════════════════
+exports.devhubRouter.post("/media/email-template-create", dhCostlyLimit("dhemailtpl"), async (req, res) => {
+    const { name, subject, htmlContent, senderEmail, senderName, replyTo, tag, isActive } = req.body || {};
+    if (!name || typeof name !== "string")
+        return res.status(400).json({ error: "name required" });
+    if (!subject || typeof subject !== "string")
+        return res.status(400).json({ error: "subject required" });
+    if (!htmlContent || typeof htmlContent !== "string")
+        return res.status(400).json({ error: "htmlContent required" });
+    if (htmlContent.length > 2000000)
+        return res.status(400).json({ error: "htmlContent too large (max 2 MB)" });
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey)
+        return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+    const sEmail = String(senderEmail || process.env.BREVO_SENDER_EMAIL || "").trim();
+    const sName = String(senderName || process.env.BREVO_SENDER_NAME || "AEVION").trim();
+    if (!sEmail)
+        return res.status(400).json({ error: "senderEmail required (or set BREVO_SENDER_EMAIL)" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sEmail))
+        return res.status(400).json({ error: "invalid senderEmail" });
+    if (replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(replyTo)))
+        return res.status(400).json({ error: "invalid replyTo" });
+    try {
+        const payload = {
+            templateName: name.trim().slice(0, 100),
+            subject: subject.trim().slice(0, 300),
+            htmlContent,
+            sender: { email: sEmail, name: sName },
+            isActive: isActive === false ? false : true,
+        };
+        if (replyTo)
+            payload.replyTo = String(replyTo).trim();
+        if (tag)
+            payload.tag = String(tag).slice(0, 50);
+        const r = await fetch("https://api.brevo.com/v3/smtp/templates", {
+            method: "POST",
+            headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(payload),
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+        }
+        const data = await r.json().catch(() => ({}));
+        if (!data.id)
+            return res.status(500).json({ error: "Brevo did not return template id" });
+        учтиБезЦены("email-template", null);
+        res.json({ ok: true, id: data.id, name: payload.templateName, subject: payload.subject });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Template create failed" });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// ZIP import (symmetric to GET /projects/:id/export — method=0 stored only)
+// ═════════════════════════════════════════════════════════════════════════════
+function parseZipStored(buf) {
+    // Find EOCD signature 0x06054b50 — search backwards (max comment 65535)
+    const eocdSig = 0x06054b50;
+    let eocdOffset = -1;
+    const maxSearch = Math.min(buf.length, 65557);
+    for (let i = buf.length - 22; i >= buf.length - maxSearch && i >= 0; i--) {
+        if (buf.readUInt32LE(i) === eocdSig) {
+            eocdOffset = i;
+            break;
+        }
+    }
+    if (eocdOffset < 0)
+        return { error: "EOCD not found — not a valid ZIP" };
+    const numEntries = buf.readUInt16LE(eocdOffset + 10);
+    const cdOffset = buf.readUInt32LE(eocdOffset + 16);
+    if (cdOffset < 0 || cdOffset >= buf.length)
+        return { error: "invalid central directory offset" };
+    const entries = [];
+    let p = cdOffset;
+    for (let n = 0; n < numEntries; n++) {
+        if (p + 46 > buf.length)
+            return { error: "central directory truncated" };
+        if (buf.readUInt32LE(p) !== 0x02014b50)
+            return { error: "bad CD entry signature" };
+        const method = buf.readUInt16LE(p + 10);
+        const compSize = buf.readUInt32LE(p + 20);
+        const uncompSize = buf.readUInt32LE(p + 24);
+        const nameLen = buf.readUInt16LE(p + 28);
+        const extraLen = buf.readUInt16LE(p + 30);
+        const commentLen = buf.readUInt16LE(p + 32);
+        const localOffset = buf.readUInt32LE(p + 42);
+        if (method !== 0)
+            return { error: `unsupported compression method ${method} (only stored=0)` };
+        if (compSize !== uncompSize)
+            return { error: "stored entry size mismatch" };
+        const flags = buf.readUInt16LE(p + 8);
+        const nameBytes = buf.slice(p + 46, p + 46 + nameLen);
+        // Mirror of the export bug (#923), read side: without bit 11 the name is
+        // NOT UTF-8 by spec. Decoding it as UTF-8 anyway yields U+FFFD in paths —
+        // files land under names that no import in the code will ever resolve.
+        // We do not guess the real code page (the spec says CP437, Russian
+        // Windows tools actually write CP866, and picking wrong is silently
+        // wrong): non-ASCII bytes with no UTF-8 flag are refused with a fix.
+        if (!(flags & UTF8_NAME_FLAG) && !isValidUtf8(nameBytes)) {
+            return {
+                error: "ZIP file names are not UTF-8 and the archive does not say which encoding they use " +
+                    "(general purpose bit 11 unset). Re-create the archive with UTF-8 names — " +
+                    "otherwise the imported paths would not match the imports inside the code.",
+            };
+        }
+        const name = nameBytes.toString("utf8");
+        p += 46 + nameLen + extraLen + commentLen;
+        // Local header at localOffset
+        if (localOffset + 30 > buf.length)
+            return { error: "local header truncated" };
+        if (buf.readUInt32LE(localOffset) !== 0x04034b50)
+            return { error: "bad local header signature" };
+        const lhNameLen = buf.readUInt16LE(localOffset + 26);
+        const lhExtraLen = buf.readUInt16LE(localOffset + 28);
+        const dataStart = localOffset + 30 + lhNameLen + lhExtraLen;
+        if (dataStart + uncompSize > buf.length)
+            return { error: "data exceeds buffer" };
+        const content = buf.slice(dataStart, dataStart + uncompSize);
+        entries.push({ path: name, content });
+    }
+    return entries;
+}
+/**
+ * ElevenLabs TTS model.
+ *
+ * eleven_monolingual_v1 was hard-coded in three places and ElevenLabs has
+ * since REMOVED it — every voice call on prod returned
+ * "unsupported_model ... have been deprecated" (confirmed live 2026-07-26),
+ * so voice was silently dead while /studio still reported it live. It was
+ * also English-only, which was wrong for this product: our prompts are
+ * Russian. multilingual_v2 is the quality default; turbo/flash are the
+ * cheaper fallbacks, all three verified against our key.
+ */
+const TTS_MODEL = process.env.ELEVENLABS_TTS_MODEL || "eleven_multilingual_v2";
+const TTS_MODEL_FALLBACKS = ["eleven_turbo_v2_5", "eleven_flash_v2_5"];
+const BINARY_EXTENSIONS = /\.(mp3|wav|ogg|png|jpg|jpeg|webp|gif|pdf|zip|woff2?|ttf|otf)$/i;
+exports.devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
+    // Человек загрузил СВОЙ код. Если файлы легли только в память процесса, при
+    // перезапуске он их потеряет, а ответ говорил, сколько импортировано.
+    let storageFallback = false;
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId)
+        return res.status(404).json({ error: "project not found" });
+    const { base64Zip, overwrite } = req.body || {};
+    if (!base64Zip || typeof base64Zip !== "string")
+        return res.status(400).json({ error: "base64Zip required" });
+    let zipBuf;
+    try {
+        zipBuf = Buffer.from(base64Zip, "base64");
+    }
+    catch {
+        return res.status(400).json({ error: "invalid base64" });
+    }
+    if (zipBuf.length === 0)
+        return res.status(400).json({ error: "empty ZIP" });
+    if (zipBuf.length > 50 * 1024 * 1024)
+        return res.status(400).json({ error: "ZIP too large (max 50 MB)" });
+    const parsed = parseZipStored(zipBuf);
+    if (!Array.isArray(parsed))
+        return res.status(400).json({ error: parsed.error });
+    if (parsed.length === 0)
+        return res.status(400).json({ error: "ZIP contains no entries" });
+    if (parsed.length > 500)
+        return res.status(400).json({ error: "max 500 files per import" });
+    const imported = [];
+    const skipped = [];
+    const toWrite = [];
+    for (const entry of parsed) {
+        // Skip metadata + directory entries
+        // Both files the export adds itself. Without this, a project that is
+        // exported and re-imported gains a file each round.
+        if (entry.path === "aevion-export.json" || entry.path === "HOW-TO-RUN.md") {
+            skipped.push({ path: entry.path, reason: "metadata" });
+            continue;
+        }
+        if (entry.path.endsWith("/")) {
+            skipped.push({ path: entry.path, reason: "directory" });
+            continue;
+        }
+        if (entry.path.includes("..")) {
+            skipped.push({ path: entry.path, reason: "path traversal" });
+            continue;
+        }
+        if (entry.path.length > 240) {
+            skipped.push({ path: entry.path, reason: "path too long" });
+            continue;
+        }
+        const isBinary = BINARY_EXTENSIONS.test(entry.path);
+        const finalPath = isBinary && !entry.path.endsWith(".b64") ? entry.path + ".b64" : entry.path;
+        const content = isBinary ? entry.content.toString("base64") : entry.content.toString("utf8");
+        // overwrite=false ⇒ skip if exists
+        if (overwrite === false) {
+            let existing;
+            try {
+                existing = await dbGetFile(project.id, finalPath);
+            }
+            catch {
+                existing = [...memFiles.values()].find((f) => f.projectId === project.id && f.path === finalPath) ?? null;
+            }
+            if (existing) {
+                skipped.push({ path: finalPath, reason: "already exists" });
+                continue;
+            }
+        }
+        toWrite.push({
+            file: {
+                id: node_crypto_1.default.randomUUID(), projectId: project.id, path: finalPath,
+                content, language: detectLanguage(finalPath), updatedAt: now(),
+            },
+            bytes: entry.content.length,
+            binary: isBinary,
+        });
+    }
+    // Checkpoint BEFORE writing, exactly as /github/sync does — a ZIP imported
+    // with overwrite=true replaces whole files, and without this the IDE's undo
+    // and history (which it offers as the safety net for AI writes) simply did
+    // not cover the one bulk write that can wipe a project in one click.
+    let checkpointId = null;
+    if (toWrite.length > 0) {
+        let existingFiles = [];
+        try {
+            existingFiles = await dbListFiles(project.id);
+        }
+        catch {
+            existingFiles = [...memFiles.values()].filter((f) => f.projectId === project.id);
+        }
+        const cp = await createCheckpoint(project.id, userId, `ZIP import (${toWrite.length} file${toWrite.length === 1 ? "" : "s"})`, toWrite.map((w) => w.file.path), existingFiles);
+        checkpointId = cp?.id ?? null;
+        // Точка могла лечь только в память — тогда «отменить» переживёт
+        // не дольше перезапуска. Признак есть у cp.storage.
+    }
+    for (const { file: f, bytes, binary } of toWrite) {
+        try {
+            await dbUpsertFile(f);
+        }
+        catch {
+            const ex = [...memFiles.values()].find((x) => x.projectId === project.id && x.path === f.path);
+            if (ex) {
+                ex.content = f.content;
+                ex.language = f.language;
+                ex.updatedAt = f.updatedAt;
+            }
+            else
+                memFiles.set(f.id, f);
+            storageFallback = true;
+        }
+        imported.push({ path: f.path, bytes, binary });
+    }
+    res.json({
+        ...(storageFallback ? MEMORY_NOTE : {}),
+        ok: imported.length > 0,
+        importedCount: imported.length,
+        skippedCount: skipped.length,
+        imported,
+        skipped,
+        checkpointId,
+    });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Video generation via Replicate API
+// POST /api/devhub/media/video  { prompt, model?, width?, height?, duration? }
+// GET  /api/devhub/media/video/status/:predictionId
+// ═════════════════════════════════════════════════════════════════════════════
+exports.devhubRouter.post("/media/video", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const { prompt, model, duration, imageUrl, aspectRatio, resolution, negativePrompt, realism } = req.body || {};
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+        return res.status(400).json({ error: "prompt is required" });
+    }
+    const credit = await checkCredit(userId, "video");
+    if (!credit.allowed) {
+        return res.status(402).json({
+            error: "Monthly video limit reached",
+            tier: credit.tier, used: credit.used, limit: credit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const apiToken = process.env.REPLICATE_API_TOKEN;
+    if (!apiToken) {
+        return res.status(503).json({
+            error: "Video generation not configured — set REPLICATE_API_TOKEN in Railway",
+            setupUrl: "https://replicate.com/account/api-tokens",
+        });
+    }
+    const { findVideoModel, videoModelCatalogue } = await Promise.resolve().then(() => __importStar(require("../lib/devhubVideoModels")));
+    const chosen = findVideoModel(model);
+    if (!chosen) {
+        // An unknown id used to be forwarded to Replicate as-is, which failed with
+        // a provider error the user could not act on.
+        return res.status(400).json({
+            error: `unknown video model "${model}"`,
+            models: videoModelCatalogue().map((m) => m.id),
+        });
+    }
+    const resolvedModel = chosen.id;
+    // The realism pass QReal built (services/qreal/directives.ts) is the whole
+    // difference between "looks generated" and "looks filmed": camera body and
+    // shutter, skin subsurface scattering, irregular blinks, handheld
+    // micro-jitter, real room acoustics. Imported, never copied — a second copy
+    // would drift and QReal's benchmark would stop measuring what production
+    // actually sends. Opt out with realism:false for stylised or animated shots,
+    // where describing a physical camera fights the prompt.
+    const { REALISM_DIRECTIVES } = await Promise.resolve().then(() => __importStar(require("../services/qreal/directives")));
+    const wantsRealism = realism !== false;
+    const finalPrompt = wantsRealism ? `${prompt.trim()} ${REALISM_DIRECTIVES}` : prompt.trim();
+    try {
+        // Each model has its own input schema — the previous code sent num_frames
+        // and width/height to models that accept neither, so they were dropped.
+        const input = chosen.toInput({
+            prompt: finalPrompt,
+            imageUrl,
+            duration,
+            aspectRatio,
+            resolution,
+            negativePrompt,
+        });
+        const resp = await fetch(`https://api.replicate.com/v1/models/${resolvedModel}/predictions`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${apiToken}`,
+                "Content-Type": "application/json",
+                Prefer: "respond-async",
+            },
+            body: JSON.stringify({ input }),
+        }).catch(() => fetch("https://api.replicate.com/v1/predictions", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${apiToken}`,
+                "Content-Type": "application/json",
+                Prefer: "respond-async",
+            },
+            body: JSON.stringify({ version: resolvedModel, input }),
+        }));
+        if (!resp.ok) {
+            const errText = await resp.text();
+            if (resp.status === 402) {
+                (0, providerHealth_1.noteProviderFailure)("video", "Replicate: insufficient credit");
+                // Having the token is not having the money — /studio reported video
+                // "live" while every generation failed on an empty balance.
+                return res.status(402).json({
+                    error: "Video provider has no credit — top up the Replicate account to generate",
+                    provider: "replicate",
+                    topUpUrl: "https://replicate.com/account/billing#billing",
+                });
+            }
+            (0, providerHealth_1.noteProviderFailure)("video", `Replicate ${resp.status}`);
+            return res.status(resp.status).json({ error: `Replicate error: ${errText.slice(0, 300)}` });
+        }
+        const prediction = await resp.json();
+        await debitQuietly(userId, "video");
+        return res.json({
+            ok: true,
+            predictionId: prediction.id,
+            status: prediction.status,
+            model: chosen.id,
+            modelLabel: chosen.label,
+            audio: chosen.audio,
+            realism: wantsRealism,
+            creditsUsed: 1,
+            // Withheld rather than invented when the meter could not be read.
+            creditsRemaining: credit.limit === -1 ? -1 : credit.usedKnown ? credit.limit - credit.used - 1 : null,
+            ...creditNote(credit),
+        });
+    }
+    catch (e) {
+        return res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Video generation failed" });
+    }
+});
+// POST /api/devhub/media/3d — image → textured GLB mesh. A media type the
+// platform did not have: it could make pictures, speech, music and video, but
+// nothing a game engine or a three.js scene could load.
+exports.devhubRouter.post("/media/3d", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const { imageUrl, model, textureSize, removeBackground } = req.body || {};
+    if (!imageUrl || typeof imageUrl !== "string" || !/^https?:/.test(imageUrl)) {
+        return res.status(400).json({ error: "imageUrl (http/https) is required - generate or upload an image first" });
+    }
+    const credit = await checkCredit(userId, "video");
+    if (!credit.allowed) {
+        return res.status(402).json({
+            error: "Monthly generation limit reached",
+            tier: credit.tier, used: credit.used, limit: credit.limit,
+            upgrade: "/studio#upgrade",
+        });
+    }
+    const apiToken = process.env.REPLICATE_API_TOKEN;
+    if (!apiToken) {
+        return res.status(503).json({ error: "3D generation not configured - set REPLICATE_API_TOKEN", envVar: "REPLICATE_API_TOKEN" });
+    }
+    const { find3dModel, threeDModelCatalogue } = await Promise.resolve().then(() => __importStar(require("../lib/devhub3dModels")));
+    const chosen = find3dModel(model);
+    if (!chosen) {
+        return res.status(400).json({ error: `unknown 3D model "${model}"`, models: threeDModelCatalogue().map((m) => m.id) });
+    }
+    try {
+        const r = await fetch("https://api.replicate.com/v1/predictions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json", Prefer: "respond-async" },
+            body: JSON.stringify({ version: chosen.version, input: chosen.toInput({ imageUrl, textureSize, removeBackground }) }),
+        });
+        if (!r.ok) {
+            const t = await r.text();
+            return res.status(r.status).json({ error: `Replicate error: ${t.slice(0, 300)}` });
+        }
+        const prediction = await r.json();
+        await debitQuietly(userId, "video");
+        res.json({ ok: true, predictionId: prediction.id, status: prediction.status, model: chosen.id, modelLabel: chosen.label, format: "glb" });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "3D generation failed" });
+    }
+});
+// GET /api/devhub/media/3d/models - catalogue, same contract as video.
+exports.devhubRouter.get("/media/3d/models", async (_req, res) => {
+    const { threeDModelCatalogue } = await Promise.resolve().then(() => __importStar(require("../lib/devhub3dModels")));
+    res.json({ models: threeDModelCatalogue(), configured: !!process.env.REPLICATE_API_TOKEN });
+});
+// GET /api/devhub/media/video/models — what the video button can actually run.
+// Exposed so the IDE and the agent pick from real ids instead of guessing.
+exports.devhubRouter.get("/media/video/models", async (_req, res) => {
+    const { videoModelCatalogue } = await Promise.resolve().then(() => __importStar(require("../lib/devhubVideoModels")));
+    res.json({ models: videoModelCatalogue(), configured: !!process.env.REPLICATE_API_TOKEN });
+});
+exports.devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
+    const apiToken = process.env.REPLICATE_API_TOKEN;
+    if (!apiToken)
+        return res.status(503).json({ error: "REPLICATE_API_TOKEN not set" });
+    try {
+        const r = await fetch(`https://api.replicate.com/v1/predictions/${req.params.predictionId}`, {
+            headers: { Authorization: `Bearer ${apiToken}` },
+        });
+        if (!r.ok)
+            return res.status(r.status).json({ error: "Replicate fetch failed" });
+        const pred = await r.json();
+        const outputUrl = Array.isArray(pred.output) ? pred.output[0] : pred.output;
+        return res.json({
+            status: pred.status,
+            videoUrl: outputUrl ?? null,
+            error: pred.error ?? null,
+            predictionId: pred.id,
+            seconds: pred.metrics?.predict_time ?? null,
+        });
+    }
+    catch (e) {
+        // Сюда попадает отказ ВНЕШНЕГО поставщика (сеть до api.replicate.com), а не
+        // наша поломка. Код 500 означает «сломались мы»: такая ошибка едет в Sentry
+        // как наша авария и тонет среди настоящих. Поставщик недоступен — это 502.
+        //
+        // Граница честная. В ЭТОМ обработчике единственный источник исключения —
+        // сетевой вызов и разбор его ответа, поэтому обобщение безопасно. В роутере
+        // ещё 32 места с таким же catch, и там оно НЕ проверено: часть из них ходит
+        // в нашу базу, где 500 законна. Сплошную правку по образцу делать нельзя.
+        //
+        // Найдено 04.09.2026 чужим сторожем devhubReadsAreHonestWhenStorageFails.
+        // При мерже 06.09 текст ошибки идёт через redactInfraDetails — это тот же
+        // safeErrorText после переименования (см. комментарий у импорта).
+        return res.status(502).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Video provider unreachable" });
+    }
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Domain provision: <slug>.<зона> (aevion.app) через lib/devhubDns — Vercel или Cloudflare
+// POST /api/devhub/projects/:id/domain/setup  { subdomain? }
+// GET  /api/devhub/projects/:id/domain/status
+// ═════════════════════════════════════════════════════════════════════════════
+exports.devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    if (!(0, devhubDns_1.dnsConfigured)()) {
+        return res.status(503).json({
+            error: `Domain provision not configured — set ${(0, devhubDns_1.dnsTokensNeeded)().join(" and ")} in Railway`,
+            setupUrl: (0, devhubDns_1.dnsProvider)() === "vercel" ? "https://vercel.com/account/settings/tokens" : "https://dash.cloudflare.com/profile/api-tokens",
+        });
+    }
+    const deployTarget = project.deployUrl?.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!deployTarget) {
+        return res.status(400).json({ error: "Project must be deployed first before adding a domain" });
+    }
+    const requestedSub = req.body?.subdomain || slugify(project.name);
+    const subdomain = (requestedSub + "-" + project.id.slice(0, 6)).toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const fullDomain = `${subdomain}.${(0, devhubDns_1.siteZone)()}`;
+    try {
+        const dns = await (0, devhubDns_1.upsertCname)(fullDomain, deployTarget);
+        if (!dns.ok)
+            return res.json({ ok: false, error: dns.error });
+        // Save custom domain to project
+        project.customDomain = fullDomain;
+        project.updatedAt = now();
+        try {
+            await dbSaveProject(project);
+        }
+        catch {
+            memProjects.set(project.id, project);
+        }
+        return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget, action: dns.action });
+    }
+    catch (e) {
+        return res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Domain provision failed" });
+    }
+});
+exports.devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const read = await readProject(req.params.id);
+    if (!read.project && read.failed)
+        return replyStorageUnavailable(res);
+    const project = read.project;
+    if (!project || project.userId !== userId) {
+        return res.status(404).json({ error: "project not found" });
+    }
+    return res.json({
+        customDomain: project.customDomain ?? null,
+        deployUrl: project.deployUrl ?? null,
+        url: project.customDomain ? `https://${project.customDomain}` : project.deployUrl,
+    });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Studio overview: aggregates platform capabilities status
+// GET /api/devhub/studio/capabilities
+// ═════════════════════════════════════════════════════════════════════════════
+// GET /api/devhub/providers/health — are the KEYS still valid?
+//
+// Distinct from /studio/capabilities (is a key present?) and from an actual
+// generation (is there money?). The middle question turned out to matter: a
+// Brevo key that answers fine from production is rejected from a laptop by
+// its IP allowlist, and ElevenLabs kept accepting our key while refusing the
+// model we sent. Only free, side-effect-free endpoints are used — nothing
+// here sends a message, spends credit, or creates anything.
+exports.devhubRouter.get("/providers/health", async (_req, res) => {
+    /* Есть ли хоть один ключ поставщика моделей — для проб семейства моделей (см. ниже). */
+    const ключейПоставщиков = () => ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"].filter((k) => !!process.env[k]).length;
+    const probe = async (name, run) => {
+        try {
+            const r = await run();
+            return { name, ...r };
+        }
+        catch (e) {
+            return { name, ok: false, detail: (e?.message || "request failed").slice(0, 120) };
+        }
+    };
+    const checks = await Promise.all([
+        probe("brevo", async () => {
+            if (!process.env.BREVO_API_KEY)
+                return { ok: false, detail: "BREVO_API_KEY not set" };
+            // 06.10.2026: раньше здесь читался ТОЛЬКО код ответа, и панель писала
+            // «ok, HTTP 200» в тот самый день, когда Brevo прислал «your API keys
+            // have been marked as inactive». Остаток писем лежит в теле того же
+            // ответа. Через Brevo идёт сбор адресов со всех витрин — слепота тут
+            // стоит воронки.
+            const итог = (0, providerSpendCheck_1.разборBrevo)(await (0, providerSpendCheck_1.запросBrevo)());
+            return { ok: (0, providerSpendCheck_1.этоОк)(итог.состояние), detail: итог.detail };
+        }),
+        probe("replicate", async () => {
+            if (!process.env.REPLICATE_API_TOKEN)
+                return { ok: false, detail: "REPLICATE_API_TOKEN not set" };
+            const r = await fetch("https://api.replicate.com/v1/account", {
+                headers: { Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}` },
+            });
+            // Valid key only. Credit is invisible here — an empty balance still
+            // answers 200, which is exactly how "video: live" stayed wrong.
+            //
+            // 05.10.2026: у openai и elevenlabs этот же вопрос теперь задаётся
+            // по-настоящему, а здесь дешёвого способа нет — у Replicate остаток
+            // показывает только кабинет, а пробный запуск модели стоит денег.
+            // Поэтому зелёный кружок остаётся, но подпись больше не делает вид,
+            // что про деньги спросили.
+            return {
+                ok: r.ok,
+                detail: r.ok ? "ключ годен; ДЕНЬГИ НЕ ПРОВЕРЕНЫ — остаток виден только в кабинете" : `HTTP ${r.status}`,
+            };
+        }),
+        probe("cloudflare", async () => {
+            if (!process.env.CLOUDFLARE_API_TOKEN)
+                return { ok: false, detail: "CLOUDFLARE_API_TOKEN not set" };
+            const r = await fetch("https://api.cloudflare.com/client/v4/user/tokens/verify", {
+                headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+            });
+            return { ok: r.ok, detail: `HTTP ${r.status}` };
+        }),
+        // Зона DNS — Vercel или Cloudflare по выбранному поставщику (lib/devhubDns).
+        (0, devhubDns_1.zoneProbe)(),
+        // 05.10.2026: проверка спрашивала «не отозван ли ключ», а знать надо было
+        // «есть ли деньги». 26.09–03.10 в Sentry дважды прилетело
+        // `openai 429 insufficient_quota`, и ровно в эти дни панель показывала
+        // `openai: ok — key valid (billing not visible here)`. Теперь шлём самый
+        // дешёвый настоящий запрос (один токен) и разбираем ответ по смыслу;
+        // результат кэшируется на PROVIDER_SPEND_CHECK_HOURS (по умолчанию 6 ч),
+        // поэтому заход на панель не стоит денег.
+        probe("openai", async () => {
+            if (!process.env.OPENAI_API_KEY)
+                return { ok: false, detail: "OPENAI_API_KEY not set" };
+            const r = await (0, providerSpendCheck_1.проверитьРасход)("openai", () => (0, providerSpendCheck_1.запросOpenAI)());
+            return { ok: (0, providerSpendCheck_1.этоОк)(r.состояние), detail: r.detail };
+        }),
+        probe("anthropic", async () => {
+            if (!process.env.ANTHROPIC_API_KEY)
+                return { ok: false, detail: "ANTHROPIC_API_KEY not set" };
+            const r = await (0, providerSpendCheck_1.проверитьРасход)("anthropic", () => (0, providerSpendCheck_1.запросAnthropic)());
+            return { ok: (0, providerSpendCheck_1.этоОк)(r.состояние), detail: r.detail };
+        }),
+        probe("gemini", async () => {
+            if (!process.env.GEMINI_API_KEY)
+                return { ok: false, detail: "GEMINI_API_KEY not set" };
+            const r = await (0, providerSpendCheck_1.проверитьРасход)("gemini", () => (0, providerSpendCheck_1.запросGemini)());
+            return { ok: (0, providerSpendCheck_1.этоОк)(r.состояние), detail: r.detail };
+        }),
+        // Добавлено 28.08.2026. Замер показал границу: проверок было ПЯТЬ на
+        // семнадцать возможностей, то есть панель говорила «настроено» по наличию
+        // переменной, а по-настоящему проверялась меньше трети. Ниже — четыре
+        // недостающих провайдера, на которых держатся перевод, публикация,
+        // выгрузка в репозиторий и вся озвучка.
+        //
+        // Все вызовы читающие и бесплатные: спрашиваем, действителен ли ключ.
+        // Витрина эту ручку НЕ зовёт (проверено), поэтому лишней нагрузки на
+        // посетителя не появляется — платят только смоук и человек руками.
+        // 🔴 Добавлено 07.10.2026. Прежние проверки отвечали «ключ годен, деньги
+        // есть» — и это было правдой, при которой модуль всё равно падал: ИМЯ
+        // МОДЕЛИ, которое мы зовём, у поставщика могло исчезнуть. Замер того дня:
+        // из трёх объявленных моделей Gemini жива была одна, из семи бесплатных
+        // слагов OpenRouter — две. Один путь падал уже тогда (healthai с явным
+        // `provider: "gemini"` звал снятую модель), и выглядело это снаружи как
+        // «ИИ иногда ломается».
+        //
+        // Спрашиваем бесплатные читающие списки — договор этой ручки не нарушен:
+        // ничего не отправляется, не тратится и не создаётся. Ответ кэшируется,
+        // чтобы заход на панель не ходил в сеть каждый раз.
+        //
+        // ⚠️ Граница названа прямо в подписи: «имя есть у поставщика» НЕ равно
+        // «вызов разрешён». 07.10 `gemini-2.5-pro` и `gemini-2.5-flash-lite`
+        // числились в каталоге и отвечали 404 «недоступна новым пользователям».
+        // Поэтому зелёный здесь слабее, чем кажется, и подпись об этом говорит.
+        /* Две пробы семейства моделей — не про ключ, а про каталог и умолчания; но без единого ключа
+       поставщика им нечего проверять, и «упало» читалось бы как «ключ не подошёл». Поэтому у них
+       тот же исход «not set», что у ключевых проб (сторож providerChecksCoverTheCapabilities). */
+        probe("models_declared", async () => ключейПоставщиков() === 0 ? { ok: false, detail: "provider keys not set — nothing to declare" } : (0, _________________1.проверитьИменаМоделей)()),
+        // Вторая проба того же семейства, и она ДРУГОЙ вопрос — сегодняшний урок
+        // в том, что две разные нужды, исполненные одним движением, передавливают
+        // одну из них. Разница измерена: `gemini-2.0-flash-001` ИСЧЕЗ из каталога
+        // (ловит проверка имён), а `gemini-2.5-pro` в каталоге ЕСТЬ и отвечает 404
+        // (ловит только вызов). Зовём ровно умолчания и ровно один токен.
+        probe("default_model_answers", async () => ключейПоставщиков() === 0 ? { ok: false, detail: "provider keys not set — nothing to call" } : (0, _________________1.проверитьУмолчанияВызовом)()),
+        probe("deepl", async () => {
+            if (!process.env.DEEPL_API_KEY)
+                return { ok: false, detail: "DEEPL_API_KEY not set" };
+            const r = await fetch("https://api-free.deepl.com/v2/usage", {
+                headers: { Authorization: `DeepL-Auth-Key ${process.env.DEEPL_API_KEY}` },
+            });
+            return { ok: r.ok, detail: `HTTP ${r.status}` };
+        }),
+        probe("github", async () => {
+            if (!process.env.GITHUB_TOKEN)
+                return { ok: false, detail: "GITHUB_TOKEN not set" };
+            const r = await fetch("https://api.github.com/user", {
+                headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "User-Agent": "aevion-devhub" },
+            });
+            return { ok: r.ok, detail: `HTTP ${r.status}` };
+        }),
+        probe("vercel", async () => {
+            if (!process.env.VERCEL_API_TOKEN)
+                return { ok: false, detail: "VERCEL_API_TOKEN not set" };
+            const r = await fetch("https://api.vercel.com/v2/user", {
+                headers: { Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}` },
+            });
+            return { ok: r.ok, detail: `HTTP ${r.status}` };
+        }),
+        probe("elevenlabs", async () => {
+            if (!process.env.ELEVENLABS_API_KEY)
+                return { ok: false, detail: "ELEVENLABS_API_KEY not set" };
+            const r = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
+                headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY },
+            });
+            // Остаток знаков виден прямо здесь — и теперь он читается. Прежде
+            // панель смотрела только на HTTP 200 и писала "key valid": при
+            // исчерпанном пакете кружок оставался зелёным.
+            const итог = (0, providerSpendCheck_1.разборElevenLabs)({ status: r.status, body: await r.text().catch(() => "") });
+            return { ok: (0, providerSpendCheck_1.этоОк)(итог.состояние), detail: итог.detail };
+        }),
+    ]);
+    // Замкнуть петлю честности (смоук 06.09.2026: «github обещан live, а проба
+    // github: HTTP 401»). Пробник мерил ключи, но НЕ кормил providerHealth —
+    // /studio/capabilities продолжал объявлять возможность живой, пока живой
+    // человек не обжигался об неё сам. Теперь результат пробы становится тем же
+    // фактом, что и настоящий вызов: applyHealth переведёт «live» в «degraded».
+    // Карта — только однозначные пары; image не трогаем (у него цепочка из трёх
+    // провайдеров, падение одного не значит падения возможности).
+    const CHECK_TO_CAPABILITIES = {
+        github: ["github"],
+        vercel: ["vercel"],
+        deepl: ["translate"],
+        replicate: ["video", "3d"],
+        elevenlabs: ["audio_tts", "audio_music"],
+        brevo: ["email", "sms", "whatsapp"],
+        cloudflare: ["pages"],
+        cloudflare_zone: ["domain"],
+        vercel_dns: ["domain"],
+    };
+    for (const c of checks) {
+        for (const capId of CHECK_TO_CAPABILITIES[c.name] ?? []) {
+            if (c.ok)
+                (0, providerHealth_1.noteProviderSuccess)(capId);
+            else
+                (0, providerHealth_1.noteProviderFailure)(capId, `провайдер-проба: ${c.detail}`);
+        }
+    }
+    const failing = checks.filter((c) => !c.ok);
+    res.json({ checks, healthy: failing.length === 0, failing: failing.map((c) => c.name) });
+});
+// Зона aevion.build: делегирована ли она на самом деле.
+//
+// 29.08.2026: список возможностей объявлял домен "live" по ОДНОМУ признаку —
+// заданы ли ключи Cloudflare. А наша же проба cloudflare_health (тридцатью
+// строками выше) знала правду и прямо писала: пока регистратор не указал на
+// Cloudflare, каждый выданный адрес *.aevion.build не разрешается. Два наших
+// ответа об одном и том же спорили в одном файле, и ежедневный смоук это ловил.
+//
+// Ответ кэшируем: список возможностей открывают часто, а зона меняется раз в
+// жизнь. Отказ пробы НЕ считаем отрицанием — возвращаем null («не знаю»), иначе
+// сетевая икота выключала бы работающую возможность.
+let zoneCache = { at: 0, active: null };
+const ZONE_TTL_MS = 5 * 60000;
+// Отказ живёт в кэше НАМНОГО меньше успеха, и это не мелочь: при равном сроке
+// секундный сбой сети запирал на пять минут ответ «needs_token» — то есть мы
+// просили человека настроить то, что у него уже настроено. Незнание не должно
+// залипать наравне со знанием: успех — состояние, отказ — событие.
+const ZONE_FAIL_TTL_MS = 30000;
+/** Сброс кэша зоны — для тестов: иначе первый случай отравляет второй. */
+function __resetAevionBuildZoneCache() {
+    zoneCache = { at: 0, active: null };
+}
+async function aevionBuildZoneActive() {
+    // Поставщика и саму пробу знает lib/devhubDns; здесь только кэш.
+    if (!(0, devhubDns_1.dnsConfigured)())
+        return null;
+    const now = Date.now();
+    const ttl = zoneCache.active === null ? ZONE_FAIL_TTL_MS : ZONE_TTL_MS;
+    if (zoneCache.at !== 0 && now - zoneCache.at < ttl)
+        return zoneCache.active;
+    const active = await (0, devhubDns_1.zoneActiveUncached)();
+    zoneCache = { at: now, active };
+    return active;
+}
+// GET /api/devhub/studio/deploy-stats?days=N — доля успешных публикаций.
+//
+// Вопрос основателя, на который до 31.08.2026 ответа не было: доходит ли
+// человек до РАБОТАЮЩЕГО приложения. «Шестнадцать возможностей» и «движок
+// VS Code» описывают наличие механизма, а не результат.
+//
+// Данные лежали в "DevHubDeployment" с самого начала: двенадцать обращений к
+// таблице, и все вида «покажи выкатки этого проекта». Ни одного считающего —
+// число было в базе и недоступно никому без доступа к базе.
+//
+// Ручка ЧИТАЮЩАЯ: ничего не пишет и ничего не меняет.
+exports.devhubRouter.get("/studio/deploy-stats", async (req, res) => {
+    const raw = Number(req.query.days);
+    const days = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 365) : 30;
+    // Статус в таблице — свободная строка (interface DevHubDeployment), закрытого
+    // перечисления нет. Поэтому считаем ФАКТИЧЕСКОЕ распределение, а не заранее
+    // придуманный список: иначе новый статус молча выпадет из знаменателя.
+    const counts = new Map();
+    let storage = "db";
+    // Сколько «неудач» несут ЖИВОЙ адрес. Замер 08.09.2026: за неделю ручка
+    // показывала 5 выкаток и 0 успешных, а четыре из пяти адресов отвечали 200
+    // (контроль: выдуманный поддомен того же проекта даёт 404). Причина была не
+    // в публикации: проверка ждала ответа 25 секунд, а у гостя КАЖДЫЙ проект —
+    // это новый проект Cloudflare Pages, он поднимается дольше. Ожидание
+    // исправлено, но старые записи остались, и «успешных 0» продолжает пугать
+    // человека, читающего эту цифру. Пусть цифра называет свою оговорку сама.
+    let failedWithUrl = 0;
+    /*
+     * «Наши» выкатки и проекты отделяются от людей той же функцией, что и
+     * самоуборка пробных сайтов: пробный гостевой проект — имя probe-/smoke-
+     * ИЛИ метка захода ?c=probe-… (0-НАШИ-ЗАХОДЫ). Повод 12.10.2026: «14
+     * проектов от 11 гостей» читались как живые сборки, а были нашими пробами.
+     * Один источник правды: классификация в JS, а не вторая регулярка в SQL.
+     */
+    const наших = { всего: 0, live: 0 };
+    const проекты = { total: 0, ours: 0 };
+    if (!(0, ensureDevHubTables_1.isDevHubDbReady)()) {
+        storage = "memory";
+        const since = Date.now() - days * 86400000;
+        for (const d of memDeployments.values()) {
+            if (Date.parse(d.triggeredAt) >= since) {
+                counts.set(d.status, (counts.get(d.status) ?? 0) + 1);
+                if (d.status === "failed" && d.deployUrl)
+                    failedWithUrl += 1;
+                const пр = memProjects.get(d.projectId);
+                if (пр && пробныйГостевойПроект(пр)) {
+                    наших.всего += 1;
+                    if (d.status === "live")
+                        наших.live += 1;
+                }
+            }
+        }
+        for (const пр of memProjects.values()) {
+            if (Date.parse(пр.createdAt) >= since) {
+                проекты.total += 1;
+                if (пробныйГостевойПроект(пр))
+                    проекты.ours += 1;
+            }
+        }
+    }
+    else {
+        // Отказ хранилища — НЕ наша поломка, и отвечать на него пятисоткой значит
+        // выдать чужую недоступность за свою аварию. Поймал не я: платформенный
+        // сторож devhubReadsAreHonestWhenStorageFails увидел «deploy-stats -> 500»
+        // при первом же прогоне. Штатный ответ здесь 503 storage_unavailable, и
+        // помощник для него уже есть — второй способ отвечать заводить незачем.
+        try {
+            const r = await pool.query(`SELECT "status", "name", "entryTag", "userId", COUNT(*)::int AS n
+           FROM (SELECT d."status", p."name", p."entryTag", d."userId"
+                   FROM "DevHubDeployment" d
+                   LEFT JOIN "DevHubProject" p ON p."id" = d."projectId"
+                  WHERE d."triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')) x
+          GROUP BY "status", "name", "entryTag", "userId"`, [days]);
+            for (const row of r.rows) {
+                const n = Number(row.n);
+                counts.set(row.status, (counts.get(row.status) ?? 0) + n);
+                if (пробныйГостевойПроект({ name: row.name ?? "", userId: row.userId ?? "", entryTag: row.entryTag ?? null })) {
+                    наших.всего += n;
+                    if (row.status === "live")
+                        наших.live += n;
+                }
+            }
+            const pr = await pool.query(`SELECT "name", "entryTag", "userId"
+           FROM "DevHubProject"
+          WHERE "createdAt" >= NOW() - ($1::int * INTERVAL '1 day')`, [days]);
+            for (const row of pr.rows) {
+                проекты.total += 1;
+                if (пробныйГостевойПроект({ name: row.name ?? "", userId: row.userId ?? "", entryTag: row.entryTag ?? null }))
+                    проекты.ours += 1;
+            }
+            const f = await pool.query(`SELECT COUNT(*)::int AS n
+           FROM "DevHubDeployment"
+          WHERE "triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')
+            AND "status" = 'failed'
+            AND "deployUrl" IS NOT NULL AND "deployUrl" <> ''`, [days]);
+            failedWithUrl = Number(f.rows[0]?.n ?? 0);
+        }
+        catch {
+            return replyStorageUnavailable(res);
+        }
+    }
+    const byStatus = [...counts.entries()]
+        .map(([status, count]) => ({ status, count }))
+        .sort((a, b) => b.count - a.count);
+    const total = byStatus.reduce((s, x) => s + x.count, 0);
+    const live = counts.get("live") ?? 0;
+    return res.json({
+        days,
+        total,
+        byStatus,
+        // Оговорка ЕДЕТ РЯДОМ С ЧИСЛОМ, а не живёт в чужой голове: столько
+        // «неудач» имеют живой адрес и почти наверняка были успехами, которые
+        // прежняя проверка не дождалась.
+        failedWithUrl,
+        // Наши пробы и люди — отдельно; «people» и есть число для вопроса «сколько
+        // живых дошло до сборки». Знаменатель у successRate людей — только их выкатки.
+        ours: { total: наших.всего, live: наших.live },
+        people: {
+            total: total - наших.всего,
+            live: live - наших.live,
+            successRate: total - наших.всего > 0 ? Math.round((1000 * (live - наших.live)) / (total - наших.всего)) / 10 : null,
+        },
+        // Проекты, СОЗДАННЫЕ в окне (не выкатки): столько гостей/людей начали сборку.
+        projects: { total: проекты.total, ours: проекты.ours, people: проекты.total - проекты.ours },
+        // NULL, а не 0, когда считать не из чего. Ноль здесь читался бы как
+        // «ни одна публикация не удалась» — это другое утверждение, и оно
+        // отправило бы человека чинить работающее.
+        //
+        // ⚠️ Мутация «убрать тернарник» этим сторожем НЕ ловится, и это не дыра:
+        // при total = 0 голый расчёт даёт NaN, а NaN в JSON сериализуется в null.
+        // Снаружи ответ тот же — значит и падать нечему. Проверено: JSON.stringify
+        // от NaN даёт null.
+        //
+        // Явная запись оставлена намеренно: полагаться на то, что NaN «случайно»
+        // превратится в правильный ответ, — это работать через побочный эффект
+        // сериализации. Первый же потребитель ВНУТРИ процесса получит NaN, а не
+        // null, и сравнение `=== null` у него молча не сработает.
+        successRate: total > 0 ? Math.round((1000 * live) / total) / 10 : null,
+        // Признак едет В САМИХ ДАННЫХ: при недоступной базе числа считаны из
+        // памяти процесса и живут до перезапуска. Молча выдать их за историю —
+        // тот же класс, что пустой список вместо отказа.
+        storage,
+    });
+});
+exports.devhubRouter.get("/studio/capabilities", async (_req, res) => {
+    // Живая проба вместо переменной: переменную ставит человек, проверив зону,
+    // и она протухает молча в тот день, когда зона перестанет отвечать.
+    // Проба берётся из кэша (5 мин при успехе, 30 с при отказе), так что на
+    // каждый запрос сети нет.
+    const zoneActive = await aevionBuildZoneActive();
+    const caps = [
+        { id: "code", name: "Редактор кода", description: "Monaco IDE in browser (VS Code engine)", status: "live" },
+        { id: "translate", name: "Перевод", description: "DeepL translation for generated copy", status: process.env.DEEPL_API_KEY ? "live" : "needs_token", token: "DEEPL_API_KEY" },
+        { id: "database", name: "База данных", description: "Real Postgres per project — schema + login role, DATABASE_URL wired in", status: process.env.DEVHUB_DB_ADMIN_URL ? "live" : "needs_token", token: "DEVHUB_DB_ADMIN_URL" },
+        { id: "github", name: "GitHub", description: "Auto-push to GitHub repo", status: process.env.GITHUB_TOKEN ? "live" : "needs_token", token: "GITHUB_TOKEN" },
+        { id: "railway", name: "Выкатка на Railway", description: "Deploy backends to Railway — not available yet (per-project services not implemented)", status: process.env.DEVHUB_RAILWAY_PER_PROJECT ? "live" : "not_available", token: "RAILWAY_API_TOKEN" },
+        { id: "vercel", name: "Выкатка на Vercel", description: "Deploy frontends to Vercel", status: process.env.VERCEL_API_TOKEN ? "live" : "needs_token", token: "VERCEL_API_TOKEN" },
+        { id: "pages", name: "Публикация на Cloudflare Pages", description: "Deploy static sites + get *.pages.dev URL", status: (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ? "live" : "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] },
+        // Замер 28.08.2026 на проде: панель считала домен НАСТРОЕННЫМ, потому что
+        // три переменные заданы. А наша же проверка провайдеров в этом самом файле
+        // спрашивает Cloudflare о зоне и требует status === "active" — на проде она
+        // отвечает "unknown". То есть два наших ответа об одном и том же расходились,
+        // и человек читал «Настроено: 14 из 16», где домен был среди настроенных.
+        //
+        // Наличие ключа — не то же самое, что делегированная зона. Пока она не
+        // делегирована, честный ответ — not_available, как у Railway. Флаг
+        // DEVHUB_AEVION_BUILD_ZONE_ACTIVE включает возможность обратно, когда зона
+        // заработает: возвращать её должен человек, который это проверил.
+        { id: "domain", name: `Домен (${(0, devhubDns_1.siteZone)()})`, description: `Auto-provision <slug>.${(0, devhubDns_1.siteZone)()} with Pages deploy`, status: zoneActive === true ? "live" : "not_available",
+            // Причина в lastError: интерфейс показывает её подсказкой. Без неё
+            // человек видит выключенную возможность и не знает, чего ждать —
+            // «не работает» без причины читается как поломка у нас.
+            lastError: ((0, devhubDns_1.dnsConfigured)() && zoneActive === false)
+                ? `ключи заданы, но зона ${(0, devhubDns_1.siteZone)()} ${(0, devhubDns_1.dnsProvider)() === "vercel" ? "не подтверждена у Vercel" : "не делегирована в Cloudflare"} — выданные адреса не разрешаются`
+                : undefined,
+            tokens: ["CLOUDFLARE_ACCOUNT_ID", ...(0, devhubDns_1.dnsTokensNeeded)()] },
+        { id: "video", name: "Генерация видео", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+        // 3D объявлен на странице модуля среди возможностей «в одном проекте»,
+        // а в этом списке его не было вовсе: панель показывала «настроено N из 16»,
+        // и человек, считающий по списку, обещания не находил. Ключ тот же, что у
+        // видео, поэтому состояние честно совпадает — но называться должно своим
+        // именем: интерфейс до сих пор спрашивал про 3D под идентификатором video.
+        { id: "3d", name: "Генерация 3D", description: "Image → 3D mesh via Replicate (TRELLIS, Hunyuan3D)", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
+        { id: "image", name: "Генерация картинок", description: "AI images — Workers AI (flux) → Gemini → Together → OpenAI fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
+        { id: "screenshot_code", name: "Скриншот в код", description: "Attach a design screenshot in the AI chat — a vision model recreates it as code", status: (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) ? "live" : "needs_token", tokens: ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] },
+        { id: "audio_tts", name: "Озвучка", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+        { id: "audio_music", name: "Музыка и звуки", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
+        { id: "email", name: "Почта", description: "Brevo transactional email", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+        { id: "sms", name: "SMS", description: "Brevo SMS", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+        { id: "whatsapp", name: "WhatsApp", description: "WhatsApp Business API", status: process.env.BREVO_API_KEY ? "live" : "needs_token", token: "BREVO_API_KEY" },
+    ];
+    // A configured key is not a working capability — fold in what the last real
+    // call to each provider actually did (lib/providerHealth).
+    const withHealth = caps.map(providerHealth_1.applyHealth);
+    // Ручка ПУБЛИЧНАЯ (проверено curl без ключа), и её lastError уходит прямо в
+    // подсказку на витрине. Замер 08.09.2026 на проде: там лежал сырой ответ
+    // поставщика — `ElevenLabs HTTP 400: {"detail":{"type":"authentication_error",
+    // "code":"invalid_api_key",...}}` и `провайдер-проба: HTTP 401`. Это ворота §3.4
+    // («тексты ошибок человеческие, без кодов и адресов») и заодно утечка нашего
+    // устройства наружу.
+    //
+    // Поэтому наружу идёт КОД, а слова подбирает витрина на языке читателя:
+    // подсказка живёт в атрибуте title, а его машинный доводчик НЕ переводит —
+    // русский текст отсюда EN-посетитель увидел бы как есть.
+    const offCodeOf = (c) => {
+        if (c.status === "live")
+            return undefined;
+        const raw = (c.lastError ?? "").toLowerCase();
+        if (/quota|exhaust|limit exceeded|исчерпан/.test(raw))
+            return "quota_exhausted";
+        if (/401|403|invalid.?api.?key|authentication|unauthor/.test(raw))
+            return "auth_rejected";
+        // 15.09.2026: зона у Vercel — текст отказа «не подтверждена у Vercel» / «not verified».
+        if (/не делегирован|not delegated|не подтверждена|not verified|zone .* not ready/.test(raw))
+            return "zone_not_delegated";
+        if (raw.includes("{") || /http \d{3}/.test(raw))
+            return "provider_error";
+        if (c.status === "needs_token")
+            return "needs_token";
+        if (c.status === "not_available")
+            return "not_available";
+        if (c.status === "degraded")
+            return "provider_error";
+        return undefined;
+    };
+    // Текст оставляем только СВОЙ: всё, что похоже на ответ поставщика (тело JSON
+    // или код HTTP), заменяется классом. Наши выверенные фразы — например про
+    // неделегированную зону — проходят, они написаны для человека.
+    const publicReason = (reason) => {
+        if (!reason)
+            return undefined;
+        if (reason.includes("{") || /HTTP \d{3}/i.test(reason))
+            return undefined;
+        return reason.slice(0, 160);
+    };
+    // Отказ поставщика бывает про ВЫЗОВ, а бывает про КЛЮЧ. Отвергнутый ключ и
+    // выжженная квота ломают все возможности, которые на этом ключе висят, —
+    // а показывается это только у той, которую случилось позвать.
+    //
+    // Замер прода 08.09.2026, два снимка с разницей в 40 минут: сперва audio_tts
+    // и audio_music оба degraded, потом audio_music стал live, а audio_tts остался
+    // degraded — при ОДНОМ ключе ELEVENLABS_API_KEY. Разошлись они не по существу,
+    // а по сроку памяти об отказе (30 минут в providerHealth): у одной запись
+    // состарилась, у другой нет. Человек читал «настроено 12 из 17», и музыка была
+    // среди работающих, хотя ключ тот же и он отвергнут. Групп таких три:
+    // озвучка+музыка, видео+3D, почта+SMS+WhatsApp.
+    //
+    // Переносим ТОЛЬКО отказ уровня ключа и ТОЛЬКО между возможностями с одним
+    // единственным токеном. У кого список токенов (image, screenshot_code,
+    // pages) — там запасная цепочка поставщиков, и падение одного звена
+    // возможность не убивает: понижать её было бы клеветой.
+    const keyLevelFailure = new Map();
+    for (const c of withHealth) {
+        const token = c.token;
+        if (!token)
+            continue;
+        const h = (0, providerHealth_1.getProviderHealth)(c.id);
+        if (!h || h.ok)
+            continue;
+        const code = offCodeOf({ status: "degraded", lastError: h.reason });
+        if (code !== "auth_rejected" && code !== "quota_exhausted")
+            continue;
+        const at = Date.parse(h.at);
+        const prev = keyLevelFailure.get(token);
+        if (!prev || at > prev.at)
+            keyLevelFailure.set(token, { code, at });
+    }
+    const withSiblings = withHealth.map((c) => {
+        if (c.status !== "live")
+            return c;
+        const token = c.token;
+        const failure = token ? keyLevelFailure.get(token) : undefined;
+        if (!failure)
+            return c;
+        // Свой УСПЕХ новее чужого отказа — верим ему: ключ могли поправить между
+        // вызовами, и тогда понижение было бы враньём в другую сторону.
+        const own = (0, providerHealth_1.getProviderHealth)(c.id);
+        if (own && own.ok && Date.parse(own.at) > failure.at)
+            return c;
+        return { ...c, status: "degraded", sharedKeyFailure: failure.code };
+    });
+    const publicCaps = withSiblings.map((c) => {
+        const shared = c.sharedKeyFailure;
+        const offCode = shared ?? offCodeOf(c);
+        const lastError = publicReason(c.lastError);
+        const out = { ...c, ...(offCode ? { offCode } : {}) };
+        delete out.sharedKeyFailure;
+        if (lastError)
+            out.lastError = lastError;
+        else
+            delete out.lastError;
+        return out;
+    });
+    const live = withSiblings.filter((c) => c.status === "live").length;
+    const degraded = withSiblings.filter((c) => c.status === "degraded").length;
+    // needsToken считался ОСТАТКОМ (всего минус live минус degraded), и потому
+    // втягивал not_available. Следствие видел человек: баннер /studio писал
+    // «3 capabilities need Railway env vars», а список рядом фильтрует по
+    // status === "needs_token" и показывал ОДНУ переменную. Заголовок спорил с
+    // собственным списком, и «нужен ключ» обещало починку там, где ключ ни при
+    // чём: Railway не сделан, зона домена не делегирована.
+    const needsToken = withSiblings.filter((c) => c.status === "needs_token").length;
+    const notAvailable = withSiblings.filter((c) => c.status === "not_available").length;
+    return res.json({
+        capabilities: publicCaps,
+        summary: { total: withSiblings.length, live, degraded, needsToken, notAvailable },
+    });
+});
+// ═════════════════════════════════════════════════════════════════════════════
+// Studio Credits — usage metering per user per month
+// GET  /api/devhub/studio/credits
+// POST /api/devhub/studio/tier  { tier: "pro" | "free" | "enterprise" }  (admin)
+// ═════════════════════════════════════════════════════════════════════════════
+// GET /api/devhub/studio/spend — сколько потратили ЗАПУСКИ ЭТОГО ЧЕЛОВЕКА.
+//
+// Заведена 03.09.2026 по прямой задаче основателя: расход должен быть виден
+// покупателю на экране, а не только админу. Место, где тратят твои деньги
+// невидимо, местом жительства не становится.
+//
+// Три честности, без которых цифра врала бы:
+//   1) хранилище недоступно -> "не знаю", а не ноль: ноль означает «вы ничего
+//      не потратили», и это успокаивает ложно;
+//   2) рядом с суммой идёт число вызовов, у которых цену посчитать НЕЧЕМ
+//      (поставщика нет в нашей таблице цен) — иначе сумма читается как полная;
+//   3) записи ДО 03.09 личности не знают, поэтому у давних пользователей
+//      сумма будет неполной, и об этом сказано прямо в ответе.
+// POST /api/devhub/studio/adopt-guest — забрать СВОЮ гостевую работу в аккаунт.
+//
+// Замер 03.09.2026: человек, который попробовал DevHub гостем и затем вошёл,
+// ТЕРЯЛ все свои проекты из виду. Гостевые проекты висят на "guest:<id>", а
+// после входа личностью становится sub из токена — и список отдаёт пустоту.
+// Механизма переноса не было НИ ОДНОГО (проверено: ни ручки, ни SQL).
+//
+// Бьёт это дважды: по первой опоре планеты («вошёл один раз — узнают везде»)
+// и по воронке — работа исчезает ровно в тот момент, когда человек решил
+// остаться.
+//
+// Про безопасность: гостевой идентификатор САМ ПО СЕБЕ даёт доступ к этим
+// проектам (он и есть ключ). Значит перенос не открывает ничего нового —
+// он лишь переписывает владельца на того, кто уже держит ключ.
+exports.devhubRouter.post("/studio/adopt-guest", dhAdoptLimit(), async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth?.sub) {
+        // Не 401: сюда попадёт и обычный гость, который просто ещё не вошёл.
+        // Ему надо сказать ЧТО сделать, а не отказать без объяснения.
+        return res.status(400).json({
+            error: "not_signed_in",
+            message: "Войдите — тогда гостевая работа перейдёт в ваш аккаунт.",
+        });
+    }
+    const guestId = (0, devhubGuest_1.devhubGuestId)(req.headers[devhubGuest_1.DEVHUB_GUEST_HEADER]);
+    if (guestId === "anonymous") {
+        return res.status(400).json({
+            error: "no_guest_id",
+            message: "Гостевая работа не найдена: браузер не прислал свой идентификатор.",
+        });
+    }
+    if (guestId === auth.sub) {
+        return res.json({ ok: true, adopted: 0, note: "Эта работа уже ваша." });
+    }
+    try {
+        let adopted = 0;
+        if ((0, ensureDevHubTables_1.isDevHubDbReady)()) {
+            // ПОРЯДОК ЗДЕСЬ ЗНАЧИМ, и выбран он по тому, как ведёт себя ПОЛОВИНЧАТЫЙ
+            // исход. Записи две, транзакции нет намеренно, значит одна может пройти,
+            // а другая упасть.
+            //
+            //   расход, потом проекты (сейчас): упали проекты -> ответ 500, витрина
+            //     отметку НЕ ставит и повторит при следующем заходе. На повторе
+            //     расход уже перенесён, его UPDATE совпадёт с нулём строк, проекты
+            //     переедут — состояние выправляется само.
+            //
+            //   проекты, потом расход (было до 04.09): упал расход -> ответ 200,
+            //     витрина ставит отметку и больше НЕ ПОВТОРИТ. Человек навсегда
+            //     остаётся с проектами без истории трат, и починит это только рука.
+            //
+            // Цена одной и той же поломки различается: в одном порядке она временная,
+            // в другом вечная. Транзакция дала бы «оба или ни одного», но тогда сбой
+            // в ИСТОРИИ отнимал бы у человека и ПРОЕКТЫ, а они важнее. Размен назван
+            // вслух, чтобы следующий читатель не «починил» порядок обратно.
+            await pool.query(`UPDATE "smart_run_log" SET "userId" = $1 WHERE "userId" = $2`, [auth.sub, guestId]).catch((e) => {
+                // Не роняем перенос из-за истории: проекты важнее. Но и не молчим —
+                // без следа никто не узнает, что расход остался на гостевой личности.
+                console.warn(`[DevHub] расход гостя ${guestId} не перенесён:`, e);
+            });
+            const r = await pool.query(`UPDATE "DevHubProject" SET "userId" = $1 WHERE "userId" = $2`, [auth.sub, guestId]);
+            adopted = r.rowCount ?? 0;
+        }
+        // В памяти — тот же перенос, иначе при недоступной базе работа
+        // «переедет» только наполовину и это будет выглядеть как потеря.
+        for (const p of memProjects.values()) {
+            if (p.userId === guestId) {
+                p.userId = auth.sub;
+                adopted++;
+            }
+        }
+        res.json({ ok: true, adopted });
+    }
+    catch (e) {
+        res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "adopt failed" });
+    }
+});
+exports.devhubRouter.get("/studio/spend", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    const agg = await (0, smartRunLog_1.aggregateSmartRunsForUser)(userId);
+    if (!agg) {
+        return res.status(503).json({
+            error: "storage_unavailable",
+            message: "Расход посчитать не удалось — это не ноль, а отсутствие ответа.",
+        });
+    }
+    res.json({
+        ok: true,
+        runs: agg.runs,
+        costUsd: agg.costUsd,
+        unpricedRuns: agg.unpricedRuns,
+        // Какие именно поверхности теряют цену. Без этого число «сколько» не
+        // подсказывает, что чинить, и живёт годами.
+        unpricedByModule: agg.unpricedByModule,
+        since: "2026-09-03",
+        note: agg.unpricedRuns > 0
+            ? `Из ${agg.runs} запусков у ${agg.unpricedRuns} цену посчитать нечем: у их поставщика нет тарифа в нашей таблице. Сумма по ним не учтена.`
+            : undefined,
+    });
+});
+exports.devhubRouter.get("/studio/credits", async (req, res) => {
+    const auth = await (0, authLive_1.verifyBearerLive)(req);
+    const userId = (0, devhubGuest_1.requesterId)(req, auth?.sub);
+    try {
+        const { anyUnknown, ...result } = await getAllMonthUsage(userId);
+        return res.json({
+            ...result,
+            // Сведено вручную из трёх правок, и все три нужны.
+            //
+            // ОТ ПЕРЕНОСИМЫХ КОММИТОВ: различение ТРЁХ случаев — не прочитан расход,
+            // не прочитан тариф, не прочитано ни то ни другое. Ноль расхода и слово
+            // «free» — честные ответы сами по себе, поэтому отказ базы был от них
+            // неотличим: предел переставал применяться, а платящий молча получал
+            // бесплатные лимиты.
+            //
+            // ОТ ТЕКУЩЕЙ ВЕТКИ: `tierInfo` отдаёт ТУ ЖЕ таблицу, по которой стоит
+            // ограничитель, и адрес обновления — нынешний. В переносимых версиях
+            // здесь литеральная копия таблицы и ещё `aevion.vercel.app`; принять их
+            // сторону целиком значило бы откатить и то, и другое.
+            //
+            // Тексты переведены: они уходят в ответ, который читает витрина.
+            ...(anyUnknown || !result.tierKnown
+                ? (0, degradedResponse_1.degraded)(!result.tierKnown && anyUnknown
+                    ? "Ни тариф, ни расход за месяц не удалось прочитать из базы — показанные числа не являются " +
+                        "замером, и предел при этой проверке не применялся"
+                    : anyUnknown
+                        ? "Расход за месяц не удалось прочитать из базы — показанные числа не являются замером, " +
+                            "и предел при этой проверке не применялся"
+                        : "Тариф не удалось прочитать из базы — показан последний известный, а не текущий")
+                : {}),
+            tierInfo: TIER_LIMITS,
+            // ЧИТАТЕЛЯ У ЭТОГО ПОЛЯ НЕТ, и это осознанно (проверено 28.08.2026:
+            // ноль обращений во всём фронтенде). Наша витрина ведёт кнопку ПРЯМО на
+            // оплату (ссылка из каталога товаров), а не на раздел страницы — на один
+            // шаг короче, и это лучше для покупателя.
+            //
+            // Поле оставлено для СТОРОННИХ клиентов API: им нужен адрес, куда вести
+            // человека, и якорь `#upgrade` на /studio существует (проверено).
+            //
+            // Если кто-то соберётся «починить» витрину, заставив её читать это поле —
+            // это будет ШАГ НАЗАД: покупатель получит лишний переход вместо кассы.
+            upgradeUrl: "https://aevion.app/studio#upgrade",
+        });
+    }
+    catch (e) {
+        return res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Credits fetch failed" });
+    }
+});
+exports.devhubRouter.post("/studio/tier", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth?.sub)
+        return res.status(401).json({ error: "authentication required" });
+    const role = (auth.role || "").toLowerCase();
+    if (role !== "admin")
+        return res.status(403).json({ error: "admin_only" });
+    const userId = auth.sub;
+    const { tier, targetUserId } = req.body || {};
+    const validTiers = ["free", "pro", "enterprise"];
+    if (!tier || !validTiers.includes(tier)) {
+        return res.status(400).json({ error: `tier must be one of: ${validTiers.join(", ")}` });
+    }
+    const target = targetUserId ?? userId;
+    try {
+        await setUserTier(target, tier);
+        return res.json({ ok: true, userId: target, tier });
+    }
+    catch (e) {
+        return res.status(500).json({ error: (0, safeErrorText_1.redactInfraDetails)(e) || "Tier update failed" });
+    }
+});

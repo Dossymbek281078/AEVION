@@ -1,0 +1,391 @@
+"use strict";
+/**
+ * QPersona — Digital Avatar backend router.
+ *
+ * Endpoints:
+ *   GET  /api/qpersona/health
+ *   POST /api/qpersona/personas                  — create persona
+ *   GET  /api/qpersona/personas                  — list public personas (paginated)
+ *   GET  /api/qpersona/personas/:alias           — get one persona
+ *   PATCH /api/qpersona/personas/:alias          — update persona
+ *   POST /api/qpersona/personas/:alias/ai-bio    — AI-generate bio
+ *   GET  /api/qpersona/stats                     — aggregate stats
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SMOKE_ALIAS_SQL = exports.qpersonaRouter = void 0;
+exports.isSmokeAlias = isSmokeAlias;
+const express_1 = require("express");
+const platform_1 = require("../lib/sentry/platform");
+const dbPool_1 = require("../lib/dbPool");
+const conceptBoardStore_1 = require("../lib/conceptBoardStore");
+const ensureQPersonaTables_1 = require("../lib/ensureQPersonaTables");
+const rateLimit_1 = require("../lib/rateLimit");
+const providers_1 = require("../services/qcoreai/providers");
+const safeError_1 = require("../lib/safeError");
+const captureQPersonaError = (0, platform_1.makeServiceCapture)("qpersona");
+exports.qpersonaRouter = (0, express_1.Router)();
+const pool = (0, dbPool_1.getPool)();
+(async () => {
+    try {
+        await (0, ensureQPersonaTables_1.ensureQPersonaTables)(pool);
+    }
+    catch {
+        // in-memory fallback active
+    }
+})();
+// ─── Rate limiters ─────────────────────────────────────────────────────────────
+const readLimit = (0, rateLimit_1.rateLimit)({ windowMs: 60000, max: 120, keyPrefix: "qpersona-read" });
+const writeLimit = (0, rateLimit_1.rateLimit)({ windowMs: 60000, max: 20, keyPrefix: "qpersona-write" });
+const aiLimit = (0, rateLimit_1.rateLimit)({ windowMs: 60000, max: 5, keyPrefix: "qpersona-ai" });
+let _memSeq = 1;
+const memPersonas = new Map();
+function aliasValid(alias) {
+    return /^[a-z0-9_-]{3,30}$/.test(alias);
+}
+// ─── DB helpers ───────────────────────────────────────────────────────────────
+async function dbCreate(fields) {
+    const { rows } = await pool.query(`INSERT INTO qpersona_profiles
+       (alias, display_name, bio, avatar_prompt, skills, links)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+     RETURNING *`, [
+        fields.alias,
+        fields.display_name,
+        fields.bio ?? null,
+        fields.avatar_prompt ?? null,
+        JSON.stringify(fields.skills),
+        JSON.stringify(fields.links),
+    ]);
+    return rows[0];
+}
+async function dbGet(alias) {
+    const { rows } = await pool.query(`SELECT * FROM qpersona_profiles WHERE alias = $1`, [alias]);
+    return rows[0] ?? null;
+}
+async function dbUpdate(alias, patch) {
+    const sets = [];
+    const vals = [];
+    let idx = 1;
+    if (patch.bio !== undefined) {
+        sets.push(`bio = $${idx++}`);
+        vals.push(patch.bio);
+    }
+    if (patch.avatar_prompt !== undefined) {
+        sets.push(`avatar_prompt = $${idx++}`);
+        vals.push(patch.avatar_prompt);
+    }
+    if (patch.skills !== undefined) {
+        sets.push(`skills = $${idx++}::jsonb`);
+        vals.push(JSON.stringify(patch.skills));
+    }
+    if (patch.links !== undefined) {
+        sets.push(`links = $${idx++}::jsonb`);
+        vals.push(JSON.stringify(patch.links));
+    }
+    if (sets.length === 0)
+        return dbGet(alias);
+    sets.push(`updated_at = NOW()`);
+    vals.push(alias);
+    const { rows } = await pool.query(`UPDATE qpersona_profiles SET ${sets.join(", ")} WHERE alias = $${idx} RETURNING *`, vals);
+    return rows[0] ?? null;
+}
+/*
+ * СЛУЖЕБНЫЕ ЗАПИСИ смоук-прогонов — не показывать и не считать.
+ *
+ * Замер на проде 01.09.2026: `/api/qpersona/personas?limit=100` вернул 37
+ * записей, и ВСЕ 37 — наши смоук-прогоны (`sm1784803084136`,
+ * `smoke-1784775240406-x`, `smoke-test-xyz`). Настоящих персон ноль. При этом
+ * витрина писала посетителю «37 personas created».
+ *
+ * Это не косметика: число на витрине по нашему стандарту берётся из
+ * фактического прогона, а здесь оно считало наши же проверки и выдавало их за
+ * людей. У страницы уже есть честное пустое состояние — «No personas yet» —
+ * значит после фильтра правильный экран появится сам.
+ *
+ * ⚠️ ОДИН признак на ВСЕ четыре функции, и это главное в этой правке. Отфильтруй
+ * мы только галерею — счётчик остался бы 37 при пустом списке, и мы своими
+ * руками сделали бы то, что ловим у других: два наших ответа об одном спорят.
+ *
+ * Условие для SQL и предикат для памяти обязаны совпадать. Их согласие
+ * проверяется тестом на общем наборе примеров, а не на честном слове.
+ */
+exports.SMOKE_ALIAS_SQL = "(alias ~ '^smoke([-_0-9]|$)' OR alias ~ '^sm[0-9]{6,}$')";
+function isSmokeAlias(alias) {
+    const a = String(alias ?? "");
+    // ⚠️ «начинается на smoke» было СЛИШКОМ широко: под него попадал живой
+    // человек `smokey-eyes`. Поймал отрицательный контроль в тесте, глазами не
+    // видно. Служебные метки всегда отделяют хвост: `smoke-1784…`, `smoke-test-…`.
+    // Признак, прячущий настоящих людей, хуже отсутствия признака: витрина стала
+    // бы честно пустой и одинаково бесполезной.
+    if (a === "smoke")
+        return true;
+    if (a.startsWith("smoke") && /^[-_0-9]/.test(a.slice(5)))
+        return true;
+    // `sm` + длинная метка времени: так подписывались прогоны до 01.09.
+    if (a.startsWith("sm") && /^[0-9]{6,}$/.test(a.slice(2)))
+        return true;
+    return false;
+}
+async function dbList(limit, offset) {
+    const { rows } = await pool.query(`SELECT * FROM qpersona_profiles
+     WHERE visibility = 'public' AND NOT ${exports.SMOKE_ALIAS_SQL}
+     ORDER BY created_at DESC LIMIT $1 OFFSET $2`, [limit, offset]);
+    return rows;
+}
+async function dbStats() {
+    // ⚠️ Здесь была ВТОРАЯ, более старая расходимость: галерея отбирала
+    // `visibility = 'public'`, а счётчик считал ВСЁ подряд — то есть включал
+    // непубличные записи, которых на витрине не видно никогда. Условие у обоих
+    // теперь одно и то же.
+    const { rows: totRow } = await pool.query(`SELECT COUNT(*)::text AS count FROM qpersona_profiles
+     WHERE visibility = 'public' AND NOT ${exports.SMOKE_ALIAS_SQL}`);
+    const { rows: latRow } = await pool.query(`SELECT alias FROM qpersona_profiles
+     WHERE visibility = 'public' AND NOT ${exports.SMOKE_ALIAS_SQL}
+     ORDER BY created_at DESC LIMIT 5`);
+    return {
+        total: parseInt(totRow[0]?.count ?? "0", 10),
+        latest: latRow.map((r) => r.alias),
+    };
+}
+// ─── In-memory helpers ────────────────────────────────────────────────────────
+function memCreate(fields) {
+    const now = new Date().toISOString();
+    const record = {
+        id: _memSeq++,
+        alias: fields.alias,
+        display_name: fields.display_name,
+        bio: fields.bio ?? null,
+        avatar_prompt: fields.avatar_prompt ?? null,
+        skills: fields.skills,
+        links: fields.links,
+        visibility: "public",
+        created_at: now,
+        updated_at: now,
+    };
+    memPersonas.set(fields.alias, record);
+    return record;
+}
+function memGet(alias) {
+    return memPersonas.get(alias) ?? null;
+}
+function memUpdate(alias, patch) {
+    const rec = memPersonas.get(alias);
+    if (!rec)
+        return null;
+    const updated = { ...rec, ...patch, updated_at: new Date().toISOString() };
+    memPersonas.set(alias, updated);
+    return updated;
+}
+function memList(limit, offset) {
+    return Array.from(memPersonas.values())
+        .filter((p) => p.visibility === "public" && !isSmokeAlias(p.alias))
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(offset, offset + limit);
+}
+function memStats() {
+    const all = Array.from(memPersonas.values())
+        .filter((p) => p.visibility === "public" && !isSmokeAlias(p.alias))
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return {
+        total: all.length,
+        latest: all.slice(0, 5).map((p) => p.alias),
+    };
+}
+// ─── Routes ───────────────────────────────────────────────────────────────────
+/** GET /api/qpersona/health */
+exports.qpersonaRouter.get("/health", readLimit, (_req, res) => {
+    res.json({
+        ok: true,
+        module: "qpersona",
+        db: (0, ensureQPersonaTables_1.isQPersonaDbReady)() ? "postgres" : "memory",
+        dbError: (0, ensureQPersonaTables_1.getQPersonaDbError)(),
+    });
+});
+/** GET /api/qpersona/stats */
+exports.qpersonaRouter.get("/stats", readLimit, async (_req, res) => {
+    try {
+        const stats = (0, ensureQPersonaTables_1.isQPersonaDbReady)() ? await dbStats() : memStats();
+        res.json({ ok: true, ...stats });
+    }
+    catch (e) {
+        captureQPersonaError(e, { route: "qpersona/stats" });
+        res.status(500).json({ ok: false, error: (0, safeError_1.safeErrorText)(e, "internal error", "qpersona") });
+    }
+});
+/** GET /api/qpersona/personas — list public personas */
+exports.qpersonaRouter.get("/personas", readLimit, async (req, res) => {
+    try {
+        // || 20 ловит NaN, но НЕ отрицательное: limit=-5 доезжало до SQL и
+        // отвечало 500 (проверено на проде 19.08). Math.max(...,1) закрывает.
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
+        const offset = Math.max(Number(req.query.offset) || 0, 0);
+        const personas = (0, ensureQPersonaTables_1.isQPersonaDbReady)()
+            ? await dbList(limit, offset)
+            : memList(limit, offset);
+        res.json({ ok: true, personas, limit, offset });
+    }
+    catch (e) {
+        captureQPersonaError(e, { route: "qpersona/GET/personas" });
+        res.status(500).json({ ok: false, error: (0, safeError_1.safeErrorText)(e, "internal error", "qpersona") });
+    }
+});
+/** POST /api/qpersona/personas — create persona */
+exports.qpersonaRouter.post("/personas", writeLimit, async (req, res) => {
+    try {
+        const { alias, displayName, bio, avatarPrompt, skills, links } = req.body ?? {};
+        if (!alias || typeof alias !== "string") {
+            res.status(400).json({ ok: false, error: "alias is required" });
+            return;
+        }
+        if (!aliasValid(alias)) {
+            res.status(400).json({ ok: false, error: "alias must be 3-30 chars, lowercase letters/digits/hyphens/underscores" });
+            return;
+        }
+        if (!displayName || typeof displayName !== "string") {
+            res.status(400).json({ ok: false, error: "displayName is required" });
+            return;
+        }
+        const fields = {
+            alias: alias.toLowerCase(),
+            display_name: String(displayName).slice(0, 120),
+            bio: bio ? String(bio).slice(0, 2000) : undefined,
+            avatar_prompt: avatarPrompt ? String(avatarPrompt).slice(0, 500) : undefined,
+            skills: Array.isArray(skills) ? skills.map(String).slice(0, 30) : [],
+            links: Array.isArray(links) ? links.map(String).slice(0, 20) : [],
+        };
+        let persona;
+        if ((0, ensureQPersonaTables_1.isQPersonaDbReady)()) {
+            // Check uniqueness gracefully
+            const existing = await dbGet(fields.alias);
+            if (existing) {
+                res.status(409).json({ ok: false, error: "alias already taken" });
+                return;
+            }
+            persona = await dbCreate(fields);
+        }
+        else {
+            if (memPersonas.has(fields.alias)) {
+                res.status(409).json({ ok: false, error: "alias already taken" });
+                return;
+            }
+            persona = memCreate(fields);
+        }
+        res.status(201).json({ ok: true, persona });
+    }
+    catch (e) {
+        const msg = (0, safeError_1.safeErrorText)(e, "internal error", "qpersona");
+        if (msg.includes("unique") || msg.includes("duplicate")) {
+            res.status(409).json({ ok: false, error: "alias already taken" });
+            return;
+        }
+        captureQPersonaError(e, { route: "qpersona/POST/personas" });
+        res.status(500).json({ ok: false, error: msg });
+    }
+});
+/** GET /api/qpersona/personas/:alias — public profile */
+exports.qpersonaRouter.get("/personas/:alias", readLimit, async (req, res) => {
+    try {
+        const alias = String(req.params.alias ?? "").toLowerCase();
+        const persona = (0, ensureQPersonaTables_1.isQPersonaDbReady)() ? await dbGet(alias) : memGet(alias);
+        if (!persona) {
+            res.status(404).json({ ok: false, error: "persona not found" });
+            return;
+        }
+        res.json({ ok: true, persona });
+    }
+    catch (e) {
+        captureQPersonaError(e, { route: "qpersona/GET/personas/:alias" });
+        res.status(500).json({ ok: false, error: (0, safeError_1.safeErrorText)(e, "internal error", "qpersona") });
+    }
+});
+/** PATCH /api/qpersona/personas/:alias — update bio/skills/links/avatarPrompt */
+exports.qpersonaRouter.patch("/personas/:alias", writeLimit, async (req, res) => {
+    try {
+        const alias = String(req.params.alias ?? "").toLowerCase();
+        const { bio, avatarPrompt, skills, links } = req.body ?? {};
+        const patch = {};
+        if (bio !== undefined)
+            patch.bio = bio ? String(bio).slice(0, 2000) : null;
+        if (avatarPrompt !== undefined)
+            patch.avatar_prompt = avatarPrompt ? String(avatarPrompt).slice(0, 500) : null;
+        if (skills !== undefined)
+            patch.skills = Array.isArray(skills) ? skills.map(String).slice(0, 30) : [];
+        if (links !== undefined)
+            patch.links = Array.isArray(links) ? links.map(String).slice(0, 20) : [];
+        const persona = (0, ensureQPersonaTables_1.isQPersonaDbReady)()
+            ? await dbUpdate(alias, patch)
+            : memUpdate(alias, patch);
+        if (!persona) {
+            res.status(404).json({ ok: false, error: "persona not found" });
+            return;
+        }
+        res.json({ ok: true, persona });
+    }
+    catch (e) {
+        captureQPersonaError(e, { route: "qpersona/PATCH/personas/:alias" });
+        res.status(500).json({ ok: false, error: (0, safeError_1.safeErrorText)(e, "internal error", "qpersona") });
+    }
+});
+/** POST /api/qpersona/personas/:alias/ai-bio — AI-generate bio */
+exports.qpersonaRouter.post("/personas/:alias/ai-bio", aiLimit, async (req, res) => {
+    try {
+        const alias = String(req.params.alias ?? "").toLowerCase();
+        const persona = (0, ensureQPersonaTables_1.isQPersonaDbReady)() ? await dbGet(alias) : memGet(alias);
+        if (!persona) {
+            res.status(404).json({ ok: false, error: "persona not found" });
+            return;
+        }
+        const providerId = (0, providers_1.resolveProvider)();
+        const providerDef = (0, providers_1.getProviders)().find((p) => p.id === providerId);
+        const modelName = providerDef?.defaultModel ?? "";
+        const skillsText = (persona.skills ?? []).join(", ") || "no skills listed";
+        const existingBio = persona.bio ? `Existing bio: "${persona.bio}"` : "No existing bio.";
+        const messages = [
+            {
+                role: "system",
+                content: "You are a professional bio writer for digital personas. " +
+                    "Write a concise, engaging professional bio (2-4 sentences, max 300 chars) " +
+                    "for the given persona based on their name, skills, and existing bio if any. " +
+                    "Return ONLY the bio text — no quotes, no explanation.",
+            },
+            {
+                role: "user",
+                content: `Name: ${persona.display_name}\nSkills: ${skillsText}\n${existingBio}`,
+            },
+        ];
+        const result = await (0, providers_1.callProvider)(providerId, messages, modelName, 0.7, undefined, undefined, { module: "qpersona-bio" });
+        const generatedBio = result.reply.trim().slice(0, 500);
+        // Update the persona with the generated bio
+        const updated = (0, ensureQPersonaTables_1.isQPersonaDbReady)()
+            ? await dbUpdate(alias, { bio: generatedBio })
+            : memUpdate(alias, { bio: generatedBio });
+        res.json({
+            ok: true,
+            bio: generatedBio,
+            persona: updated,
+            provider: providerId,
+            model: result.model,
+        });
+    }
+    catch (e) {
+        captureQPersonaError(e, { route: "qpersona/POST/personas/:alias/ai-bio" });
+        res.status(500).json({ ok: false, error: (0, safeError_1.safeErrorText)(e, "AI bio generation failed", "qpersona") });
+    }
+});
+// ── MVP concept board surface ───────────────────────────────────────────────
+exports.qpersonaRouter.get("/status", readLimit, (_req, res) => {
+    res.json({
+        module: "qpersona",
+        code: "QPERSONA",
+        status: "mvp",
+        description: "AI-generated public persona built on verified content (QSign + QRight).",
+        endpoints: {
+            health: "/api/qpersona/health",
+            stats: "/api/qpersona/stats",
+            personas: "/api/qpersona/personas",
+            conceptMessages: "/api/qpersona/concept/messages",
+            conceptStats: "/api/qpersona/concept-stats",
+        },
+        timestamp: new Date().toISOString(),
+    });
+});
+(0, conceptBoardStore_1.mountConceptBoard)({ router: exports.qpersonaRouter, moduleId: "qpersona", defaultTag: "qpersona", readLimit, writeLimit });

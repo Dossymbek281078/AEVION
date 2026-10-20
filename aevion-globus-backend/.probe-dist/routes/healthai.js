@@ -1,0 +1,2340 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.healthaiRouter = void 0;
+const express_1 = require("express");
+const denPoMestnomu_1 = require("../lib/denPoMestnomu");
+const _________1 = require("../lib/\u0434\u0435\u0448\u0451\u0432\u044B\u0439\u0418\u0418");
+const crypto_1 = __importDefault(require("crypto"));
+const authJwt_1 = require("../lib/authJwt");
+const freeActionQuota_1 = require("../lib/freeActionQuota");
+const rateLimit_1 = require("../lib/rateLimit");
+const dbPool_1 = require("../lib/dbPool");
+const platform_1 = require("../lib/sentry/platform");
+const smartComplete_1 = require("../services/qcoreai/smartComplete");
+const captureHealthAIError = (0, platform_1.makeServiceCapture)("healthai");
+/**
+ * qstr — нормализует значение из req.params / req.query / req.headers,
+ * которое в типах Express 5 имеет вид `string | string[] | undefined`,
+ * в обычный `string`. Если пришёл массив — берём первый элемент.
+ * Runtime-safe (в отличие от `as string`).
+ */
+function qstr(v, defaultValue = "") {
+    if (Array.isArray(v))
+        return String(v[0] ?? defaultValue);
+    if (v === undefined || v === null)
+        return defaultValue;
+    return String(v);
+}
+/**
+ * HealthAI v1 — Personal AI Doctor MVP.
+ *
+ * In-memory storage. No DB yet, no real LLM yet — symptom advice через
+ * rule-based mapping ключевых слов на советы. Это безопасный MVP, который
+ * не претендует на медицинский диагноз (см. disclaimer).
+ *
+ * Endpoints:
+ *  POST /profile           — register / update health profile
+ *  GET  /profile/:id       — fetch profile
+ *  POST /check             — symptom check, returns advice
+ *  POST /log               — daily wellness log entry
+ *  GET  /history/:id       — list of advice + log entries
+ *  GET  /trends/:id        — 7d/30d averages and series
+ *  GET  /leaderboard       — wellness streaks (по числу логов подряд)
+ *  GET  /health            — status
+ */
+exports.healthaiRouter = (0, express_1.Router)();
+const profilesMem = new Map();
+const checksMem = new Map();
+const logsMem = new Map();
+const cyclesMem = new Map();
+const planSnapshotsMem = new Map();
+/**
+ * Hybrid store: raw SQL pool if DATABASE_URL available, else in-memory Maps.
+ * Tables bootstrapped on first use via CREATE TABLE IF NOT EXISTS.
+ */
+let useDb = false;
+let dbInitTried = false;
+async function ensureDb() {
+    if (dbInitTried)
+        return;
+    dbInitTried = true;
+    if (!process.env.DATABASE_URL) {
+        console.log("[HealthAI] DATABASE_URL absent — in-memory mode");
+        return;
+    }
+    try {
+        // Bootstrap Prisma tables via raw SQL (mirrors schema.prisma HealthAI models).
+        // Prisma's db push isn't in the Railway build command, so we create them here.
+        // One pool.query() per statement — same pattern as ensureQCoreTables.ts.
+        const pool = (0, dbPool_1.getPool)();
+        await pool.query(`CREATE TABLE IF NOT EXISTS "HealthProfile" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT,
+      "memberLabel" TEXT,
+      "age"         INT NOT NULL DEFAULT 0,
+      "sex"         TEXT NOT NULL DEFAULT 'other',
+      "heightCm"    INT NOT NULL DEFAULT 0,
+      "weightKg"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "conditions"  TEXT[] NOT NULL DEFAULT '{}',
+      "allergies"   TEXT[] NOT NULL DEFAULT '{}',
+      "medications" TEXT[] NOT NULL DEFAULT '{}',
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS "HealthProfile_userId_idx" ON "HealthProfile" ("userId")`);
+        await pool.query(`CREATE TABLE IF NOT EXISTS "HealthDailyLog" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "date"        TEXT NOT NULL,
+      "sleepHours"  DOUBLE PRECISION,
+      "moodScore"   INT,
+      "weightKg"    DOUBLE PRECISION,
+      "waterL"      DOUBLE PRECISION,
+      "exerciseMin" INT,
+      "notes"       TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("profileId", "date")
+    )`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS "HealthDailyLog_profileId_date_idx" ON "HealthDailyLog" ("profileId", "date")`);
+        await pool.query(`CREATE TABLE IF NOT EXISTS "SymptomCheck" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "symptoms"    TEXT[] NOT NULL DEFAULT '{}',
+      "severity"    INT NOT NULL DEFAULT 5,
+      "durationH"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "notes"       TEXT,
+      "matched"     JSONB NOT NULL DEFAULT '[]',
+      "generic"     TEXT,
+      "disclaimer"  TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS "SymptomCheck_profileId_createdAt_idx" ON "SymptomCheck" ("profileId", "createdAt")`);
+        await pool.query(`CREATE TABLE IF NOT EXISTS "CycleEntry" (
+      "id"        TEXT PRIMARY KEY,
+      "profileId" TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "date"      TEXT NOT NULL,
+      "flow"      TEXT,
+      "symptoms"  TEXT[] NOT NULL DEFAULT '{}',
+      "notes"     TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("profileId", "date")
+    )`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS "CycleEntry_profileId_date_idx" ON "CycleEntry" ("profileId", "date")`);
+        await pool.query(`CREATE TABLE IF NOT EXISTS "PlanSnapshot" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "plan"        JSONB NOT NULL,
+      "bmi"         DOUBLE PRECISION,
+      "avgSleep7d"  DOUBLE PRECISION,
+      "avgMood7d"   DOUBLE PRECISION,
+      "generatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS "PlanSnapshot_profileId_generatedAt_idx" ON "PlanSnapshot" ("profileId", "generatedAt")`);
+        await pool.query(`SELECT 1 FROM "HealthProfile" LIMIT 1`);
+        useDb = true;
+        console.log("[HealthAI] Postgres persistence enabled");
+    }
+    catch (e) {
+        captureHealthAIError(e, { route: "db-init" });
+        console.warn("[HealthAI] DB init failed, fallback in-memory:", e instanceof Error ? e.message : e);
+    }
+}
+void ensureDb();
+function rowToProfile(r) {
+    return {
+        id: r.id,
+        userId: r.userId ?? null,
+        memberLabel: r.memberLabel ?? null,
+        age: r.age,
+        sex: r.sex,
+        heightCm: r.heightCm,
+        weightKg: Number(r.weightKg),
+        conditions: r.conditions || [],
+        allergies: r.allergies || [],
+        medications: r.medications || [],
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+        updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
+    };
+}
+function rowToCheck(r) {
+    return {
+        id: r.id,
+        profileId: r.profileId,
+        symptoms: r.symptoms || [],
+        severity: r.severity,
+        durationH: Number(r.durationH),
+        notes: r.notes ?? undefined,
+        matched: typeof r.matched === "string" ? JSON.parse(r.matched) : r.matched,
+        generic: r.generic || "",
+        disclaimer: r.disclaimer || DISCLAIMER,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    };
+}
+function rowToCycle(r) {
+    return {
+        id: r.id,
+        profileId: r.profileId,
+        date: r.date,
+        flow: r.flow ?? undefined,
+        symptoms: r.symptoms || [],
+        notes: r.notes ?? undefined,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    };
+}
+function rowToLog(r) {
+    return {
+        id: r.id,
+        profileId: r.profileId,
+        date: r.date,
+        sleepHours: r.sleepHours == null ? undefined : Number(r.sleepHours),
+        moodScore: r.moodScore ?? undefined,
+        weightKg: r.weightKg == null ? undefined : Number(r.weightKg),
+        waterL: r.waterL == null ? undefined : Number(r.waterL),
+        exerciseMin: r.exerciseMin ?? undefined,
+        notes: r.notes ?? undefined,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    };
+}
+const store = {
+    async getProfile(id) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT * FROM "HealthProfile" WHERE "id"=$1`, [id]);
+            return r.rows.length ? rowToProfile(r.rows[0]) : null;
+        }
+        return profilesMem.get(id) || null;
+    },
+    async upsertProfile(p) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`INSERT INTO "HealthProfile" ("id","userId","memberLabel","age","sex","heightCm","weightKg","conditions","allergies","medications","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
+         ON CONFLICT ("id") DO UPDATE SET "userId"=$2,"memberLabel"=$3,"age"=$4,"sex"=$5,"heightCm"=$6,"weightKg"=$7,"conditions"=$8,"allergies"=$9,"medications"=$10,"updatedAt"=NOW()
+         RETURNING *`, [p.id, p.userId ?? null, p.memberLabel ?? null, p.age, p.sex, p.heightCm, p.weightKg, p.conditions, p.allergies, p.medications]);
+            return rowToProfile(r.rows[0]);
+        }
+        profilesMem.set(p.id, p);
+        return p;
+    },
+    async listProfilesByUser(userId) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT * FROM "HealthProfile" WHERE "userId"=$1 ORDER BY "createdAt" ASC`, [userId]);
+            return r.rows.map(rowToProfile);
+        }
+        return Array.from(profilesMem.values()).filter((p) => p.userId === userId);
+    },
+    async deleteProfile(id) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`DELETE FROM "HealthProfile" WHERE "id"=$1 RETURNING id`, [id]);
+            return r.rowCount > 0;
+        }
+        return profilesMem.delete(id);
+    },
+    async getChecks(profileId, limit = 200) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT * FROM "SymptomCheck" WHERE "profileId"=$1 ORDER BY "createdAt" DESC LIMIT $2`, [profileId, limit]);
+            return r.rows.map(rowToCheck);
+        }
+        return (checksMem.get(profileId) || []).slice(0, limit);
+    },
+    async addCheck(c) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            await pool.query(`INSERT INTO "SymptomCheck" ("id","profileId","symptoms","severity","durationH","notes","matched","generic","disclaimer","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`, [c.id, c.profileId, c.symptoms, c.severity, c.durationH, c.notes ?? null, JSON.stringify(c.matched), c.generic ?? null, c.disclaimer ?? null]);
+            return;
+        }
+        const list = checksMem.get(c.profileId) || [];
+        list.unshift(c);
+        if (list.length > 200)
+            list.length = 200;
+        checksMem.set(c.profileId, list);
+    },
+    async getLogs(profileId, limit = 365) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT * FROM "HealthDailyLog" WHERE "profileId"=$1 ORDER BY "date" DESC LIMIT $2`, [profileId, limit]);
+            return r.rows.map(rowToLog);
+        }
+        return (logsMem.get(profileId) || []).slice(0, limit);
+    },
+    async upsertLog(l) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`INSERT INTO "HealthDailyLog" ("id","profileId","date","sleepHours","moodScore","weightKg","waterL","exerciseMin","notes","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+         ON CONFLICT ("profileId","date") DO UPDATE SET "sleepHours"=$4,"moodScore"=$5,"weightKg"=$6,"waterL"=$7,"exerciseMin"=$8,"notes"=$9
+         RETURNING *`, [l.id, l.profileId, l.date, l.sleepHours ?? null, l.moodScore ?? null, l.weightKg ?? null, l.waterL ?? null, l.exerciseMin ?? null, l.notes ?? null]);
+            return rowToLog(r.rows[0]);
+        }
+        const list = logsMem.get(l.profileId) || [];
+        const idx = list.findIndex((x) => x.date === l.date);
+        if (idx >= 0)
+            list[idx] = l;
+        else
+            list.unshift(l);
+        if (list.length > 365)
+            list.length = 365;
+        logsMem.set(l.profileId, list);
+        return l;
+    },
+    async getCycles(profileId, limit = 365) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT * FROM "CycleEntry" WHERE "profileId"=$1 ORDER BY "date" DESC LIMIT $2`, [profileId, limit]);
+            return r.rows.map(rowToCycle);
+        }
+        return (cyclesMem.get(profileId) || []).slice(0, limit);
+    },
+    async upsertCycle(c) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`INSERT INTO "CycleEntry" ("id","profileId","date","flow","symptoms","notes","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,NOW())
+         ON CONFLICT ("profileId","date") DO UPDATE SET "flow"=$4,"symptoms"=$5,"notes"=$6
+         RETURNING *`, [c.id, c.profileId, c.date, c.flow ?? null, c.symptoms, c.notes ?? null]);
+            return rowToCycle(r.rows[0]);
+        }
+        const list = cyclesMem.get(c.profileId) || [];
+        const idx = list.findIndex((x) => x.date === c.date);
+        if (idx >= 0)
+            list[idx] = c;
+        else
+            list.unshift(c);
+        cyclesMem.set(c.profileId, list);
+        return c;
+    },
+    async addPlanSnapshot(s) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            await pool.query(`INSERT INTO "PlanSnapshot" ("id","profileId","plan","bmi","avgSleep7d","avgMood7d","generatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`, [s.id, s.profileId, JSON.stringify(s.plan), s.bmi ?? null, s.avgSleep7d ?? null, s.avgMood7d ?? null, new Date(s.generatedAt)]);
+            return;
+        }
+        const list = planSnapshotsMem.get(s.profileId) || [];
+        list.unshift(s);
+        if (list.length > 50)
+            list.length = 50;
+        planSnapshotsMem.set(s.profileId, list);
+    },
+    async listPlanSnapshots(profileId, limit = 30) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT * FROM "PlanSnapshot" WHERE "profileId"=$1 ORDER BY "generatedAt" DESC LIMIT $2`, [profileId, limit]);
+            return r.rows.map((row) => ({
+                id: row.id, profileId: row.profileId, plan: row.plan,
+                bmi: row.bmi == null ? null : Number(row.bmi),
+                avgSleep7d: row.avgSleep7d == null ? null : Number(row.avgSleep7d),
+                avgMood7d: row.avgMood7d == null ? null : Number(row.avgMood7d),
+                generatedAt: row.generatedAt instanceof Date ? row.generatedAt.toISOString() : row.generatedAt,
+            }));
+        }
+        return (planSnapshotsMem.get(profileId) || []).slice(0, limit);
+    },
+    async getPlanSnapshot(id) {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT * FROM "PlanSnapshot" WHERE "id"=$1`, [id]);
+            if (!r.rows.length)
+                return null;
+            const row = r.rows[0];
+            return {
+                id: row.id, profileId: row.profileId, plan: row.plan,
+                bmi: row.bmi == null ? null : Number(row.bmi),
+                avgSleep7d: row.avgSleep7d == null ? null : Number(row.avgSleep7d),
+                avgMood7d: row.avgMood7d == null ? null : Number(row.avgMood7d),
+                generatedAt: row.generatedAt instanceof Date ? row.generatedAt.toISOString() : row.generatedAt,
+            };
+        }
+        for (const list of planSnapshotsMem.values()) {
+            const found = list.find((x) => x.id === id);
+            if (found)
+                return found;
+        }
+        return null;
+    },
+    async allProfileIdsWithLogs() {
+        await ensureDb();
+        if (useDb) {
+            const pool = (0, dbPool_1.getPool)();
+            const r = await pool.query(`SELECT DISTINCT "profileId" FROM "HealthDailyLog"`);
+            return r.rows.map((row) => row.profileId);
+        }
+        return Array.from(logsMem.keys());
+    },
+};
+const DISCLAIMER = "Это образовательный совет AI-помощника, а не медицинский диагноз. " +
+    "При тревожных симптомах обязательно обратитесь к врачу.";
+/**
+ * Rule-based knowledge base. Каждый matcher — массив ключевых слов
+ * (русский+английский), привязанные к одному совету.
+ */
+const ADVICE_RULES = [
+    {
+        keyword: "headache",
+        match: ["headache", "head pain", "головная боль", "болит голова", "мигрень"],
+        advice: "Чаще всего — обезвоживание, напряжение шеи или недосып. " +
+            "Выпейте 300-500мл воды, проветрите помещение, сделайте паузу от экрана. " +
+            "Если боль резкая, нарастает, сопровождается рвотой или спутанностью — " +
+            "обратитесь за неотложной помощью.",
+        urgency: "self-care",
+    },
+    {
+        keyword: "fever",
+        match: ["fever", "температура", "жар", "озноб", "лихорадка"],
+        advice: "Измерьте температуру. До 38°C — обильное питьё, отдых. " +
+            "Выше 38.5°C, держится >2 дней или сопровождается одышкой/болью в груди " +
+            "— показан очный осмотр врача.",
+        urgency: "consult",
+    },
+    {
+        keyword: "cough",
+        match: ["cough", "кашель", "горло", "першит"],
+        advice: "Тёплое питьё с мёдом или имбирём, увлажнение воздуха. " +
+            "Сухой кашель >7 дней или с кровью — нужна консультация врача " +
+            "и, возможно, рентген лёгких.",
+        urgency: "self-care",
+    },
+    {
+        keyword: "chest-pain",
+        match: ["chest pain", "боль в груди", "давит грудь", "грудная боль"],
+        advice: "ВАЖНО: давящая боль в груди, особенно отдающая в руку/челюсть, " +
+            "одышка, холодный пот — возможный сердечный приступ. " +
+            "Немедленно вызывайте скорую (112).",
+        urgency: "urgent",
+    },
+    {
+        keyword: "nausea",
+        match: ["nausea", "тошнота", "рвота", "тошнит"],
+        advice: "Малыми глотками воду или электролиты. Рисовый отвар, тосты. " +
+            "Если рвота >24ч или с кровью/жёлчью — звоните врачу.",
+        urgency: "consult",
+    },
+    {
+        keyword: "fatigue",
+        match: ["fatigue", "усталость", "слабость", "нет сил", "выгорание"],
+        advice: "Проверьте сон (7-9ч), уровень железа и витамина D. " +
+            "Хроническая усталость >2 недель — повод сдать общий анализ крови.",
+        urgency: "consult",
+    },
+    {
+        keyword: "anxiety",
+        match: ["anxiety", "тревога", "паника", "беспокойство", "stress"],
+        advice: "Дыхание 4-7-8 (вдох 4с, задержка 7с, выдох 8с) три раунда. " +
+            "Прогулка 20 мин, ограничьте кофеин и новости. " +
+            "Если эпизоды повторяются — поможет КПТ или психотерапевт.",
+        urgency: "self-care",
+    },
+    {
+        keyword: "insomnia",
+        match: ["insomnia", "бессонница", "не могу уснуть", "плохо сплю"],
+        advice: "Гигиена сна: тёмная прохладная спальня, экраны off за 60 мин до сна, " +
+            "магний на ночь, фиксированное время подъёма. " +
+            "Если >2 недель без эффекта — консультация сомнолога.",
+        urgency: "self-care",
+    },
+    {
+        keyword: "back-pain",
+        match: ["back pain", "боль в спине", "поясница", "сорвал спину"],
+        advice: "Тёплый душ, лёгкая растяжка (cat-cow). Избегайте долгого сидения. " +
+            "Острая боль с онемением ноги — срочно к неврологу.",
+        urgency: "consult",
+    },
+    {
+        keyword: "shortness-of-breath",
+        match: [
+            "shortness of breath",
+            "одышка",
+            "тяжело дышать",
+            "не хватает воздуха",
+        ],
+        advice: "ВАЖНО: внезапная сильная одышка, особенно в покое или с болью в груди — " +
+            "немедленно скорая. Если одышка появляется только при нагрузке и нарастает — " +
+            "консультация кардиолога/пульмонолога.",
+        urgency: "urgent",
+    },
+];
+function newId(prefix) {
+    return `${prefix}_${crypto_1.default.randomBytes(8).toString("hex")}`;
+}
+function nowIso() {
+    return new Date().toISOString();
+}
+function todayDate() {
+    return (0, denPoMestnomu_1.denPoMestnomu)();
+}
+function classifySymptoms(symptoms) {
+    const lower = symptoms.map((s) => s.toLowerCase().trim());
+    const matched = [];
+    const seen = new Set();
+    for (const s of lower) {
+        for (const rule of ADVICE_RULES) {
+            if (seen.has(rule.keyword))
+                continue;
+            if (rule.match.some((k) => s.includes(k))) {
+                matched.push({
+                    keyword: rule.keyword,
+                    advice: rule.advice,
+                    urgency: rule.urgency,
+                });
+                seen.add(rule.keyword);
+            }
+        }
+    }
+    const generic = matched.length === 0
+        ? "Опишите симптомы подробнее: что именно беспокоит, как давно, " +
+            "что ухудшает или облегчает. Если симптомы тревожные или длятся " +
+            "более нескольких дней — обратитесь к врачу."
+        : matched.some((m) => m.urgency === "urgent")
+            ? "Среди ваших симптомов есть признаки, требующие срочной помощи. " +
+                "Не откладывайте обращение в скорую."
+            : "Если симптомы сохранятся или усилятся — запишитесь на приём.";
+    return { matched, generic };
+}
+/**
+ * Индекс массы тела, или null — если считать не из чего.
+ *
+ * Возвращал 0 при нулевом росте. Ноль — это не «неизвестно», а число, и в поле
+ * показателя здоровья оно читается как значение. Проверено 20.08.2026: пустое
+ * тело в POST /profile создаёт профиль с ростом и весом 0, и рядом уезжает
+ * bmi: 0.
+ *
+ * Витрина к правде уже готова: healthai/plan объявляет `bmi: number | null` и
+ * рисует его только при `!== null`. То есть договор был на «неизвестно», а
+ * бэкенд слал ноль — и страница честно печатала «0.0».
+ *
+ * Вес тоже проверяется: рост 170 при весе 0 давал ИМТ 0 тем же путём.
+ */
+function bmi(heightCm, weightKg) {
+    if (!(heightCm > 0) || !(weightKg > 0))
+        return null;
+    const m = heightCm / 100;
+    return Math.round((weightKg / (m * m)) * 10) / 10;
+}
+function round(n, decimals = 1) {
+    const f = Math.pow(10, decimals);
+    return Math.round(n * f) / f;
+}
+/**
+ * Ownership guard for a health profile referenced by id.
+ *
+ * Health records (profile, symptom checks, daily logs, trends) must never be
+ * enumerable across users via a client-supplied profileId. A profile that
+ * belongs to an authenticated user (userId set) may only be read or written by
+ * that same JWT sub. Anonymous/legacy profiles (userId null) stay open so the
+ * no-token demo flow keeps working — non-breaking, mirrors the qlife/qgood fix.
+ *
+ * `requireExists: true` for reads (a missing profile is a 404); writes pass
+ * `false` so creating against a not-yet-persisted anonymous profile still works.
+ */
+async function guardProfile(req, profileId, opts) {
+    const profile = await store.getProfile(profileId);
+    if (!profile) {
+        return opts.requireExists
+            ? { ok: false, status: 404, error: "profile-not-found" }
+            : { ok: true };
+    }
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return { ok: false, status: 401, error: "auth-required" };
+        if (auth.sub !== profile.userId) {
+            return { ok: false, status: 403, error: "not-profile-owner" };
+        }
+    }
+    return { ok: true };
+}
+exports.healthaiRouter.get("/health", async (_req, res) => {
+    await ensureDb();
+    res.json({
+        status: "ok",
+        service: "AEVION HealthAI",
+        persistence: useDb ? "postgres" : "in-memory",
+        profilesCount: useDb
+            ? Number((await (0, dbPool_1.getPool)().query(`SELECT COUNT(*) FROM "HealthProfile"`)).rows[0].count)
+            : profilesMem.size,
+        rulesCount: ADVICE_RULES.length,
+        timestamp: nowIso(),
+    });
+});
+exports.healthaiRouter.post("/profile", async (req, res) => {
+    const body = req.body || {};
+    const id = body.id || newId("hp");
+    const existing = await store.getProfile(id);
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    // Если профиль уже принадлежит другому юзеру — отказать (если предъявлен токен).
+    if (existing?.userId && auth?.sub && existing.userId !== auth.sub) {
+        return res.status(403).json({ error: "profile-belongs-to-another-user" });
+    }
+    const profile = {
+        id,
+        userId: existing?.userId ?? (auth?.sub ?? null),
+        memberLabel: typeof body.memberLabel === "string"
+            ? body.memberLabel.slice(0, 80)
+            : existing?.memberLabel ?? null,
+        age: Number(body.age) || existing?.age || 0,
+        sex: ["M", "F", "other"].includes(body.sex)
+            ? body.sex
+            : existing?.sex || "other",
+        heightCm: Number(body.heightCm) || existing?.heightCm || 0,
+        weightKg: Number(body.weightKg) || existing?.weightKg || 0,
+        conditions: Array.isArray(body.conditions)
+            ? body.conditions.map(String)
+            : existing?.conditions || [],
+        allergies: Array.isArray(body.allergies)
+            ? body.allergies.map(String)
+            : existing?.allergies || [],
+        medications: Array.isArray(body.medications)
+            ? body.medications.map(String)
+            : existing?.medications || [],
+        createdAt: existing?.createdAt || nowIso(),
+        updatedAt: nowIso(),
+    };
+    const saved = await store.upsertProfile(profile);
+    // Claim transition: a profile that had no owner is now bound to this
+    // authenticated user. Evict any screener results cached during the prior
+    // anonymous phase so they don't carry into the freshly owned profile.
+    if (auth?.sub && !existing?.userId && saved.userId === auth.sub) {
+        clearScreenerCache(id);
+    }
+    res.json({
+        profile: saved,
+        bmi: bmi(saved.heightCm, saved.weightKg),
+        isNew: !existing,
+    });
+});
+exports.healthaiRouter.get("/profiles/me", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth-required" });
+    const profiles = await store.listProfilesByUser(auth.sub);
+    res.json({
+        profiles: profiles.map((p) => ({
+            ...p,
+            bmi: bmi(p.heightCm, p.weightKg),
+        })),
+    });
+});
+exports.healthaiRouter.delete("/profile/:id", async (req, res) => {
+    const auth = (0, authJwt_1.verifyBearerOptional)(req);
+    if (!auth)
+        return res.status(401).json({ error: "auth-required" });
+    const profile = await store.getProfile(qstr(req.params.id));
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId !== auth.sub) {
+        return res.status(403).json({ error: "not-profile-owner" });
+    }
+    const ok = await store.deleteProfile(qstr(req.params.id));
+    res.json({ ok });
+});
+exports.healthaiRouter.get("/profile/:id", async (req, res) => {
+    const profile = await store.getProfile(qstr(req.params.id));
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    // An owned profile is readable only by its owner; anonymous profiles stay open.
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    res.json({
+        profile,
+        bmi: bmi(profile.heightCm, profile.weightKg),
+    });
+});
+exports.healthaiRouter.post("/check", async (req, res) => {
+    const body = req.body || {};
+    if (!body.profileId || typeof body.profileId !== "string") {
+        return res.status(400).json({ error: "profileId-required" });
+    }
+    const access = await guardProfile(req, body.profileId, { requireExists: false });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
+    if (symptoms.length === 0) {
+        return res.status(400).json({ error: "symptoms-empty" });
+    }
+    const severity = Math.max(1, Math.min(10, Number(body.severity) || 5));
+    const durationH = Math.max(0, Number(body.durationH) || 0);
+    // Бесплатная норма проверок (lib/planGate.ts, ПРОБНЫЕ_ПУТИ). Считаем ПОСЛЕ
+    // разбора: пустой запрос не должен съедать бесплатную попытку. Спит, пока
+    // healthai_check не назван в PAID_ACTIONS; платящего не считает.
+    const норма = await (0, freeActionQuota_1.учестьДействие)(req, "healthai_check");
+    if (норма.заблокировано) {
+        (0, freeActionQuota_1.отказПоНорме)(res, "healthai", норма);
+        return;
+    }
+    const { matched, generic } = classifySymptoms(symptoms);
+    const check = {
+        id: newId("chk"),
+        profileId: body.profileId,
+        symptoms,
+        severity,
+        durationH,
+        notes: typeof body.notes === "string" ? body.notes.slice(0, 500) : undefined,
+        matched,
+        generic,
+        disclaimer: DISCLAIMER,
+        createdAt: nowIso(),
+    };
+    /*
+     * 🔴 ПРОВЕРКА БЕЗ ПРОФИЛЯ НЕ ПАДАЕТ (12.10.2026, Sentry AEVION-BACKEND-1G).
+     *
+     * guardProfile выше пускает несуществующий profileId намеренно
+     * (requireExists: false — бесплатная проверка гостю, волна healthai от
+     * 12.10). Но addCheck пишет в "SymptomCheck", у которой profileId — внешний
+     * ключ на "HealthProfile": вставка падала на fk_sc_profile, ручка отвечала
+     * 500, а бесплатная попытка к этому моменту была уже списана. Гость получал
+     * ошибку сервера вместо ответа — и терял попытку.
+     *
+     * Ответ гостю без профиля отдаём, а не сохраняем: сохранять его некуда.
+     * Говорим об этом прямо полем saved — молчаливое «не сохранилось» хуже.
+     */
+    const профиль = await store.getProfile(body.profileId);
+    if (!профиль) {
+        res.json({ check, saved: false, reason: "profile-not-found" });
+        return;
+    }
+    await store.addCheck(check);
+    res.json({ check, saved: true });
+});
+exports.healthaiRouter.post("/log", async (req, res) => {
+    const body = req.body || {};
+    if (!body.profileId || typeof body.profileId !== "string") {
+        return res.status(400).json({ error: "profileId-required" });
+    }
+    const access = await guardProfile(req, body.profileId, { requireExists: false });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+        ? body.date
+        : todayDate();
+    const log = {
+        id: newId("log"),
+        profileId: body.profileId,
+        date,
+        sleepHours: body.sleepHours != null ? Number(body.sleepHours) : undefined,
+        moodScore: body.moodScore != null
+            ? Math.max(1, Math.min(10, Number(body.moodScore)))
+            : undefined,
+        weightKg: body.weightKg != null ? Number(body.weightKg) : undefined,
+        waterL: body.waterL != null ? Number(body.waterL) : undefined,
+        exerciseMin: body.exerciseMin != null ? Number(body.exerciseMin) : undefined,
+        notes: typeof body.notes === "string" ? body.notes.slice(0, 500) : undefined,
+        createdAt: nowIso(),
+    };
+    const saved = await store.upsertLog(log);
+    res.json({ log: saved });
+});
+exports.healthaiRouter.get("/history/:id", async (req, res) => {
+    const profileId = qstr(req.params.id);
+    const access = await guardProfile(req, profileId, { requireExists: true });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const cks = await store.getChecks(profileId, 20);
+    const lgs = await store.getLogs(profileId, 90);
+    res.json({ checks: cks, logs: lgs });
+});
+exports.healthaiRouter.get("/trends/:id", async (req, res) => {
+    const profileId = qstr(req.params.id);
+    const access = await guardProfile(req, profileId, { requireExists: true });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const lgs = await store.getLogs(profileId);
+    if (lgs.length === 0) {
+        return res.json({
+            avg7d: null,
+            avg30d: null,
+            series: [],
+            streak: 0,
+        });
+    }
+    const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const last7 = sorted.slice(-7);
+    const last30 = sorted.slice(-30);
+    const avg = (rows, pick) => {
+        const vals = rows.map(pick).filter((v) => v != null);
+        if (vals.length === 0)
+            return null;
+        return Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 100) / 100;
+    };
+    const series = sorted.map((l) => ({
+        date: l.date,
+        sleepHours: l.sleepHours ?? null,
+        moodScore: l.moodScore ?? null,
+        weightKg: l.weightKg ?? null,
+    }));
+    // Streak: самая длинная цепочка последовательных дней с любым логом.
+    let streak = 0;
+    let cur = 0;
+    let prevDate = null;
+    for (const l of sorted) {
+        const d = new Date(l.date + "T00:00:00Z");
+        if (prevDate &&
+            Math.abs(d.getTime() - prevDate.getTime()) === 24 * 3600 * 1000) {
+            cur += 1;
+        }
+        else {
+            cur = 1;
+        }
+        if (cur > streak)
+            streak = cur;
+        prevDate = d;
+    }
+    res.json({
+        avg7d: {
+            sleep: avg(last7, (l) => l.sleepHours),
+            mood: avg(last7, (l) => l.moodScore),
+            weight: avg(last7, (l) => l.weightKg),
+            water: avg(last7, (l) => l.waterL),
+            exercise: avg(last7, (l) => l.exerciseMin),
+        },
+        avg30d: {
+            sleep: avg(last30, (l) => l.sleepHours),
+            mood: avg(last30, (l) => l.moodScore),
+            weight: avg(last30, (l) => l.weightKg),
+            water: avg(last30, (l) => l.waterL),
+            exercise: avg(last30, (l) => l.exerciseMin),
+        },
+        series,
+        streak,
+    });
+});
+/**
+ * LLM provider chain: Anthropic → OpenAI → Gemini. Каждый со одинаковыми
+ * safety guardrails. Если ни один не настроен — 503.
+ */
+async function callLlmAnthropic(systemPrompt, userPrompt) {
+    const key = process.env.ANTHROPIC_API_KEY?.trim();
+    if (!key)
+        throw new Error("not-configured");
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1024,
+            temperature: 0.4,
+            system: systemPrompt,
+            messages: [{ role: "user", content: userPrompt }],
+        }),
+    });
+    const data = (await r.json());
+    if (!r.ok)
+        throw new Error(data.error?.message || `Anthropic ${r.status}`);
+    const reply = data.content?.map((b) => b.text || "").join("").trim() || "";
+    if (!reply)
+        throw new Error("empty-reply");
+    return { advice: reply, model: "claude-haiku-4-5" };
+}
+async function callLlmOpenAI(systemPrompt, userPrompt) {
+    const key = process.env.OPENAI_API_KEY?.trim();
+    if (!key)
+        throw new Error("not-configured");
+    const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const r = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+            model,
+            max_tokens: 1024,
+            temperature: 0.4,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt },
+            ],
+        }),
+    });
+    const data = (await r.json());
+    if (!r.ok)
+        throw new Error(data.error?.message || `OpenAI ${r.status}`);
+    const reply = data.choices?.[0]?.message?.content?.trim() || "";
+    if (!reply)
+        throw new Error("empty-reply");
+    return { advice: reply, model };
+}
+async function callLlmGemini(systemPrompt, userPrompt) {
+    const key = process.env.GEMINI_API_KEY?.trim();
+    if (!key)
+        throw new Error("not-configured");
+    // 🔴 07.10.2026. Здесь стояло `gemini-2.0-flash-001` — МЁРТВАЯ модель:
+    // живой вызов отвечает 404 «снята с обслуживания». То есть ветка «попросил
+    // gemini явно» не работала вовсе, а общий путь через реестр работал, и
+    // снаружи это выглядело бы как «ИИ иногда ломается».
+    // Умолчание выровнено с реестром (`providers.ts`), проверено вызовом.
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+        }),
+    });
+    const data = (await r.json());
+    if (!r.ok)
+        throw new Error(data.error?.message || `Gemini ${r.status}`);
+    const reply = data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim() || "";
+    if (!reply)
+        throw new Error("empty-reply");
+    return { advice: reply, model };
+}
+// Ограничитель на платный ИИ (свип 06.09.2026: звалось анонимно и без
+// предела темпа вовсе). Учёт расхода — отдельный платформенный долг.
+// У /plan/:profileId особая беда: платная цепочка из ТРЁХ провайдеров на GET —
+// её дёргали бы префетчи браузеров и краулеры.
+const healthaiAiLimit = (0, rateLimit_1.rateLimit)({ windowMs: 60000, max: 5, keyPrefix: "healthai-ai" });
+exports.healthaiRouter.post("/check-llm", healthaiAiLimit, async (req, res) => {
+    const body = req.body || {};
+    if (!body.profileId || typeof body.profileId !== "string") {
+        return res.status(400).json({ error: "profileId-required" });
+    }
+    const profile = await store.getProfile(body.profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    // An owned profile may only be queried by its owner; anonymous stays open.
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
+    if (symptoms.length === 0) {
+        return res.status(400).json({ error: "symptoms-empty" });
+    }
+    const lang = body.lang === "en" || body.lang === "ru" ? body.lang : "ru";
+    const profileLine = `Возраст: ${profile.age || "?"}, пол: ${profile.sex}, рост: ${profile.heightCm || "?"}см, вес: ${profile.weightKg || "?"}кг.`;
+    const conditionsLine = profile.conditions.length
+        ? `Хронические: ${profile.conditions.join(", ")}.`
+        : "";
+    const allergiesLine = profile.allergies.length
+        ? `Аллергии: ${profile.allergies.join(", ")}.`
+        : "";
+    const medsLine = profile.medications.length
+        ? `Лекарства: ${profile.medications.join(", ")}.`
+        : "";
+    const systemPrompt = lang === "en"
+        ? `You are AEVION HealthAI — an educational health assistant. STRICT RULES:
+1. NEVER provide a medical diagnosis.
+2. NEVER recommend specific medications or dosages.
+3. If symptoms suggest URGENT condition (chest pain, stroke signs, severe shortness of breath, sudden severe pain, suicidal ideation) — say so clearly and recommend emergency services.
+4. Otherwise: 2-4 short paragraphs of self-care + clear marker when to see a doctor.
+5. Plain language, no jargon. Reference the user's profile only if relevant.
+6. End with disclaimer: "Это не медицинский диагноз — при сомнениях обратитесь к врачу."`
+        : `Ты — AEVION HealthAI, образовательный AI-помощник по здоровью. ЖЁСТКИЕ ПРАВИЛА:
+1. НИКОГДА не ставь диагноз.
+2. НИКОГДА не рекомендуй конкретные лекарства и дозировки.
+3. Если симптомы указывают на СРОЧНОЕ состояние (боль в груди, признаки инсульта, тяжёлая одышка, внезапная острая боль, суицидальные мысли) — прямо скажи об этом и направь к скорой.
+4. Иначе: 2-4 коротких абзаца с self-care советами + ясный маркер когда обращаться к врачу.
+5. Простой язык, без жаргона. Ссылайся на профиль пациента только если это релевантно.
+6. Закончи дисклеймером: "Это не медицинский диагноз — при сомнениях обратитесь к врачу."`;
+    const userPrompt = lang === "en"
+        ? `Patient profile: ${profileLine} ${conditionsLine} ${allergiesLine} ${medsLine}\nSymptoms: ${symptoms.join("; ")}.\nDuration: ${body.durationH || "?"}h. Severity: ${body.severity || "?"}/10.${body.notes ? `\nNotes: ${body.notes}` : ""}\n\nGive structured advice.`
+        : `Профиль пациента: ${profileLine} ${conditionsLine} ${allergiesLine} ${medsLine}\nСимптомы: ${symptoms.join("; ")}.\nДлительность: ${body.durationH || "?"}ч. Тяжесть: ${body.severity || "?"}/10.${body.notes ? `\nЗаметки: ${body.notes}` : ""}\n\nДай структурированный совет.`;
+    // Provider chain: Anthropic → OpenAI → Gemini. Юзер может pin через body.provider.
+    const requested = body.provider === "anthropic" ||
+        body.provider === "openai" ||
+        body.provider === "gemini"
+        ? body.provider
+        : null;
+    const chain = requested
+        ? [
+            [
+                requested,
+                requested === "anthropic"
+                    ? callLlmAnthropic
+                    : requested === "openai"
+                        ? callLlmOpenAI
+                        : callLlmGemini,
+            ],
+        ]
+        : [
+            ["anthropic", callLlmAnthropic],
+            ["openai", callLlmOpenAI],
+            ["gemini", callLlmGemini],
+        ];
+    // 🔴 07.10.2026: когда провайдер НЕ назван запросом, идём через общий
+    // реестр, а не через свою цепочку. Своя начиналась с Anthropic — платного
+    // счёта, на котором 07.10 оставалось $8.93 и который консоль пыталась
+    // автопополнить на $20. Реестр зовёт по порядку Gemini → OpenAI →
+    // Anthropic (платный последним), сам перескакивает при отказе, считает
+    // стоимость и пишет переключение в журнал.
+    //
+    // Явно названный провайдер остаётся своей веткой: это отладочная
+    // возможность ручки, и «попросил gemini — получил anthropic» было бы ложью.
+    if (!requested) {
+        try {
+            const ответ = await (0, _________1.спроситьИИ)({ роль: systemPrompt, вопрос: userPrompt, максТокенов: 1024 });
+            return res.json({
+                advice: ответ.текст,
+                provider: ответ.поставщик,
+                model: ответ.модель,
+                triedFallbacks: ответ.перебор.map((p) => ({ provider: p, error: "перешли дальше" })),
+                disclaimer: DISCLAIMER,
+            });
+        }
+        catch (e) {
+            captureHealthAIError(e, { route: "check-llm", provider: "registry" });
+            return res.status(502).json({
+                error: "all_providers_failed",
+                message: "Ни один поставщик ИИ не ответил.",
+                detail: String(e?.message || e).slice(0, 200),
+                disclaimer: DISCLAIMER,
+            });
+        }
+    }
+    const tried = [];
+    for (const [name, fn] of chain) {
+        try {
+            const { advice, model } = await fn(systemPrompt, userPrompt);
+            return res.json({
+                advice,
+                provider: name,
+                model,
+                triedFallbacks: tried,
+                disclaimer: DISCLAIMER,
+            });
+        }
+        catch (e) {
+            captureHealthAIError(e, { route: "check-llm", provider: name });
+            tried.push({
+                provider: name,
+                error: String(e?.message || e),
+            });
+            // continue chain
+        }
+    }
+    // Все провайдеры упали или не настроены.
+    const allUnconfigured = tried.every((t) => t.error === "not-configured");
+    res.status(allUnconfigured ? 503 : 502).json({
+        error: allUnconfigured ? "llm-not-configured" : "llm-all-failed",
+        hint: allUnconfigured
+            ? "Set at least one of ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY in env."
+            : "All configured LLM providers failed; see attempts.",
+        attempts: tried,
+    });
+});
+// Additive: same educational health advice, but routed through the platform
+// smartComplete layer (auto-router picks a single flagship vs the weight-graded
+// Council) instead of the bespoke Anthropic→OpenAI→Gemini chain above. Returns
+// the advice plus the `routing` record and feeds the shared cross-module
+// savings tally under the "healthai" tag. The strict safety system prompt is
+// applied to both the crowd and the chair. /check-llm stays untouched.
+exports.healthaiRouter.post("/check-smart", async (req, res) => {
+    const body = req.body || {};
+    if (!body.profileId || typeof body.profileId !== "string") {
+        return res.status(400).json({ error: "profileId-required" });
+    }
+    const profile = await store.getProfile(body.profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId)
+            return res.status(403).json({ error: "not-profile-owner" });
+    }
+    const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
+    if (symptoms.length === 0)
+        return res.status(400).json({ error: "symptoms-empty" });
+    const lang = body.lang === "en" ? "en" : "ru";
+    const profileLine = `Возраст: ${profile.age || "?"}, пол: ${profile.sex}, рост: ${profile.heightCm || "?"}см, вес: ${profile.weightKg || "?"}кг.`;
+    const extra = [
+        profile.conditions.length ? `Хронические: ${profile.conditions.join(", ")}.` : "",
+        profile.allergies.length ? `Аллергии: ${profile.allergies.join(", ")}.` : "",
+        profile.medications.length ? `Лекарства: ${profile.medications.join(", ")}.` : "",
+    ].filter(Boolean).join(" ");
+    const systemPrompt = lang === "en"
+        ? `You are AEVION HealthAI — an educational health assistant. STRICT RULES:
+1. NEVER provide a medical diagnosis.
+2. NEVER recommend specific medications or dosages.
+3. If symptoms suggest an URGENT condition (chest pain, stroke signs, severe shortness of breath, sudden severe pain, suicidal ideation) — say so clearly and recommend emergency services.
+4. Otherwise: 2-4 short paragraphs of self-care + a clear marker for when to see a doctor.
+5. Plain language, no jargon. Reference the profile only if relevant.
+6. End with: "This is not a medical diagnosis — see a doctor if in doubt."`
+        : `Ты — AEVION HealthAI, образовательный AI-помощник по здоровью. ЖЁСТКИЕ ПРАВИЛА:
+1. НИКОГДА не ставь диагноз.
+2. НИКОГДА не рекомендуй конкретные лекарства и дозировки.
+3. Если симптомы указывают на СРОЧНОЕ состояние (боль в груди, признаки инсульта, тяжёлая одышка, внезапная острая боль, суицидальные мысли) — прямо скажи об этом и направь к скорой.
+4. Иначе: 2-4 коротких абзаца self-care + ясный маркер когда обращаться к врачу.
+5. Простой язык, без жаргона. Ссылайся на профиль только если релевантно.
+6. Закончи: "Это не медицинский диагноз — при сомнениях обратитесь к врачу."`;
+    const userInput = `${lang === "en" ? "Patient profile" : "Профиль пациента"}: ${profileLine} ${extra}\n` +
+        `${lang === "en" ? "Symptoms" : "Симптомы"}: ${symptoms.join("; ")}.\n` +
+        `${lang === "en" ? "Duration" : "Длительность"}: ${body.durationH || "?"}h. ${lang === "en" ? "Severity" : "Тяжесть"}: ${body.severity || "?"}/10.` +
+        `${body.notes ? `\n${lang === "en" ? "Notes" : "Заметки"}: ${body.notes}` : ""}`;
+    try {
+        const { answer, routing } = await (0, smartComplete_1.smartComplete)({
+            userInput,
+            overrides: { writer: { systemPrompt }, critic: { systemPrompt } },
+        }, { module: "healthai" });
+        return res.json({ advice: answer, routing, disclaimer: DISCLAIMER });
+    }
+    catch (e) {
+        captureHealthAIError(e, { route: "check-smart" });
+        return res.status(502).json({ error: "llm-failed", message: e?.message || "smart advice failed" });
+    }
+});
+exports.healthaiRouter.post("/import", async (req, res) => {
+    const body = req.body || {};
+    if (!body.profileId || typeof body.profileId !== "string") {
+        return res.status(400).json({ error: "profileId-required" });
+    }
+    const access = await guardProfile(req, body.profileId, { requireExists: false });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const source = body.source === "apple-health" ||
+        body.source === "google-fit" ||
+        body.source === "manual"
+        ? body.source
+        : "manual";
+    const entries = Array.isArray(body.entries) ? body.entries : [];
+    if (entries.length === 0) {
+        return res.status(400).json({ error: "entries-empty" });
+    }
+    let imported = 0;
+    for (const e of entries) {
+        if (!e || typeof e !== "object")
+            continue;
+        const date = typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date)
+            ? e.date
+            : null;
+        if (!date)
+            continue;
+        const log = {
+            id: newId("log"),
+            profileId: body.profileId,
+            date,
+            sleepHours: e.sleepHours != null ? Number(e.sleepHours) : undefined,
+            moodScore: e.moodScore != null
+                ? Math.max(1, Math.min(10, Number(e.moodScore)))
+                : undefined,
+            weightKg: e.weightKg != null ? Number(e.weightKg) : undefined,
+            waterL: e.waterL != null ? Number(e.waterL) : undefined,
+            exerciseMin: e.exerciseMin != null ? Number(e.exerciseMin) : undefined,
+            notes: `imported:${source}`,
+            createdAt: nowIso(),
+        };
+        await store.upsertLog(log);
+        imported++;
+    }
+    res.json({ imported, source });
+});
+exports.healthaiRouter.get("/risks/:id", async (req, res) => {
+    const profileId = qstr(req.params.id);
+    const profile = await store.getProfile(profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    const lgs = await store.getLogs(profileId);
+    const cks = await store.getChecks(profileId);
+    const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const last7 = sorted.slice(-7);
+    const last30 = sorted.slice(-30);
+    const avg = (rows, pick) => {
+        const vals = rows.map(pick).filter((v) => v != null);
+        if (vals.length === 0)
+            return null;
+        return vals.reduce((s, v) => s + v, 0) / vals.length;
+    };
+    const risks = [];
+    const bmiVal = bmi(profile.heightCm, profile.weightKg);
+    if (bmiVal !== null && bmiVal >= 30) {
+        risks.push({
+            code: "bmi-obese",
+            severity: "high",
+            title: "BMI в зоне ожирения",
+            detail: `BMI ${bmiVal} — рекомендована консультация терапевта/эндокринолога. План питания + регулярная активность 150+ мин/неделю.`,
+        });
+    }
+    else if (bmiVal !== null && bmiVal >= 27) {
+        risks.push({
+            code: "bmi-overweight",
+            severity: "medium",
+            title: "BMI выше нормы",
+            detail: `BMI ${bmiVal} — увеличьте суточную активность, контроль порций. Цель: 0.5-1кг/мес снижение.`,
+        });
+    }
+    else if (bmiVal !== null && bmiVal < 18.5) {
+        risks.push({
+            code: "bmi-underweight",
+            severity: "medium",
+            title: "BMI ниже нормы",
+            detail: `BMI ${bmiVal} — повышенная утомляемость, ослабленный иммунитет. Проверьте уровень железа, ферритина, B12.`,
+        });
+    }
+    const avgSleep7 = avg(last7, (l) => l.sleepHours);
+    if (avgSleep7 != null && avgSleep7 < 6.5 && last7.length >= 4) {
+        risks.push({
+            code: "sleep-deficit",
+            severity: avgSleep7 < 5.5 ? "high" : "medium",
+            title: "Хронический недосып",
+            detail: `Средний сон ${avgSleep7.toFixed(1)}ч за 7 дней (норма 7-9ч). Недосып повышает риски гипертонии, диабета, депрессии.`,
+        });
+    }
+    const avgMood7 = avg(last7, (l) => l.moodScore);
+    if (avgMood7 != null && avgMood7 < 5 && last7.length >= 3) {
+        risks.push({
+            code: "mood-low",
+            severity: avgMood7 < 3.5 ? "high" : "medium",
+            title: "Сниженное настроение",
+            detail: `Средний mood ${avgMood7.toFixed(1)}/10 за 7 дней. Если состояние сохраняется >2 недель — обратитесь к психотерапевту.`,
+        });
+    }
+    // Weight trend (за 30 дней разница >= 3kg в любую сторону = flag).
+    const weightSeries = last30
+        .map((l) => l.weightKg)
+        .filter((v) => v != null);
+    if (weightSeries.length >= 4) {
+        const first = weightSeries[0];
+        const lastW = weightSeries[weightSeries.length - 1];
+        const diff = lastW - first;
+        if (Math.abs(diff) >= 3) {
+            risks.push({
+                code: diff > 0 ? "weight-rising" : "weight-falling",
+                severity: Math.abs(diff) >= 5 ? "medium" : "low",
+                title: diff > 0 ? "Резкий набор веса" : "Резкая потеря веса",
+                detail: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}кг за последние 30 дней. ${diff > 0
+                    ? "Если без сознательной программы — проверьте щитовидную, кортизол, диабет."
+                    : "Если без диеты — потеря >5% веса требует обследования (онкомаркеры, ЖКТ, эндокринная система)."}`,
+            });
+        }
+    }
+    // Streak broken — последняя запись >3 дней назад.
+    if (sorted.length > 0) {
+        const lastDate = new Date(sorted[sorted.length - 1].date + "T00:00:00Z");
+        const daysSince = Math.floor((Date.now() - lastDate.getTime()) / (24 * 3600 * 1000));
+        if (daysSince > 3) {
+            risks.push({
+                code: "tracking-gap",
+                severity: "low",
+                title: "Перерыв в логировании",
+                detail: `${daysSince} дней без записи. Регулярный wellness log усиливает выводы трендов.`,
+            });
+        }
+    }
+    // Recent urgent symptom check (за 7 дней).
+    const sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    const recentUrgent = cks.find((c) => new Date(c.createdAt).getTime() >= sevenDaysAgo &&
+        c.matched.some((m) => m.urgency === "urgent"));
+    if (recentUrgent) {
+        risks.push({
+            code: "recent-urgent-symptom",
+            severity: "high",
+            title: "Недавний urgent-симптом",
+            detail: `Symptom-check от ${new Date(recentUrgent.createdAt).toLocaleDateString()} содержал признаки, требующие срочной помощи. Проконтролируйте, что обращение к врачу состоялось.`,
+        });
+    }
+    // Сортировка по severity (high → low).
+    const order = { high: 0, medium: 1, low: 2 };
+    risks.sort((a, b) => order[a.severity] - order[b.severity]);
+    res.json({
+        risks,
+        summary: {
+            total: risks.length,
+            high: risks.filter((r) => r.severity === "high").length,
+            medium: risks.filter((r) => r.severity === "medium").length,
+            low: risks.filter((r) => r.severity === "low").length,
+        },
+        bmi: bmiVal,
+        avgSleep7d: avgSleep7,
+        avgMood7d: avgMood7,
+        disclaimer: DISCLAIMER,
+    });
+});
+/**
+ * Hydration coach — норма воды по весу (35 мл/кг для взрослых, +0.5л при
+ * exercise >=30мин/день за 7 дней), сравнение с фактом за последние 7 дней,
+ * подсказки. Безопасно: не диагноз, не подменяет врача.
+ */
+exports.healthaiRouter.get("/hydration/:profileId", async (req, res) => {
+    const profileId = qstr(req.params.profileId);
+    const profile = await store.getProfile(profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    const lgs = await store.getLogs(profileId);
+    const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const last7 = sorted.slice(-7);
+    const last3 = sorted.slice(-3);
+    const avg = (rows, pick) => {
+        const vals = rows.map(pick).filter((v) => v != null);
+        if (vals.length === 0)
+            return null;
+        return vals.reduce((s, v) => s + v, 0) / vals.length;
+    };
+    // База: 35 мл/кг, минимум 1.5л.
+    const baseMlPerKg = 35;
+    const targetBase = Math.max(1.5, (profile.weightKg * baseMlPerKg) / 1000);
+    const avgExercise = avg(last7, (l) => l.exerciseMin) ?? 0;
+    const exerciseBonus = avgExercise >= 30 ? 0.5 : 0;
+    const targetL = Math.round((targetBase + exerciseBonus) * 100) / 100;
+    const avgWater7 = avg(last7, (l) => l.waterL);
+    const avgWater3 = avg(last3, (l) => l.waterL);
+    const todayLog = sorted[sorted.length - 1];
+    const todayWater = todayLog && todayLog.date === todayDate() ? (todayLog.waterL ?? null) : null;
+    const deficit7 = avgWater7 != null ? Math.round((targetL - avgWater7) * 100) / 100 : null;
+    let status = "no-data";
+    if (avgWater7 == null) {
+        status = "no-data";
+    }
+    else if (avgWater7 >= targetL * 0.95) {
+        status = "on-track";
+    }
+    else if (avgWater7 >= targetL * 0.7) {
+        status = "below";
+    }
+    else {
+        status = "well-below";
+    }
+    const tips = [];
+    if (status === "well-below") {
+        tips.push("Дефицит воды более 30% от нормы. Поставьте бутылку 0.5л на стол — допивайте каждые 2 часа.");
+        tips.push("Симптомы хронической дегидратации: усталость, головные боли, тёмная моча.");
+    }
+    else if (status === "below") {
+        tips.push(`До нормы не хватает ~${deficit7}л/день. Попробуйте стакан воды до каждого приёма пищи.`);
+    }
+    else if (status === "on-track") {
+        tips.push("Норма соблюдается — поддерживайте ритм. При жаре или активности увеличивайте до +0.5л.");
+    }
+    else {
+        tips.push("Залогируйте waterL за несколько дней, чтобы получить персональные рекомендации.");
+    }
+    if (avgExercise >= 30) {
+        tips.push("Регулярная активность учтена — целевой объём поднят на 0.5л.");
+    }
+    res.json({
+        targetL,
+        targetBaseL: Math.round(targetBase * 100) / 100,
+        exerciseBonusL: exerciseBonus,
+        avgWater7d: avgWater7 != null ? Math.round(avgWater7 * 100) / 100 : null,
+        avgWater3d: avgWater3 != null ? Math.round(avgWater3 * 100) / 100 : null,
+        todayWaterL: todayWater,
+        deficit7dL: deficit7,
+        status,
+        tips,
+        disclaimer: DISCLAIMER,
+    });
+});
+/**
+ * Wellness Score — агрегированный 0-100 балл по 4 столпам (sleep / mood /
+ * water / exercise) + streak bonus − risk penalty. Чисто rule-based,
+ * мотивационный (НЕ диагноз). Подсвечивает слабое звено для фокуса.
+ */
+exports.healthaiRouter.get("/score/:profileId", async (req, res) => {
+    const profileId = qstr(req.params.profileId);
+    const profile = await store.getProfile(profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    const lgs = await store.getLogs(profileId);
+    const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const last7 = sorted.slice(-7);
+    const avg = (rows, pick) => {
+        const vals = rows.map(pick).filter((v) => v != null);
+        if (vals.length === 0)
+            return null;
+        return vals.reduce((s, v) => s + v, 0) / vals.length;
+    };
+    // Каждый столп: 0-25 баллов.
+    const scoreSleep = (() => {
+        const v = avg(last7, (l) => l.sleepHours);
+        if (v == null)
+            return { score: null, label: "no-data" };
+        // Нормально 7-9ч → 25; <5 или >11 → 0.
+        if (v >= 7 && v <= 9)
+            return { score: 25, label: "optimal" };
+        if (v >= 6 && v < 7)
+            return { score: 18, label: "low" };
+        if (v > 9 && v <= 10)
+            return { score: 18, label: "high" };
+        if (v >= 5 && v < 6)
+            return { score: 10, label: "deficit" };
+        return { score: 4, label: "critical" };
+    })();
+    const scoreMood = (() => {
+        const v = avg(last7, (l) => l.moodScore);
+        if (v == null)
+            return { score: null, label: "no-data" };
+        // mood 0-10; >=7.5 → 25; <3 → 0.
+        if (v >= 7.5)
+            return { score: 25, label: "great" };
+        if (v >= 6)
+            return { score: 20, label: "good" };
+        if (v >= 4.5)
+            return { score: 13, label: "neutral" };
+        if (v >= 3)
+            return { score: 6, label: "low" };
+        return { score: 1, label: "very-low" };
+    })();
+    const scoreWater = (() => {
+        const v = avg(last7, (l) => l.waterL);
+        if (v == null)
+            return { score: null, label: "no-data" };
+        const target = Math.max(1.5, (profile.weightKg * 35) / 1000);
+        const pct = v / target;
+        if (pct >= 0.95)
+            return { score: 25, label: "on-target" };
+        if (pct >= 0.8)
+            return { score: 19, label: "near" };
+        if (pct >= 0.6)
+            return { score: 12, label: "below" };
+        return { score: 4, label: "well-below" };
+    })();
+    const scoreExercise = (() => {
+        const v = avg(last7, (l) => l.exerciseMin);
+        if (v == null)
+            return { score: null, label: "no-data" };
+        // WHO: 150мин/неделю модерат → ~21мин/день.
+        if (v >= 30)
+            return { score: 25, label: "active" };
+        if (v >= 20)
+            return { score: 19, label: "moderate" };
+        if (v >= 10)
+            return { score: 12, label: "light" };
+        if (v >= 5)
+            return { score: 6, label: "minimal" };
+        return { score: 2, label: "sedentary" };
+    })();
+    // Streak bonus: 0-10 баллов (1 балл за каждые 3 дня).
+    let cur = 0;
+    let streak = 0;
+    let prevDate = null;
+    for (const l of sorted) {
+        const d = new Date(l.date + "T00:00:00Z");
+        if (prevDate &&
+            Math.abs(d.getTime() - prevDate.getTime()) === 24 * 3600 * 1000) {
+            cur += 1;
+        }
+        else {
+            cur = 1;
+        }
+        if (cur > streak)
+            streak = cur;
+        prevDate = d;
+    }
+    const streakBonus = Math.min(10, Math.floor(streak / 3));
+    // Если каких-то pillars нет данных — раскидываем "no-data" доли пропорционально.
+    const pillars = [scoreSleep, scoreMood, scoreWater, scoreExercise];
+    const knownPillars = pillars.filter((p) => p.score != null);
+    const knownSum = knownPillars.reduce((s, p) => s + (p.score ?? 0), 0);
+    // Если 4 столпа известны → max 100 (100 пилларов + streak 10, capped 100).
+    const pillarMax = knownPillars.length * 25;
+    const pillarsNormalized = pillarMax > 0 ? Math.round((knownSum / pillarMax) * 90) : 0;
+    const totalRaw = pillarsNormalized + streakBonus;
+    const total = Math.min(100, Math.max(0, totalRaw));
+    // Слабое звено (для фокуса).
+    const weakest = knownPillars
+        .filter((p) => (p.score ?? 100) < 18)
+        .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
+    let band = "insufficient";
+    if (knownPillars.length === 0)
+        band = "insufficient";
+    else if (total >= 80)
+        band = "excellent";
+    else if (total >= 60)
+        band = "good";
+    else if (total >= 40)
+        band = "fair";
+    else
+        band = "low";
+    res.json({
+        score: total,
+        band,
+        streak,
+        streakBonus,
+        pillars: {
+            sleep: scoreSleep,
+            mood: scoreMood,
+            water: scoreWater,
+            exercise: scoreExercise,
+        },
+        weakest: weakest
+            ? {
+                pillar: weakest === scoreSleep
+                    ? "sleep"
+                    : weakest === scoreMood
+                        ? "mood"
+                        : weakest === scoreWater
+                            ? "water"
+                            : "exercise",
+                label: weakest.label,
+                score: weakest.score,
+            }
+            : null,
+        knownPillarsCount: knownPillars.length,
+        logsCount: lgs.length,
+        disclaimer: DISCLAIMER,
+    });
+});
+/**
+ * Cycle tracking — period log + predictions (avg cycle length из последних
+ * 3 законченных циклов).
+ */
+exports.healthaiRouter.post("/cycle", async (req, res) => {
+    const body = req.body || {};
+    if (!body.profileId || typeof body.profileId !== "string") {
+        return res.status(400).json({ error: "profileId-required" });
+    }
+    const access = await guardProfile(req, body.profileId, { requireExists: false });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+        ? body.date
+        : todayDate();
+    const flow = body.flow === "spotting" ||
+        body.flow === "light" ||
+        body.flow === "medium" ||
+        body.flow === "heavy"
+        ? body.flow
+        : undefined;
+    const symptoms = Array.isArray(body.symptoms)
+        ? body.symptoms.map(String).slice(0, 20)
+        : [];
+    const entry = {
+        id: newId("cyc"),
+        profileId: body.profileId,
+        date,
+        flow,
+        symptoms,
+        notes: typeof body.notes === "string" ? body.notes.slice(0, 500) : undefined,
+        createdAt: nowIso(),
+    };
+    const saved = await store.upsertCycle(entry);
+    res.json({ entry: saved });
+});
+exports.healthaiRouter.get("/cycle/:profileId", async (req, res) => {
+    const profileId = qstr(req.params.profileId);
+    const access = await guardProfile(req, profileId, { requireExists: true });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const all = await store.getCycles(profileId);
+    if (all.length === 0) {
+        return res.json({
+            entries: [],
+            lastPeriodStart: null,
+            avgCycleLength: null,
+            predictedNextStart: null,
+            predictedOvulation: null,
+        });
+    }
+    const sorted = [...all].sort((a, b) => (a.date < b.date ? -1 : 1));
+    // Period start = первая запись с flow != spotting в каждом блоке последовательных дней.
+    const isPeriod = (e) => !!e.flow && e.flow !== "spotting";
+    const starts = [];
+    let prev = null;
+    for (const e of sorted) {
+        if (!isPeriod(e)) {
+            prev = null;
+            continue;
+        }
+        if (prev) {
+            const a = new Date(prev + "T00:00:00Z");
+            const b = new Date(e.date + "T00:00:00Z");
+            if ((b.getTime() - a.getTime()) / (24 * 3600 * 1000) <= 2) {
+                prev = e.date;
+                continue;
+            }
+        }
+        starts.push(e.date);
+        prev = e.date;
+    }
+    const lastStart = starts[starts.length - 1] || null;
+    let avgLen = null;
+    if (starts.length >= 2) {
+        const diffs = [];
+        for (let i = 1; i < starts.length; i++) {
+            const a = new Date(starts[i - 1] + "T00:00:00Z");
+            const b = new Date(starts[i] + "T00:00:00Z");
+            diffs.push(Math.round((b.getTime() - a.getTime()) / (24 * 3600 * 1000)));
+        }
+        const recent = diffs.slice(-3);
+        avgLen = Math.round(recent.reduce((s, x) => s + x, 0) / recent.length);
+        if (avgLen < 18 || avgLen > 60)
+            avgLen = null;
+    }
+    let predictedNext = null;
+    let predictedOv = null;
+    if (lastStart && avgLen) {
+        const lastDate = new Date(lastStart + "T00:00:00Z");
+        const nextDate = new Date(lastDate.getTime() + avgLen * 24 * 3600 * 1000);
+        predictedNext = (0, denPoMestnomu_1.denPoMestnomu)(nextDate);
+        const ovDate = new Date(nextDate.getTime() - 14 * 24 * 3600 * 1000);
+        predictedOv = (0, denPoMestnomu_1.denPoMestnomu)(ovDate);
+    }
+    res.json({
+        entries: sorted.slice(-90),
+        periodStarts: starts,
+        lastPeriodStart: lastStart,
+        avgCycleLength: avgLen,
+        predictedNextStart: predictedNext,
+        predictedOvulation: predictedOv,
+        disclaimer: DISCLAIMER,
+    });
+});
+/**
+ * PHQ-9 — Patient Health Questionnaire-9, стандартизированный screener
+ * депрессии. 9 вопросов, каждый 0-3. Score 0-27.
+ *  0-4: minimal · 5-9: mild · 10-14: moderate · 15-19: moderately severe · 20-27: severe
+ *  Q9 (suicide ideation) > 0 → immediate flag.
+ */
+const PHQ9_LAST = new Map();
+function phq9Severity(score) {
+    if (score <= 4)
+        return {
+            severity: "minimal",
+            advice: "Симптомов депрессии практически нет. Поддерживайте режим (сон 7-9ч, активность, контакт с близкими).",
+        };
+    if (score <= 9)
+        return {
+            severity: "mild",
+            advice: "Лёгкие симптомы. Стоит проверить через 2-4 недели. Полезны ежедневные прогулки 30+ мин, психогигиена, ограничение алкоголя.",
+        };
+    if (score <= 14)
+        return {
+            severity: "moderate",
+            advice: "Умеренная степень. Рекомендована консультация терапевта/психотерапевта. Психотерапия и/или медикаменты могут быть показаны.",
+        };
+    if (score <= 19)
+        return {
+            severity: "moderately-severe",
+            advice: "Умеренно-тяжёлая степень. Активное лечение показано: психотерапия + (часто) фармакотерапия. Не откладывайте обращение к специалисту.",
+        };
+    return {
+        severity: "severe",
+        advice: "Тяжёлая степень. Необходима неотложная консультация психиатра. Активное лечение, контроль безопасности.",
+    };
+}
+exports.healthaiRouter.post("/screener/phq9", async (req, res) => {
+    const body = req.body || {};
+    if (!body.profileId || typeof body.profileId !== "string") {
+        return res.status(400).json({ error: "profileId-required" });
+    }
+    const profile = await store.getProfile(body.profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    if (!Array.isArray(body.answers) || body.answers.length !== 9) {
+        return res.status(400).json({ error: "answers-must-be-9-numbers" });
+    }
+    const answers = [];
+    for (const a of body.answers) {
+        const n = Math.round(Number(a));
+        if (!Number.isFinite(n) || n < 0 || n > 3) {
+            return res.status(400).json({ error: "answer-must-be-0-to-3" });
+        }
+        answers.push(n);
+    }
+    const score = answers.reduce((s, v) => s + v, 0);
+    const { severity, advice } = phq9Severity(score);
+    const suicideFlag = answers[8] > 0;
+    const result = {
+        score,
+        severity,
+        suicideFlag,
+        suicideAdvice: suicideFlag
+            ? "Вы отметили мысли о самоповреждении. ЭТО ВАЖНО. Свяжитесь со специалистом или позвоните на телефон доверия: РФ 8-800-2000-122 / Казахстан 150 / международный +1-800-273-8255 (US National Suicide Prevention Lifeline)."
+            : null,
+        advice,
+        answers,
+        createdAt: nowIso(),
+        disclaimer: DISCLAIMER,
+    };
+    PHQ9_LAST.set(body.profileId, {
+        score,
+        severity,
+        suicideFlag,
+        answers,
+        createdAt: result.createdAt,
+    });
+    res.json(result);
+});
+exports.healthaiRouter.get("/screener/phq9/:profileId", async (req, res) => {
+    const profileId = qstr(req.params.profileId);
+    const access = await guardProfile(req, profileId, { requireExists: true });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const last = PHQ9_LAST.get(profileId);
+    if (!last)
+        return res.json({ last: null });
+    res.json({ last });
+});
+/**
+ * GAD-7 — Generalized Anxiety Disorder 7-item, стандартизированный
+ * скрининг тревожных расстройств. 7 вопросов 0-3, score 0-21.
+ *  0-4: minimal · 5-9: mild · 10-14: moderate · 15-21: severe
+ */
+const GAD7_LAST = new Map();
+// Drop any cached PHQ-9 / GAD-7 "last result" for a profile id. Called when a
+// profile is claimed by an authenticated owner (POST /profile) so screener
+// answers entered during the prior anonymous phase don't surface to the new
+// owner. (Function declaration — hoisted, so POST /profile above can call it.)
+function clearScreenerCache(profileId) {
+    PHQ9_LAST.delete(profileId);
+    GAD7_LAST.delete(profileId);
+}
+function gad7Severity(score) {
+    if (score <= 4)
+        return {
+            severity: "minimal",
+            advice: "Тревога в норме. Продолжайте здоровые привычки: регулярный сон, физ. активность, ограничение кофеина.",
+        };
+    if (score <= 9)
+        return {
+            severity: "mild",
+            advice: "Лёгкая тревога. Помогают: дыхательные техники (4-7-8), 20-30 мин прогулок, mindfulness 10 мин в день. Если симптомы сохраняются >3 недель — консультация специалиста.",
+        };
+    if (score <= 14)
+        return {
+            severity: "moderate",
+            advice: "Умеренная тревога. Рекомендована консультация психотерапевта (КПТ показала высокую эффективность при тревожных расстройствах).",
+        };
+    return {
+        severity: "severe",
+        advice: "Тяжёлая тревога. Активное лечение показано: психотерапия + (часто) фармакотерапия. Не откладывайте обращение к специалисту.",
+    };
+}
+exports.healthaiRouter.post("/screener/gad7", async (req, res) => {
+    const body = req.body || {};
+    if (!body.profileId || typeof body.profileId !== "string") {
+        return res.status(400).json({ error: "profileId-required" });
+    }
+    const profile = await store.getProfile(body.profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    if (!Array.isArray(body.answers) || body.answers.length !== 7) {
+        return res.status(400).json({ error: "answers-must-be-7-numbers" });
+    }
+    const answers = [];
+    for (const a of body.answers) {
+        const n = Math.round(Number(a));
+        if (!Number.isFinite(n) || n < 0 || n > 3) {
+            return res.status(400).json({ error: "answer-must-be-0-to-3" });
+        }
+        answers.push(n);
+    }
+    const score = answers.reduce((s, v) => s + v, 0);
+    const { severity, advice } = gad7Severity(score);
+    const result = {
+        score,
+        severity,
+        advice,
+        answers,
+        createdAt: nowIso(),
+        disclaimer: DISCLAIMER,
+    };
+    GAD7_LAST.set(body.profileId, {
+        score,
+        severity,
+        answers,
+        createdAt: result.createdAt,
+    });
+    res.json(result);
+});
+exports.healthaiRouter.get("/screener/gad7/:profileId", async (req, res) => {
+    const profileId = qstr(req.params.profileId);
+    const access = await guardProfile(req, profileId, { requireExists: true });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const last = GAD7_LAST.get(profileId);
+    if (!last)
+        return res.json({ last: null });
+    res.json({ last });
+});
+exports.healthaiRouter.get("/plan/:profileId", healthaiAiLimit, async (req, res) => {
+    const profileId = qstr(req.params.profileId);
+    const profile = await store.getProfile(profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    const lgs = await store.getLogs(profileId);
+    const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const last7 = sorted.slice(-7);
+    const avgSleep = (() => {
+        const v = last7.map((l) => l.sleepHours).filter((x) => x != null);
+        return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+    })();
+    const avgMood = (() => {
+        const v = last7.map((l) => l.moodScore).filter((x) => x != null);
+        return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+    })();
+    const avgExercise = (() => {
+        const v = last7.map((l) => l.exerciseMin).filter((x) => x != null);
+        return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+    })();
+    const bmiVal = bmi(profile.heightCm, profile.weightKg);
+    const phq9 = PHQ9_LAST.get(profileId);
+    const gad7 = GAD7_LAST.get(profileId);
+    const goals = [];
+    const habitsAdd = [];
+    const habitsReduce = [];
+    const mental = [];
+    const rationale = [];
+    // BMI-based goals.
+    if (bmiVal !== null && bmiVal >= 30) {
+        goals.push("Снижение веса 0.5-0.7кг/неделю безопасным дефицитом калорий ~500ккал");
+        rationale.push(`BMI ${bmiVal} в зоне ожирения`);
+    }
+    else if (bmiVal !== null && bmiVal >= 27) {
+        goals.push("Постепенное снижение веса до BMI <25 (примерно 0.5кг/неделю)");
+        rationale.push(`BMI ${bmiVal} избыточный`);
+    }
+    else if (bmiVal !== null && bmiVal < 18.5) {
+        goals.push("Постепенный набор веса +0.3кг/неделю через калорийный профицит и силовые");
+        rationale.push(`BMI ${bmiVal} ниже нормы`);
+    }
+    else if (bmiVal !== null) {
+        goals.push("Поддержание веса в норме");
+    }
+    // Sleep goal.
+    if (avgSleep != null && avgSleep < 6.5) {
+        goals.push("Восстановить сон 7-9ч в сутки");
+        habitsAdd.push("Wind-down routine: за 60 мин до сна — экраны off, тёплый душ, чтение");
+        habitsReduce.push("Кофеин после 14:00, алкоголь вечером");
+        rationale.push(`Сон 7д avg ${avgSleep.toFixed(1)}ч ниже нормы`);
+    }
+    else {
+        habitsAdd.push("Постоянное время отбоя ±30 мин даже на выходных");
+    }
+    // Activity goal.
+    if (avgExercise == null || avgExercise < 20) {
+        goals.push("Достичь WHO-минимума 150 мин кардио + 2 силовые в неделю");
+        rationale.push("Текущая активность ниже WHO-минимума");
+    }
+    // Mental health.
+    if (phq9 && phq9.score >= 10) {
+        mental.push("PHQ-9 ≥10 — рекомендована консультация психотерапевта (КПТ показала высокую эффективность)");
+        mental.push("30 мин outdoor прогулок ежедневно — эффект сопоставим с антидепрессантами при mild-moderate депрессии");
+    }
+    else if (avgMood != null && avgMood < 5) {
+        mental.push("Среднее настроение ниже 5/10 — добавьте 30 мин дневного света утром (помогает регуляции серотонина)");
+    }
+    if (gad7 && gad7.score >= 10) {
+        mental.push("GAD-7 ≥10 — психотерапия (КПТ) первая линия при тревожных расстройствах");
+        mental.push("Дыхание 4-7-8 (вдох 4с, задержка 7с, выдох 8с) 3 раунда — снижает кортизол быстро");
+    }
+    else {
+        mental.push("Mindfulness 10 мин/день (Headspace, Calm) — научно доказанный эффект на стресс");
+    }
+    // Conditions-aware nutrition.
+    const focus = [
+        "Овощи и зелень минимум 400г/день",
+        "Белок 1.2-1.6г на кг веса (рыба, птица, бобовые, творог)",
+        "Цельные крупы (овсянка, гречка, киноа)",
+        "Орехи 30-40г/день (омега-3)",
+    ];
+    const avoid = [
+        "Сладкие напитки и соки",
+        "Промышленные транс-жиры (выпечка, фастфуд)",
+        "Избыток рафинированных углеводов",
+    ];
+    if (profile.conditions.some((c) => /diabet|диабет/i.test(c))) {
+        focus.unshift("Низкогликемические продукты (овощи, бобовые, ягоды)");
+        avoid.unshift("Простые сахара, белый рис, белый хлеб");
+        rationale.push("Диабет в анамнезе — приоритет низкого GI");
+    }
+    if (profile.conditions.some((c) => /гипертон|hypertens/i.test(c))) {
+        focus.push("Калий-богатые продукты (бананы, авокадо, листовая зелень)");
+        avoid.push("Соль >5г/день, обработанное мясо");
+        rationale.push("Гипертония — DASH-pattern диета");
+    }
+    // Filter allergies.
+    const allergiesLower = profile.allergies.map((a) => a.toLowerCase());
+    const filterAllergens = (arr) => arr.filter((s) => {
+        const sl = s.toLowerCase();
+        return !allergiesLower.some((a) => a && sl.includes(a));
+    });
+    const sampleMealsBase = [
+        "Завтрак: овсянка с ягодами и орехами + йогурт",
+        "Обед: куриная грудка + киноа + овощи на пару",
+        "Полдник: яблоко + горсть миндаля",
+        "Ужин: запечённая рыба + овощной салат + гречка",
+    ];
+    const sampleMeals = filterAllergens(sampleMealsBase);
+    const focusFiltered = filterAllergens(focus);
+    // Exercise plan.
+    const weeklyExercise = [];
+    if (bmiVal !== null && bmiVal >= 27) {
+        weeklyExercise.push({ type: "Кардио (быстрая ходьба, плавание, велосипед)", frequency: "5×/неделю", minutes: 40 });
+        weeklyExercise.push({ type: "Силовая тренировка", frequency: "2-3×/неделю", minutes: 45 });
+    }
+    else {
+        weeklyExercise.push({ type: "Кардио (бег, плавание, велосипед)", frequency: "3×/неделю", minutes: 30 });
+        weeklyExercise.push({ type: "Силовая тренировка", frequency: "2×/неделю", minutes: 45 });
+    }
+    if (profile.age >= 50) {
+        weeklyExercise.push({ type: "Баланс и гибкость (йога, тай-чи)", frequency: "2×/неделю", minutes: 30 });
+    }
+    else {
+        weeklyExercise.push({ type: "Растяжка / mobility", frequency: "ежедневно", minutes: 10 });
+    }
+    // Daily routine.
+    const dailyRoutine = {
+        wake: "7:00",
+        sleepTarget: "23:00 (7-8ч)",
+        waterL: profile.weightKg ? Math.round(profile.weightKg * 0.03 * 10) / 10 : 2.5,
+        meals: sampleMeals,
+    };
+    // Habits.
+    habitsAdd.push("Утро: 500мл воды натощак");
+    habitsAdd.push("Прогулка 15+ мин после обеда (улучшает гликемию)");
+    if (profile.age >= 40)
+        habitsAdd.push("Ежегодные screening: BP, липиды, глюкоза");
+    habitsReduce.push("Sitting >2ч подряд — каждый час 2-3 мин стоя/растяжки");
+    const plan = {
+        goals,
+        dailyRoutine,
+        weeklyExercise,
+        nutrition: {
+            focus: focusFiltered,
+            avoid,
+            sampleMeals,
+        },
+        habitsToAdd: habitsAdd,
+        habitsToReduce: habitsReduce,
+        mentalHealth: mental,
+        rationale,
+    };
+    // LLM enhancement — personalize the rule-based plan with AI insights.
+    // Gracefully falls back to rule-based if no API key or LLM call fails.
+    let aiInsights = null;
+    let aiModel = null;
+    const llmSystemPrompt = [
+        "You are a certified wellness coach. A patient's health plan was generated by rules.",
+        "Add 2-3 SHORT, practical, personalized tips that the rules missed.",
+        "Language: match the plan language (Russian if goals are in Russian).",
+        "Output ONLY the tips as a plain numbered list. No headers, no disclaimers, no repetition of existing advice.",
+    ].join(" ");
+    const llmUserPrompt = [
+        `Profile: age ${profile.age}, sex ${profile.sex}, BMI ${bmiVal ?? "unknown"}.`,
+        profile.conditions.length ? `Conditions: ${profile.conditions.join(", ")}.` : "",
+        profile.medications.length ? `Medications: ${profile.medications.join(", ")}.` : "",
+        avgSleep != null ? `Avg sleep 7d: ${avgSleep.toFixed(1)}h.` : "",
+        avgMood != null ? `Avg mood 7d: ${avgMood.toFixed(1)}/10.` : "",
+        avgExercise != null ? `Avg exercise 7d: ${avgExercise.toFixed(0)} min/day.` : "",
+        `Current plan goals: ${plan.goals.slice(0, 3).join("; ")}.`,
+        "Add 2-3 personalized tips not already covered.",
+    ].filter(Boolean).join(" ");
+    try {
+        const chain = [
+            () => callLlmAnthropic(llmSystemPrompt, llmUserPrompt),
+            () => callLlmOpenAI(llmSystemPrompt, llmUserPrompt),
+            () => callLlmGemini(llmSystemPrompt, llmUserPrompt),
+        ];
+        for (const fn of chain) {
+            try {
+                const r = await fn();
+                aiInsights = r.advice;
+                aiModel = r.model;
+                break;
+            }
+            catch {
+                /* try next provider */
+            }
+        }
+    }
+    catch { /* ignore */ }
+    const generatedAt = nowIso();
+    const snapshotId = newId("plan");
+    void store
+        .addPlanSnapshot({
+        id: snapshotId,
+        profileId,
+        plan,
+        bmi: bmiVal || null,
+        avgSleep7d: avgSleep,
+        avgMood7d: avgMood,
+        generatedAt,
+    })
+        .catch(() => { });
+    res.json({
+        plan,
+        aiInsights,
+        aiModel,
+        aiEnhanced: !!aiInsights,
+        snapshotId,
+        bmi: bmiVal,
+        avgSleep7d: avgSleep,
+        avgMood7d: avgMood,
+        avgExercise7d: avgExercise,
+        phq9: phq9 ? { score: phq9.score, severity: phq9.severity } : null,
+        gad7: gad7 ? { score: gad7.score, severity: gad7.severity } : null,
+        generatedAt,
+        disclaimer: DISCLAIMER,
+    });
+});
+exports.healthaiRouter.get("/plan/history/:profileId", async (req, res) => {
+    const profileId = qstr(req.params.profileId);
+    const access = await guardProfile(req, profileId, { requireExists: true });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    const list = await store.listPlanSnapshots(profileId);
+    res.json({
+        snapshots: list.map((s) => ({
+            id: s.id,
+            generatedAt: s.generatedAt,
+            bmi: s.bmi,
+            avgSleep7d: s.avgSleep7d,
+            avgMood7d: s.avgMood7d,
+            goalsCount: Array.isArray(s.plan?.goals) ? s.plan.goals.length : 0,
+        })),
+    });
+});
+exports.healthaiRouter.get("/plan/snapshot/:id", async (req, res) => {
+    const snap = await store.getPlanSnapshot(qstr(req.params.id));
+    if (!snap)
+        return res.status(404).json({ error: "snapshot-not-found" });
+    // A snapshot inherits the ownership of the profile it was generated for.
+    // A snapshot with no profileId is orphaned/corrupt — fail closed rather than
+    // passing the string "null" into guardProfile (which, with requireExists
+    // false, would resolve to no-profile and wrongly allow the read).
+    if (!snap.profileId) {
+        return res.status(403).json({ error: "snapshot-not-owned" });
+    }
+    const access = await guardProfile(req, String(snap.profileId), { requireExists: false });
+    if (!access.ok)
+        return res.status(access.status).json({ error: access.error });
+    res.json(snap);
+});
+/** Полный экспорт профиля для врача (или для backup). */
+exports.healthaiRouter.get("/export/:id", async (req, res) => {
+    const profileId = qstr(req.params.id);
+    const profile = await store.getProfile(profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    const cks = await store.getChecks(profileId);
+    const lgs = await store.getLogs(profileId);
+    res.setHeader("Content-Disposition", `attachment; filename="aevion-healthai-${profileId}.json"`);
+    res.json({
+        exportedAt: nowIso(),
+        profile,
+        bmi: bmi(profile.heightCm, profile.weightKg),
+        symptomChecks: cks,
+        dailyLogs: lgs,
+        disclaimer: DISCLAIMER,
+    });
+});
+/**
+ * Population averages: сравнение пользователя с агрегатами по всем профилям.
+ * Считает средние sleep / mood / weight / BMI по всем активным профилям и
+ * возвращает дельты для конкретного profileId. Для разогрева анонимной демо-
+ * среды есть baseline — статичные «глобальные» averages если в системе пока
+ * меньше 5 профилей.
+ */
+const POP_BASELINE = {
+    sleepHours: 6.9,
+    moodScore: 6.4,
+    bmi: 25.7,
+    exerciseMin: 28,
+};
+exports.healthaiRouter.get("/population/:profileId", async (req, res) => {
+    const profileId = qstr(req.params.profileId);
+    const profile = await store.getProfile(profileId);
+    if (!profile)
+        return res.status(404).json({ error: "profile-not-found" });
+    if (profile.userId) {
+        const auth = (0, authJwt_1.verifyBearerOptional)(req);
+        if (!auth)
+            return res.status(401).json({ error: "auth-required" });
+        if (auth.sub !== profile.userId) {
+            return res.status(403).json({ error: "not-profile-owner" });
+        }
+    }
+    const ids = await store.allProfileIdsWithLogs();
+    const profiles = [];
+    for (const id of ids) {
+        const p = await store.getProfile(id);
+        if (p)
+            profiles.push(p);
+    }
+    // ensure self counted даже если без логов
+    if (!profiles.find((p) => p.id === profileId))
+        profiles.push(profile);
+    let sleepSum = 0, sleepN = 0, moodSum = 0, moodN = 0, exSum = 0, exN = 0;
+    let bmiSum = 0, bmiN = 0;
+    for (const p of profiles) {
+        const lgs = await store.getLogs(p.id);
+        const last = lgs.slice(0, 7);
+        for (const l of last) {
+            if (typeof l.sleepHours === "number") {
+                sleepSum += l.sleepHours;
+                sleepN += 1;
+            }
+            if (typeof l.moodScore === "number") {
+                moodSum += l.moodScore;
+                moodN += 1;
+            }
+            if (typeof l.exerciseMin === "number") {
+                exSum += l.exerciseMin;
+                exN += 1;
+            }
+        }
+        const b = bmi(p.heightCm, p.weightKg);
+        if (b !== null) {
+            bmiSum += b;
+            bmiN += 1;
+        }
+    }
+    const usedBaseline = profiles.length < 5;
+    const popSleep = usedBaseline
+        ? POP_BASELINE.sleepHours
+        : sleepN > 0
+            ? sleepSum / sleepN
+            : POP_BASELINE.sleepHours;
+    const popMood = usedBaseline
+        ? POP_BASELINE.moodScore
+        : moodN > 0
+            ? moodSum / moodN
+            : POP_BASELINE.moodScore;
+    const popBmi = usedBaseline
+        ? POP_BASELINE.bmi
+        : bmiN > 0
+            ? bmiSum / bmiN
+            : POP_BASELINE.bmi;
+    const popExercise = usedBaseline
+        ? POP_BASELINE.exerciseMin
+        : exN > 0
+            ? exSum / exN
+            : POP_BASELINE.exerciseMin;
+    // self averages
+    const selfLogs = (await store.getLogs(profileId)).slice(0, 7);
+    const num = (xs) => xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / xs.length;
+    const selfSleep = num(selfLogs.filter((l) => typeof l.sleepHours === "number").map((l) => l.sleepHours));
+    const selfMood = num(selfLogs.filter((l) => typeof l.moodScore === "number").map((l) => l.moodScore));
+    const selfExercise = num(selfLogs.filter((l) => typeof l.exerciseMin === "number").map((l) => l.exerciseMin));
+    // Эта ручка правду отдавала и раньше: превращала 0 в null для ответа.
+    // Непоследовательность внутри одного файла и была признаком недосмотра —
+    // /profile и /plan слали ноль наружу, population нет.
+    const selfBmi = bmi(profile.heightCm, profile.weightKg);
+    res.json({
+        sample: profiles.length,
+        usedBaseline,
+        population: {
+            sleepHours: round(popSleep, 1),
+            moodScore: round(popMood, 1),
+            bmi: round(popBmi, 1),
+            exerciseMin: round(popExercise, 0),
+        },
+        self: {
+            sleepHours: selfSleep == null ? null : round(selfSleep, 1),
+            moodScore: selfMood == null ? null : round(selfMood, 1),
+            bmi: selfBmi,
+            exerciseMin: selfExercise == null ? null : round(selfExercise, 0),
+        },
+        delta: {
+            sleepHours: selfSleep == null ? null : round(selfSleep - popSleep, 1),
+            moodScore: selfMood == null ? null : round(selfMood - popMood, 1),
+            bmi: selfBmi == null ? null : round(selfBmi - popBmi, 1),
+            exerciseMin: selfExercise == null
+                ? null
+                : round(selfExercise - popExercise, 0),
+        },
+    });
+});
+const DOCTOR_REFERRALS = [
+    {
+        id: "ref-ru-103",
+        name: "Скорая помощь / Ambulance",
+        country: "RU",
+        city: "*",
+        specialty: "general",
+        telemedicine: false,
+        phone: "103",
+        emergency: true,
+    },
+    {
+        id: "ref-kz-103",
+        name: "Жедел жәрдем / Скорая",
+        country: "KZ",
+        city: "*",
+        specialty: "general",
+        telemedicine: false,
+        phone: "103",
+        emergency: true,
+    },
+    {
+        id: "ref-us-911",
+        name: "Emergency Services",
+        country: "US",
+        city: "*",
+        specialty: "general",
+        telemedicine: false,
+        phone: "911",
+        emergency: true,
+    },
+    {
+        id: "ref-ru-mh-hotline",
+        name: "Телефон доверия (24/7)",
+        country: "RU",
+        city: "*",
+        specialty: "psychiatry",
+        telemedicine: true,
+        phone: "8-800-2000-122",
+    },
+    {
+        id: "ref-kz-mh-hotline",
+        name: "Психологическая помощь",
+        country: "KZ",
+        city: "*",
+        specialty: "psychiatry",
+        telemedicine: true,
+        phone: "150",
+    },
+    {
+        id: "ref-us-988",
+        name: "988 Suicide & Crisis Lifeline",
+        country: "US",
+        city: "*",
+        specialty: "psychiatry",
+        telemedicine: true,
+        phone: "988",
+    },
+    {
+        id: "ref-global-telehealth",
+        name: "AEVION Telehealth Partner Network",
+        country: "*",
+        city: "*",
+        specialty: "general",
+        telemedicine: true,
+        url: "https://aevion.app/healthai/telehealth",
+    },
+];
+exports.healthaiRouter.get("/referrals", async (req, res) => {
+    const country = req.query.country?.toUpperCase();
+    const specialty = req.query.specialty;
+    const emergency = req.query.emergency === "1";
+    const list = DOCTOR_REFERRALS.filter((r) => {
+        if (country && r.country !== "*" && r.country !== country)
+            return false;
+        if (specialty && r.specialty !== specialty)
+            return false;
+        if (emergency && !r.emergency)
+            return false;
+        return true;
+    });
+    res.json({
+        referrals: list,
+        disclaimer: "Список партнёров AEVION HealthAI. AEVION не оказывает медицинских услуг и не заменяет приём врача.",
+    });
+});
+exports.healthaiRouter.get("/leaderboard", async (_req, res) => {
+    const ids = await store.allProfileIdsWithLogs();
+    const board = [];
+    for (const profileId of ids) {
+        const lgs = await store.getLogs(profileId);
+        const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+        let streak = 0;
+        let cur = 0;
+        let prevDate = null;
+        for (const l of sorted) {
+            const d = new Date(l.date + "T00:00:00Z");
+            if (prevDate &&
+                Math.abs(d.getTime() - prevDate.getTime()) === 24 * 3600 * 1000) {
+                cur += 1;
+            }
+            else {
+                cur = 1;
+            }
+            if (cur > streak)
+                streak = cur;
+            prevDate = d;
+        }
+        // Anonymize: never expose raw profileIds in a public gamification board —
+        // a profileId is the key used to address a health record, so listing them
+        // is an enumeration surface. A stable one-way hash keeps rows
+        // distinguishable (a caller can hash their own id to find their row)
+        // without revealing real ids.
+        const anonId = crypto_1.default.createHash("sha256").update(profileId).digest("hex").slice(0, 12);
+        board.push({ anonId, streak, logs: lgs.length });
+    }
+    board.sort((a, b) => b.streak - a.streak || b.logs - a.logs);
+    res.json({
+        leaderboard: board.slice(0, 20).map((row, i) => ({ rank: i + 1, ...row })),
+    });
+});

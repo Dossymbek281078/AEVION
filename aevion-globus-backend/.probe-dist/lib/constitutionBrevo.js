@@ -1,0 +1,866 @@
+"use strict";
+/**
+ * Brevo (formerly Sendinblue) email helper for Constitution.
+ *
+ * Env:
+ *   BREVO_API_KEY       — from Brevo dashboard → Account → API Keys
+ *   BREVO_SENDER_EMAIL  — verified sender (default: noreply@aevion.app)
+ *   BREVO_SENDER_NAME   — display name (default: AEVION Constitution)
+ *
+ * Used by:
+ *   - constitutionWaitlist.ts: sendWeeklyDigest() when Pro launches
+ *   - Future transactional emails: welcome, upgrade confirmation, cert-issued
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.sendBrevoEmail = sendBrevoEmail;
+exports.buildWaitlistConfirmEmail = buildWaitlistConfirmEmail;
+exports.planPhrase = planPhrase;
+exports.isLiveNow = isLiveNow;
+exports.модульОткрыт = модульОткрыт;
+exports.модулиБезДняОткрытия = модулиБезДняОткрытия;
+exports.isModuleLiveNow = isModuleLiveNow;
+exports.isEnglishSource = isEnglishSource;
+exports.buildPlatformWaitlistEmail = buildPlatformWaitlistEmail;
+exports.buildWeeklyDigestEmail = buildWeeklyDigestEmail;
+exports.buildEmailVerifyEmail = buildEmailVerifyEmail;
+exports.sendEmailVerify = sendEmailVerify;
+exports.sendWaitlistConfirm = sendWaitlistConfirm;
+exports.sendWeeklyDigestEmail = sendWeeklyDigestEmail;
+exports.sendAgencyLeadNotice = sendAgencyLeadNotice;
+exports.адресатПодтвержденияЗаявки = адресатПодтвержденияЗаявки;
+exports.строкиПодтвержденияЗаявки = строкиПодтвержденияЗаявки;
+exports.sendAgencyLeadReceipt = sendAgencyLeadReceipt;
+const degradedResponse_1 = require("./degradedResponse");
+const brevoQuota_1 = require("./brevoQuota");
+const waitlistUnsubToken_1 = require("./waitlistUnsubToken");
+const BREVO_API = "https://api.brevo.com/v3";
+const email_1 = require("./build/email");
+// export добавлен 06.09.2026: отправитель нужен scripts/launch-announce-send.ts
+// (письмо запуска 10.09); прежде скрипт импортировал его вопреки локальности,
+// и это жило только потому, что scripts/ не проверялись типами.
+async function sendBrevoEmail(payload) {
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+        console.warn("[Brevo] BREVO_API_KEY not set — email not sent");
+        return { ok: false, error: "BREVO_API_KEY missing" };
+    }
+    const senderEmail = process.env.BREVO_SENDER_EMAIL || "noreply@aevion.app";
+    const senderName = process.env.BREVO_SENDER_NAME || "AEVION Constitution";
+    const body = {
+        sender: { email: senderEmail, name: senderName },
+        to: payload.to,
+        subject: payload.subject,
+        htmlContent: payload.htmlContent,
+        textContent: payload.textContent,
+        replyTo: payload.replyTo,
+        tags: payload.tags,
+    };
+    try {
+        const r = await fetch(`${BREVO_API}/smtp/email`, {
+            method: "POST",
+            headers: {
+                "api-key": apiKey,
+                "Content-Type": "application/json",
+                Accept: "application/json",
+            },
+            body: JSON.stringify(body),
+            // Без таймаута зависший Brevo держал запрос бесконечно и вместе с ним
+            // соединение из пула. Письмо не критично, ждать его нечего.
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!r.ok) {
+            const text = await r.text().catch(() => "");
+            return { ok: false, error: `Brevo HTTP ${r.status}: ${text.slice(0, 200)}` };
+        }
+        const j = await r.json();
+        // Считаем ОТПРАВЛЕННЫЕ, а не попытки: квоту Brevo расходует принятое письмо.
+        // Стоит и на пути без messageId — провайдер принял запрос, значит квота
+        // потрачена, даже если доставка не подтверждена.
+        (0, brevoQuota_1.noteEmailSent)();
+        if (!j.messageId) {
+            const { degradedReason } = (0, degradedResponse_1.degraded)("Brevo returned 2xx with no messageId — delivery not confirmed");
+            return { ok: true, degraded: true, degradedReason };
+        }
+        return { ok: true, messageId: j.messageId };
+    }
+    catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : "unknown" };
+    }
+}
+/* ─── Constitution-specific email templates ──────────────────────── */
+/**
+ * Письмо подписчику зависит от того, где он подписался.
+ *
+ * Таблица `constitution_waitlist` перестала быть только конституционной: с
+ * 14.08.2026 в неё пишет и общая форма на главной и на /go, потому что заводить
+ * второе хранилище адресов ради тех же трёх полей — дороже, чем поле `source`.
+ * Но письмо оставалось одно, конституционное, и человек, оставивший адрес на
+ * главной ради «раннего доступа к модулям», получал «Ты в листе ожидания
+ * Constitution Pro» с обещанием скидки на продукт, которого не просил, и с
+ * подписью «вы подписались на aevion.app/constitution/pricing» — неправдой.
+ * Замер в журнале Brevo показал, что письма реально уходят, то есть неправда
+ * доезжала бы до каждого настоящего подписчика.
+ *
+ * Развилка идёт по `source`, а не по отдельному флагу: source уже хранится в
+ * строке и уже отвечает на вопрос «откуда человек».
+ */
+/**
+ * Блок отписки для подвала письма.
+ *
+ * До 21.08.2026 здесь стояла ссылка на страницу, которой НЕ СУЩЕСТВУЕТ (404), —
+ * то есть отписаться было нельзя ни одним способом. Теперь ссылка ведёт на рабочую
+ * ручку и несёт токен; если подписывать нечем (нет секрета), вместо ссылки в письме
+ * стоит живой адрес почты, а не ссылка, которая молча не сработает.
+ */
+function unsubBlock(email, color = "#64748b", lang = "ru") {
+    const url = (0, waitlistUnsubToken_1.unsubscribeUrl)(email);
+    // Подпись отписки на языке ПИСЬМА, а не платформы: английское письмо с
+    // русской строкой «Отписаться» — то же самое расхождение, только мельче
+    // (поймано 29.08 собственной пробой сразу после починки языка письма).
+    if (lang === "en") {
+        return url
+            ? `<a href="${url}" style="color:${color}">Unsubscribe</a>`
+            : `Unsubscribe: write to <a href="mailto:${(0, waitlistUnsubToken_1.unsubContact)()}" style="color:${color}">${(0, waitlistUnsubToken_1.unsubContact)()}</a>`;
+    }
+    return url
+        ? `<a href="${url}" style="color:${color}">Отписаться</a>`
+        : `Отписаться: напишите на <a href="mailto:${(0, waitlistUnsubToken_1.unsubContact)()}" style="color:${color}">${(0, waitlistUnsubToken_1.unsubContact)()}</a>`;
+}
+/**
+ * То же самое для ТЕКСТОВОЙ части письма.
+ *
+ * 🔴 Повод (11.10.2026, нашёл оркестратор): под полем листа ожидания написано
+ * «Отписка одной ссылкой в каждом письме», а ссылка стояла только в HTML и в
+ * заголовке List-Unsubscribe. Кто читает письмо текстом (а это и почтовые
+ * клиенты с выключенным HTML, и часть мобильных), обещание не исполнялось.
+ * Разметки здесь быть не должно: в text/plain тег `<a>` человек увидит как есть.
+ */
+function unsubBlockText(email, lang = "ru") {
+    const url = (0, waitlistUnsubToken_1.unsubscribeUrl)(email);
+    if (lang === "en") {
+        return url ? `Unsubscribe: ${url}` : `Unsubscribe: write to ${(0, waitlistUnsubToken_1.unsubContact)()}`;
+    }
+    return url ? `Отписаться: ${url}` : `Отписаться: напишите на ${(0, waitlistUnsubToken_1.unsubContact)()}`;
+}
+/** Текстовая часть письма вместе со строкой отписки — один способ для всех вариантов. */
+function сТекстовойОтпиской(тело, email, lang = "ru") {
+    return `${тело}
+
+${unsubBlockText(email, lang)}`;
+}
+function buildWaitlistConfirmEmail(email, source) {
+    // Проверяется ВХОЖДЕНИЕ метки, а не начало строки. С 19.08 источник может
+    // быть списком через запятую («cyberchess,constitution»): при повторной
+    // подписке метка теперь дописывается, а не перезаписывает предыдущую. Условие
+    // `/^constitution/` на таком списке дало бы ложное «не наш» и отправило бы
+    // конституционному подписчику письмо про ранний доступ.
+    const marks = String(source ?? "")
+        .split(",")
+        .map((m) => m.trim().toLowerCase())
+        .filter(Boolean);
+    const fromConstitution = marks.length === 0 || marks.some((m) => m.startsWith("constitution"));
+    if (!fromConstitution)
+        return buildPlatformWaitlistEmail(email, source);
+    const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
+      <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION Constitution</div>
+      <p style="margin:0 0 16px">Ты в списке ожидания Pro.</p>
+      <p style="color:#9aa3c0;margin:0 0 16px">
+        Как только Constitution Pro запустится, ты получишь письмо с
+        <strong style="color:#f472b6">30% скидкой на первый месяц</strong> — только для ранней подписки.
+      </p>
+      <p style="color:#9aa3c0;margin:0 0 24px">
+        Пока — пробуй Free: <a href="https://aevion.app/constitution" style="color:#22d3ee">aevion.app/constitution</a>
+      </p>
+      <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
+      <p style="color:#64748b;font-size:11px;margin:0">
+        Ты получил это письмо потому что подписался на waitlist на aevion.app/constitution/pricing.<br>
+        ${unsubBlock(email)}
+      </p>
+    </div>
+  `;
+    return {
+        to: [{ email }],
+        subject: "📨 Ты в листе ожидания Constitution Pro",
+        htmlContent: html,
+        textContent: сТекстовойОтпиской(`Ты в списке ожидания Constitution Pro. Откроем — сразу письмо с 30% скидкой. Пока: aevion.app/constitution`, email),
+        tags: ["constitution", "waitlist-confirm"],
+    };
+}
+/**
+ * Письмо тому, кто оставил адрес на главной или на /go: ранний доступ к модулям
+ * платформы, без обещаний по конкретному продукту, которых мы не давали на той
+ * странице. Никаких скидок здесь не обещаем — цену и условия решает основатель.
+ */
+/**
+ * Посадочные модулей: человек подписался НЕ «на платформу вообще», а ради
+ * конкретного продукта и конкретной даты, и письмо обязано это отражать.
+ *
+ * До 19.08 подписчику с /cyberchess/launch уходило «вы оставили адрес на
+ * главной странице aevion.app» — неправда — и ни слова про шахматы, ради
+ * которых он подписался. Форма научилась передавать `source` 14.08, письмо
+ * про это не знало.
+ *
+ * Дата названа как ПЛАН, а не обещание: письмо живёт в почте месяцами, а дата
+ * запуска — цель доски, и она может сдвинуться. Обещаем то, что зависит от
+ * нас: написать в день запуска.
+ */
+/*
+ * 🔴 `openedAt` — день, когда модуль ФАКТИЧЕСКИ открылся, и это НЕ то же
+ * самое, что `planUtc` (день, который мы обещали). Замер 30.09.2026 показал,
+ * зачем их разделять: у восьми модулей обещанный день прошёл, и письмо всем
+ * им говорило «Обещали 20 сентября — напишем, как только откроем» — включая
+ * те, которыми человек уже пользуется. Подписавшийся на странице QVenture,
+ * где он только что бесплатно получил разбор, читал, что модуль ещё закрыт.
+ *
+ * Заполняется только там, где открытость ДОКАЗАНА исходником, а не догадкой:
+ *   devhub, multichat — их страницы запуска печатают «Уже открыто»;
+ *   qright — на странице стоит «Реестр открыт уже сейчас»;
+ *   qventure — разбор работает без входа и без оплаты (проверено на проде
+ *              30.09.2026: ручка захвата адреса отвечает 201/postgres).
+ * bureau намеренно БЕЗ отметки: его страница сама пишет «Обещали 20 сентября
+ * — напишем, как только откроем», то есть модуль действительно не открыт, и
+ * письмо обязано говорить то же.
+ * cyberchess отметки не требует — он в LIVE_ENTRIES и идёт другим письмом.
+ */
+const LAUNCH_MODULES = [
+    { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch", planUtc: Date.UTC(2026, 8, 30) },
+    { prefix: "bureau", name: "AEVION IP Bureau", plan: "20 сентября", page: "https://aevion.app/bureau/launch", planUtc: Date.UTC(2026, 8, 20) },
+    // ⚠️ 09.09.2026: строка была скопирована с соседней (bureau) и не поправлена —
+    // подписчик со страницы QRight получал письмо про ЧУЖОЙ модуль («AEVION IP
+    // Bureau») и ссылку на чужую страницу запуска, накануне собственного запуска
+    // QRight. Нашлось расхождением двух НАШИХ списков: в launchAnnounce.ts тот же
+    // модуль называется «QRight» и ведёт на /qright.
+    //
+    // Адрес — страница МОДУЛЯ, а не /qright/launch: страницы запуска у него нет
+    // (проверено 09.09: /qright 200, /qright/launch 404). Выдумывать адрес нельзя,
+    // это увело бы человека из письма в 404. Тот же выбор и по той же причине
+    // сделан у qskyway выше.
+    { prefix: "qright", name: "QRight", plan: "20 сентября", page: "https://aevion.app/qright", planUtc: Date.UTC(2026, 8, 20), openedAt: Date.UTC(2026, 8, 20) },
+    { prefix: "devhub", name: "DevHub Studio", plan: "20 сентября", page: "https://aevion.app/devhub/launch", planUtc: Date.UTC(2026, 8, 20), openedAt: Date.UTC(2026, 8, 21) },
+    { prefix: "multichat", name: "AEVION Multichat", plan: "20 сентября", page: "https://aevion.app/multichat-engine/launch", planUtc: Date.UTC(2026, 8, 20), openedAt: Date.UTC(2026, 8, 21) },
+    // ⚠️ Добавлено 31.08.2026. Найдено сторожем воронки при сборке: подписчик со
+    // страницы QSkyway получал ОБЩЕЕ письмо «платформа выпускает модули по
+    // одному» вместо письма про свой модуль — а QSkyway в списке основателя на
+    // 20 сентября.
+    //
+    // Адрес ведёт на страницу МОДУЛЯ, а не на /qskyway/launch: страницы запуска
+    // у него нет. Выдумывать адрес нельзя — у нас это уже давало ложные находки
+    // и повело бы человека из письма в 404. Страница модуля проверена: 200.
+    { prefix: "qskyway", name: "AEVION QSkyway", plan: "20 сентября", page: "https://aevion.app/qskyway", planUtc: Date.UTC(2026, 8, 20) },
+    // ⚠️ Ещё три модуля 31.08.2026, и нашлись они не глазами, а РАСХОЖДЕНИЕМ ДВУХ
+    // НАШИХ СПИСКОВ. Сторож сверяет письмо с планом основателя; я добавил в письмо
+    // QSkyway, он покраснел — и при разборе выяснилось, что у плана на 20 сентября
+    // ВОСЕМЬ модулей, а письмо знало пять. То есть подписчики трёх модулей,
+    // выходящих в один день с остальными, получили бы общее письмо «платформа
+    // выпускает модули по одному» — ровно в день выпуска своего.
+    //
+    // Ни один тест этого не видел: письмо уходило, ошибок не было, список просто
+    // не знал про них. Отсутствие не падает.
+    //
+    // Адреса ведут на страницы МОДУЛЕЙ: страниц /launch у этих трёх нет, а
+    // выдумывать адрес нельзя — человек из письма попал бы в 404. Все три
+    // проверены на проде: 200, при контроле (заведомо несуществующий адрес)
+    // ответ иной.
+    { prefix: "qsign", name: "AEVION QSign", plan: "20 сентября", page: "https://aevion.app/qsign", planUtc: Date.UTC(2026, 8, 20) },
+    { prefix: "startup", name: "Биржа стартапов", plan: "20 сентября", page: "https://aevion.app/startup-exchange", planUtc: Date.UTC(2026, 8, 20) },
+    { prefix: "qventure", name: "AEVION QVenture", plan: "20 сентября", page: "https://aevion.app/qventure", planUtc: Date.UTC(2026, 8, 20), openedAt: Date.UTC(2026, 8, 20) },
+];
+/**
+ * Входы, где продукт УЖЕ работает. Отличать их от LAUNCH_MODULES обязательно:
+ * там человек ждёт открытия, здесь он уже получил ценность и ждать ему нечего.
+ *
+ * Замер 27.08.2026: подписчик со страницы протокола долголетия получал общий
+ * текст «платформа выпускает модули по одному, напишем в день запуска
+ * следующего». Он подписался РАДИ протокола и уже забрал его бесплатно —
+ * письмо не подтверждало ни того, что он получил, ни следующего шага. Это тот
+ * же класс, что чинили 19.08 для шахмат: источник доезжает до письма, а письмо
+ * про него не знает.
+ */
+/**
+ * Часовой пояс запуска — Алматы, UTC+5 (тот же, что у обратного отсчёта на
+ * странице запуска). Держим число здесь, а не считаем от сервера: сервер
+ * живёт в UTC, и без сдвига письмо на шесть часов считало бы, что запуск
+ * ещё не наступил.
+ */
+const LAUNCH_TZ_OFFSET_MS = 5 * 3600000;
+/**
+ * Как назвать дату человеку — с учётом того, что день мог УЖЕ ПРОЙТИ.
+ *
+ * «Открываем по плану 20 сентября» становится ложью само по себе, без единой
+ * правки кода: просто когда день наступит и пройдёт. Ни один тест этого не
+ * ловит — сегодня текст верен.
+ *
+ * После даты НЕ пишем «уже открыт»: календарь не значит, что модуль работает,
+ * и 30.08 это уже стоило нам письма, звавшего в запуск, которого не было.
+ * Честное третье состояние — «обещали такого-то, напишем, как откроем».
+ *
+ * `now` параметром и экспорт — ради проверки: иначе день запуска нельзя
+ * проверить иначе как переводом часов на машине.
+ */
+function planPhrase(plan, planUtc, ru, now = new Date(), открыт = false, page) {
+    /*
+     * ТРИ состояния, а не два.
+     *
+     * Было два: «откроем по плану» и «обещали такого-то — напишем, как
+     * откроем». Второе говорилось всем, у кого обещанный день прошёл, — то
+     * есть и тем модулям, которые к этому дню уже работали. Замер 30.09.2026:
+     * так отвечали восемь источников подписки из десяти, включая QVenture,
+     * где человек ровно что получил разбор бесплатно и без входа.
+     *
+     * Третье состояние — «уже открыт, вот куда идти». Оно включается не
+     * календарём обещания, а отдельной отметкой `openedAt`: обещание и
+     * открытие это разные события, и путать их нельзя ни в какую сторону.
+     */
+    const прошёл = isLiveNow(planUtc, now);
+    if (ru) {
+        if (открыт)
+            return `Модуль уже открыт — заходите${page ? `: ${page}` : ""}.`;
+        return прошёл
+            ? `Обещали ${plan} — напишем, как только откроем.`
+            : `Открываем по плану ${plan}. Напишем вам в день запуска.`;
+    }
+    if (открыт)
+        return `It is already open — come in${page ? `: ${page}` : ""}.`;
+    return прошёл
+        ? `We promised ${plan} — we will write the moment it opens.`
+        : `We open ${plan}. You get one email on launch day.`;
+}
+/** Наступил ли день, с которого модуль считается открытым. */
+// Экспортируется РАДИ ПРОВЕРКИ: без параметра now и без экспорта поведение в
+// день запуска нельзя проверить иначе как переводом часов на машине.
+function isLiveNow(liveFromUtcMidnight, now = new Date()) {
+    if (liveFromUtcMidnight === undefined)
+        return true;
+    const shifted = new Date(now.getTime() + LAUNCH_TZ_OFFSET_MS);
+    const today = Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate());
+    return today >= liveFromUtcMidnight;
+}
+const LIVE_ENTRIES = [
+    {
+        prefix: "longevity",
+        name: "Протокол долголетия",
+        // Английское имя и следующий шаг: без них письмо англоязычному
+        // подписчику выходило смесью — «Протокол долголетия is open» (поймано
+        // собственной пробой 29.08 сразу после починки языка).
+        nameEn: "The Longevity Protocol",
+        nextStepEn: "The protocol is open in full on the page — markers, an evidence-ranked stack " +
+            "and what is overrated. You can also take it as a PDF to fill in at day zero " +
+            "and at day ninety.",
+        page: "https://aevion.app/longevity",
+        // Следующий шаг называем без цен и без скидок: цена живёт в каталоге, а
+        // условия решает основатель (это же сказано у соседнего письма выше).
+        nextStep: "Протокол открыт целиком на странице — маркеры, стек по доказательности и двенадцать недель. " +
+            "Там же можно забрать его в PDF, чтобы заполнять на нулевой и двенадцатой неделе, " +
+            "и открыть подписку на остальные модули платформы.",
+    },
+    {
+        // Шахматы переходят из «планируем» в «открыто» ПО ДАТЕ, а не рукой.
+        // Найдено 29.08.2026: список открытых модулей был статическим, и 30-го
+        // подписавшийся получил бы «Открываем по плану 30 августа» — в сам день
+        // запуска. Ручной шаг, о котором никто не вспомнит в день запуска, — это
+        // не шаг, а ловушка.
+        prefix: "cyberchess",
+        name: "CyberChess",
+        page: "https://aevion.app/cyberchess",
+        // ПЕРЕНЕСЕНО основателем 29.08.2026 на 30 сентября: «нет удобного
+        // разбора партии сразу после её конца, много недоработок».
+        // Дата здесь не украшение: 30.08 она сделала письмо ложным —
+        // подписчик получал «уже открыт» в день, когда запуска не было.
+        liveFrom: Date.UTC(2026, 8, 30),
+        // Следующий шаг называем тем же, чем письмо запуска: задача дня решается
+        // за минуту и работает с телефона — это самый короткий путь к первой
+        // ценности. Цен и условий здесь нет: они живут в каталоге.
+        nextStep: "Начать проще всего с задачи дня — она решается за минуту. " +
+            "Там же рейтинг и турниры, а партию с движком удобнее играть с компьютера.",
+    },
+];
+/**
+ * Живой ли модуль ПО СЛАГУ — для ворот отправки письма запуска
+ * (scripts/launch-announce-send.ts). Экспортировано 06.09.2026: скрипт
+ * раньше читал поле liveFromUtcMidnight прямо из LAUNCH_MODULES, поле
+ * переехало сюда (LIVE_ENTRIES.liveFrom), и скрипт молча сломался — поймал
+ * пятый конфиг типов на сборке цикла №3.
+ * Политика прежняя: нет записи с датой — модуль считается живым (дата не
+ * назначена ≠ запрещён); есть — решает isLiveNow по календарю Алматы.
+ */
+/**
+ * 🔴 ЕДИНСТВЕННОЕ место, где решается «открыт ли модуль».
+ *
+ * До 30.09.2026 ответ складывался в двух местах независимо: письмо смотрело,
+ * есть ли запись в `LIVE_ENTRIES`, а `planPhrase` — есть ли отметка `openedAt`.
+ * Одна вещь под двумя именами: они не обязаны расходиться, но ничто не мешало
+ * им разойтись, и один раз уже разошлись — у cyberchess отметки нет, а письмо
+ * он шлёт как открытый. Проверка, выбиравшая «неоткрытый модуль» по отметке,
+ * на этом и споткнулась.
+ *
+ * Теперь источник один, а оба прежних места — его читатели. Открыт, если:
+ *   * модуль есть в `LIVE_ENTRIES` и его `liveFrom` наступил (там живут те, что
+ *     работали всегда), ЛИБО
+ *   * у него проставлен `openedAt` и этот день наступил.
+ *
+ * Сторож `oneSourceOfModuleOpenness.guard` следит, что второго места не завелось.
+ */
+function модульОткрыт(prefix, now = new Date()) {
+    if (liveEntryFromSource(prefix, now))
+        return true;
+    const мод = moduleFromSource(prefix);
+    return мод?.openedAt !== undefined && isLiveNow(мод.openedAt, now);
+}
+/**
+ * Модули, у которых ещё НЕТ дня фактического открытия (`openedAt`).
+ *
+ * Экспортируется ради проверок, и это не formality: фикстура, выбранная ПО
+ * ИМЕНИ, протухает вместе с календарём. Замер 30.09.2026: тест письма брал
+ * `cyberchess` как пример «ещё не открытого» модуля и краснел в день его
+ * запуска — вчера он был верен, сегодня нет, и ни одной строки кода для этого
+ * менять не понадобилось.
+ *
+ * Признак не зависит от даты: «нет отметки открытия» — это утверждение о том,
+ * что мы ещё не подтвердили открытие, а не о том, какое сегодня число.
+ */
+function модулиБезДняОткрытия() {
+    /*
+     * Открытость живёт в ДВУХ местах, и учесть надо оба, иначе признак соврёт.
+     * Первое — отметка `openedAt` в этой таблице. Второе — `LIVE_ENTRIES`: модуль,
+     * попавший туда и доживший до своей `liveFrom`, уходит по другой ветке письма
+     * («уже открыт»), сколько бы отметок ни стояло здесь. Именно так и вышло с
+     * cyberchess: `openedAt` у него нет, а письмо он шлёт как открытый.
+     */
+    return LAUNCH_MODULES.filter((m) => !модульОткрыт(m.prefix)).map(({ prefix, name, plan, page }) => ({
+        prefix,
+        name,
+        plan,
+        page,
+    }));
+}
+function isModuleLiveNow(slug, now = new Date()) {
+    const s = slug.toLowerCase().replace(/^en-/, "");
+    const записьЕсть = LIVE_ENTRIES.some((m) => s === m.prefix || s.startsWith(`${m.prefix}-`));
+    // Политика, названная вслух: записи нет — модуль считаем живым (дата не
+    // назначена ≠ запрещён). Она старше единого источника и относится к ДРУГОМУ
+    // вопросу — «слать ли письмо запуска», — поэтому остаётся здесь.
+    if (!записьЕсть)
+        return true;
+    // А вот сам ответ «открыт ли он» берётся из единственного места, а не
+    // вычисляется заново: до 30.09.2026 здесь стояла своя копия проверки по
+    // `liveFrom`, и это было второе мнение об одном и том же.
+    return модульОткрыт(s, now);
+}
+function liveEntryFromSource(source, now = new Date()) {
+    if (!source)
+        return null;
+    // Снимаем языковую приставку: «en-longevity» — тот же модуль, что
+    // «longevity», и англоязычный подписчик должен получить письмо «уже
+    // открыт», а не общее «вы в списке» (поймано 29.08 собственной пробой).
+    const s = source.toLowerCase().replace(/^en-/, "");
+    return LIVE_ENTRIES.find((m) => (s === m.prefix || s.startsWith(`${m.prefix}-`)) && isLiveNow(m.liveFrom, now)) ?? null;
+}
+function moduleFromSource(source) {
+    if (!source)
+        return null;
+    const s = source.toLowerCase().replace(/^en-/, "");
+    return LAUNCH_MODULES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`)) ?? null;
+}
+/**
+ * Подписался на АНГЛИЙСКОЙ странице — получает английское письмо.
+ *
+ * Найдено 29.08.2026 вкладкой воронки, за сутки до запуска: письмо честно
+ * подставляло, ОТКУДА человек подписался, но про язык не знало вовсе —
+ * упоминаний языка во всём файле было ноль. Четыре ролика из одиннадцати
+ * опубликованных англоязычные и ведут на /en/go; первое письмо от нас
+ * приходило бы на языке, которого человек может не знать. При этом всё
+ * «работает»: адрес сохранён, письмо ушло, отказов нет.
+ *
+ * Метка источника доезжает сюда как `en-go` / `en-longevity`, поэтому язык
+ * читается из неё же — второго источника правды не заводим.
+ */
+function isEnglishSource(source) {
+    return String(source ?? "")
+        .split(",")
+        .map((m) => m.trim().toLowerCase())
+        .some((m) => m === "en" || m.startsWith("en-"));
+}
+/** Английский вариант того же письма. Русский путь ниже не трогается. */
+function buildPlatformWaitlistEmailEn(email, source) {
+    const live = liveEntryFromSource(source);
+    const mod = live ? null : moduleFromSource(source);
+    const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf7">
+      <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
+      <p style="margin:0 0 16px">${live
+        ? `You are in — ${live.nameEn ?? live.name} is already open.`
+        : `You are on the early-access list${mod ? ` for ${mod.name}` : ""}.`}</p>
+      <p style="color:#9aa3c0;margin:0 0 16px">
+        ${live
+        ? (live.nextStepEn ?? "Open it from the link below — no account needed to look around.")
+        : mod
+            ? `${planPhrase(mod.plan, mod.planUtc, false, new Date(), модульОткрыт(mod.prefix), mod.page)} With early-access terms.`
+            : "AEVION ships one module at a time. You get one email when the next one opens."}
+      </p>
+      <p style="color:#9aa3c0;margin:0 0 24px">
+        ${live
+        ? `Open: <a href="${live.page}" style="color:#22d3ee">${live.page.replace("https://", "")}</a>`
+        : mod
+            ? `Launch page: <a href="${mod.page}" style="color:#22d3ee">${mod.page.replace("https://", "")}</a>`
+            : `Meanwhile, see what already works: <a href="https://aevion.app/en/go" style="color:#22d3ee">aevion.app/en/go</a>`}
+      </p>
+      <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
+      <p style="color:#64748b;font-size:11px;margin:0">
+        You get this email because you left your address on aevion.app.
+        ${unsubBlock(email, "#64748b", "en")}
+      </p>
+    </div>
+  `;
+    return {
+        to: [{ email }],
+        subject: live
+            ? `${live.nameEn ?? live.name} is open`
+            : mod
+                ? `You are on the list: ${mod.name}`
+                : "You are on the AEVION early-access list",
+        htmlContent: html,
+        textContent: сТекстовойОтпиской(live
+            ? `${live.nameEn ?? live.name} is already open. Open: ${live.page}`
+            : mod
+                ? `You are on the early-access list for ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, false, new Date(), модульОткрыт(mod.prefix), mod.page)} Launch page: ${mod.page}`
+                : "You are on the AEVION early-access list. We ship one module at a time.", email, "en"),
+        tags: ["waitlist-confirm", "platform", "en"],
+    };
+}
+function buildPlatformWaitlistEmail(email, source) {
+    // Английская страница — английское письмо. Развилка ОДНА и стоит первой,
+    // чтобы русский путь ниже остался нетронутым (он несёт запуск 30.08).
+    if (isEnglishSource(source))
+        return buildPlatformWaitlistEmailEn(email, source);
+    const live = liveEntryFromSource(source);
+    const mod = live ? null : moduleFromSource(source);
+    const where = live
+        ? `странице «${live.name}»`
+        : mod
+            ? `странице запуска ${mod.name}`
+            : source === "go" || source?.startsWith("go-")
+                ? "странице aevion.app/go"
+                : "главной странице aevion.app";
+    const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
+      <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
+      <p style="margin:0 0 16px">${live
+        ? `Адрес записан — «${live.name}» уже открыт для вас.`
+        : `Адрес записан${mod ? ` — вы в списке раннего доступа к ${mod.name}` : " — вы в списке раннего доступа"}.`}</p>
+      <p style="color:#9aa3c0;margin:0 0 16px">
+        ${live
+        ? live.nextStep
+        : mod
+            ? `${planPhrase(mod.plan, mod.planUtc, true, new Date(), модульОткрыт(mod.prefix), mod.page)}`
+            : "Платформа выпускает модули по одному. Как только выйдет следующий, вы получите письмо в день запуска — с условиями раннего доступа, пока цена стартовая."}
+      </p>
+      <p style="color:#9aa3c0;margin:0 0 24px">
+        ${live
+        ? `Открыть: <a href="${live.page}" style="color:#22d3ee">${live.page.replace("https://", "")}</a>`
+        : mod
+            ? `Страница запуска: <a href="${mod.page}" style="color:#22d3ee">${mod.page.replace("https://", "")}</a>`
+            : `Пока можно посмотреть, что уже работает: <a href="https://aevion.app/go" style="color:#22d3ee">aevion.app/go</a>`}
+      </p>
+      <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin-bottom:16px">
+      <p style="color:#64748b;font-size:11px;margin:0">
+        Вы получили это письмо, потому что оставили адрес на ${where}.<br>
+        ${unsubBlock(email)}
+      </p>
+    </div>
+  `;
+    return {
+        to: [{ email }],
+        subject: live
+            ? `${live.name} — открыт для вас`
+            : mod
+                ? `Вы в списке раннего доступа: ${mod.name}`
+                : "Вы в списке раннего доступа AEVION",
+        htmlContent: html,
+        textContent: сТекстовойОтпиской(live
+            ? `Адрес записан — «${live.name}» уже открыт. ${live.nextStep} Открыть: ${live.page}`
+            : mod
+                ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, true, new Date(), модульОткрыт(mod.prefix), mod.page)} Страница: ${mod.page}`
+                : `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`, email),
+        tags: live ? ["platform", "live-entry-confirm"] : ["platform", "waitlist-confirm"],
+    };
+}
+function buildWeeklyDigestEmail(recipients, topArtifacts, weekOf) {
+    const list = topArtifacts
+        .map((a, i) => `
+      <tr>
+        <td style="padding:8px 4px;color:#d4af37;font-weight:700">#${i + 1}</td>
+        <td style="padding:8px 4px">
+          <a href="${a.url}" style="color:#22d3ee">${a.title}</a>
+        </td>
+        <td style="padding:8px 4px;color:#9aa3c0">${a.regimeName}</td>
+        <td style="padding:8px 4px;color:#f472b6;text-align:right">👍 ${a.votes}</td>
+      </tr>`)
+        .join("");
+    const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
+      <div style="color:#d4af37;font-size:22px;font-weight:900;margin-bottom:4px">AEVION Constitution</div>
+      <div style="color:#9aa3c0;font-size:12px;margin-bottom:20px">Weekly digest · ${weekOf}</div>
+      <h2 style="color:#f5d27a;font-size:18px;margin:0 0 12px">Топ-5 конституций недели</h2>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:1px solid rgba(212,175,55,0.2)">
+            <th style="padding:4px;text-align:left;color:#9aa3c0;font-size:11px">#</th>
+            <th style="padding:4px;text-align:left;color:#9aa3c0;font-size:11px">Сценарий</th>
+            <th style="padding:4px;text-align:left;color:#9aa3c0;font-size:11px">Режим</th>
+            <th style="padding:4px;text-align:right;color:#9aa3c0;font-size:11px">Голоса</th>
+          </tr>
+        </thead>
+        <tbody>${list}</tbody>
+      </table>
+      <div style="margin-top:20px;text-align:center">
+        <a href="https://aevion.app/constitution/leaderboard" style="display:inline-block;padding:10px 20px;background:#d4af37;color:#0b1736;font-weight:700;border-radius:8px;text-decoration:none">
+          Смотреть все →
+        </a>
+      </div>
+      <hr style="border:none;border-top:1px solid rgba(212,175,55,0.2);margin:20px 0">
+      <p style="color:#64748b;font-size:11px;margin:0">
+        Constitution Weekly · 1 письмо в неделю ·
+        <a href="https://aevion.app/constitution/pricing" style="color:#64748b">Upgrade to Pro</a>
+      </p>
+    </div>
+  `;
+    return {
+        to: recipients.map((r) => ({ email: r.email })),
+        subject: `📊 Топ-5 конституций недели · ${weekOf}`,
+        htmlContent: html,
+        tags: ["constitution", "weekly-digest"],
+    };
+}
+/* ─── Exported send functions ─────────────────────────────────────── */
+/**
+ * Письмо с подтверждением адреса.
+ *
+ * До 19.08.2026 его не было вовсе: `POST /api/auth/email/verify/request`
+ * создавал токен, писал его в базу и возвращал `{ok:true}`, а интерфейс
+ * показывал «Verification email sent» — то есть сообщал об успехе действия,
+ * которого не произошло. В разработке токен отдавался прямо в ответе
+ * (`devToken`), и на этом фоне отсутствие отправки в проде не бросалось в
+ * глаза.
+ *
+ * Отправляем тем же путём, каким уходят письма подписчикам, — он проверен и
+ * работает. Ссылка ведёт на страницу подтверждения с токеном в адресе.
+ */
+function buildEmailVerifyEmail(email, verifyUrl) {
+    const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
+      <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
+      <p style="margin:0 0 16px">Подтвердите адрес — это займёт одно нажатие.</p>
+      <p style="color:#9aa3c0;margin:0 0 20px">
+        Мы отправили это письмо, потому что на аккаунте ${email} запросили подтверждение адреса.
+        Если это были не вы, просто не открывайте ссылку — без неё ничего не изменится.
+      </p>
+      <p style="margin:0 0 24px">
+        <a href="${verifyUrl}" style="display:inline-block;background:#22d3ee;color:#0b1736;font-weight:700;padding:12px 20px;border-radius:8px;text-decoration:none">
+          Подтвердить адрес
+        </a>
+      </p>
+      <p style="color:#64748b;font-size:11px;margin:0">
+        Ссылка действует ограниченное время. Если кнопка не открывается, скопируйте адрес:<br>
+        <span style="color:#9aa3c0">${verifyUrl}</span>
+      </p>
+    </div>
+  `;
+    return {
+        to: [{ email }],
+        subject: "Подтвердите адрес — AEVION",
+        htmlContent: html,
+        textContent: `Подтвердите адрес: ${verifyUrl}
+
+Если это были не вы — просто не открывайте ссылку.`,
+        tags: ["auth", "email-verify"],
+    };
+}
+/** Отправляет письмо подтверждения. Возвращает, УДАЛОСЬ ли — вызывающий обязан
+ *  сообщить человеку правду, а не «отправлено» в любом случае. */
+/**
+ * Отправка с запасным каналом: Brevo → Resend.
+ *
+ * Повод. 05.10.2026 Brevo прислал «your API keys have been marked as
+ * inactive». Через него идут подтверждение листа ожидания (сбор адресов со
+ * ВСЕХ витрин) и письма по заявкам агентства — то есть денежные потоки. До
+ * этой правки `sendBrevoEmail` при отказе просто возвращал false, и поток
+ * умирал целиком: запасного канала не было вовсе.
+ *
+ * Запас берётся ТОТ ЖЕ, которым уже пользуется регистрация, — `send()` из
+ * `lib/build/email.ts` (внутри SMTP, иначе Resend). Второй способ отправки
+ * заводить нельзя: через месяц он разойдётся с первым, и разницу заметят
+ * только по пропавшим письмам.
+ *
+ * Отказ Brevo НЕ проглатывается: он пишется в журнал с причиной и с именем
+ * потока, даже когда запасной канал спас письмо. Молчаливый успех поверх
+ * отказа — это то, из-за чего поломку замечают через неделю.
+ */
+async function отправитьСЗапасом(поток, payload) {
+    const основной = await sendBrevoEmail(payload);
+    if (основной.ok) {
+        if (основной.degraded) {
+            // Слово "degraded" в строке — не украшение: в файле есть общая
+            // конвенция (tests/constitutionBrevo.test.ts, «degraded convention»):
+            // неподтверждённая доставка пишется ПРЕДУПРЕЖДЕНИЕМ с этим словом, а
+            // не ошибкой. Своя формулировка молча вывела бы поток из-под сторожа.
+            console.warn(`[mail:${поток}] Brevo degraded (принял без подтверждения): ${основной.degradedReason}`);
+        }
+        return true;
+    }
+    console.error(`[mail:${поток}] Brevo отказал: ${основной.error} — пробуем запасной канал`);
+    const адрес = payload.to[0]?.email;
+    if (!адрес) {
+        console.error(`[mail:${поток}] запасной канал не вызван: в письме нет получателя`);
+        return false;
+    }
+    const ушло = await (0, email_1.send)(адрес, payload.subject, payload.htmlContent);
+    if (!ушло) {
+        console.error(`[mail:${поток}] запасной канал тоже не смог — письмо НЕ отправлено на ${адрес.replace(/(.).*(@.*)/, "$1***$2")}`);
+        return false;
+    }
+    console.warn(`[mail:${поток}] письмо ушло ЗАПАСНЫМ каналом, Brevo недоступен`);
+    return true;
+}
+async function sendEmailVerify(email, verifyUrl) {
+    const result = await sendBrevoEmail(buildEmailVerifyEmail(email, verifyUrl));
+    if (!result.ok) {
+        console.error("[Brevo] email-verify failed:", result.error);
+        return false;
+    }
+    if (result.degraded) {
+        console.warn(`[Brevo] email-verify degraded for ${email}: ${result.degradedReason}`);
+    }
+    return true;
+}
+/** Возвращает, УДАЛОСЬ ли отправить. Вызывающий обязан заметить false:
+ *  молчаливый провал неотличим от задержки почты и не всплывает никогда. */
+async function sendWaitlistConfirm(email, source) {
+    const payload = buildWaitlistConfirmEmail(email, source);
+    // Сбор адресов — единственный денежный след большинства витрин. Запасной
+    // канал обязателен: 05.10 Brevo пометил ключи неактивными, и без запаса
+    // поток умер бы целиком и молча.
+    return отправитьСЗапасом("лист-ожидания", payload);
+}
+async function sendWeeklyDigestEmail(recipients, topArtifacts, weekOf) {
+    if (!recipients.length)
+        return { sent: 0, errors: 0, degraded: 0 };
+    // Brevo allows up to 50 recipients per send; batch if needed
+    const BATCH = 50;
+    let sent = 0;
+    let errors = 0;
+    let degradedCount = 0;
+    for (let i = 0; i < recipients.length; i += BATCH) {
+        const batch = recipients.slice(i, i + BATCH);
+        const payload = buildWeeklyDigestEmail(batch, topArtifacts, weekOf);
+        const result = await sendBrevoEmail(payload);
+        if (!result.ok) {
+            errors += batch.length;
+        }
+        else if (result.degraded) {
+            // Delivery not confirmed — don't count it as a clean "sent", but it did
+            // reach Brevo without an HTTP error, so it's not a hard failure either.
+            degradedCount += batch.length;
+            console.warn(`[Brevo] weekly-digest degraded for batch of ${batch.length}: ${result.degradedReason}`);
+        }
+        else {
+            sent += batch.length;
+        }
+    }
+    return { sent, errors, degraded: degradedCount };
+}
+/**
+ * Уведомление основателю о новой заявке с сайта агентства (20.09.2026).
+ *
+ * Почему письмо, а не только запись в базу: заявка живёт часами — лист отправки
+ * сам требует «ответили — созвон, пока интерес горячий». Строка в таблице, которую
+ * никто не смотрит, этого не даёт.
+ *
+ * `replyTo` ставим на контакт заявителя, когда он похож на почту: ответить можно
+ * прямо из ящика, не копируя адрес руками.
+ */
+async function sendAgencyLeadNotice(lead) {
+    const to = process.env.AGENCY_LEAD_EMAIL || "yahiin1978@gmail.com";
+    const почта = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(lead.contact);
+    const эк = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const строки = [
+        `Контакт: ${lead.contact}`,
+        lead.name ? `Имя: ${lead.name}` : "",
+        lead.source ? `Источник: ${lead.source}` : "",
+        "",
+        lead.message,
+    ].filter(Boolean);
+    const payload = {
+        to: [{ email: to }],
+        subject: `Заявка с сайта агентства: ${lead.contact}`,
+        htmlContent: `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a">` +
+            строки.map((s) => `<p style="margin:0 0 8px">${эк(s)}</p>`).join("") +
+            `</div>`,
+        textContent: строки.join("\n"),
+        replyTo: почта ? { email: lead.contact } : undefined,
+        tags: ["agency-lead"],
+    };
+    // Заявка с витрины — деньги на столе. Запасной канал тот же, что у
+    // регистрации (SMTP → Resend), второй способ отправки не заводим.
+    return отправитьСЗапасом("заявка-агентства", payload);
+}
+/**
+ * Подтверждение ЧЕЛОВЕКУ, что его заявка дошла.
+ *
+ * Повод (20.09.2026). Страница пишет «Заявка отправлена», а в почте у человека
+ * пусто: единственное письмо уходило нам. Для холодного посетителя, который нас
+ * ещё не знает, это выглядит как «отправил в никуда», и он пишет второй раз или
+ * уходит совсем.
+ *
+ * Границы, сознательно:
+ *   • шлём ТОЛЬКО когда контакт — почта. На телефон писать нечем, и выдумывать
+ *     канал нельзя;
+ *   • письмо не роняет приём заявки: заявка уже сохранена, и её судьба не должна
+ *     зависеть от почтового провайдера;
+ *   • отказ не молчит — в журнале остаётся ЧТО и КОМУ не ушло (§16г).
+ *
+ * Обещания в тексте держим ровно те, что уже стоят на странице: вернуть результат
+ * в течение рабочего дня и ничего не списывать. Лишнее обещание здесь дороже
+ * молчания: письмо читают именно те, кто ещё сомневается.
+ */
+/** Кому можно отправить подтверждение: почта — адрес, телефон и мусор — null. */
+function адресатПодтвержденияЗаявки(contact) {
+    const c = String(contact || "").trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c) ? c : null;
+}
+/** Текст подтверждения отдельно от отправки — чтобы обещания можно было проверить тестом. */
+function строкиПодтвержденияЗаявки(lead) {
+    const имя = lead.name ? `${lead.name}, ` : "";
+    return [
+        `${имя}заявка получена — она уже у нас, ничего делать не нужно.`,
+        `${имя}заявка получена — она уже у нас, ничего делать не нужно.`,
+        "",
+        "Что дальше: разберём ваши данные и вернём результат в течение рабочего дня —",
+        "карточки, черновики ответов или очередь писем, смотря что вы прислали.",
+        "Бесплатно и без договора: сначала работа, потом разговор о пилоте.",
+        "",
+        "Если ответа не будет к завтрашнему вечеру — ответьте на это письмо, значит",
+        "оно потерялось у нас, а не у вас.",
+        "",
+        "— AEVION Automation",
+    ];
+}
+async function sendAgencyLeadReceipt(lead) {
+    const адрес = адресатПодтвержденияЗаявки(lead.contact);
+    if (!адрес)
+        return false;
+    const эк = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const строки = строкиПодтвержденияЗаявки(lead);
+    const payload = {
+        to: [{ email: адрес }],
+        subject: "Ваша заявка получена — AEVION Automation",
+        htmlContent: `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a">` +
+            строки.map((s) => (s ? `<p style="margin:0 0 8px">${эк(s)}</p>` : "")).join("") +
+            `</div>`,
+        textContent: строки.join("\n"),
+        tags: ["agency-lead-receipt"],
+    };
+    // Расписка заявителю: без неё холодный посетитель думает, что отправил в
+    // никуда. Тот же запасной канал.
+    return отправитьСЗапасом("расписка-заявителю", payload);
+}

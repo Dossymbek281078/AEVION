@@ -1,0 +1,1760 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.pricingRouter = void 0;
+exports.leadsStoreStatus = leadsStoreStatus;
+const express_1 = require("express");
+const moduleAccess_1 = require("../data/moduleAccess");
+const queryNumber_1 = require("../lib/queryNumber");
+const queryDate_1 = require("../lib/queryDate");
+const fs_1 = require("fs");
+const path_1 = require("path");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const authJwt_1 = require("../lib/authJwt");
+const crypto_1 = require("crypto");
+const pricing_1 = require("../data/pricing");
+const projects_1 = require("../data/projects");
+const lemonSqueezyVariants_1 = require("../data/lemonSqueezyVariants");
+const trust_1 = require("../data/trust");
+const roadmap_1 = require("../data/roadmap");
+const cases_1 = require("../data/cases");
+const changelog_1 = require("../data/changelog");
+const provisioning_1 = require("./provisioning");
+const rateLimit_1 = require("../lib/rateLimit");
+const platform_1 = require("../lib/sentry/platform");
+exports.pricingRouter = (0, express_1.Router)();
+/**
+ * Хранилище лидов: JSONL по строке на лид.
+ * Путь: aevion-globus-backend/data/leads.jsonl
+ * Один файл — append-only, потокобезопасно для одного процесса.
+ */
+/** Resolved per call, not at import: a test that sets LEADS_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function leadsFile() {
+    // ПОРЯДОК: явная переменная -> том Railway -> рабочий каталог.
+    //
+    // 🔴 21.09.2026. Раньше второго шага не было, и заявка ложилась в
+    // `process.cwd()/data` — то есть её сохранность держалась на СОВПАДЕНИИ:
+    // том смонтирован в `/app/aevion-globus-backend/data`, и пока рабочий
+    // каталог ровно такой, файл попадает на том случайно. Сменится рабочий
+    // каталог (другой Dockerfile, запуск из dist, `npm --prefix`) — заявки
+    // начнут стираться КАЖДОЙ выкаткой, и заметить это нельзя: ручка отвечает
+    // 201, человек видит «спасибо», файл исчезает вместе с контейнером.
+    //
+    // Цена ошибки здесь выше обычной: на 21.09 четыре модуля запуска не
+    // покупаются, и касса отправляет покупателя именно сюда — «напишите нам».
+    // Эта заявка и есть единственный след платящего человека.
+    //
+    // Путь под томом берём так же, как события и подписки (routes/events.ts),
+    // чтобы ответ на вопрос «переживёт ли выкатку» был один на все хранилища.
+    const fromEnv = process.env.LEADS_FILE?.trim();
+    if (fromEnv)
+        return fromEnv;
+    const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
+    if (mount)
+        return (0, path_1.join)(mount, "leads.jsonl");
+    return (0, path_1.join)(process.cwd(), "data", "leads.jsonl");
+}
+/**
+ * Состояние хранилища заявок — то же, что eventsStore/subsStore в /health.
+ *
+ * Отвечает ФАКТОМ «попадает ли путь под точку монтирования тома», а не
+ * «задана ли переменная»: именно эту подмену разбирали 14.08 в events.ts —
+ * тогда из «переменная не задана» сделали вывод «выкатка сотрёт данные», и
+ * он был неверен.
+ */
+function leadsStoreStatus() {
+    const persistedByEnv = Boolean(process.env.LEADS_FILE?.trim());
+    const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
+    const file = leadsFile();
+    // Сравниваем НОРМАЛИЗОВАННЫЕ пути, а не строки: у событий это сделано
+    // заменой разделителей, но resolve честнее — он снимает "..", лишние слэши
+    // и разницу регистра диска на Windows, где идут тесты.
+    const onVolume = mount ? (0, path_1.resolve)(file).startsWith((0, path_1.resolve)(mount)) : null;
+    if (!(0, fs_1.existsSync)(file))
+        return { persistedByEnv, onVolume, exists: false, count: 0, oldest: null };
+    try {
+        const lines = (0, fs_1.readFileSync)(file, "utf8").split("\n").filter(Boolean);
+        let oldest = null;
+        for (const line of lines) {
+            try {
+                const ts = JSON.parse(line)?.ts;
+                if (typeof ts === "string" && (oldest === null || ts < oldest))
+                    oldest = ts;
+            }
+            catch {
+                // Битая строка не должна ронять health — пропускаем её одну.
+            }
+        }
+        return { persistedByEnv, onVolume, exists: true, count: lines.length, oldest };
+    }
+    catch {
+        // Прочитать не удалось — это НЕ «ноль заявок». Отдаём -1, как события.
+        return { persistedByEnv, onVolume, exists: true, count: -1, oldest: null };
+    }
+}
+function ensureLeadsDir() {
+    const dir = (0, path_1.dirname)(leadsFile());
+    if (!(0, fs_1.existsSync)(dir))
+        (0, fs_1.mkdirSync)(dir, { recursive: true });
+}
+function rateLimitKey(ip) {
+    return `lead:${ip}`;
+}
+const RATE_LIMIT = new Map();
+const RATE_WINDOW_MS = 10 * 60 * 1000; // 10 мин
+const RATE_MAX = 5;
+function isRateLimited(ip) {
+    const now = Date.now();
+    const key = rateLimitKey(ip);
+    const cur = RATE_LIMIT.get(key);
+    if (!cur || cur.reset < now) {
+        RATE_LIMIT.set(key, { count: 1, reset: now + RATE_WINDOW_MS });
+        return false;
+    }
+    if (cur.count >= RATE_MAX)
+        return true;
+    cur.count += 1;
+    return false;
+}
+function isValidEmail(s) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+/**
+ * GET /api/pricing
+ * Полный прайс-лист: тарифы, модули, бандлы, валюты.
+ * Используется фронтом /pricing для одного запроса вместо 4-х.
+ */
+exports.pricingRouter.get("/", (_req, res) => {
+    // Обогащаем модули названием из projects.ts (избегаем рассинхрона).
+    //
+    // Порядок запасных путей важен: реестр -> собственное имя модуля -> и только
+    // потом id. Прежде сразу подставлялся `m.id`, и два модуля, которых нет в
+    // реестре, показывались ПОКУПАТЕЛЮ как «qmelanin» и «qrenew» — в выпадающем
+    // списке продукта для тарифа Lite. Замер 20.08.2026 на живом проде: 2 из 43.
+    // Таких мест было ТРИ, не одно.
+    const modulesEnriched = pricing_1.MODULES_PRICING.map((m) => {
+        const p = projects_1.projects.find((x) => x.id === m.id);
+        return {
+            ...m,
+            name: p?.name ?? m.name ?? m.id,
+            code: p?.code ?? m.id.toUpperCase(),
+            kind: p?.kind ?? "product",
+            tags: p?.tags ?? [],
+        };
+    });
+    res.json({
+        generatedAt: new Date().toISOString(),
+        currency: "USD",
+        // Лестница сроков вместо годовой скидки (15.09.2026): тариф — это срок.
+        // 🔴 20.10.2026: factor — доля цены месяца ПЛАНА (0.9/0.8/0.7/0.6), а не TERM_FACTOR
+        // отдельных приложений (0.875/0.75/0.625/0.5): лестница сроков здесь — лестница плана.
+        // Читателей поля в коде и тестах на 20.10 — 0 (git grep termLadder: ручка + фикстура).
+        termLadder: pricing_1.TERM_TIERS.map((t) => ({ tierId: t, months: pricing_1.TERM_MONTHS[t], factor: pricing_1.PLANET_TERM_PRICE[t] / pricing_1.PLANET_TERM_PRICE.lite })),
+        /*
+         * 🔴 19.10.2026: один план «AEVION Планета» ЯВНЫМИ полями (perMonthUsd, totalUsd
+         * по сроку) и шахматы отдельной карточкой $50/год. Приёмка оркестратора
+         * читает именно их: подстрока «250» в большом JSON ничего не доказывает.
+         */
+        plan: {
+            id: "planet",
+            name: "AEVION Планета",
+            /*
+             * 19.10.2026 22:4x, слово основателя: срочный план списывается ПОМЕСЯЧНО
+             * (billing, paymentsCount); totalUsd — сумма платежей за срок. Вперёд —
+             * один платёж prepayUsd со скидкой prepayDiscountPercent.
+             */
+            billing: "monthly",
+            terms: pricing_1.TERM_TIERS.map((t) => ({
+                tierId: t,
+                months: pricing_1.TERM_MONTHS[t],
+                perMonthUsd: pricing_1.PLANET_TERM_PRICE[t],
+                totalUsd: (0, pricing_1.planetTotal)(t),
+                paymentsCount: (0, pricing_1.planetPaymentsCount)(t),
+                prepayUsd: (0, pricing_1.planetPrepayTotal)(t),
+                prepayDiscountPercent: pricing_1.PLANET_PREPAY_DISCOUNT_PERCENT[t],
+                // Вариант «Б»: что можно купить сейчас (переменные вариантов кассы заданы).
+                sellable: (0, lemonSqueezyVariants_1.planetBillingSellable)(t),
+            })),
+            /* Досрочная отмена (итог основателя 19.10 22:5x): прожитые дни — по самой
+             * длинной пройденной ступени; дослужил — цена плана; разница > 0 возврат,
+             * < 0 — доплата счётом у помесячного, 0 у оплаты вперёд. */
+            earlyCancellation: {
+                daysPerMonth: pricing_1.DAYS_PER_MONTH,
+                daysPerYear: pricing_1.DAYS_PER_YEAR,
+                ladder: pricing_1.TERM_TIERS.map((t) => ({ tierId: t, fromDay: pricing_1.PLANET_LADDER_FROM_DAY[t], usdPerMonth: pricing_1.PLANET_TERM_PRICE[t] })),
+                monthlySurcharge: true,
+                prepaidSurcharge: false,
+            },
+        },
+        chess: { id: "cyberchess", priceUsd: pricing_1.CHESS_YEARLY_USD, period: "year" },
+        /*
+         * «Продаётся отдельно» берётся из единого источника data/moduleAccess.ts —
+         * из того же места, откуда шлюз берёт «закрыто стеной». До 01.10.2026 это
+         * были два несверенных списка, и расхождение было ровно таким: 8 модулей
+         * продаются, не будучи закрыты, 5 закрыты, не продаваясь.
+         *
+         * Наружу идёт только «продаётся»: сообщать посетителю, что модуль всё
+         * равно открыт, значит своими руками снимать причину платить.
+         *
+         * На 01.10 у всех девяти строк прайса флаг `продаётся` = true, поэтому
+         * выдача этой ручки не меняется — проверено сторожем
+         * moduleAccessIsOneSource (прайс и источник совпадают в обе стороны).
+         */
+        // 19.10.2026: у годового приложения (шахматы $50/год) terms — один срок max
+        // с его суммой; pricePerMonth у него нет (целых долларов не выходит).
+        standaloneApps: (0, moduleAccess_1.приложенияДляВитрины)().map((a) => ({
+            ...a,
+            terms: (0, pricing_1.appSellableTerms)(a).map((t) => ({
+                tierId: t,
+                months: pricing_1.TERM_MONTHS[t],
+                pricePerMonth: a.yearOnlyUsd != null ? null : (0, pricing_1.termPricePerMonth)(a.baseMonthly, t),
+                total: (0, pricing_1.appTermTotal)(a, t),
+            })),
+        })),
+        tiers: pricing_1.TIERS,
+        modules: modulesEnriched,
+        bundles: pricing_1.BUNDLES,
+        currencies: pricing_1.CURRENCY_RATES,
+        notes: [
+            "Цены указаны в USD. Конвертация в KZT/RUB/EUR — справочная, окончательный счёт в USD.",
+            // 20.10.2026: списание ежемесячно; вперёд — скидка. Процент из данных (ключ перевода
+            // во frontend/src/lib/pricingLocalize.ts NOTES_EN — этот же текст).
+            `Тариф — это срок обязательства: Lite 1 мес, Medium 3, Pro 6, Full 9, Max 12. Списание ежемесячно; чем длиннее срок, тем дешевле месяц. Весь срок вперёд — скидка до ${String(pricing_1.PLANET_PREPAY_DISCOUNT_PERCENT.max).replace(".", ",")} %.`,
+            "Enterprise — индивидуальный договор, фиксированный SLA, NDA/DPA.",
+        ],
+    });
+});
+/**
+ * GET /api/pricing/tiers
+ * Только тарифы (легче для фронта, если модули не нужны).
+ */
+exports.pricingRouter.get("/tiers", (_req, res) => {
+    res.json({ items: pricing_1.TIERS, total: pricing_1.TIERS.length });
+});
+/**
+ * GET /api/pricing/tiers/:id
+ * Один тариф детально.
+ */
+exports.pricingRouter.get("/tiers/:id", (req, res) => {
+    const tier = (0, pricing_1.getTier)(req.params.id);
+    if (!tier) {
+        return res.status(404).json({ error: "tier_not_found", id: req.params.id });
+    }
+    res.json(tier);
+});
+/**
+ * GET /api/pricing/modules
+ * Прайс по модулям (с обогащением из projects.ts).
+ */
+exports.pricingRouter.get("/modules", (_req, res) => {
+    const items = pricing_1.MODULES_PRICING.map((m) => {
+        const p = projects_1.projects.find((x) => x.id === m.id);
+        return {
+            ...m,
+            name: p?.name ?? m.name ?? m.id,
+            code: p?.code ?? m.id.toUpperCase(),
+        };
+    });
+    res.json({ items, total: items.length });
+});
+/**
+ * GET /api/pricing/modules/:id
+ * Цена одного модуля + метаданные.
+ */
+exports.pricingRouter.get("/modules/:id", (req, res) => {
+    const m = (0, pricing_1.getModulePrice)(req.params.id);
+    if (!m) {
+        return res.status(404).json({ error: "module_not_found", id: req.params.id });
+    }
+    const p = projects_1.projects.find((x) => x.id === m.id);
+    res.json({
+        ...m,
+        name: p?.name ?? m.name ?? m.id,
+        code: p?.code ?? m.id.toUpperCase(),
+        description: p?.description,
+        tags: p?.tags ?? [],
+    });
+});
+/**
+ * GET /api/pricing/bundles
+ * Готовые сборки модулей.
+ */
+exports.pricingRouter.get("/bundles", (_req, res) => {
+    res.json({ items: pricing_1.BUNDLES, total: pricing_1.BUNDLES.length });
+});
+/**
+ * POST /api/pricing/quote
+ * Body: { tierId, modules?, seats?, currency? } — срок задаёт сам тариф
+ * Возвращает смету: lines, subtotal, discount, total.
+ *
+ * Validation:
+ *   - tierId обязателен и должен быть из known set
+ *   - seats: integer 1..1000
+ *   - modules: массив строк <= 30
+ *   - currency: 'USD' | 'EUR' | 'KZT' | 'RUB'
+ */
+exports.pricingRouter.post("/quote", (req, res) => {
+    const body = req.body ?? {};
+    const tierId = body.tierId;
+    // Список тарифов НЕ перечисляем: он уже есть в каталоге, а копия расходится.
+    // Замер 01.09.2026: витрина получает шесть тарифов, включая pro («Universe»,
+    // $149/мес), рисует для него кнопку — а эта проверка отвечала 400
+    // invalid_tier. Калькулятор цен ломался на самом дорогом тарифе.
+    // Это была ЧЕТВЁРТАЯ копия одного пропуска: раньше pro путали с Lite в стене
+    // (починено 22.07), в письме о покупке и в разборе ссылки заказа (31.08).
+    if (!tierId || !(0, pricing_1.getTier)(tierId)) {
+        return res.status(400).json({ error: "invalid_tier", tierId });
+    }
+    const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
+    // `in` идёт по цепочке прототипов, поэтому `"constructor" in CURRENCY_RATES`
+    // истинно — и валютой становилось само слово `constructor`, а курсом функция
+    // Object.prototype.constructor. Смета уходила клиенту БЕЗ ЦИФР: HTTP 200,
+    // total и subtotal пустые. Живой прод отвечал так 28.07.2026 на constructor,
+    // __proto__, toString, valueOf и hasOwnProperty — пять ключей, которые есть у
+    // любого объекта.
+    //
+    // hasOwnProperty.call, а не `obj.hasOwnProperty(...)`: у самого CURRENCY_RATES
+    // этот метод может быть перекрыт ключом валюты.
+    const currency = typeof body.currency === "string"
+        && Object.prototype.hasOwnProperty.call(pricing_1.CURRENCY_RATES, body.currency)
+        ? body.currency
+        : "USD";
+    const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x) => typeof x === "string") : [];
+    const promoCode = typeof body.promoCode === "string" ? body.promoCode.trim().slice(0, 40) : undefined;
+    const quote = (0, pricing_1.buildQuote)({ tierId, modules, seats, currency, promoCode });
+    res.json(quote);
+});
+/**
+ * POST /api/pricing/promo/validate
+ * Body: { code, tierId }
+ * Возвращает: { valid, promo?, reason? }
+ *
+ * Используется фронтом для отдельной проверки кода до отправки full-quote.
+ */
+/**
+ * Предел темпа на /promo/validate — ручку, у которой его не было (замер 02.09.2026:
+ * (замер 02.09.2026 ПОТОКОМ запросов, а не грепом: у /promo/validate
+ * предела не было ни одного, и мутация это подтверждает).
+ *
+ * ⚠️ Не ищите пределы грепом. Имён у ограничителей здесь около сорока
+ * пяти — rateLimit, isRateLimited, programRateLimited и другие. Мой свип
+ * по двум именам занизил счёт, и я поставил ограничители туда, где
+ * защита уже была; убрал поправкой. Правильный прибор — поток запросов
+ * по ручке: он не знает имён и не может в них ошибиться.
+ *
+ * Ограничитель отдельный, а не общий с соседями: общий бакет уже был
+ * находкой в этом репозитории — ручки начинают отбирать лимит друг у друга,
+ * и человек, отправивший заявку, не может проверить промокод.
+ *
+ * keyFn нигде не переопределяем: умолчание нормализует адрес, включая IPv6.
+ */
+// Оракул «код верен или нет». Без предела это перебор промокодов: их пять,
+// имена короткие. Ущерб ограничен (скидка не больше 50%), но и предел стоит
+// одной строки. 20 в минуту — заведомо больше, чем человек вводит руками.
+const promoLimiter = (0, rateLimit_1.rateLimit)({
+    windowMs: 60000,
+    max: 20,
+    message: "Слишком много проверок кода. Подождите минуту.",
+});
+// ВАЖНО для следующего читателя: у /lead и /newsletter предел УЖЕ ЕСТЬ —
+// isRateLimited(ip) внутри самих обработчиков (отказ 429, retryAfter 10m).
+// 02.09.2026 я этого не увидел: греп искал "rateLimit(" и другого имени не
+// знал, поэтому знаменатель свипа получился неверным. Свои ограничители
+// отсюда убраны как ВТОРОЙ способ делать то же самое. Поведение обеих ручек
+// закреплено сторожем publicPricingEndpointsAreRateLimited — он проверяет
+// способность отказать, а не конкретный механизм.
+exports.pricingRouter.post("/promo/validate", promoLimiter, (req, res) => {
+    const body = req.body ?? {};
+    const code = typeof body.code === "string" ? body.code.trim().slice(0, 40) : "";
+    const tierId = body.tierId;
+    if (!code) {
+        return res.status(400).json({ valid: false, reason: "empty_code" });
+    }
+    if (!tierId || !(0, pricing_1.getTier)(tierId)) {
+        return res.status(400).json({ valid: false, reason: "invalid_tier" });
+    }
+    const { promo, reason } = (0, pricing_1.resolvePromoCode)(code, tierId);
+    if (!promo) {
+        return res.json({ valid: false, reason });
+    }
+    res.json({
+        valid: true,
+        promo: {
+            code: promo.code,
+            kind: promo.kind,
+            amount: promo.amount,
+            description: promo.description,
+            annualOnly: promo.annualOnly ?? false,
+        },
+    });
+});
+/**
+ * GET /api/pricing/promo
+ * Публичный список действующих промо-кодов (без maxUses, для маркетинга).
+ * Полезно для GTM-баннеров и landing pages.
+ */
+exports.pricingRouter.get("/promo", (_req, res) => {
+    const now = new Date();
+    const items = pricing_1.PROMO_CODES.filter((p) => !p.validUntil || new Date(p.validUntil) > now).map((p) => ({
+        code: p.code,
+        kind: p.kind,
+        amount: p.amount,
+        description: p.description,
+        validUntil: p.validUntil,
+        tiers: p.tiers ?? [],
+    }));
+    res.json({ items, total: items.length });
+});
+/**
+ * POST /api/pricing/lead
+ * Body: { name, email, company?, industry?, tier?, modules?, seats?, message?, source? }
+ *
+ * Создаёт лид в JSONL-файле. Простая защита: rate-limit 5/10мин на IP +
+ * валидация email + длины полей. Без БД — для GTM-этапа этого достаточно.
+ *
+ * Returns: { ok: true, id }
+ */
+exports.pricingRouter.post("/lead", (req, res) => {
+    const ip = (0, rateLimit_1.clientIp)(req);
+    if (isRateLimited(ip)) {
+        return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+    }
+    const body = req.body ?? {};
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+    const company = typeof body.company === "string" ? body.company.trim().slice(0, 200) : undefined;
+    const industry = typeof body.industry === "string" ? body.industry.trim().slice(0, 60) : undefined;
+    const tier = typeof body.tier === "string" && (0, pricing_1.getTier)(body.tier)
+        ? body.tier
+        : undefined;
+    const seats = Number.isFinite(body.seats) ? Math.min(10000, Math.max(1, Math.floor(body.seats))) : undefined;
+    const message = typeof body.message === "string" ? body.message.trim().slice(0, 4000) : undefined;
+    const source = typeof body.source === "string" ? body.source.trim().slice(0, 60) : undefined;
+    const modules = Array.isArray(body.modules)
+        ? body.modules.slice(0, 30).filter((x) => typeof x === "string").map((s) => s.slice(0, 60))
+        : undefined;
+    if (!name || name.length < 2) {
+        return res.status(400).json({ error: "invalid_name" });
+    }
+    if (!email || !isValidEmail(email)) {
+        return res.status(400).json({ error: "invalid_email" });
+    }
+    const lead = {
+        id: `lead_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        ts: new Date().toISOString(),
+        name,
+        email,
+        company,
+        industry,
+        tier,
+        modules,
+        seats,
+        message,
+        source,
+        ip,
+    };
+    try {
+        ensureLeadsDir();
+        (0, fs_1.appendFileSync)(leadsFile(), JSON.stringify(lead) + "\n", "utf8");
+    }
+    catch (e) {
+        console.error("[pricing/lead] write failed", e);
+        return res.status(500).json({ error: "storage_error" });
+    }
+    // Порядок как у /apply: письма запускаются и НЕ ждутся — ответ человеку не
+    // задерживается почтой, а отказ отправки не роняет принятую заявку.
+    // Оба письма идут ПОСЛЕ успешной записи (appendFileSync выше): внутреннее
+    // уведомление нам и подтверждение заявителю с настоящим lead.id.
+    void уведомитьОЗаявке(lead);
+    void подтвердитьЗаявителю(lead);
+    res.status(201).json({ ok: true, id: lead.id });
+});
+/**
+ * GET /api/pricing/leads/count
+ * Общее число лидов — для GTM-дашборда. БЕЗ доступа к содержимому.
+ */
+exports.pricingRouter.get("/leads/count", (_req, res) => {
+    try {
+        if (!(0, fs_1.existsSync)(leadsFile()))
+            return res.json({ total: 0 });
+        const content = (0, fs_1.readFileSync)(leadsFile(), "utf8");
+        const lines = content.split("\n").filter((l) => l.trim().length > 0);
+        res.json({ total: lines.length });
+    }
+    catch (e) {
+        console.error("[pricing/leads/count] read failed", e);
+        res.status(500).json({ error: "read_error" });
+    }
+});
+/**
+ * GET /api/pricing/leads
+ * Список последних лидов. Защищён ADMIN_TOKEN (header X-Admin-Token).
+ * Если ADMIN_TOKEN не задан — endpoint полностью недоступен (401).
+ *
+ * ?limit=N — последние N (макс 500), по умолчанию 100
+ */
+exports.pricingRouter.get("/leads", (req, res) => {
+    const required = process.env.ADMIN_TOKEN?.trim();
+    if (!required) {
+        return res.status(401).json({ error: "admin_token_not_configured" });
+    }
+    const got = req.headers["x-admin-token"]?.trim();
+    if (got !== required) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+    const limit = Math.min(Math.max((0, queryNumber_1.queryNumber)(req.query.limit, 100), 1), 500);
+    try {
+        if (!(0, fs_1.existsSync)(leadsFile()))
+            return res.json({ items: [], total: 0 });
+        const content = (0, fs_1.readFileSync)(leadsFile(), "utf8");
+        const lines = content.split("\n").filter((l) => l.trim().length > 0);
+        const tail = lines.slice(-limit).reverse();
+        const items = [];
+        for (const line of tail) {
+            try {
+                items.push(JSON.parse(line));
+            }
+            catch {
+                // skip malformed
+            }
+        }
+        res.json({ items, total: lines.length });
+    }
+    catch (e) {
+        console.error("[pricing/leads] read failed", e);
+        res.status(500).json({ error: "read_error" });
+    }
+});
+/**
+ * GET /api/pricing/roadmap
+ * Публичный roadmap по 27 модулям: timeline, фазы, прогресс.
+ * Обогащает каждую запись данными из projects.ts (name, code, description).
+ */
+exports.pricingRouter.get("/roadmap", (_req, res) => {
+    const items = roadmap_1.ROADMAP.map((r) => {
+        const p = projects_1.projects.find((x) => x.id === r.id);
+        return {
+            ...r,
+            name: p?.name ?? r.id,
+            code: p?.code ?? r.id.toUpperCase(),
+            description: p?.description ?? "",
+            tags: p?.tags ?? [],
+        };
+    }).sort((a, b) => a.targetSortKey - b.targetSortKey);
+    res.json({
+        items,
+        total: items.length,
+        phases: roadmap_1.PHASE_META,
+        generatedAt: new Date().toISOString(),
+    });
+});
+/**
+ * GET /api/pricing/cases
+ * Customer case studies для /pricing/cases.
+ * Фильтры: ?industry=&tier=&module=
+ *
+ * Возвращает summary-объекты (без полного challenge/solution/outcome),
+ * чтобы листинг грузился быстро. Для полного — /api/pricing/cases/:id.
+ */
+exports.pricingRouter.get("/cases", (req, res) => {
+    const industry = typeof req.query.industry === "string" ? req.query.industry : undefined;
+    const tier = typeof req.query.tier === "string" ? req.query.tier : undefined;
+    const moduleId = typeof req.query.module === "string" ? req.query.module : undefined;
+    const items = cases_1.CASE_STUDIES.filter((c) => (!industry || c.industry === industry) &&
+        (!tier || c.tier === tier) &&
+        (!moduleId || c.modules.includes(moduleId)));
+    res.json({ items, total: items.length });
+});
+/**
+ * GET /api/pricing/cases/:id
+ * Детальный case study.
+ */
+exports.pricingRouter.get("/cases/:id", (req, res) => {
+    const c = (0, cases_1.getCaseStudy)(req.params.id);
+    if (!c) {
+        return res.status(404).json({ error: "case_not_found", id: req.params.id });
+    }
+    res.json(c);
+});
+/**
+ * GET /api/pricing/testimonials
+ * Публичные отзывы — фильтрация по ?industry= и ?module=.
+ */
+exports.pricingRouter.get("/testimonials", (req, res) => {
+    const industry = typeof req.query.industry === "string" ? req.query.industry : undefined;
+    const moduleId = typeof req.query.module === "string" ? req.query.module : undefined;
+    const items = trust_1.TESTIMONIALS.filter((t) => (!industry || t.industry === industry) && (!moduleId || t.module === moduleId));
+    res.json({ items, total: items.length });
+});
+/**
+ * GET /api/pricing/trust
+ * Trust signals: цифры + бейджи compliance.
+ */
+exports.pricingRouter.get("/trust", (_req, res) => {
+    res.json({
+        numbers: trust_1.TRUST_NUMBERS,
+        badges: trust_1.TRUST_BADGES,
+    });
+});
+/* ===========================
+ * Newsletter signup
+ * Хранение: data/newsletter.jsonl (gitignored).
+ * =========================== */
+/** Resolved per call, not at import: a test that sets NEWSLETTER_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function newsletterFile() {
+    return process.env.NEWSLETTER_FILE || (0, path_1.join)(process.cwd(), "data", "newsletter.jsonl");
+}
+const NEWSLETTER_RATE = new Map();
+function newsletterRateLimited(ip) {
+    const now = Date.now();
+    const cur = NEWSLETTER_RATE.get(ip);
+    if (!cur || cur.reset < now) {
+        NEWSLETTER_RATE.set(ip, { count: 1, reset: now + 10 * 60 * 1000 });
+        return false;
+    }
+    if (cur.count >= 3)
+        return true;
+    cur.count += 1;
+    return false;
+}
+/**
+ * POST /api/pricing/newsletter
+ * Body: { email, source? }
+ *
+ * Лёгкий signup-форм для лидгена тех, кто не готов покупать.
+ */
+exports.pricingRouter.post("/newsletter", (req, res) => {
+    const ip = (0, rateLimit_1.clientIp)(req);
+    if (newsletterRateLimited(ip)) {
+        return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+    }
+    const body = req.body ?? {};
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+    if (!email || !isValidEmail(email)) {
+        return res.status(400).json({ error: "invalid_email" });
+    }
+    const source = typeof body.source === "string" ? body.source.trim().slice(0, 60) : undefined;
+    const entry = {
+        id: `nl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        ts: new Date().toISOString(),
+        email,
+        source,
+        ip,
+    };
+    try {
+        const dir = (0, path_1.dirname)(newsletterFile());
+        if (!(0, fs_1.existsSync)(dir))
+            (0, fs_1.mkdirSync)(dir, { recursive: true });
+        (0, fs_1.appendFileSync)(newsletterFile(), JSON.stringify(entry) + "\n", "utf8");
+    }
+    catch (e) {
+        console.error("[newsletter] write failed", e);
+        return res.status(500).json({ error: "storage_error" });
+    }
+    res.status(201).json({ ok: true, id: entry.id });
+});
+/**
+ * GET /api/pricing/newsletter/count
+ * Количество подписчиков — не PII.
+ */
+exports.pricingRouter.get("/newsletter/count", (_req, res) => {
+    try {
+        if (!(0, fs_1.existsSync)(newsletterFile()))
+            return res.json({ total: 0 });
+        const content = (0, fs_1.readFileSync)(newsletterFile(), "utf8");
+        const lines = content.split("\n").filter((l) => l.trim().length > 0);
+        res.json({ total: lines.length });
+    }
+    catch (e) {
+        console.error("[newsletter/count] read failed", e);
+        res.status(500).json({ error: "read_error" });
+    }
+});
+/* ===========================
+ * Affiliate / Partner programs
+ * Хранение: data/affiliate.jsonl, data/partners.jsonl, data/edu.jsonl
+ * =========================== */
+/** Resolved per call, not at import: a test that sets AFFILIATE_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function affiliateFile() {
+    return process.env.AFFILIATE_FILE || (0, path_1.join)(process.cwd(), "data", "affiliate.jsonl");
+}
+/** Resolved per call, not at import: a test that sets PARTNERS_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function partnersFile() {
+    return process.env.PARTNERS_FILE || (0, path_1.join)(process.cwd(), "data", "partners.jsonl");
+}
+/** Resolved per call, not at import: a test that sets EDU_FILE after this
+ * module is first imported would otherwise write into the real data/ file —
+ * exactly how the paywall suite polluted data/subscriptions.jsonl. */
+function eduFile() {
+    return process.env.EDU_FILE || (0, path_1.join)(process.cwd(), "data", "edu.jsonl");
+}
+const PROGRAM_RATE = new Map();
+function programRateLimited(ip, kind) {
+    const key = `${kind}:${ip}`;
+    const now = Date.now();
+    const cur = PROGRAM_RATE.get(key);
+    if (!cur || cur.reset < now) {
+        PROGRAM_RATE.set(key, { count: 1, reset: now + 10 * 60 * 1000 });
+        return false;
+    }
+    if (cur.count >= 3)
+        return true;
+    cur.count += 1;
+    return false;
+}
+function persistApplication(file, app) {
+    const dir = (0, path_1.dirname)(file);
+    if (!(0, fs_1.existsSync)(dir))
+        (0, fs_1.mkdirSync)(dir, { recursive: true });
+    (0, fs_1.appendFileSync)(file, JSON.stringify(app) + "\n", "utf8");
+}
+// СОСТОЯНИЕ СЕЙЧАС (читать первым): NOTIFY_EMAIL ЗАДАНА и непуста —
+// перемерено 24.09.2026 по сервису, значение не печатается. Уведомления о
+// заявках уходят; отправляет их функция `уведомитьОЗаявке` ниже, вызов стоит
+// сразу после записи заявки.
+//
+// ⚠️ Порядок абзацев здесь не косметика. 24.09 соседнее окно прочло идущий
+// НИЖЕ исторический абзац (19.08, прошедшее время) и объявило денежный канал
+// сломанным — при исправном коде. Поэтому нынешнее состояние стоит ПЕРВЫМ, а
+// история после него: читатель бросает чтение на первом абзаце.
+//
+// ⚠️ ИСТОРИЯ 19.08.2026: здесь стоял запасной адрес "hello@aevion.io" — и это
+// ЧУЖОЙ домен. aevion.io принадлежит другой компании с тем же названием (их
+// schema.org: «Aevion builds an AI-native personal operating system»,
+// контакт jonathan@aevion.io). ТОГДА переменная NOTIFY_EMAIL на проде не была
+// задана, и внутренние уведомления о заявках — с именем, почтой, организацией,
+// страной и каналом заявителя — уходили им.
+//
+// ⚠️ ПОПРАВКА 17.09.2026. Тогда же NOTIFY_EMAIL ЗАДАНА и непуста — замер по
+// сервису, значение не печатаем; рядом заданы BREVO_API_KEY, SMTP_HOST,
+// RESEND_API_KEY, то есть отправлять есть чем и есть куда. Прежняя фраза стояла
+// в НАСТОЯЩЕМ времени и говорила будущему читателю неправду про денежный канал:
+// прочитав её, легко решить, что уведомления некуда шлются, и не искать причину,
+// когда они перестанут приходить. Замер состояния живёт минуты — поэтому здесь
+// оставлена дата, а не «сейчас».
+//
+// Запасного адреса больше нет намеренно. Не задана переменная — уведомление
+// не отправляется, а пишется предупреждение: заявка при этом сохраняется, и
+// потерять её нельзя. Придумать «правдоподобный» адрес было бы тем же
+// дефектом с другим доменом.
+const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL?.trim() || "";
+const PROGRAM_LABELS = {
+    affiliate: {
+        label: "Affiliate Program",
+        eta: "1-2 рабочих дня",
+        subject: "AEVION Affiliate — заявка получена",
+    },
+    partner: {
+        label: "Partner Program",
+        eta: "1-2 рабочих дня",
+        subject: "AEVION Partner — заявка получена",
+    },
+    edu: {
+        label: "Education Program",
+        eta: "1-2 рабочих дня (с verification)",
+        subject: "AEVION for Education — заявка получена",
+    },
+};
+function applicantHtml(app) {
+    const meta = PROGRAM_LABELS[app.kind];
+    return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#f8fafc;color:#0f172a">
+  <div style="background:#fff;border-radius:14px;padding:28px;border:1px solid rgba(15,23,42,0.08)">
+    <div style="font-size:11px;font-weight:800;color:#0d9488;letter-spacing:0.06em;margin-bottom:8px">AEVION · ${meta.label.toUpperCase()}</div>
+    <h1 style="font-size:22px;margin:0 0 12px">Заявка получена, ${escapeHtml(app.name)}</h1>
+    <p style="font-size:14px;line-height:1.5;color:#475569;margin:0 0 16px">
+      Спасибо за интерес к ${meta.label}. Customer Success рассмотрит заявку и свяжется в течение <strong>${meta.eta}</strong>.
+    </p>
+    <div style="background:#f8fafc;border-radius:8px;padding:14px;font-size:13px;color:#475569;font-family:ui-monospace,monospace">
+      ID заявки: <strong style="color:#0f172a">${escapeHtml(app.id)}</strong>
+    </div>
+    <p style="font-size:13px;color:#94a3b8;margin:16px 0 0">
+      Вопросы — отвечайте на это письмо${NOTIFY_EMAIL ? ` или пишите ${NOTIFY_EMAIL}` : ""}.
+    </p>
+  </div>
+</body></html>`;
+}
+function applicantText(app) {
+    const meta = PROGRAM_LABELS[app.kind];
+    return `Заявка получена, ${app.name}
+
+Спасибо за интерес к ${meta.label}. Customer Success рассмотрит заявку и свяжется в течение ${meta.eta}.
+
+ID заявки: ${app.id}
+
+Вопросы — отвечайте на это письмо${NOTIFY_EMAIL ? ` или пишите ${NOTIFY_EMAIL}` : ""}.
+
+— AEVION`;
+}
+function notifyHtml(app) {
+    const meta = PROGRAM_LABELS[app.kind];
+    const fields = [
+        ["Имя", app.name],
+        ["Email", app.email],
+        ["Организация", app.organization],
+        ["Страна", app.country],
+        ["Канал", app.channel],
+        ["Тип партнёра", app.partnerType],
+        ["Домен вуза", app.institutionDomain],
+        ["Детали", app.details],
+    ];
+    const rows = fields
+        .filter(([, v]) => v && v.trim().length > 0)
+        .map(([k, v]) => `<tr><td style="padding:6px 10px;color:#64748b;font-weight:700;vertical-align:top">${k}</td><td style="padding:6px 10px;color:#0f172a">${escapeHtml(v)}</td></tr>`)
+        .join("");
+    return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:20px">
+  <div style="font-size:11px;font-weight:800;color:#0d9488;letter-spacing:0.06em;margin-bottom:6px">NEW ${meta.label.toUpperCase()} APPLICATION</div>
+  <h2 style="margin:0 0 14px;font-size:18px">${escapeHtml(app.name)} · ${escapeHtml(app.organization ?? "—")}</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">${rows}</table>
+  <div style="margin-top:14px;font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace">
+    ID: ${escapeHtml(app.id)} · IP: ${escapeHtml(app.ip)} · ${escapeHtml(app.ts)}
+  </div>
+</body></html>`;
+}
+function escapeHtml(s) {
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+/**
+ * Отправка письма, у которой отказ ВИДЕН.
+ *
+ * Здесь было пять вызовов вида `sendEmail({...}).catch((e) => console.error(...))`.
+ * Выглядит как полноценная обработка отказа, а сработать не может ни разу:
+ * `sendEmail` не бросает НИ ПРИ КАКОМ исходе — отказ поставщика, обрыв сети и
+ * даже собственное исключение она возвращает объектом `{ok: false}`. Правда об
+ * отправке живёт только в признаке `ok`, и его не читал никто.
+ *
+ * Следствие было дороже падения: заявка сохранена, ссылка выдана, ответ 200 — а
+ * письмо не ушло, и в журнале на месте отказа НЕТ строки от того, кто письмо
+ * заказывал. Сам `sendEmail` при этом пишет о себе, но не знает, ЧТО именно не
+ * доехало: вход в дашборд, подтверждение заявки или уведомление о сделке.
+ *
+ * Что НЕ меняется: письмо по-прежнему не роняет операцию, ради которой шлётся.
+ * Меняется одно — отказ перестаёт быть невидимым.
+ *
+ * Адрес получателя целиком в журнал не пишем: это персональные данные, а для
+ * разбора хватает домена и темы. То же решение принято в `sendEmail`, и держать
+ * их одинаковыми важнее, чем каждое по отдельности.
+ *
+ * Факт, на котором держится весь этот помощник, закреплён отдельным тестом:
+ * `tests/sendEmailNeverThrowsSoCatchIsDead.test.ts`. Начнёт `sendEmail` бросать —
+ * тест покраснеет, и правило надо будет пересматривать вместе с ним.
+ */
+async function отправитьПисьмо(метка, payload) {
+    try {
+        const r = await (0, provisioning_1.sendEmail)(payload);
+        if (!r.ok) {
+            const домен = String(payload.to).split("@").pop() ?? "?";
+            console.error(`[${метка}] письмо НЕ отправлено: получатель @${домен}, тема "${payload.subject}" — ` +
+                `${r.error ?? "причина не названа"}`);
+            return;
+        }
+        if (r.degraded) {
+            console.warn(`[${метка}] отправка вырожденная, доставка не подтверждена: ` +
+                `${r.degradedReason ?? "причина не названа"}`);
+        }
+    }
+    catch (e) {
+        // Сегодня недостижимо (см. тест выше), но вызов обёрнут намеренно: если
+        // sendEmail когда-нибудь начнёт бросать, письмо всё равно не должно
+        // ронять денежный путь.
+        console.error(`[${метка}] отправка упала исключением`, e);
+    }
+}
+async function notifyApplication(app) {
+    const meta = PROGRAM_LABELS[app.kind];
+    // Auto-reply заявителю
+    void отправитьПисьмо(`apply/${app.kind} -> заявителю`, {
+        to: app.email,
+        subject: meta.subject,
+        html: applicantHtml(app),
+        text: applicantText(app),
+    });
+    // Внутреннее уведомление — только если адрес настроен (см. комментарий у
+    // NOTIFY_EMAIL: запасной вёл в чужую компанию).
+    if (!NOTIFY_EMAIL) {
+        console.warn(`[apply/${app.kind}] NOTIFY_EMAIL не задан — внутреннее уведомление не отправлено. ` +
+            `Заявка сохранена, адресат уведомления не настроен.`);
+        return;
+    }
+    void отправитьПисьмо(`apply/${app.kind} -> внутреннее уведомление`, {
+        to: NOTIFY_EMAIL,
+        subject: `[${app.kind}] ${app.name} · ${app.organization ?? "—"}`,
+        html: notifyHtml(app),
+        text: `New ${app.kind} application: ${app.name} (${app.email}) · ${app.organization ?? "—"}\nID: ${app.id}\nDetails: ${app.details ?? "—"}`,
+    });
+}
+/**
+ * Уведомление о заявке из формы связи.
+ *
+ * ЗАЧЕМ. `POST /lead` проверял поля, дописывал строку в leads.jsonl и отвечал
+ * 201 — писем не уходило ни одного. Единственным читателем заявок была суточная
+ * сводка на ноутбуке. При этом `/pricing/[tierId]` обещает во ВСЕХ ТРЁХ языках
+ * «Customer Success свяжется в течение 24 часов». Обещание без механизма хуже
+ * отсутствия обещания: человек уходит и больше не пишет.
+ *
+ * Почему это не видел ни один сторож — дыра лежала в СТЫКЕ двух проверок:
+ * `supportChannelFailsLoudly` следит, чтобы отказ ЗАПИСИ не выдавался за
+ * принятое обращение, а `applicationsReachAHuman` спрашивает «дойдёт ли до
+ * человека», но по `/api/health/channels`, где слова lead нет вовсе. Оба
+ * зелёные и оба правы по своему вопросу.
+ *
+ * Образец — `notifyApplication` выше: письмо НЕ роняет операцию, ради которой
+ * шлётся, а незаданный адрес даёт видимое предупреждение, а не тишину. Отличие
+ * одно: автоответ заявителю здесь НЕ шлём — форма показывает «принято» сразу, и
+ * второе письмо человеку, который ждёт звонка, ничего не добавляет.
+ */
+async function уведомитьОЗаявке(lead) {
+    if (!NOTIFY_EMAIL) {
+        console.warn(`[pricing/lead] NOTIFY_EMAIL не задан — уведомление о заявке не отправлено. ` +
+            `Заявка ${lead.id} сохранена, адресат уведомления не настроен.`);
+        return;
+    }
+    const строки = [
+        ["Имя", lead.name],
+        ["Почта", lead.email],
+        ["Организация", lead.company],
+        ["Отрасль", lead.industry],
+        ["Тариф", lead.tier],
+        ["Мест", lead.seats === undefined ? undefined : String(lead.seats)],
+        ["Модули", lead.modules?.join(", ")],
+        ["Откуда", lead.source],
+    ];
+    const видимые = строки.filter(([, v]) => v && v.length > 0);
+    const html = `<h2>Заявка с витрины${lead.tier ? ` — тариф ${lead.tier}` : ""}</h2>` +
+        `<table>${видимые.map(([k, v]) => `<tr><td><b>${k}</b></td><td>${v}</td></tr>`).join("")}</table>` +
+        (lead.message ? `<p><b>Сообщение</b><br>${lead.message}</p>` : "") +
+        `<p>ID: ${lead.id} · ${lead.ts}</p>`;
+    const text = `Заявка с витрины${lead.tier ? ` (тариф ${lead.tier})` : ""}\n` +
+        видимые.map(([k, v]) => `${k}: ${v}`).join("\n") +
+        (lead.message ? `\nСообщение: ${lead.message}` : "") +
+        `\nID: ${lead.id} · ${lead.ts}`;
+    void отправитьПисьмо("pricing/lead -> внутреннее уведомление", {
+        to: NOTIFY_EMAIL,
+        subject: `[lead${lead.tier ? ` ${lead.tier}` : ""}] ${lead.name} · ${lead.company ?? "—"}`,
+        html,
+        text,
+    });
+}
+/**
+ * Автоподтверждение ЗАЯВИТЕЛЮ (окно Продаж, 19.10.2026). Форма слала письмо
+ * только нам, а страница обещает ответ в 24 часа — человек не получал ничего.
+ *
+ * Требования (иначе письмо вредит):
+ *  • уходит ТОЛЬКО после успешной записи заявки, с НАСТОЯЩИМ lead.id (его же
+ *    видит человек в ответе ручки) — выдуманный номер сломал бы доверие;
+ *  • отказ отправки НЕ глотается: `отправитьПисьмо` пишет в журнал получателя,
+ *    тему и причину — молчание выглядело бы успехом;
+ *  • ответ ручки письма не ждёт (вызывается void, как уведомитьОЗаявке).
+ *
+ * Язык: форма /pricing/contact не передаёт язык страницы, поэтому шлём РУ и EN
+ * одним письмом — это честнее, чем угадать. Текст согласован Продажами, без
+ * цены и доли.
+ */
+async function подтвердитьЗаявителю(lead) {
+    const имя = lead.name || "there";
+    const id = lead.id;
+    const proof = "https://aevion.app/verify/cert-463708f3b7f6e156";
+    const subject = `Заявка ${id} принята — ответим в 24 часа · Request ${id} received — we reply within 24h`;
+    const ruText = `Здравствуйте, ${имя}!\n\n` +
+        `Заявка принята, её номер ${id}. Отвечу лично в течение 24 часов — по сути вашей задачи, не шаблоном.\n\n` +
+        `Пока ждёте, вот то же, что увидят ваши клиенты, без регистрации: ${proof}\n\n` +
+        `Если срочно — ответьте на это письмо словом «срочно» и удобным временем.\n\n` +
+        `Досымбек Жакия, основатель AEVION`;
+    const enText = `Hello, ${имя}!\n\n` +
+        `Your request is in, number ${id}. I will answer personally within 24 hours — to your actual question, not with a template.\n\n` +
+        `While you wait, here is what your own clients would see, no account needed: ${proof}\n\n` +
+        `If it is urgent, reply "urgent" with a time that suits you.\n\n` +
+        `Dosymbek Zhakiya, founder of AEVION`;
+    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const toHtml = (t) => t.split("\n\n").map((p) => `<p>${esc(p).replace(/\n/g, "<br>").replace(esc(proof), `<a href="${proof}">${proof}</a>`)}</p>`).join("");
+    const html = `${toHtml(ruText)}<hr>${toHtml(enText)}`;
+    const text = `${ruText}\n\n— — —\n\n${enText}`;
+    await отправитьПисьмо("pricing/lead -> подтверждение заявителю", {
+        to: lead.email,
+        subject,
+        html,
+        text,
+    });
+}
+/**
+ * POST /api/pricing/affiliate/apply
+ * Body: { name, email, organization?, country?, channel?, details? }
+ * Заявка на участие в реферальной программе AEVION (20% recurring lifetime).
+ */
+exports.pricingRouter.post("/affiliate/apply", (req, res) => {
+    const ip = (0, rateLimit_1.clientIp)(req);
+    if (programRateLimited(ip, "affiliate_apply")) {
+        return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+    }
+    const body = req.body ?? {};
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+    const organization = typeof body.organization === "string" ? body.organization.trim().slice(0, 200) : undefined;
+    const country = typeof body.country === "string" ? body.country.trim().slice(0, 100) : undefined;
+    const channel = typeof body.channel === "string" ? body.channel.trim().slice(0, 200) : undefined;
+    const details = typeof body.details === "string" ? body.details.trim().slice(0, 2000) : undefined;
+    if (!name || name.length < 2)
+        return res.status(400).json({ error: "invalid_name" });
+    if (!email || !isValidEmail(email))
+        return res.status(400).json({ error: "invalid_email" });
+    const app = {
+        id: `aff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        ts: new Date().toISOString(),
+        kind: "affiliate",
+        name,
+        email,
+        organization,
+        country,
+        channel,
+        details,
+        ip,
+    };
+    try {
+        persistApplication(affiliateFile(), app);
+    }
+    catch (e) {
+        console.error("[affiliate/apply] write failed", e);
+        return res.status(500).json({ error: "storage_error" });
+    }
+    notifyApplication(app);
+    res.status(201).json({ ok: true, id: app.id });
+});
+/**
+ * POST /api/pricing/partners/apply
+ * Body: { name, email, organization, country, partnerType, details? }
+ */
+exports.pricingRouter.post("/partners/apply", (req, res) => {
+    const ip = (0, rateLimit_1.clientIp)(req);
+    if (programRateLimited(ip, "partners_apply")) {
+        return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+    }
+    const body = req.body ?? {};
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+    const organization = typeof body.organization === "string" ? body.organization.trim().slice(0, 200) : "";
+    const country = typeof body.country === "string" ? body.country.trim().slice(0, 100) : undefined;
+    const partnerType = ["reseller", "system_integrator", "agency"].includes(body.partnerType)
+        ? body.partnerType
+        : undefined;
+    const details = typeof body.details === "string" ? body.details.trim().slice(0, 2000) : undefined;
+    if (!name || name.length < 2)
+        return res.status(400).json({ error: "invalid_name" });
+    if (!email || !isValidEmail(email))
+        return res.status(400).json({ error: "invalid_email" });
+    if (!organization)
+        return res.status(400).json({ error: "invalid_organization" });
+    if (!partnerType)
+        return res.status(400).json({ error: "invalid_partner_type" });
+    const app = {
+        id: `prt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        ts: new Date().toISOString(),
+        kind: "partner",
+        name,
+        email,
+        organization,
+        country,
+        partnerType,
+        details,
+        ip,
+    };
+    try {
+        persistApplication(partnersFile(), app);
+    }
+    catch (e) {
+        console.error("[partners/apply] write failed", e);
+        return res.status(500).json({ error: "storage_error" });
+    }
+    notifyApplication(app);
+    res.status(201).json({ ok: true, id: app.id });
+});
+/**
+ * POST /api/pricing/edu/apply
+ * Body: { name, email, organization, institutionDomain, country?, details? }
+ */
+exports.pricingRouter.post("/edu/apply", (req, res) => {
+    const ip = (0, rateLimit_1.clientIp)(req);
+    if (programRateLimited(ip, "edu")) {
+        return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+    }
+    const body = req.body ?? {};
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+    const organization = typeof body.organization === "string" ? body.organization.trim().slice(0, 200) : "";
+    const institutionDomain = typeof body.institutionDomain === "string" ? body.institutionDomain.trim().toLowerCase().slice(0, 200) : "";
+    const country = typeof body.country === "string" ? body.country.trim().slice(0, 100) : undefined;
+    const details = typeof body.details === "string" ? body.details.trim().slice(0, 2000) : undefined;
+    if (!name || name.length < 2)
+        return res.status(400).json({ error: "invalid_name" });
+    if (!email || !isValidEmail(email))
+        return res.status(400).json({ error: "invalid_email" });
+    if (!organization)
+        return res.status(400).json({ error: "invalid_organization" });
+    const app = {
+        id: `edu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        ts: new Date().toISOString(),
+        kind: "edu",
+        name,
+        email,
+        organization,
+        country,
+        institutionDomain,
+        details,
+        ip,
+    };
+    try {
+        persistApplication(eduFile(), app);
+    }
+    catch (e) {
+        console.error("[edu/apply] write failed", e);
+        return res.status(500).json({ error: "storage_error" });
+    }
+    notifyApplication(app);
+    res.status(201).json({ ok: true, id: app.id });
+});
+/**
+ * GET /api/pricing/applications?kind=affiliate|partner|edu
+ * Token-gated: x-admin-token. Возвращает последние N заявок из соответствующего JSONL.
+ * Используется /pricing/admin для мониторинга всех program-applications в одном месте.
+ */
+exports.pricingRouter.get("/applications", (req, res) => {
+    const required = process.env.ADMIN_TOKEN?.trim();
+    if (!required) {
+        return res.status(401).json({ error: "admin_token_not_configured" });
+    }
+    const got = req.headers["x-admin-token"]?.trim();
+    if (got !== required) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+    const kind = req.query.kind === "affiliate" || req.query.kind === "partner" || req.query.kind === "edu"
+        ? req.query.kind
+        : null;
+    if (!kind) {
+        return res.status(400).json({ error: "invalid_kind", expected: ["affiliate", "partner", "edu"] });
+    }
+    const file = kind === "affiliate" ? affiliateFile() : kind === "partner" ? partnersFile() : eduFile();
+    const limit = Math.min(Math.max((0, queryNumber_1.queryNumber)(req.query.limit, 100), 1), 500);
+    try {
+        if (!(0, fs_1.existsSync)(file))
+            return res.json({ items: [], total: 0, kind });
+        const content = (0, fs_1.readFileSync)(file, "utf8");
+        const lines = content.split("\n").filter((l) => l.trim().length > 0);
+        const tail = lines.slice(-limit).reverse();
+        const items = [];
+        for (const line of tail) {
+            try {
+                items.push(JSON.parse(line));
+            }
+            catch {
+                // skip malformed
+            }
+        }
+        res.json({ items, total: lines.length, kind });
+    }
+    catch (e) {
+        console.error(`[applications/${kind}] read failed`, e);
+        res.status(500).json({ error: "read_error" });
+    }
+});
+/**
+ * GET /api/pricing/newsletter/list
+ * Token-gated: список последних подписчиков newsletter (без PII в публичном /count).
+ */
+exports.pricingRouter.get("/newsletter/list", (req, res) => {
+    const required = process.env.ADMIN_TOKEN?.trim();
+    if (!required) {
+        return res.status(401).json({ error: "admin_token_not_configured" });
+    }
+    const got = req.headers["x-admin-token"]?.trim();
+    if (got !== required) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+    const limit = Math.min(Math.max((0, queryNumber_1.queryNumber)(req.query.limit, 100), 1), 500);
+    try {
+        if (!(0, fs_1.existsSync)(newsletterFile()))
+            return res.json({ items: [], total: 0 });
+        const content = (0, fs_1.readFileSync)(newsletterFile(), "utf8");
+        const lines = content.split("\n").filter((l) => l.trim().length > 0);
+        const tail = lines.slice(-limit).reverse();
+        const items = [];
+        for (const line of tail) {
+            try {
+                items.push(JSON.parse(line));
+            }
+            catch {
+                // skip
+            }
+        }
+        res.json({ items, total: lines.length });
+    }
+    catch (e) {
+        console.error("[newsletter/list] read failed", e);
+        res.status(500).json({ error: "read_error" });
+    }
+});
+/**
+ * Magic-link auth для self-service dashboards (affiliate, partners).
+ * HMAC(email + ":" + scope, DASHBOARD_SECRET) → токен 24-hex.
+ *
+ * DASHBOARD_SECRET по умолчанию = ADMIN_TOKEN (если не задан отдельно).
+ * Это not super-secret — даёт доступ только к данным конкретного email.
+ */
+function dashboardSecret() {
+    return (process.env.DASHBOARD_SECRET?.trim() ||
+        process.env.ADMIN_TOKEN?.trim() ||
+        "aevion-dashboard-default-rotate-me");
+}
+function dashboardToken(email, scope) {
+    return (0, crypto_1.createHmac)("sha256", dashboardSecret())
+        .update(`${email.toLowerCase()}:${scope}`)
+        .digest("hex")
+        .slice(0, 32);
+}
+function verifyDashboardToken(email, scope, got) {
+    const want = dashboardToken(email, scope);
+    if (want.length !== got.length)
+        return false;
+    try {
+        return (0, crypto_1.timingSafeEqual)(Buffer.from(want), Buffer.from(got));
+    }
+    catch {
+        return false;
+    }
+}
+// Канал тревог у этого модуля до 02.09.2026 отсутствовал вовсе.
+const capture = (0, platform_1.makeServiceCapture)("pricing");
+function readJsonlAll(file) {
+    if (!(0, fs_1.existsSync)(file))
+        return [];
+    try {
+        const content = (0, fs_1.readFileSync)(file, "utf8");
+        const lines = content.split("\n").filter((l) => l.trim().length > 0);
+        const out = [];
+        for (const line of lines) {
+            try {
+                out.push(JSON.parse(line));
+            }
+            catch {
+                // skip malformed
+            }
+        }
+        return out;
+    }
+    catch (e) {
+        // Поведение прежнее — пустой список: у части вызывающих есть свой
+        // catch, и бросок они всё равно проглотят, а чинить каждую ручку
+        // программы партнёров отсюда не мой заход.
+        //
+        // Но отказ обязан быть виден. Замер 02.09.2026 пробой со сломанным
+        // хранилищем: нечитаемый файл заявок даёт партнёру 404 «вас нет», а
+        // нечитаемый файл сделок — НУЛЕВЫЕ комиссии. Оба молча, следа не
+        // оставалось вовсе.
+        const причина = e instanceof Error ? e.message : String(e);
+        console.error(`[pricing] журнал НЕ прочитан -> ${file} :: ${причина}`);
+        capture(e, { route: "pricing/readJsonlAll", file });
+        return [];
+    }
+}
+/**
+ * Детерминированный реферальный код по email + scope.
+ * Один email → один стабильный ref-code, чтобы повторные magic-link сессии
+ * не порождали разные коды.
+ */
+function refCode(email, scope) {
+    return (scope +
+        "_" +
+        (0, crypto_1.createHmac)("sha256", dashboardSecret())
+            .update(`ref:${email.toLowerCase()}:${scope}`)
+            .digest("hex")
+            .slice(0, 8));
+}
+const SITE_BASE = process.env.PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
+function magicLinkHtml(appName, link, scope) {
+    return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#f8fafc;color:#0f172a">
+  <div style="background:#fff;border-radius:14px;padding:28px;border:1px solid rgba(15,23,42,0.08)">
+    <div style="font-size:11px;font-weight:800;color:#0d9488;letter-spacing:0.06em;margin-bottom:8px">AEVION · ${scope.toUpperCase()} DASHBOARD</div>
+    <h1 style="font-size:22px;margin:0 0 12px">Войти в дашборд</h1>
+    <p style="font-size:14px;line-height:1.5;color:#475569;margin:0 0 16px">
+      Привет, ${escapeHtml(appName)}. Перейдите по ссылке, чтобы открыть ваш ${scope.toLowerCase()}-дашборд.
+      Ссылка действительна для текущего устройства.
+    </p>
+    <a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 20px;background:linear-gradient(135deg, #0d9488, #0ea5e9);color:#fff;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px">
+      Открыть дашборд
+    </a>
+    <p style="font-size:12px;color:#94a3b8;margin:16px 0 0;font-family:ui-monospace,monospace;word-break:break-all">${escapeHtml(link)}</p>
+  </div>
+</body></html>`;
+}
+/**
+ * POST /api/pricing/affiliate/magic-link
+ * Body: { email }
+ * Если email есть в affiliate-applications — отправляет magic-link на email.
+ * Всегда отвечает 204 (не раскрываем существование email).
+ */
+exports.pricingRouter.post("/affiliate/magic-link", (req, res) => {
+    const ip = (0, rateLimit_1.clientIp)(req);
+    if (programRateLimited(ip, "affiliate_link")) {
+        return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+    }
+    const body = req.body ?? {};
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+    if (!email || !isValidEmail(email)) {
+        return res.status(400).json({ error: "invalid_email" });
+    }
+    const apps = readJsonlAll(affiliateFile());
+    const found = apps.find((a) => a.email === email);
+    if (found) {
+        const token = dashboardToken(email, "affiliate");
+        const link = `${SITE_BASE}/pricing/affiliate-dashboard?email=${encodeURIComponent(email)}&token=${token}`;
+        void отправитьПисьмо("affiliate/magic-link", {
+            to: email,
+            subject: "AEVION Affiliate — вход в дашборд",
+            html: magicLinkHtml(found.name, link, "Affiliate"),
+            text: `Здравствуйте, ${found.name}.\n\nСсылка для входа в Affiliate-дашборд:\n${link}\n\n— AEVION`,
+        });
+    }
+    // Always 204, don't leak existence.
+    res.status(204).end();
+});
+/**
+ * GET /api/pricing/affiliate/dashboard?email=&token=
+ * Возвращает данные заявки и заглушки трекинга по аффилиату.
+ * Рефкод детерминирован по email — один email = один стабильный код.
+ */
+exports.pricingRouter.get("/affiliate/dashboard", (req, res) => {
+    const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+    const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+    if (!email || !isValidEmail(email))
+        return res.status(400).json({ error: "invalid_email" });
+    if (!token || !verifyDashboardToken(email, "affiliate", token)) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+    const apps = readJsonlAll(affiliateFile());
+    const found = apps.find((a) => a.email === email);
+    if (!found)
+        return res.status(404).json({ error: "not_found" });
+    const code = refCode(email, "aff");
+    const refLink = `${SITE_BASE}/?ref=${code}`;
+    // Tracking infrastructure не собирает affiliate-клики ещё;
+    // отдаём честные нули. Когда появится — заменим на реальные агрегаты.
+    const stats = {
+        clicks: 0,
+        signups: 0,
+        mrr_usd: 0,
+        pending_payout_usd: 0,
+        paid_payout_usd: 0,
+        commission_percent: 20,
+        cookie_days: 60,
+    };
+    res.json({
+        application: {
+            id: found.id,
+            ts: found.ts,
+            name: found.name,
+            email: found.email,
+            organization: found.organization ?? null,
+            country: found.country ?? null,
+            channel: found.channel ?? null,
+            status: "submitted",
+        },
+        refCode: code,
+        refLink,
+        stats,
+        history: [],
+    });
+});
+/**
+ * POST /api/pricing/partners/magic-link
+ * Идентично affiliate, но для partners.
+ */
+exports.pricingRouter.post("/partners/magic-link", (req, res) => {
+    const ip = (0, rateLimit_1.clientIp)(req);
+    if (programRateLimited(ip, "partners_link")) {
+        return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+    }
+    const body = req.body ?? {};
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+    if (!email || !isValidEmail(email)) {
+        return res.status(400).json({ error: "invalid_email" });
+    }
+    const apps = readJsonlAll(partnersFile());
+    const found = apps.find((a) => a.email === email);
+    if (found) {
+        const token = dashboardToken(email, "partners");
+        const link = `${SITE_BASE}/pricing/partners-portal?email=${encodeURIComponent(email)}&token=${token}`;
+        void отправитьПисьмо("partners/magic-link", {
+            to: email,
+            subject: "AEVION Partner — вход в портал",
+            html: magicLinkHtml(found.name, link, "Partner"),
+            text: `Здравствуйте, ${found.name}.\n\nСсылка для входа в Partner-портал:\n${link}\n\n— AEVION`,
+        });
+    }
+    res.status(204).end();
+});
+const PARTNER_DEALS_FILE = process.env.PARTNER_DEALS_FILE
+    ? process.env.PARTNER_DEALS_FILE
+    : (0, path_1.join)(process.cwd(), "data", "partner-deals.jsonl");
+function persistDeal(deal) {
+    const dir = (0, path_1.dirname)(PARTNER_DEALS_FILE);
+    if (!(0, fs_1.existsSync)(dir))
+        (0, fs_1.mkdirSync)(dir, { recursive: true });
+    (0, fs_1.appendFileSync)(PARTNER_DEALS_FILE, JSON.stringify(deal) + "\n", "utf8");
+}
+/**
+ * GET /api/pricing/partners/dashboard?email=&token=
+ * Партнёрский портал: данные заявки + список зарегистрированных сделок этого партнёра.
+ */
+exports.pricingRouter.get("/partners/dashboard", (req, res) => {
+    const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+    const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+    if (!email || !isValidEmail(email))
+        return res.status(400).json({ error: "invalid_email" });
+    if (!token || !verifyDashboardToken(email, "partners", token)) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+    const apps = readJsonlAll(partnersFile());
+    const found = apps.find((a) => a.email === email);
+    if (!found)
+        return res.status(404).json({ error: "not_found" });
+    const allDeals = readJsonlAll(PARTNER_DEALS_FILE);
+    const myDeals = allDeals
+        .filter((d) => d.partnerEmail === email)
+        .sort((a, b) => b.ts.localeCompare(a.ts));
+    const totals = {
+        count: myDeals.length,
+        pipeline_usd: myDeals.filter((d) => d.status === "registered" || d.status === "qualified").reduce((s, d) => s + d.dealSizeUsd, 0),
+        won_usd: myDeals.filter((d) => d.status === "won").reduce((s, d) => s + d.dealSizeUsd, 0),
+        lost_usd: myDeals.filter((d) => d.status === "lost").reduce((s, d) => s + d.dealSizeUsd, 0),
+    };
+    res.json({
+        application: {
+            id: found.id,
+            ts: found.ts,
+            name: found.name,
+            email: found.email,
+            organization: found.organization ?? null,
+            country: found.country ?? null,
+            partnerType: found.partnerType ?? null,
+            status: "submitted",
+        },
+        deals: myDeals,
+        totals,
+        margin_percent: 30,
+    });
+});
+/**
+ * POST /api/pricing/partners/deals
+ * Body: { email, token, customer, customerEmail?, modules[], dealSizeUsd, expectedClose?, notes? }
+ * Регистрирует сделку партнёра (deal registration).
+ */
+exports.pricingRouter.post("/partners/deals", (req, res) => {
+    const body = req.body ?? {};
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+    const token = typeof body.token === "string" ? body.token.trim() : "";
+    if (!email || !isValidEmail(email))
+        return res.status(400).json({ error: "invalid_email" });
+    if (!token || !verifyDashboardToken(email, "partners", token)) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+    const apps = readJsonlAll(partnersFile());
+    if (!apps.find((a) => a.email === email)) {
+        return res.status(404).json({ error: "partner_not_found" });
+    }
+    const customer = typeof body.customer === "string" ? body.customer.trim().slice(0, 200) : "";
+    const customerEmail = typeof body.customerEmail === "string" ? body.customerEmail.trim().toLowerCase().slice(0, 200) : undefined;
+    const modules = Array.isArray(body.modules)
+        ? body.modules.filter((m) => typeof m === "string").slice(0, 20).map((m) => m.slice(0, 60))
+        : [];
+    const dealSizeUsd = Number.isFinite(body.dealSizeUsd) ? Math.max(0, Math.min(10000000, Number(body.dealSizeUsd))) : 0;
+    const expectedClose = typeof body.expectedClose === "string" ? body.expectedClose.slice(0, 20) : undefined;
+    const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) : undefined;
+    if (!customer)
+        return res.status(400).json({ error: "invalid_customer" });
+    if (modules.length === 0)
+        return res.status(400).json({ error: "modules_required" });
+    const deal = {
+        id: `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        ts: new Date().toISOString(),
+        partnerEmail: email,
+        customer,
+        customerEmail,
+        modules,
+        dealSizeUsd,
+        expectedClose,
+        notes,
+        status: "registered",
+    };
+    try {
+        persistDeal(deal);
+    }
+    catch (e) {
+        console.error("[partners/deals] write failed", e);
+        return res.status(500).json({ error: "storage_error" });
+    }
+    // Notify channel team
+    void отправитьПисьмо("partners/deals", {
+        to: NOTIFY_EMAIL,
+        subject: `[partner-deal] ${customer} · $${dealSizeUsd.toLocaleString("en-US")}`,
+        html: `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:20px">
+      <div style="font-size:11px;font-weight:800;color:#7c3aed;letter-spacing:0.06em;margin-bottom:6px">NEW DEAL REGISTRATION</div>
+      <h2 style="margin:0 0 14px;font-size:18px">${escapeHtml(customer)} · $${dealSizeUsd.toLocaleString("en-US")}</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:6px 10px;color:#64748b;font-weight:700">Партнёр</td><td style="padding:6px 10px">${escapeHtml(email)}</td></tr>
+        <tr><td style="padding:6px 10px;color:#64748b;font-weight:700">Модули</td><td style="padding:6px 10px">${escapeHtml(modules.join(", "))}</td></tr>
+        <tr><td style="padding:6px 10px;color:#64748b;font-weight:700">Expected close</td><td style="padding:6px 10px">${escapeHtml(expectedClose ?? "—")}</td></tr>
+        <tr><td style="padding:6px 10px;color:#64748b;font-weight:700;vertical-align:top">Заметки</td><td style="padding:6px 10px">${escapeHtml(notes ?? "—")}</td></tr>
+      </table>
+      <div style="margin-top:14px;font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace">ID: ${escapeHtml(deal.id)} · ${escapeHtml(deal.ts)}</div>
+    </body></html>`,
+        text: `New deal: ${customer} · $${dealSizeUsd}\nPartner: ${email}\nModules: ${modules.join(", ")}\nExpected close: ${expectedClose ?? "—"}\nNotes: ${notes ?? "—"}\nID: ${deal.id}`,
+    });
+    res.status(201).json({ ok: true, deal });
+});
+/**
+ * GET /api/pricing/changelog
+ * Публичный journal изменений pricing-блока.
+ * Параметры:
+ *   - kind=added|changed|removed|deprecated|promo|module — фильтр по типу
+ *   - since=YYYY-MM-DD — отдавать только записи >= даты
+ *   - limit (default 100, max 500), offset (default 0)
+ *
+ * Сортировка по date desc (новейшие сверху).
+ */
+exports.pricingRouter.get("/changelog", (req, res) => {
+    const KIND_VALUES = ["added", "changed", "removed", "deprecated", "promo", "module"];
+    const kind = typeof req.query.kind === "string" ? req.query.kind : undefined;
+    // `?since=zzz` раньше молча отдавал ПУСТОЙ журнал: сравнение строк
+    // ("2026-01-01" >= "zzz") ложно, и неверный запрос выглядел честным
+    // ответом «изменений нет». 500 тут не было, потому потребитель мягче
+    // СУБД — но неверный ответ хуже отказа: на него сошлются как на факт.
+    const sinceRaw = (0, queryDate_1.queryDate)(req.query.since);
+    if (sinceRaw === undefined)
+        return res.status(400).json({ error: "invalid_since" });
+    const since = sinceRaw ?? undefined;
+    const limit = Math.min(Math.max((0, queryNumber_1.queryNumber)(req.query.limit, 100), 1), 500);
+    const offset = Math.max((0, queryNumber_1.queryNumber)(req.query.offset, 0), 0);
+    if (kind && !KIND_VALUES.includes(kind)) {
+        return res.status(400).json({ error: "invalid_kind", kind });
+    }
+    // Универсум по `since` — нужен для подсчёта counts (кол-во по каждому kind),
+    // чтобы UI-фильтры не пропадали при выбранном kind.
+    const universe = changelog_1.CHANGELOG.filter((e) => !since || e.date >= since);
+    const filtered = universe
+        .filter((e) => !kind || e.kind === kind)
+        .slice()
+        .sort((a, b) => b.date.localeCompare(a.date));
+    const total = filtered.length;
+    const items = filtered.slice(offset, offset + limit);
+    const counts = {};
+    for (const e of universe)
+        counts[e.kind] = (counts[e.kind] ?? 0) + 1;
+    res.json({ items, total, counts, kind: kind ?? null, since: since ?? null });
+});
+/**
+ * GET /api/pricing/healthz
+ * Sanity-check для CI/мониторинга.
+ */
+exports.pricingRouter.get("/healthz", (_req, res) => {
+    res.json({
+        ok: true,
+        tiers: pricing_1.TIERS.length,
+        modules: pricing_1.MODULES_PRICING.length,
+        bundles: pricing_1.BUNDLES.length,
+        timestamp: new Date().toISOString(),
+    });
+});
+// ── GET /api/pricing/faq ─────────────────────────────────────────────────────
+const PRICING_FAQ = [
+    { id: "faq-01", q: "What is included in the Starter plan?", a: "Core platform access with up to 3 users, AI quota 1k calls/month, QSign basic.", category: "plans" },
+    { id: "faq-02", q: "Can I upgrade mid-month?", a: "Yes. Upgrading applies pro-rated billing instantly.", category: "billing" },
+    { id: "faq-03", q: "Do longer terms cost less?", a: `Yes. A plan is a commitment of 1, 3, 6, 9 or 12 months, billed monthly at the term's price: $${pricing_1.PLANET_BASE_MONTHLY}/month with no term, $${(0, pricing_1.planetFromPerMonth)()}/month on a 12-month commitment. Paying the whole term up front takes a further 5–12.5% off (12 months: $${(0, pricing_1.planetPrepayTotal)("max")}).`, category: "billing" },
+    { id: "faq-04", q: "Is there a free trial?", a: "14-day free trial on Growth and above. No credit card required.", category: "plans" },
+    { id: "faq-05", q: "What payment methods do you accept?", a: "Visa, Mastercard, Kaspi, QR code (QazQR), wire transfer.", category: "billing" },
+    { id: "faq-06", q: "Can I cancel any time?", a: "Yes. With no term, cancelling stops the next charge. On a term plan the months you used are re-priced at the longest term step you completed (<90 days $250/mo, 90–179 $225, 180–269 $200, 270–364 $175): a prepaid balance is refunded, a monthly plan gets an invoice for the difference.", category: "billing" },
+    { id: "faq-07", q: "What does Enterprise include?", a: "Unlimited seats, SLA 99.9%, dedicated Railway cluster, custom domain, SSO, on-prem option.", category: "enterprise" },
+    { id: "faq-08", q: "Is there a minimum commitment for Enterprise?", a: "12-month contract minimum, custom pricing via quote request.", category: "enterprise" },
+    { id: "faq-09", q: "How does per-seat pricing work?", a: "Each named user counts as a seat. Guest/viewer roles are free.", category: "plans" },
+    { id: "faq-10", q: "What SLA guarantees exist?", a: "Growth: 99.5% uptime. Enterprise: 99.9% with penalty credits.", category: "enterprise" },
+    { id: "faq-11", q: "Can I add modules à la carte?", a: "Yes. Module add-ons are available on any paid tier.", category: "plans" },
+    { id: "faq-12", q: "Are my data and keys stored securely?", a: "Keys are encrypted at rest (AES-256). AEVION never stores plaintext secrets.", category: "enterprise" },
+];
+exports.pricingRouter.get("/faq", (req, res) => {
+    const cat = typeof req.query.category === "string" ? req.query.category.trim().toLowerCase() : null;
+    const items = cat ? PRICING_FAQ.filter((f) => f.category === cat) : PRICING_FAQ;
+    const byCategory = PRICING_FAQ.reduce((acc, f) => {
+        acc[f.category] = (acc[f.category] || 0) + 1;
+        return acc;
+    }, {});
+    const categories = Object.entries(byCategory).map(([id, count]) => ({
+        id,
+        label: id.charAt(0).toUpperCase() + id.slice(1),
+        count,
+    }));
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.json({ ok: true, items, total: items.length, categories });
+});
+// ── GET /api/pricing/social-proof ───────────────────────────────────────────
+exports.pricingRouter.get("/social-proof", (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.json({
+        ok: true,
+        teamsOnboard: 47,
+        usersServed: 312,
+        countriesReached: 8,
+        avgRating: 4.8,
+        generatedAt: new Date().toISOString(),
+        breakdown: {
+            startups: 21,
+            agencies: 14,
+            enterprises: 8,
+            individuals: 4,
+        },
+    });
+});
+/**
+ * GET /api/pricing/subscription/me
+ * Returns the latest subscription for the authenticated user (by email from JWT).
+ * Returns { subscription: null } if no subscription found.
+ */
+exports.pricingRouter.get("/subscription/me", (req, res) => {
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith("Bearer "))
+        return res.status(401).json({ error: "unauthorized" });
+    let email;
+    try {
+        const payload = jsonwebtoken_1.default.verify(auth.slice(7), (0, authJwt_1.getJwtSecret)(), { algorithms: ["HS256"] });
+        if (!payload.email)
+            return res.status(401).json({ error: "invalid_token" });
+        email = payload.email.toLowerCase();
+    }
+    catch {
+        return res.status(401).json({ error: "invalid_token" });
+    }
+    // Путь берём из provisioning — там же, где его вычисляют ЗАПИСИ платежей.
+    //
+    // Было: своя копия, считавшая от `process.cwd()`, тогда как записи идут от
+    // каталога пакета. Совпадут они или нет, зависело от того, откуда запущен
+    // процесс: запусти сервис из корня репозитория — и человек, только что
+    // заплативший, спрашивает свою подписку и получает «нет».
+    //
+    // Переменная SUBSCRIPTIONS_FILE перекрывает обе стороны и раньше, и теперь —
+    // но полагаться на неё нельзя: без неё стороны расходились молча.
+    const SUBS_FILE = (0, provisioning_1.subsFile)();
+    try {
+        if (!(0, fs_1.existsSync)(SUBS_FILE))
+            return res.json({ subscription: null });
+        const lines = (0, fs_1.readFileSync)(SUBS_FILE, "utf8").trim().split("\n").filter(Boolean);
+        const subs = lines
+            .map((l) => { try {
+            return JSON.parse(l);
+        }
+        catch {
+            return null;
+        } })
+            .filter((s) => s && s.email?.toLowerCase() === email);
+        if (subs.length === 0)
+            return res.json({ subscription: null });
+        // Return the most recent subscription
+        const latest = subs[subs.length - 1];
+        res.json({
+            subscription: {
+                tierId: latest.tierId,
+                termMonths: typeof latest.termMonths === "number" ? latest.termMonths : latest.period === "annual" ? 12 : latest.period === "monthly" ? 1 : null,
+                seats: latest.seats ?? 1,
+                modules: Array.isArray(latest.modules) ? latest.modules : [],
+                validUntil: latest.validUntil ?? null,
+                trialDays: latest.trialDays ?? 0,
+                amountUsd: latest.amountUsd ?? null,
+                source: latest.source ?? null,
+                createdAt: latest.ts,
+            },
+        });
+    }
+    catch (e) {
+        console.error("[subscription/me] read failed", e);
+        res.status(500).json({ error: "read_failed" });
+    }
+});
+/**
+ * POST /api/pricing/subscription/lite-module
+ * JWT-auth. Body: { moduleId }
+ *
+ * Lite = 1 продукт на выбор. Меняет выбранный продукт подписчика Lite/Free,
+ * дописывая новую (latest-wins) запись подписки с modules=[moduleId].
+ */
+exports.pricingRouter.post("/subscription/lite-module", (req, res) => {
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith("Bearer "))
+        return res.status(401).json({ error: "unauthorized" });
+    let email;
+    try {
+        const payload = jsonwebtoken_1.default.verify(auth.slice(7), (0, authJwt_1.getJwtSecret)(), { algorithms: ["HS256"] });
+        if (!payload.email)
+            return res.status(401).json({ error: "invalid_token" });
+        email = payload.email.toLowerCase();
+    }
+    catch {
+        return res.status(401).json({ error: "invalid_token" });
+    }
+    const moduleId = typeof req.body?.moduleId === "string" ? req.body.moduleId.trim() : "";
+    if (!moduleId || !(0, pricing_1.getModulePrice)(moduleId)) {
+        return res.status(400).json({ error: "invalid_module" });
+    }
+    const current = (0, provisioning_1.readLatestSubscription)(email);
+    if (!current || (current.tierId !== "lite" && current.tierId !== "free")) {
+        return res.status(409).json({ error: "not_lite", message: "Смена одного продукта доступна на тарифах Free/Lite" });
+    }
+    const updated = {
+        ...current,
+        id: `sub_litemod_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        ts: new Date().toISOString(),
+        modules: [moduleId],
+        source: "lite_module_change",
+    };
+    (0, provisioning_1.writeSubscription)(updated);
+    res.json({ ok: true, tierId: current.tierId, module: moduleId });
+});
+/**
+ * POST /api/pricing/subscriptions/purge
+ * Body: { email }
+ * Header: x-admin-token
+ *
+ * Removes every subscriptions.jsonl record for this email (case-insensitive).
+ * Atomic rewrite via .tmp + rename. Returns { ok, removed, remaining }.
+ *
+ * Use cases: GDPR removal, clearing test verify-pings, support hand-edits.
+ */
+exports.pricingRouter.post("/subscriptions/purge", (req, res) => {
+    const required = process.env.ADMIN_TOKEN?.trim();
+    if (!required)
+        return res.status(401).json({ error: "admin_token_not_configured" });
+    const got = req.headers["x-admin-token"]?.trim();
+    if (got !== required)
+        return res.status(401).json({ error: "unauthorized" });
+    const body = req.body ?? {};
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    if (!email || !isValidEmail(email)) {
+        return res.status(400).json({ error: "invalid_email" });
+    }
+    try {
+        const { removed, remaining } = (0, provisioning_1.purgeSubscriptions)(email);
+        res.json({ ok: true, email, removed, remaining });
+    }
+    catch (e) {
+        console.error("[subscriptions/purge] failed", e);
+        res.status(500).json({ error: "purge_failed" });
+    }
+});

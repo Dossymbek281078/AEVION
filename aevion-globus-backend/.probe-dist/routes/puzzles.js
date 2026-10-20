@@ -1,0 +1,233 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.puzzlesRouter = void 0;
+/**
+ * AEVION CyberChess — Puzzle Cloud API
+ * Routes: GET /api/puzzles  GET /api/puzzles/themes  GET /api/puzzles/count  POST /api/puzzles/seed
+ */
+const express_1 = require("express");
+const queryNumber_1 = require("../lib/queryNumber");
+const dbPool_1 = require("../lib/dbPool");
+const platform_1 = require("../lib/sentry/platform");
+const chessPuzzleLabel_1 = require("../lib/chessPuzzleLabel");
+const capture = (0, platform_1.makeServiceCapture)("puzzles");
+exports.puzzlesRouter = (0, express_1.Router)();
+let dbReady = false;
+let dbInitTried = false;
+/**
+ * Кулдаун вместо защёлки (19.08.2026).
+ *
+ * Раньше флаг «уже пробовали» ставился ПЕРЕД попыткой и больше не снимался: один
+ * обрыв сети при первом запросе — и облако задач до перезапуска процесса
+ * отвечало «offline: true», хотя база была жива. Для читателя это выглядит как
+ * «задач нет», а не как «мы не смогли спросить»; страница честно показывает
+ * встроенный набор и никто не узнаёт, что облако выключилось.
+ *
+ * Защёлка превращает временную неисправность в постоянную. Тот же класс
+ * починен в хранилище партий и в античите в этот же день.
+ */
+const PUZZLES_DB_INIT_RETRY_MS = Number(process.env.CYBERCHESS_DB_INIT_RETRY_MS ?? 30000);
+let dbInitNextTryAt = 0;
+async function ensureDb() {
+    if (dbReady)
+        return;
+    if (Date.now() < dbInitNextTryAt)
+        return;
+    dbInitTried = true;
+    dbInitNextTryAt = Date.now() + PUZZLES_DB_INIT_RETRY_MS;
+    if (!process.env.DATABASE_URL) {
+        console.log("[Puzzles] No DATABASE_URL — offline mode");
+        return;
+    }
+    try {
+        const pool = (0, dbPool_1.getPool)();
+        await pool.query(`
+      CREATE TABLE IF NOT EXISTS "ChessPuzzle" (
+        "id"        TEXT PRIMARY KEY,
+        "fen"       TEXT NOT NULL,
+        "sol"       TEXT NOT NULL,
+        "name"      TEXT NOT NULL DEFAULT 'Тактика',
+        "rating"    INT NOT NULL DEFAULT 1200,
+        "theme"     TEXT NOT NULL DEFAULT 'Тактика',
+        "phase"     TEXT NOT NULL DEFAULT 'Middlegame',
+        "side"      TEXT NOT NULL DEFAULT 'w',
+        "goal"      TEXT NOT NULL DEFAULT 'Best move',
+        "mateIn"    INT,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+        await pool.query(`CREATE INDEX IF NOT EXISTS "ChessPuzzle_rating_idx" ON "ChessPuzzle" ("rating")`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS "ChessPuzzle_theme_idx" ON "ChessPuzzle" ("theme")`);
+        await pool.query(`SELECT 1 FROM "ChessPuzzle" LIMIT 1`);
+        dbReady = true;
+        console.log("[Puzzles] Postgres ready — puzzle cloud active");
+    }
+    catch (e) {
+        console.warn("[Puzzles] DB init failed:", e instanceof Error ? e.message : e);
+    }
+}
+function offline(res) {
+    return res.json({ puzzles: [], total: 0, offline: true, message: "Puzzle DB not configured — use bundled puzzles.json" });
+}
+exports.puzzlesRouter.get("/", async (req, res) => {
+    await ensureDb();
+    if (!dbReady)
+        return offline(res);
+    try {
+        const pool = (0, dbPool_1.getPool)();
+        const nb = Math.min(200, Math.max(1, parseInt(req.query.nb) || 50));
+        const offset = Math.max(0, parseInt(req.query.offset) || 0);
+        const theme = typeof req.query.theme === "string" && req.query.theme !== "all" ? req.query.theme : undefined;
+        const minR = parseInt(req.query.minR) || 400;
+        const maxR = parseInt(req.query.maxR) || 3000;
+        const goal = typeof req.query.goal === "string" && req.query.goal !== "all" ? req.query.goal : undefined;
+        const side = (req.query.side === "w" || req.query.side === "b") ? req.query.side : undefined;
+        const mateInN = (0, queryNumber_1.queryNumber)(req.query.mateIn, 0); // мусор давал NaN; NaN ложен, и условие ниже его отбрасывало — сохраняем ровно это
+        const mateIn = mateInN > 0 ? mateInN : undefined;
+        const random = req.query.random === "1";
+        const conditions = [`"rating" >= $1 AND "rating" <= $2`];
+        const params = [minR, maxR];
+        if (theme) {
+            params.push(theme);
+            conditions.push(`"theme" = $${params.length}`);
+        }
+        if (goal) {
+            params.push(goal);
+            conditions.push(`"goal" = $${params.length}`);
+        }
+        if (side) {
+            params.push(side);
+            conditions.push(`"side" = $${params.length}`);
+        }
+        if (mateIn) {
+            params.push(mateIn);
+            conditions.push(`"mateIn" = $${params.length}`);
+        }
+        const where = conditions.join(" AND ");
+        const countR = await pool.query(`SELECT COUNT(*) FROM "ChessPuzzle" WHERE ${where}`, params);
+        const total = Number(countR.rows[0].count);
+        if (total === 0)
+            return res.json({ puzzles: [], total: 0, returned: 0 });
+        /*
+         * 🔴 ПОРЯДОК ДОЛЖЕН БЫТЬ ОДНОЗНАЧНЫМ, иначе страницы по offset врут.
+         *
+         * Было `ORDER BY "rating" ASC` — сортировка по НЕУНИКАЛЬНОМУ полю. У задач с
+         * равным рейтингом порядок не определён, а равных рейтингов в банке очень
+         * много (замер 07.10: запрос полосы 1800–2000 вернул пять задач ровно по 1800).
+         * Postgres вправе отдавать такие строки в любом порядке между запросами, и
+         * тогда постраничный обход по offset ОДНОВРЕМЕННО пропускает и дублирует
+         * строки — молча.
+         *
+         * Как это вылезло: обход банка для сопоставления происхождения дважды прошёл
+         * целиком и дал РАЗНЫЕ числа — 2409 и 2394 сопоставленных задачи из 2491.
+         * Разница 15 строк при одном и том же детерминированном, казалось бы, обходе.
+         * Для случайной выборки (random=1) это было безразлично, поэтому дефект жил
+         * незаметно; для обхода он делает результат невоспроизводимым.
+         *
+         * Добавлен "id" ASC — первичный ключ, он уникален, и порядок становится полным.
+         */
+        const safeOffset = random ? Math.floor(Math.random() * Math.max(1, total - nb)) : offset;
+        params.push(nb, safeOffset);
+        const rows = await pool.query(`SELECT * FROM "ChessPuzzle" WHERE ${where} ORDER BY "rating" ASC, "id" ASC LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
+        const puzzles = rows.rows.map((p) => {
+            const sol = (() => { try {
+                return JSON.parse(p.sol);
+            }
+            catch {
+                return [p.sol];
+            } })();
+            // Подпись считается из РЕШЕНИЯ, а не берётся из базы: у Lichess любой
+            // мат длиннее пяти помечен как mateIn5, и наш сев скопировал это в имя.
+            const podpis = (0, chessPuzzleLabel_1.ispravitPodpisMata)({ name: p.name, sol, goal: p.goal, mateIn: p.mateIn });
+            return ({ id: p.id, fen: p.fen, sol, name: podpis.name, r: p.rating, theme: p.theme, phase: p.phase, side: p.side, goal: p.goal, ...(podpis.mateIn != null ? { mateIn: podpis.mateIn } : {}) });
+        });
+        res.json({ puzzles, total, returned: rows.rows.length });
+    }
+    catch (err) {
+        capture(err);
+        console.error("[Puzzles] GET:", err);
+        res.status(500).json({ error: "puzzle_fetch_failed" });
+    }
+});
+exports.puzzlesRouter.get("/themes", async (_req, res) => {
+    await ensureDb();
+    if (!dbReady)
+        return res.json({ themes: [], offline: true });
+    try {
+        const pool = (0, dbPool_1.getPool)();
+        const r = await pool.query(`SELECT "theme", COUNT(*) AS cnt FROM "ChessPuzzle" GROUP BY "theme" ORDER BY cnt DESC`);
+        res.json({ themes: r.rows.map((g) => ({ name: g.theme, count: Number(g.cnt) })) });
+    }
+    catch {
+        res.status(500).json({ error: "themes_fetch_failed" });
+    }
+});
+exports.puzzlesRouter.get("/count", async (_req, res) => {
+    await ensureDb();
+    if (!dbReady)
+        return res.json({ total: 0, offline: true });
+    try {
+        const pool = (0, dbPool_1.getPool)();
+        const totalR = await pool.query(`SELECT COUNT(*) FROM "ChessPuzzle"`);
+        const byTheme = await pool.query(`SELECT "theme", COUNT(*) AS cnt FROM "ChessPuzzle" GROUP BY "theme" ORDER BY cnt DESC LIMIT 20`);
+        res.json({ total: Number(totalR.rows[0].count), topThemes: byTheme.rows.map((b) => ({ theme: b.theme, count: Number(b.cnt) })) });
+    }
+    catch {
+        res.status(500).json({ error: "count_failed" });
+    }
+});
+exports.puzzlesRouter.post("/seed", async (req, res) => {
+    await ensureDb();
+    if (!dbReady)
+        return res.status(503).json({ error: "db_not_ready" });
+    const key = req.headers["x-puzzle-seed-key"] ?? req.body?.key;
+    if (!process.env.PUZZLE_SEED_KEY || key !== process.env.PUZZLE_SEED_KEY)
+        return res.status(403).json({ error: "forbidden" });
+    const puzzles = req.body?.puzzles;
+    if (!Array.isArray(puzzles) || !puzzles.length)
+        return res.status(400).json({ error: "puzzles array required" });
+    try {
+        const pool = (0, dbPool_1.getPool)();
+        let upserted = 0;
+        let inserted = 0;
+        let updated = 0;
+        for (let i = 0; i < puzzles.length; i += 500) {
+            const batch = puzzles.slice(i, i + 500).map((p) => ({
+                id: String(p.id || `gen_${Date.now()}_${i}`),
+                fen: String(p.fen || ""), sol: JSON.stringify(Array.isArray(p.sol) ? p.sol : [p.sol]),
+                name: String(p.name || "Тактика"), rating: parseInt(p.r ?? p.rating) || 1200,
+                theme: String(p.theme || "Тактика"), phase: String(p.phase || "Middlegame"),
+                side: String(p.side || "w"), goal: String(p.goal || "Best move"),
+                mateIn: p.mateIn ? parseInt(p.mateIn) : null,
+            }));
+            for (const p of batch) {
+                // Было ON CONFLICT DO NOTHING — и это делало повторный засев бесполезным:
+                // id задачи (li_<id> из дампа) у всех уже лежащих записей совпадает, поэтому
+                // исправленная раскладка тем молча отбрасывалась. Именно так 12.08.2026
+                // «Связка» и «Рентген» остались бы с нулём задач после пересева.
+                // Обновляем ПРОИЗВОДНЫЕ поля (классификацию), но не саму позицию: fen и sol
+                // для того же id не меняются, а перезапись их скрыла бы порчу дампа.
+                const r = await pool.query(`INSERT INTO "ChessPuzzle" ("id","fen","sol","name","rating","theme","phase","side","goal","mateIn")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT ("id") DO UPDATE SET
+             "name"=EXCLUDED."name", "rating"=EXCLUDED."rating", "theme"=EXCLUDED."theme",
+             "phase"=EXCLUDED."phase", "goal"=EXCLUDED."goal", "mateIn"=EXCLUDED."mateIn"
+           RETURNING (xmax = 0) AS inserted`, [p.id, p.fen, p.sol, p.name, p.rating, p.theme, p.phase, p.side, p.goal, p.mateIn]);
+                // Раньше счётчик рос на каждой ПОПЫТКЕ, независимо от результата: ответ
+                // рапортовал «upserted: 500000» при нуле реальных вставок. Считаем по факту,
+                // xmax=0 у свежевставленной строки и ненулевой у обновлённой.
+                if (r.rows?.[0]?.inserted)
+                    inserted++;
+                else
+                    updated++;
+                upserted++;
+            }
+        }
+        res.json({ ok: true, upserted, inserted, updated });
+    }
+    catch (err) {
+        capture(err);
+        console.error("[Puzzles] seed:", err);
+        res.status(500).json({ error: "seed_failed" });
+    }
+});

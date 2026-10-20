@@ -1,0 +1,178 @@
+"use strict";
+/**
+ * Public API quotas — machine-readable tier matrix.
+ *
+ * GET /api/quotas — returns the canonical pricing/quota table for AEVION's
+ * public API surface. Source of truth for sales conversations, partner
+ * integrations, and public docs. Hardcoded here intentionally: changes
+ * require a code review + deploy, not a live config knob.
+ *
+ * Spec: docs/api/PUBLIC_API_QUOTAS.md
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.apiQuotasRouter = void 0;
+const express_1 = require("express");
+// Адрес, который ДЕЙСТВИТЕЛЬНО принимает почту. Один на весь файл, потому
+// что 01.09.2026 нашлось: 29.08 починили ПОЛЕ contact, а человеческий текст
+// строкой ниже остался звать на api@aevion.app — у домена нет записи MX, и
+// письмо не доходит ни до кого. Поле и текст рядом расходятся молча, если у
+// них два источника; теперь источник один.
+const CONTACT_EMAIL = "yahiin1978@gmail.com";
+exports.apiQuotasRouter = (0, express_1.Router)();
+// 1.2.0 (07.10.2026): обещание доступности снято. Поле `uptime` НЕ удалено —
+// интеграторы его разбирают, и исчезнувший ключ сломал бы их молча; вместо
+// числа отдаётся null и отдельная пояснительная строка. Причина: за лестницей
+// 99 / 99.5 / 99.9 нет прибора — ни измерения доступности, ни страницы
+// состояния, ни механизма компенсации. Обещать то, чего не мерим, значит
+// брать обязательство, исполнение которого нечем показать.
+const QUOTAS_VERSION = "1.2.0";
+const PUBLISHED_AT = "2026-10-07";
+// Tiers MUST stay in sync with frontend/src/app/pricing/api-pricing/page.tsx
+// (VOLUME_TIERS const). Names and prices align with the public pricing page;
+// rate limits + SLA + key issuance limits are added here as the backend
+// contract.
+const TIERS = [
+    {
+        id: "developer",
+        name: "Developer",
+        priceUsdMonthly: 0,
+        monthlyCalls: 10000,
+        rateLimit: { perMinute: 100 },
+        sla: { uptime: null, supportResponseHours: null, channel: "community" },
+        commercialUse: false,
+        perCallDiscount: null,
+        keyLimit: 1,
+        bestFor: "Прототипы, SDK-тесты, hobby projects",
+    },
+    {
+        id: "build",
+        name: "Build",
+        priceUsdMonthly: 49,
+        monthlyCalls: 100000,
+        rateLimit: { perMinute: 500 },
+        sla: { uptime: null, supportResponseHours: null, channel: "email" },
+        commercialUse: true,
+        perCallDiscount: 0.15,
+        keyLimit: 5,
+        bestFor: "Запуск, MVP, single-product B2B",
+    },
+    {
+        id: "scale",
+        name: "Scale",
+        priceUsdMonthly: 249,
+        monthlyCalls: 1000000,
+        rateLimit: { perMinute: 2000 },
+        sla: { uptime: null, supportResponseHours: null, channel: "email+slack" },
+        commercialUse: true,
+        perCallDiscount: 0.30,
+        keyLimit: 10,
+        bestFor: "Production SaaS, content platforms, marketplace",
+    },
+    {
+        id: "enterprise",
+        name: "Enterprise",
+        priceUsdMonthly: null,
+        monthlyCalls: null,
+        rateLimit: { perMinute: null },
+        sla: { uptime: null, supportResponseHours: null, channel: "dedicated-rep" },
+        commercialUse: true,
+        perCallDiscount: 0.50,
+        keyLimit: null,
+        bestFor: "TikTok/Spotify/YouTube-class, governments, on-prem, BYO-key",
+    },
+];
+const ENDPOINTS = [
+    {
+        path: "/api/qright/objects",
+        method: "GET",
+        publicAccess: true,
+        perRequestCostUnits: 1,
+        description: "List public IP registry entries",
+    },
+    {
+        path: "/api/bureau/cert/:id/embed",
+        method: "GET",
+        publicAccess: true,
+        perRequestCostUnits: 1,
+        description: "Embed-ready certificate viewer (HTML+JSON)",
+    },
+    {
+        path: "/api/bureau/notaries",
+        method: "GET",
+        publicAccess: true,
+        perRequestCostUnits: 1,
+        description: "Public catalog of notary partners",
+    },
+    {
+        path: "/api/bureau/trust-edges/cert/:id",
+        method: "GET",
+        publicAccess: true,
+        perRequestCostUnits: 1,
+        description: "Trust Graph edges for a cert",
+    },
+    {
+        path: "/api/qsign/verify",
+        method: "POST",
+        publicAccess: true,
+        perRequestCostUnits: 2,
+        description: "Verify ML-DSA-65 signature (CPU-heavy)",
+    },
+    {
+        path: "/api/awards/seasons/:id/results",
+        method: "GET",
+        publicAccess: true,
+        perRequestCostUnits: 1,
+        description: "Awards season results + Merkle proofs",
+    },
+    {
+        path: "/api/planet/snapshots/:id",
+        method: "GET",
+        publicAccess: true,
+        perRequestCostUnits: 2,
+        description: "Compliance snapshot with evidenceRoot",
+    },
+    {
+        path: "/api/qpaynet/merchant/charge",
+        method: "POST",
+        publicAccess: false,
+        perRequestCostUnits: 1,
+        description: "Merchant charge (existing per-merchant rate limits apply, not tier)",
+    },
+];
+exports.apiQuotasRouter.get("/", (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.json({
+        version: QUOTAS_VERSION,
+        publishedAt: PUBLISHED_AT,
+        // Почему поле есть, а числа нет — см. комментарий у QUOTAS_VERSION.
+        uptimeNote: "not guaranteed, no SLA at this time",
+        // 07.10.2026: сроки ответа 48 / 24 / 4 часа сняты по той же причине, что и
+        // доступность, — ни очереди обращений, ни приоритета, ни замера за ними
+        // нет. Поле оставлено null, чтобы интеграторы не сломались на исчезнувшем
+        // ключе; обещание срока не даётся вовсе.
+        supportResponseNote: "no guaranteed response time",
+        docsUrl: "https://github.com/Dossymbek281078/AEVION/blob/main/docs/api/PUBLIC_API_QUOTAS.md",
+        // Адрес, на который клиент API напишет, если упрётся в квоту. Стоял
+        // api@aevion.app — у домена aevion.app НЕТ записи MX (перепроверено
+        // 29.08.2026: DNS отдаёт SOA вместо MX), то есть письмо отбивается и
+        // обращение не доходит НИ ДО КОГО. Здесь тот же адрес, что в
+        // /.well-known/security.txt и на публичных страницах, — единственный,
+        // про который известно, что он принимает почту.
+        contact: CONTACT_EMAIL,
+        keyFormat: {
+            pattern: "aev_(test|live)_<24bytes_base64url>",
+            headerName: "X-Aevion-Api-Key",
+            issuance: "Self-serve via /api/keys (POST) once authenticated. Free tier: 1 key. Paid: up to 10 keys per account.",
+        },
+        tiers: TIERS,
+        endpoints: ENDPOINTS,
+        notes: [
+            "Developer tier requests above 100/min return HTTP 429 with Retry-After.",
+            "Paid tier monthly call quota — overage at per-endpoint rate-card with tier discount applied.",
+            "Per-endpoint pricing & detailed quotas: https://aevion.app/pricing/api-pricing",
+            `Enterprise quotas negotiated per-contract; contact ${CONTACT_EMAIL}.`,
+            "Per-request cost units are weighted: heavy endpoints (verify, snapshot) count 2; default 1.",
+            "QPayNet merchant keys (qpn_live_*) are a separate per-merchant system, not part of this tier matrix.",
+        ],
+    });
+});

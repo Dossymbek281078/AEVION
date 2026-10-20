@@ -1,0 +1,236 @@
+"use strict";
+// QSkyway — regulatory airspace-ceiling layer.
+//
+// Until now every airspace restriction in QSkyway was illustrative (the
+// point+radius NOFLY config in qskyway.zones.ts). This layer is the opposite:
+// ingested verbatim from a regulator's own published feed, per city, and
+// rasterized onto the same 20 m grid the height field uses.
+//
+// This file covers CEILINGS specifically, and only the FAA publishes those as an
+// open keyless feed (→ NYC); cities without one report `airspace: null` rather
+// than getting invented altitudes. That is not the same as "no rule": Astana and
+// Tokyo are governed by a prohibition and a permission regime respectively, both
+// real and both in qskyway.permission.ts. Ceilings absent ≠ regulator absent.
+//
+// ⚠️ Scope, stated the same way everywhere it surfaces: UASFM encodes Part 107
+// *small-UAS* LAANC authorization ceilings, not eVTOL air-taxi certification.
+// It is the real published altitude constraint over the twin — that is exactly
+// the claim, and no more.
+//
+// ── What was checked for the other two cities (2026-07-26) ──────────────────
+// Recorded so nobody re-derives it. Japan (Tokyo / JCAB-MLIT):
+//   · MLIT's own drone page (mlit.go.jp/en/koku/uas.html) does not publish data
+//     downloads; it links to a GSI map view with layers `did2020` + `kokuarea`.
+//   · `did2020` (Densely Inhabited Districts) IS live as raster tiles —
+//     https://cyberjapandata.gsi.go.jp/xyz/did2020/{z}/{x}/{y}.png (verified 200,
+//     z=14 covers the Nishi-Shinjuku twin at ~9.5 m/px, finer than our 20 m grid).
+//     Two caveats before using it: it is raster, so polygons would be inferred
+//     from pixel colour rather than ingested; and semantically DID means "flight
+//     needs permission", NOT a ceiling — it does not fit CityAirspace as modelled
+//     and would need its own permission-required concept.
+//   · `kokuarea` (airspace around airports) returns 404 on every documented GSI
+//     tile path (z=8..16) and does not appear in the official tile catalogue
+//     (maps.gsi.go.jp/development/ichiran.html) — it is an app-internal overlay,
+//     not a public endpoint.
+//   · DIPS 2.0 (ossportal.dips.mlit.go.jp) is a permission-application portal
+//     with no data export.
+// Kazakhstan (Astana): no FEED — but the eAIP itself publishes prohibited areas
+//   in ICAO coordinates, and UAP28 covers 100% of the twin. See
+//   qskyway.permission.astana.ts. The earlier "nothing found" was the result of
+//   looking for an API instead of for the rule.
+//
+// Is the NYC picture complete? Checked against the FAA's own services on the
+//   same host (2026-07-26): Prohibited_Areas, Special_Use_Airspace and
+//   Part_Time_National_Security_UAS_Flight_Restrictions all return ZERO features
+//   over the Midtown twin. The query was validated against a known positive —
+//   P-56 over Washington DC — so the zero is a real absence, not a broken
+//   request. For this twin the UASFM ceilings are the applicable rule.
+// Conclusion: no JCAB/CAA equivalent of UASFM — an altitude-ceiling grid — exists
+// to ingest today, so `available:false` here is the honest answer for those two.
+// It is emphatically NOT a conclusion that they are unregulated; assuming that,
+// because the search was for a feed rather than for the rule, is exactly what
+// hid Astana's UAP28 for weeks.
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.NO_CEILING = exports.AIRSPACE = void 0;
+exports.ceilingField = ceilingField;
+exports.ceilingAt = ceilingAt;
+exports.signablePayload = signablePayload;
+exports.airspaceContentHash = airspaceContentHash;
+exports.airspaceSummary = airspaceSummary;
+// ── 17.09.2026: второй фид — BAZL/FOCA (Цюрих) ─────────────────────────────
+// Швейцарское ведомство гражданской авиации публикует дрон-геозоны (EU 2019/947)
+// ВЕКТОРОМ в geo.admin.ch (слой ch.bazl.einschraenkungen-drohnen, REST identify,
+// GeoJSON). Над центром Цюриха это CTR ZURICH: «БПЛА тяжелее 250 г запрещены
+// выше 120 м над землёй; исключение — по разрешению». Это ПОТОЛОК, то есть
+// ровно то, что моделирует этот слой; отличие от FAA одно — зона задана
+// полигоном, а не прямоугольником, поэтому у ячейки появилось поле `rings`.
+// Снимок: qskyway.airspace.zurich.ts, генератор scripts/fetch-bazl-airspace.mjs.
+const crypto_1 = __importDefault(require("crypto"));
+const qskyway_airspace_nyc_1 = require("./qskyway.airspace.nyc");
+const qskyway_airspace_zurich_1 = require("./qskyway.airspace.zurich");
+exports.AIRSPACE = { nyc: qskyway_airspace_nyc_1.AIRSPACE_NYC, zurich: qskyway_airspace_zurich_1.AIRSPACE_ZURICH };
+function pointInRing(ring, lon, lat) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i], [xj, yj] = ring[j];
+        if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi)
+            inside = !inside;
+    }
+    return inside;
+}
+function cellCovers(cell, lon, lat) {
+    if (lon < cell.minLon || lon > cell.maxLon || lat < cell.minLat || lat > cell.maxLat)
+        return false;
+    return cell.rings ? cell.rings.some((ring) => pointInRing(ring, lon, lat)) : true;
+}
+/** Altitude used for grid cells the feed does not cover — "no published constraint". */
+exports.NO_CEILING = Infinity;
+// Same projection the rasterizer and the router use: equirectangular around the
+// bbox centre latitude, metres from the north-west corner.
+function cellCentreLonLat(city, c, r) {
+    const { minLat, maxLat, minLon } = city.bbox;
+    const lat0 = (minLat + maxLat) / 2;
+    const mPerLat = 110540;
+    const mPerLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
+    const x = (c + 0.5) * city.grid.cell;
+    const y = (r + 0.5) * city.grid.cell;
+    return [minLon + x / mPerLon, maxLat - y / mPerLat];
+}
+const fieldCache = new Map();
+/**
+ * Rasterize the published cells onto the city grid. Cheap (a handful of source
+ * rects), computed once per city and cached.
+ */
+function ceilingField(cityId, city) {
+    if (fieldCache.has(cityId))
+        return fieldCache.get(cityId) ?? null;
+    const src = exports.AIRSPACE[cityId];
+    if (!src) {
+        fieldCache.set(cityId, null);
+        return null;
+    }
+    const { cols, rows } = city.grid;
+    const ceilings = new Float64Array(cols * rows).fill(exports.NO_CEILING);
+    let covered = 0;
+    let zero = 0;
+    let min = null;
+    let max = null;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const [lon, lat] = cellCentreLonLat(city, c, r);
+            // Overlapping publications are possible; the binding constraint is the lowest.
+            let ceil = exports.NO_CEILING;
+            for (const cell of src.cells) {
+                if (cellCovers(cell, lon, lat))
+                    ceil = Math.min(ceil, cell.ceilingM);
+            }
+            if (ceil !== exports.NO_CEILING) {
+                ceilings[r * cols + c] = ceil;
+                covered++;
+                if (ceil === 0)
+                    zero++;
+                min = min === null ? ceil : Math.min(min, ceil);
+                max = max === null ? ceil : Math.max(max, ceil);
+            }
+        }
+    }
+    const field = {
+        ceilings,
+        cols,
+        rows,
+        coverage: +(covered / (cols * rows)).toFixed(4),
+        minCeilingM: min,
+        maxCeilingM: max,
+        zeroCeilingCells: zero,
+    };
+    fieldCache.set(cityId, field);
+    return field;
+}
+/** Ceiling at a grid cell in metres; NO_CEILING where nothing is published. */
+function ceilingAt(field, c, r) {
+    if (!field)
+        return exports.NO_CEILING;
+    if (c < 0 || r < 0 || c >= field.cols || r >= field.rows)
+        return exports.NO_CEILING;
+    return field.ceilings[r * field.cols + c];
+}
+/**
+ * Canonical, ASCII-only payload of what routing actually obeys.
+ *
+ * Signed rather than the whole record: the constraint is the cell geometry and
+ * its ceiling, not the prose around it. Keeping localized free text out of the
+ * signed bytes is the lesson from the Trust Score transport bug (PR #712) —
+ * escaped non-ASCII JSON survived a proxy differently than raw UTF-8 and broke
+ * verification for anyone whose HTTP client escapes by default.
+ */
+function signablePayload(src) {
+    const cells = [...src.cells]
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        // Кольца попадают в подпись ТОЛЬКО у полигональных ячеек: у FAA их нет, и
+        // кортеж — а с ним contentHash, заякоренный в Bitcoin, — не меняется.
+        .map((c) => [c.id, c.minLon, c.maxLon, c.minLat, c.maxLat, c.ceilingFt, c.airspaceClass ?? "", c.airportIcao ?? "", c.laanc ? 1 : 0, ...(c.rings ? [c.rings] : [])]);
+    return JSON.stringify({
+        authority: src.authority,
+        source: src.source,
+        regime: src.regime,
+        effective: src.effective,
+        bbox: [src.bbox.minLon, src.bbox.minLat, src.bbox.maxLon, src.bbox.maxLat],
+        cells,
+    });
+}
+function airspaceContentHash(src) {
+    return crypto_1.default.createHash("sha256").update(signablePayload(src)).digest("hex");
+}
+/** Public summary for API responses — the provenance, not the raster. */
+function airspaceSummary(cityId, city) {
+    const src = exports.AIRSPACE[cityId];
+    if (!src) {
+        return {
+            available: false,
+            // Says what is missing (a CEILING grid), not "no regulator" — both cities
+            // that hit this branch are in fact governed, just by a different kind of
+            // rule, and the caller sees it in the sibling `permission` block. The old
+            // wording claimed no source was found and was false for both.
+            note: "Сетку потолков высоты регулятор этого города не публикует, поэтому высотного ограничения здесь нет. Это НЕ значит, что города нет правил — см. блок permission рядом.",
+            noteEn: "This city's regulator publishes no altitude-ceiling grid, so there is no altitude constraint here. That does NOT mean the city has no rules — see the permission block next to this one.",
+        };
+    }
+    const field = ceilingField(cityId, city);
+    return {
+        available: true,
+        source: src.source,
+        sourceUrl: src.sourceUrl,
+        authority: src.authority,
+        regime: src.regime,
+        effective: src.effective,
+        fetched: src.fetched,
+        cells: src.cells.length,
+        // Три соседних поля, и у ДВУХ из них умолчание уже было честным
+        // (`?? null`), а у третьего — нет. Разное обращение с соседями в
+        // одном литерале почти всегда недосмотр.
+        //
+        // Обратите внимание на асимметрию одного и того же нуля:
+        //   `coveragePct ?? 0`      -> «покрытия нет»       — сторона осторожная;
+        //   `zeroCeilingCells ?? 0` -> «пустых ячеек нет»   — то есть «данные
+        //                              полны», сторона ЛЬСТИВАЯ и опасная.
+        // Одинаковая цифра, противоположный смысл: направление отказа
+        // определяется не значением, а тем, что оно утверждает.
+        coveragePct: field ? Math.round(100 * field.coverage) : null,
+        minCeilingM: field?.minCeilingM ?? null,
+        maxCeilingM: field?.maxCeilingM ?? null,
+        zeroCeilingCells: field?.zeroCeilingCells ?? null,
+        // Хэш ИМЕННО ЭТОЙ редакции — чтобы сводку можно было связать с привязкой к
+        // Bitcoin, не делая второго запроса и не веря нам на слово.
+        //
+        // 29.08.2026: без этого поля потребитель сводки (в том числе наша же
+        // страница) знал, ЧТО за источник, и не знал, КАКАЯ именно редакция перед
+        // ним. Байты, над которыми хэш взят, отдаёт /airspace/edition — вместе они
+        // и дают проверяемость.
+        contentHash: airspaceContentHash(src),
+        note: "Реальные потолки регулятора (FAA UASFM, LAANC для малых БВС Part 107) — НЕ сертификация аэротакси. Используется как опубликованное ограничение высоты над твином; по умолчанию рекомендательно, строгий режим — POST /route {respectCeiling:true}.",
+        noteEn: "Real regulator ceilings (FAA UASFM, LAANC for Part 107 small UAS) — NOT an air-taxi certification. Used as the published altitude limit over the twin; advisory by default, strict mode is POST /route {respectCeiling:true}.",
+    };
+}

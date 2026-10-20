@@ -1,3 +1,4 @@
+import { неОбразецSql } from "../../data/buildExampleProjects";
 import { noteEmailSent } from "../../lib/brevoQuota";
 import { Router } from "express";
 import crypto from "crypto";
@@ -199,6 +200,9 @@ vacanciesRouter.get("/", async (req, res) => {
 
     // Keep smoke/E2E throwaway vacancies (test-domain owners) off the public feed.
     where.push(excludeTestUsers("u"));
+    // 20.10.2026: истёкшие вакансии и вакансии проектов-образцов в ленту не идут.
+    where.push(`(v."expiresAt" IS NULL OR v."expiresAt" > NOW())`);
+    where.push(неОбразецSql('v."projectId"'));
 
     const limitRaw = req.query.limit !== undefined ? vNumber(req.query.limit, "limit", { min: 1, max: 100 }) : { ok: true as const, value: 50 };
     if (limitRaw.ok === false) return fail(res, 400, limitRaw.error);

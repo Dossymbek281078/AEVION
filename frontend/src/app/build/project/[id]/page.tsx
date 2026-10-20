@@ -91,6 +91,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       <div className="mt-2 mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
+          {project.example && (
+            <p data-build-example className="mb-2 inline-block rounded-md border border-amber-400/40 bg-amber-400/15 px-3 py-1.5 text-xs font-semibold text-amber-200">
+              {t("build.example.badge")} — {t("build.example.note")}
+            </p>
+          )}
           <h1 className="text-2xl font-bold text-white">{project.title}</h1>
           <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
             <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>

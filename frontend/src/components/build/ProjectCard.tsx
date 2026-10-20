@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { BuildProject } from "@/lib/build/api";
+import { useI18n } from "@/lib/i18n";
 
 const STATUS_LABEL: Record<BuildProject["status"], string> = {
   OPEN: "Открыт",
@@ -29,6 +30,7 @@ function formatBudget(n: number): string {
 export function ProjectCard({ project }: { project: BuildProject }) {
   const daysAgo = Math.floor((Date.now() - new Date(project.createdAt).getTime()) / 86400000);
   const openVacancies = typeof project.vacancyCount === "number" ? project.vacancyCount : null;
+  const { t } = useI18n();
 
   return (
     <Link
@@ -37,6 +39,11 @@ export function ProjectCard({ project }: { project: BuildProject }) {
     >
       {/* Status + city */}
       <div className="mb-2 flex flex-wrap items-center gap-2">
+        {project.example && (
+          <span data-build-example className="inline-flex items-center rounded-full border border-[#b7791f]/40 bg-[#fef3c7] px-2.5 py-1 text-[11px] font-bold text-[#8a5a12]">
+            {t("build.example.badge")}
+          </span>
+        )}
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${STATUS_TONE[project.status]}`}>
           <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[project.status]}`} />
           {STATUS_LABEL[project.status]}

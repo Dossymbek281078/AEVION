@@ -1,3 +1,4 @@
+import { неОбразецSql } from "../../data/buildExampleProjects";
 import { Router } from "express";
 import {
   buildPool as pool,
@@ -23,10 +24,12 @@ healthRouter.get("/", async (_req, res) => {
   try {
     // Storefront hero counters: exclude @aevion.test/@smoke.test fixtures.
     const notTest = excludeTestUsers("u");
+    // Проекты-образцы (data/buildExampleProjects) в счётчики героя не идут.
+    const неОбразец = неОбразецSql('p."id"');
     const r = await Promise.all([
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE v."status" = 'OPEN' AND ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE v."status" = 'OPEN' AND ${notTest} AND ${неОбразец}`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile" bp JOIN "AEVIONUser" u ON u."id" = bp."userId" WHERE ${notTest}`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'OPEN' AND ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'OPEN' AND ${notTest} AND ${неОбразец}`),
     ]);
     vacancies = Number(r[0].rows[0]?.n ?? 0);
     candidates = Number(r[1].rows[0]?.n ?? 0);
@@ -58,7 +61,7 @@ healthRouter.get("/metrics", async (_req, res) => {
     const r = await Promise.all([
       pool.query(`SELECT COUNT(*)::int AS n FROM "BuildVacancy" WHERE "status"='OPEN'`),
       pool.query(`SELECT COUNT(*)::int AS n FROM "BuildProfile"`),
-      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildProject" WHERE "status"='OPEN'`),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildProject" WHERE "status"='OPEN' AND ${неОбразецSql('"id"')}`),
       pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication"`),
       pool.query(`SELECT COUNT(*)::int AS n FROM "BuildReview"`),
     ]);

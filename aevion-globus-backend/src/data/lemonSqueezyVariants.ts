@@ -49,7 +49,9 @@ export type LegacyReference =
   | "app_smeta"
   | "app_cyberchess"
   | "app_devhub";
-export type LemonSqueezyReference = TierReference | AppTermReference | LegacyReference;
+/** Месячный вариант плана на срок (20.10.2026): tier_medium_monthly … tier_max_monthly. */
+export type PlanetMonthlyReference = `tier_${Exclude<TermTier, "lite">}_monthly`;
+export type LemonSqueezyReference = TierReference | AppTermReference | LegacyReference | PlanetMonthlyReference;
 
 /** Всё, что продаётся сейчас: пять ступеней планеты и пять ступеней каждого приложения. */
 export const TERM_REFERENCES: LemonSqueezyReference[] = [
@@ -94,6 +96,29 @@ const LEGACY_VARIANT_ENV: Record<LegacyReference, string> = {
   // возвращал null, и подписка за $149 провижинила тариф «lite» ($19).
   app_devhub:      "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO",
 };
+
+/*
+ * 🔴 20.10.2026: месячные варианты плана «Планета» (интервал month, цена месяца
+ * срока 225/200/175/150). Замер Продаж: помесячная касса через tier_lite показывала
+ * «AEVION Planet — Lite (1 mo)» и серую «$250.00 billed every month» при цене $150.
+ *
+ * Переменные НОВЫЕ (…_PLANET_<t>_MONTHLY), а не прежние …_MEDIUM_MONTHLY: замер
+ * `railway variables` 20.10 — LEMON_SQUEEZY_VARIANT_MEDIUM/PRO/FULL_MONTHLY на проде
+ * ЗАДАНЫ и указывают на товары до 15.09. Переписать их новыми id — продления старых
+ * покупок стали бы unmapped_variant (500), оставить — касса открыла бы старый товар.
+ *
+ * Ссылка та же форма tier_<t>_monthly: обратный поиск по новому и по прежнему id
+ * даёт одну ступень (billingPeriod.tierIdForReference), а продаётся — ТОЛЬКО новый.
+ */
+export const PLANET_MONTHLY_VARIANT_ENV: Record<PlanetMonthlyReference, string> = {
+  tier_medium_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_MEDIUM_MONTHLY",
+  tier_pro_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_PRO_MONTHLY",
+  tier_full_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_FULL_MONTHLY",
+  tier_max_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_MAX_MONTHLY",
+};
+function isPlanetMonthlyReference(s: string): s is PlanetMonthlyReference {
+  return Object.prototype.hasOwnProperty.call(PLANET_MONTHLY_VARIANT_ENV, s);
+}
 
 /**
  * Сопоставлены ли ссылки товаров с идентификаторами вариантов магазина.
@@ -240,6 +265,8 @@ export function resolveLemonSqueezyVariant(reference: string): string | null {
     return process.env[BUREAU_VERIFIED_VARIANT_ENV]?.trim() || null;
   }
   if (reference === PILOT_490_REFERENCE) return pilot490VariantId();
+  // Месячный вариант плана: только НОВАЯ переменная, прежний товар не продаётся.
+  if (isPlanetMonthlyReference(reference)) return process.env[PLANET_MONTHLY_VARIANT_ENV[reference]]?.trim() || null;
   if (!isReference(reference)) return null;
   const id = process.env[TIER_VARIANT_ENV[reference]]?.trim();
   return id || null;
@@ -302,7 +329,14 @@ export interface PlanetCheckoutVariant {
 export function planetCheckoutVariant(term: TermTier, billing: PlanetBilling): PlanetCheckoutVariant {
   // Без срока «вперёд» не отличается от помесячного: скидки нет, интервал — месяц.
   const режим: PlanetBilling = term === "lite" ? "monthly" : billing;
-  const reference: LemonSqueezyReference = режим === "monthly" ? "tier_lite" : `tier_${term}`;
+  // 20.10.2026: помесячно — свой месячный вариант срока, если он заведён; иначе
+  // прежний запасной tier_lite. custom_price и custom_data идут в ОБОИХ путях
+  // (checkout.ts): списание важнее показа.
+  const месячный: PlanetMonthlyReference | null = term === "lite" ? null : `tier_${term}_monthly`;
+  const reference: LemonSqueezyReference =
+    режим === "prepaid" ? `tier_${term}`
+      : месячный && resolveLemonSqueezyVariant(месячный) ? месячный
+        : "tier_lite";
   return {
     reference,
     variantId: resolveLemonSqueezyVariant(reference),
@@ -313,7 +347,7 @@ export function planetCheckoutVariant(term: TermTier, billing: PlanetBilling): P
 /** Что из двух режимов можно купить сейчас: задана переменная нужного варианта. */
 export function planetBillingSellable(term: TermTier): { monthly: boolean; prepaid: boolean } {
   return {
-    monthly: Boolean(resolveLemonSqueezyVariant("tier_lite")),
+    monthly: Boolean(planetCheckoutVariant(term, "monthly").variantId),
     prepaid: term !== "lite" && Boolean(resolveLemonSqueezyVariant(`tier_${term}`)),
   };
 }
@@ -386,7 +420,11 @@ export function referenceForVariantId(
   if (variantId == null) return null;
   const id = String(variantId);
   // Прежние варианты тоже: продление и отмена по старой покупке приходят с ними.
-  for (const [ref, env] of [...Object.entries(TIER_VARIANT_ENV), ...Object.entries(LEGACY_VARIANT_ENV)]) {
+  for (const [ref, env] of [
+    ...Object.entries(TIER_VARIANT_ENV),
+    ...Object.entries(PLANET_MONTHLY_VARIANT_ENV),
+    ...Object.entries(LEGACY_VARIANT_ENV),
+  ]) {
     if (process.env[env]?.trim() === id) return ref as LemonSqueezyReference;
   }
   return null;

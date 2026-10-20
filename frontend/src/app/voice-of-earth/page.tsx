@@ -147,7 +147,7 @@ const JSONLD = {
 };
 
 type ApiTracks = { items: Track[]; total: number; backend?: string };
-type ApiTrack = { track: Track };
+type ApiTrack = { track: Track; note?: string };
 
 function getOrCreateVoter(): string {
   if (typeof window === "undefined") return "anon";
@@ -299,7 +299,7 @@ export default function VoiceOfEarthPage() {
           // refresh list + stats
           void loadTracks();
           void loadStats();
-          return { ok: true, message: `Опубликовано (id ${result.track.id})` };
+          return { ok: true, message: result.note ?? "Трек принят — появится в каталоге после проверки командой." };
         }
         const errData = (await r.json().catch(() => ({}))) as { error?: string };
         return { ok: false, message: errData.error ?? "submit_failed" };

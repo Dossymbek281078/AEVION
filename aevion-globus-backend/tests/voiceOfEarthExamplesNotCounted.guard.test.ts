@@ -15,6 +15,10 @@ vi.mock("../src/lib/rateLimit", async (orig) => ({
   rateLimit: () => (_q: unknown, _s: unknown, n: () => void) => n(),
 }));
 vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => () => {} }));
+const письма: Array<Record<string, unknown>> = [];
+vi.mock("../src/lib/constitutionBrevo", () => ({ sendVoiceOfEarthTrackNotice: async (t: Record<string, unknown>) => { письма.push(t); return true; } }));
+let админ = false;
+vi.mock("../src/lib/adminAuth", () => ({ isAdminRequest: () => админ }));
 
 const { voiceOfEarthRouter } = await import("../src/routes/voiceOfEarth");
 const { VOICE_OF_EARTH_SEED } = await import("../src/data/voiceOfEarthSeed");
@@ -34,12 +38,24 @@ describe("Voice of Earth: примеры отдельно от треков лю
     expect(стат.body.topTracks).toEqual([]);
   });
 
-  it("трек, поданный человеком, — не пример и входит в счёт", async () => {
+  it("трек человека ждёт проверки: не виден и не в счёте, команде письмо; после одобрения админом — в счёте", async () => {
     const подан = await request(app).post("/api/voice-of-earth/tracks").send({
       title: "Песня степи", artistAlias: "Алия", language: "kk", mood: "hopeful", lyrics: "Дала кең, жүрек кең.",
     });
     expect(подан.status).toBeLessThan(300);
+    expect(подан.body.status).toBe("pending");
+    expect(подан.body.note).toMatch(/после проверки/);
+    expect(подан.body.notified).toBe(true);
+    expect(письма).toHaveLength(1);
     const id = подан.body.track?.id ?? подан.body.id;
+    expect((await request(app).get(`/api/voice-of-earth/tracks/${id}`)).status, "непроверенный трек виден всем").toBe(404);
+    expect((await request(app).get("/api/voice-of-earth/stats")).body.total).toBe(0);
+    expect((await request(app).post(`/api/voice-of-earth/tracks/${id}/vote`).send({ voterAlias: "x" })).status, "голос за непроверенный").toBe(404);
+    expect((await request(app).post(`/api/voice-of-earth/tracks/${id}/review`).send({ status: "published" })).status, "одобрил не админ").toBe(403);
+    админ = true;
+    expect((await request(app).post(`/api/voice-of-earth/tracks/${id}/review`).send({ status: "maybe" })).status).toBe(400);
+    expect((await request(app).post(`/api/voice-of-earth/tracks/${id}/review`).send({ status: "published" })).body).toMatchObject({ ok: true, status: "published" });
+    админ = false;
     const один = await request(app).get(`/api/voice-of-earth/tracks/${id}`);
     expect(один.body.track.example).toBe(false);
     const стат = await request(app).get("/api/voice-of-earth/stats");

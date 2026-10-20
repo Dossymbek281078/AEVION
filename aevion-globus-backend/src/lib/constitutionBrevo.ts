@@ -937,3 +937,34 @@ export async function sendAgencyLeadReceipt(lead: {
   // никуда. Тот же запасной канал.
   return отправитьСЗапасом("расписка-заявителю", payload);
 }
+
+/**
+ * Новый трек в Voice of Earth — письмо команде на проверку.
+ *
+ * 🔴 20.10.2026 (решение Оркестратора): трек публиковался сразу, анонимно, без
+ * модерации — любой мог вывесить на витрину любой текст. Теперь трек ждёт в pending,
+ * а команда получает письмо. Адрес — как у заявок агентства (AGENCY_LEAD_EMAIL)
+ * или VOICE_OF_EARTH_EMAIL.
+ */
+export async function sendVoiceOfEarthTrackNotice(t: {
+  id: number | string; title: string; artistAlias: string; language: string; mood: string; lyrics: string; audioUrl: string | null;
+}): Promise<boolean> {
+  const to = process.env.VOICE_OF_EARTH_EMAIL || process.env.AGENCY_LEAD_EMAIL || "yahiin1978@gmail.com";
+  const эк = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const строки = [
+    `Трек: ${t.title}`,
+    `Автор: ${t.artistAlias} · язык ${t.language} · настроение ${t.mood}`,
+    `Запись: ${t.audioUrl || "нет"}`,
+    "",
+    t.lyrics.slice(0, 3000),
+    "",
+    `Опубликовать: POST /api/voice-of-earth/tracks/${t.id}/review {"status":"published"} (админ); скрыть — {"status":"flagged"}`,
+  ];
+  return отправитьСЗапасом("трек-voice-of-earth", {
+    to: [{ email: to }],
+    subject: `Новый трек на проверку: ${t.title}`,
+    htmlContent: `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a">` + строки.map((s) => `<p style="margin:0 0 8px;white-space:pre-wrap">${эк(s)}</p>`).join("") + `</div>`,
+    textContent: строки.join(String.fromCharCode(10)),
+    tags: ["voice-of-earth-track"],
+  });
+}

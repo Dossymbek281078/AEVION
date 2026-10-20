@@ -28,6 +28,13 @@ describe("карточка сохранения после адреса", () => 
     expect(pokazyvatKartochkuSokhraneniya({ address: "not a url", saved: false })).toBe(false);
   });
 
+  // 20.10.2026: путь с входом на проде — вошедшему предлагали «оставьте почту», хотя проект в его аккаунте.
+  it("🔴 вошедшему карточка не показывается, гостю — показывается; страница передаёт признак входа", () => {
+    expect(pokazyvatKartochkuSokhraneniya({ address: "https://x.pages.dev", saved: false, signedIn: true })).toBe(false);
+    expect(pokazyvatKartochkuSokhraneniya({ address: "https://x.pages.dev", saved: false, signedIn: false })).toBe(true);
+    expect(СТРАНИЦА).toContain("signedIn: !!getAuthToken()");
+  });
+
   it("канал для листа — только то, что пройдёт схему", () => {
     expect(kanalDlyaLista("yt-devhub-1")).toBe("yt-devhub-1");
     expect(kanalDlyaLista("probe-user-99")).toBe("probe-user-99");
@@ -41,7 +48,7 @@ describe("карточка сохранения после адреса", () => 
     expect(СТРАНИЦА).toContain('apiUrl("/api/constitution/waitlist/subscribe")');
     expect(СТРАНИЦА).toContain("source: DEVHUB_SAVE_SOURCE, projectId: id");
     expect(СТРАНИЦА).toContain('type: "feature_use", source: "devhub", meta: { feature: DEVHUB_SAVE_FEATURE, projectId: id');
-    expect(СТРАНИЦА).toContain("pokazyvatKartochkuSokhraneniya({ address: адресСайта, saved: saveHidden })");
+    expect(СТРАНИЦА).toContain("pokazyvatKartochkuSokhraneniya({ address: адресСайта, saved: saveHidden, signedIn: !!getAuthToken() })");
     expect(DEVHUB_SAVE_SOURCE).toBe("devhub-guest");
     expect(DEVHUB_SAVE_FEATURE).toBe("devhub_save_email");
     // Карточка стоит ПЕРЕД редактором — в кадре на телефоне и на ноутбуке, без прокрутки.

@@ -210,3 +210,22 @@ export function standaloneApp(id: string): StandaloneApp | null {
 export function fromPricePerMonth(base: number): number {
   return termPricePerMonth(base, "max");
 }
+
+/**
+ * 🔴 20.10.2026: сумма денег на витрине — ОДНА функция на все места. Целое —
+ * без копеек с разделителем тысяч ru-RU («1 110», «1 575»); с центами — два знака
+ * через точку («641.25», «1 417.50»), как в строках бэка. Прежде «вперёд одним
+ * платежом: $641» округлял 641.25, а пункт списка ниже писал «$641.25».
+ */
+export function formatMoneyAmount(amount: number): string {
+  const cents = Math.round(amount * 100);
+  const whole = Math.trunc(cents / 100);
+  const frac = Math.abs(cents % 100);
+  const int = whole.toLocaleString("ru-RU");
+  return frac === 0 ? int : `${int}.${String(frac).padStart(2, "0")}`;
+}
+
+/** Сумма в валюте витрины: в USD — до цента; в справочной конвертации — целая, как прежде. */
+export function formatShopPrice(usd: number, symbol: string, rate: number): string {
+  return `${symbol}${formatMoneyAmount(rate === 1 ? usd : Math.round(usd * rate))}`;
+}

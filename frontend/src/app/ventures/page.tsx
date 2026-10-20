@@ -4,8 +4,9 @@
  * A showcase window inside AEVION: any visitor sees that inside AEVION you can
  * not only *use* AI but *build businesses*. Presents 20 vetted business models
  * as an "idea exchange" board (each with a realistic revenue ceiling), and
- * features the first live venture — AEVIA, a longevity gummy under the AEVION
- * umbrella.
+ * features AEVIA, a consumer gummy venture under the AEVION umbrella — in
+ * development (20.10.2026: no checkout, no pre-order; unit economics are a
+ * model, not results; no health claims without clinical data and a source).
  *
  * Static RSC page — zero data deps, zero client JS. All styling is inlined and
  * namespaced under `.vtx` so it never collides with the app's global CSS.
@@ -20,7 +21,7 @@ import { VenturesInterestProvider } from "./VenturesInterest";
 export const metadata = {
   title: "AEVION Ventures — Идея-Маркет",
   description:
-    "Внутри AEVION можно не только пользоваться AI, но и строить бизнесы. 20 моделей до $10M + живой венчур AEVIA.",
+    "Внутри AEVION можно не только пользоваться AI, но и строить бизнесы. 20 моделей до $10M + венчур AEVIA в разработке.",
 };
 
 export default function VenturesPage() {
@@ -37,9 +38,9 @@ export default function VenturesPage() {
           </h1>
           <p className="vtx-lede">
             Идея-Маркет — витрина из 20 проверенных бизнес-моделей с посчитанной
-            юнит-экономикой до <b>$10M</b>. Одна ставка уже запущена:{" "}
-            <b>AEVIA</b> — longevity-гамми под зонтом AEVION с потолком в Китае
-            до <b>$1B</b>.
+            юнит-экономикой до <b>$10M</b>. Первая ставка — в разработке:{" "}
+            <b>AEVIA</b>, гамми под зонтом AEVION; потолок рынка в Китае до{" "}
+            <b>$1B</b> — расчёт, не факт.
           </p>
           {/* 152: первое действие гостя — три замысла с «👍 интересно», без входа */}
           <TopIdeas />
@@ -94,9 +95,9 @@ export default function VenturesPage() {
 
         {/* featured venture */}
         <section className="vtx-sec">
-          <p className="vtx-label"><span className="vtx-n">03</span> Живая ставка</p>
+          <p className="vtx-label"><span className="vtx-n">03</span> Ставка в разработке</p>
           <div className="vtx-feature">
-            <span className="vtx-badge"><span className="vtx-dot" /> Live venture · powered by AEVION</span>
+            <span className="vtx-badge"><span className="vtx-dot" /> В разработке · powered by AEVION</span>
             <h2 className="vtx-h2" style={{ color: "#f6f3ec" }}>AEVIA — «Roots»</h2>
             <p className="vtx-fmuted">
               AEVIA — потребительский венчур под зонтом AEVION. Они рекламируют
@@ -111,34 +112,26 @@ export default function VenturesPage() {
               </a>
             </p>
             <p className="vtx-fbody">
-              Жевательные gummy для волос, кожи и клеточного возраста. Легенда —
-              на исследовательском тезисе: <b>седина — видимый биомаркер
-              старения</b> (истощение стволовых клеток меланоцитов, накопление
-              ROS, митохондриальная усталость). Формат гамми камерогеничен для
-              медиа-движка, лёгок в доставке в любую страну и держит подписку.
+              Жевательные гамми — потребительский wellness-продукт для ухода за
+              волосами и кожей. Это концепция в разработке: состав не утверждён,
+              клинических данных у нас нет, и никаких лечебных или омолаживающих
+              свойств мы не заявляем. Формат гамми удобен для медиа-движка, лёгок
+              в доставке в любую страну и держит подписку.
             </p>
 
             <div className="vtx-grid2">
               <div>
-                <p className="vtx-mth">Состав-легенда · формулировки wellness</p>
+                <p className="vtx-mth">Кандидаты в состав · не утверждены, свойства не заявляем</p>
                 <div className="vtx-actives">
-                  {[
-                    ["Zn : Cu ≈ 10:1", "поддержка естественной пигментации и синтеза коллагена"],
-                    ["Catalase + антиоксиданты", "защита от окислительного стресса (ROS)"],
-                    ["Спермидин (зародыш пшеницы)", "клеточное обновление (аутофагия)"],
-                    ["PQQ / CoQ10", "митохондриальная энергия клеток"],
-                    ["Биотин + селен + L-цистеин", "строительные блоки волос и ногтей"],
-                    ["Адаптоген (ашваганда)", "поддержка при стрессе"],
-                  ].map(([ing, why]) => (
+                  {["Цинк и медь", "Каталаза", "Спермидин (зародыш пшеницы)", "PQQ / CoQ10", "Биотин, селен, L-цистеин", "Ашваганда"].map((ing) => (
                     <div className="vtx-arow" key={ing}>
                       <span className="vtx-ing">{ing}</span>
-                      <span className="vtx-why">{why}</span>
                     </div>
                   ))}
                 </div>
               </div>
               <div>
-                <p className="vtx-mth">Юнит-экономика · путь до $10M</p>
+                <p className="vtx-mth">Юнит-экономика · расчёт, не факт · путь до $10M</p>
                 <ul className="vtx-kv">
                   {[
                     ["Цена (подписка / мес)", "$29", false],
@@ -156,7 +149,8 @@ export default function VenturesPage() {
                   ))}
                 </ul>
                 <p className="vtx-fnote">
-                  Первую партию финансирует денежный насос (курс) — без займов и
+                  Это модель, а не результат: продаж AEVIA пока нет. Первую партию
+                  планируем финансировать денежным насосом (курс) — без займов и
                   разбавления.
                 </p>
               </div>
@@ -175,17 +169,17 @@ export default function VenturesPage() {
           </p>
           <div className="vtx-board">
             <table className="vtx-table">
-              <thead><tr><th>SKU</th><th>Формат</th><th>Маржа</th><th>Крючок для рынка</th></tr></thead>
+              <thead><tr><th>SKU</th><th>Формат</th><th>Маржа (расчёт)</th><th>Тема · концепция, без заявлений о действии</th></tr></thead>
               <tbody>
                 {[
-                  ["AEVIA Roots", "гамми", "~85%", "против седины / клеточный возраст", true],
-                  ["AEVIA Glow", "гамми", "~85%", "коллаген, сияние кожи", false],
-                  ["AEVIA Sleep", "гамми", "~85%", "сон, магний + мелатонин", false],
-                  ["AEVIA Calm", "гамми", "~85%", "стресс, ашваганда", false],
-                  ["AEVIA Focus", "гамми", "~85%", "концентрация, ноотропы", false],
-                  ["AEVIA Gut", "гамми", "~80%", "про/пребиотики, ЖКТ", false],
+                  ["AEVIA Roots", "гамми", "~85%", "волосы", true],
+                  ["AEVIA Glow", "гамми", "~85%", "кожа, коллаген", false],
+                  ["AEVIA Sleep", "гамми", "~85%", "сон", false],
+                  ["AEVIA Calm", "гамми", "~85%", "спокойный день", false],
+                  ["AEVIA Focus", "гамми", "~85%", "концентрация", false],
+                  ["AEVIA Gut", "гамми", "~80%", "про- и пребиотики", false],
                   ["AEVIA Sticks", "дринк-микс", "~80%", "коллаген-стик, 口服美容 для Китая", false],
-                  ["AEVIA Coffee", "кофе", "~75%", "longevity-латте, ежедневный ритуал", false],
+                  ["AEVIA Coffee", "кофе", "~75%", "латте, ежедневный ритуал", false],
                 ].map(([sku, fmt, mrg, hook, flag]) => (
                   <tr key={sku as string}>
                     <td className="vtx-name">
@@ -234,7 +228,7 @@ export default function VenturesPage() {
         {/* 90 days */}
         <section className="vtx-sec">
           <p className="vtx-label"><span className="vtx-n">06</span> Исполнение</p>
-          <h2 className="vtx-h2">90 дней</h2>
+          <h2 className="vtx-h2">90 дней — план, не факт</h2>
           <div className="vtx-plan">
             {[
               ["Недели 1–3", "Насос включён", "Запуск курса + первые ролики Roots. Первый кэш на оборотку."],

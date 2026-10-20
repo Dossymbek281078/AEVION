@@ -40,7 +40,7 @@ type SeedIdea = {
 };
 
 const SEED_IDEAS: SeedIdea[] = [
-  { id: "01", name: "AEVIA — longevity / anti-grey гамми", model: "DTC + подписка", ceiling: "$1B", diff: 4, status: "live" },
+  { id: "01", name: "AEVIA — wellness-гамми для волос и кожи", model: "DTC + подписка", ceiling: "$1B", diff: 4, status: "lab" },
   { id: "02", name: "AI-ресепшн / голосовой агент", model: "SaaS", ceiling: "$10M", diff: 3, status: "open" },
   { id: "03", name: "Collagen sticks — 口服美容", model: "DTC", ceiling: "$250M", diff: 4, status: "lab" },
   { id: "04", name: "Longevity coffee / грибной латте", model: "DTC", ceiling: "$120M", diff: 3, status: "lab" },

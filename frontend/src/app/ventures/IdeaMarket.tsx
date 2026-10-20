@@ -27,7 +27,7 @@ type Idea = {
 // Descriptions kept client-side (backend catalog carries id/name/model/ceiling);
 // merged with live interest counts fetched from the API.
 export const IDEAS: Idea[] = [
-  { id: "01", name: "AEVIA — longevity / anti-grey гамми", desc: "Красота и антиэйдж изнутри, подписка", model: "DTC + подписка", ceiling: "$1B", diff: 4, status: "live" },
+  { id: "01", name: "AEVIA — wellness-гамми для волос и кожи", desc: "В разработке: продаж пока нет, подписка", model: "DTC + подписка", ceiling: "$1B", diff: 4, status: "lab" },
   { id: "02", name: "AI-ресепшн / голосовой агент", desc: "Для клиник, СТО, салонов", model: "SaaS", ceiling: "$10M", diff: 3, status: "open" },
   { id: "03", name: "Collagen sticks — 口服美容", desc: "Beauty-дринк, рынок Китая $10B+", model: "DTC", ceiling: "$250M", diff: 4, status: "lab" },
   { id: "04", name: "Longevity coffee / грибной латте", desc: "Ежедневный ритуал, высокий повтор", model: "DTC", ceiling: "$120M", diff: 3, status: "lab" },
@@ -49,7 +49,7 @@ export const IDEAS: Idea[] = [
   { id: "20", name: "3D-визуализация недвижимости", desc: "Сервис → SaaS для застройщиков", model: "Service → SaaS", ceiling: "$10M", diff: 3, status: "open" },
 ];
 
-const STATUS_LABEL: Record<Idea["status"], string> = { live: "▲ LIVE", open: "open", lab: "в лаб.", pump: "насос" };
+const STATUS_LABEL: Record<Idea["status"], string> = { live: "▲ LIVE", open: "open", lab: "в разработке", pump: "насос" };
 
 function Dots({ n }: { n: number }) {
   return (

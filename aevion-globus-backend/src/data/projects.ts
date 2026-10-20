@@ -22,7 +22,7 @@ export const projects: GlobusProject[] = [
     code: "VENTURES",
     name: "AEVION Ventures — Идея-Маркет",
     description:
-      "Витрина «внутри AEVION можно строить бизнесы»: 20 бизнес-моделей до $10M как биржа идей + первый живой венчур AEVIA (longevity-гамми под зонтом AEVION). Страница /ventures.",
+      "Витрина «внутри AEVION можно строить бизнесы»: 20 бизнес-моделей до $10M как биржа идей + венчур AEVIA в разработке (wellness-гамми под зонтом AEVION, продаж пока нет). Страница /ventures.",
     kind: "product",
     status: "live",
     priority: 2,

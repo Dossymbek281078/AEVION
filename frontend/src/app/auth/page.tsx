@@ -342,8 +342,11 @@ export default function AuthPage() {
       <ProductPageShell maxWidth={720}>
         <Wave1Nav />
         <PipelineSteps current="auth" />
-        <div style={{ borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden" }}>
-          <div style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", padding: "28px 24px 20px", color: "#fff" }}>
+        {/* 20.10.2026 (окно «Приложения», QSign 1в): на широком низком окне (1463×724) кнопка отправки лежала на y≈790–803,
+            за кадром (замер Продукта 19.10 на проде и приёмка priemka-qsign-yazyk.mjs 20.10). Классы aevion-auth-* в globals.css
+            при ширине ≥1024 и высоте ≤820 кладут герой слева, форму справа — кнопка поднимается на ~150 px, в кадр. */}
+        <div className="aevion-auth-card" style={{ borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden" }}>
+          <div className="aevion-auth-hero" style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", padding: "28px 24px 20px", color: "#fff" }}>
             <h1 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
               Вход в AEVION
             </h1>
@@ -352,7 +355,7 @@ export default function AuthPage() {
               Зарегистрируйтесь или войдите — это займёт минуту.
             </p>
           </div>
-          <div style={{ padding: "24px 24px 28px" }}>
+          <div className="aevion-auth-body" style={{ padding: "24px 24px 28px" }}>
             {token && me?.user ? (
               <div style={{ marginBottom: 20, padding: "14px 16px", borderRadius: 14, border: "1px solid rgba(16,185,129,0.3)", background: "rgba(16,185,129,0.06)" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>

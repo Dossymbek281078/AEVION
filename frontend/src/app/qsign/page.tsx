@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useI18nOptional } from "@/lib/i18n";
+import { useQsignT } from "./i18n";
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -246,15 +246,30 @@ const chip = (bg: string, fg: string): CSSProperties => ({
 // рецепт GEN_UI.busy*). Страница англоязычная — здесь зеркальный случай:
 // РУССКИЙ посетитель видел английские busy-подписи те секунды, пока идёт
 // операция. Idle-подписи не трогаем — стабильный текст кроет доводчик.
-const QS_BUSY: Record<string, { hash: string; sign: string; verify: string; webhook: string; gps: string; refresh: string; rotate: string }> = {
-  en: { hash: "Hashing…", sign: "Signing…", verify: "Verifying…", webhook: "Creating…", gps: "Requesting…", refresh: "Refreshing…", rotate: "Rotating…" },
-  ru: { hash: "Считаю хеш…", sign: "Подписываю…", verify: "Проверяю…", webhook: "Создаю…", gps: "Запрашиваю…", refresh: "Обновляю…", rotate: "Ротация…" },
-  kk: { hash: "Хеш есептелуде…", sign: "Қол қойылуда…", verify: "Тексерілуде…", webhook: "Құрылуда…", gps: "Сұралуда…", refresh: "Жаңартылуда…", rotate: "Ротация…" },
+/* Словарь страницы — ./i18n.ts (ru/en/kk). Прежний QS_BUSY (семь подписей «занято»)
+   вошёл туда ключами busy.*. */
+
+/** Кнопка действия в герое: одна на гостя (вход) и на вошедшего (якорь на форму). */
+const heroCta: CSSProperties = {
+  display: "inline-block",
+  marginTop: 14,
+  padding: "11px 20px",
+  background: "#10b981",
+  color: "#042f2e",
+  borderRadius: 10,
+  fontWeight: 800,
+  fontSize: 14,
+  textDecoration: "none",
 };
 
+/** Отказ сети (fetch бросил до ответа) — человеку нужен текст про связь, а не "Failed to fetch". */
+function isNetworkError(e: unknown): boolean {
+  const m = String((e as { message?: string } | null)?.message || e || "").toLowerCase();
+  return m.includes("failed to fetch") || m.includes("networkerror") || m.includes("load failed") || m.includes("network request failed");
+}
+
 export default function QSignPage() {
-  const qsLang = useI18nOptional()?.lang ?? "en";
-  const QS = QS_BUSY[qsLang] ?? QS_BUSY.en;
+  const t = useQsignT();
   const { showToast } = useToast();
 
   // payload + client-side canonical preview
@@ -315,7 +330,7 @@ export default function QSignPage() {
         const decoded = decodeURIComponent(raw);
         JSON.parse(decoded);
         setPayloadText(decoded);
-        setPayloadOrigin("deep link (QRight / Globus)");
+        setPayloadOrigin(t("deeplink.origin"));
       }
     } catch {}
     try {
@@ -409,12 +424,12 @@ export default function QSignPage() {
 
   const createWebhook = async () => {
     if (!token.trim()) {
-      showToast("Sign in first", "error");
+      showToast(t("toast.signInFirst"), "error");
       return;
     }
     const url = webhookUrlInput.trim();
     if (!/^https?:\/\//i.test(url)) {
-      showToast("URL must start with http(s)://", "error");
+      showToast(t("toast.urlHttp"), "error");
       return;
     }
     setCreatingWebhook(true);
@@ -429,15 +444,15 @@ export default function QSignPage() {
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(d?.error || `Create failed (${r.status})`, "error");
+        showToast(d?.error || t("toast.createFailed", { status: r.status }), "error");
         return;
       }
       setNewWebhookSecret({ id: d.id, secret: d.secret });
       setWebhookUrlInput("");
       await loadWebhooks();
-      showToast("Webhook created — copy the secret now", "success");
+      showToast(t("toast.webhookCreated"), "success");
     } catch (e: any) {
-      showToast("Create error: " + (e?.message || String(e)), "error");
+      showToast(t("toast.createError", { msg: e?.message || String(e) }), "error");
     } finally {
       setCreatingWebhook(false);
     }
@@ -452,13 +467,13 @@ export default function QSignPage() {
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        showToast(d?.error || `Delete failed (${r.status})`, "error");
+        showToast(d?.error || t("toast.deleteFailed", { status: r.status }), "error");
         return;
       }
       await loadWebhooks();
-      showToast("Webhook deleted", "success");
+      showToast(t("toast.webhookDeleted"), "success");
     } catch (e: any) {
-      showToast("Delete error: " + (e?.message || String(e)), "error");
+      showToast(t("toast.deleteError", { msg: e?.message || String(e) }), "error");
     }
   };
 
@@ -476,7 +491,7 @@ export default function QSignPage() {
   const hashFile = async (file: File) => {
     if (file.size > FILE_MAX_BYTES) {
       showToast(
-        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB > 50MB cap)`,
+        t("toast.fileTooLarge", { mb: (file.size / 1024 / 1024).toFixed(1) }),
         "error",
       );
       return;
@@ -500,9 +515,9 @@ export default function QSignPage() {
       setPayloadOrigin(
         `file: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
       );
-      showToast(`Hashed ${file.name}`, "success");
+      showToast(t("toast.hashed", { name: file.name }), "success");
     } catch (e: any) {
-      showToast(`Hash failed: ${e?.message || String(e)}`, "error");
+      showToast(t("toast.hashFailed", { msg: e?.message || String(e) }), "error");
     } finally {
       setHashingFile(false);
     }
@@ -511,7 +526,7 @@ export default function QSignPage() {
   const requestGps = () => {
     if (!("geolocation" in navigator)) {
       setGpsStatus("denied");
-      showToast("Geolocation not supported", "error");
+      showToast(t("toast.geoUnsupported"), "error");
       return;
     }
     setGpsStatus("loading");
@@ -519,12 +534,12 @@ export default function QSignPage() {
       (pos) => {
         setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setGpsStatus("idle");
-        showToast("GPS attached", "success");
+        showToast(t("toast.gpsAttached"), "success");
       },
       () => {
         setGps(null);
         setGpsStatus("denied");
-        showToast("GPS permission denied", "error");
+        showToast(t("toast.gpsDenied"), "error");
       },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
     );
@@ -538,20 +553,20 @@ export default function QSignPage() {
   const copy = async (txt: string, what: string) => {
     try {
       await navigator.clipboard.writeText(txt);
-      showToast(`${what} copied`, "success");
+      showToast(t("toast.copied", { what }), "success");
     } catch {
-      showToast("Copy failed", "error");
+      showToast(t("toast.copyFailed"), "error");
     }
   };
 
   /* — sign — */
   const sign = async () => {
     if (!token.trim()) {
-      showToast("Bearer token required — sign in at /auth", "error");
+      showToast(t("toast.signInFirst"), "error");
       return;
     }
     if (parseError) {
-      showToast("Fix JSON before signing", "error");
+      showToast(t("toast.fixJson"), "error");
       return;
     }
     setSigning(true);
@@ -591,7 +606,7 @@ export default function QSignPage() {
       }
       const data = await res.json();
       if (!res.ok) {
-        showToast(data?.error || `Sign failed (${res.status})`, "error");
+        showToast(data?.error || t("toast.signFailed", { status: res.status }), "error");
         setSigned(null);
         return;
       }
@@ -606,9 +621,9 @@ export default function QSignPage() {
       setVerifyEdKid(sr.ed25519.kid);
       setVerifyResult(null);
       loadMetrics();
-      showToast("Signed · id " + sr.id.slice(0, 8), "success");
+      showToast(t("toast.signed", { id: sr.id.slice(0, 8) }), "success");
     } catch (e: any) {
-      showToast("Sign error: " + (e?.message || String(e)), "error");
+      showToast(isNetworkError(e) ? t("toast.network") : t("toast.signError", { msg: e?.message || String(e) }), "error");
     } finally {
       setSigning(false);
     }
@@ -636,13 +651,13 @@ export default function QSignPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        showToast(data?.error || `Verify failed (${res.status})`, "error");
+        showToast(data?.error || t("toast.verifyFailed", { status: res.status }), "error");
         return;
       }
       setVerifyResult(data as VerifyResponse);
-      showToast(data.valid ? "Signature VALID" : "Signature INVALID", data.valid ? "success" : "error");
+      showToast(data.valid ? t("toast.sigValid") : t("toast.sigInvalid"), data.valid ? "success" : "error");
     } catch (e: any) {
-      showToast("Verify error: " + (e?.message || String(e)), "error");
+      showToast(isNetworkError(e) ? t("toast.verifyNetwork") : t("toast.verifyError", { msg: e?.message || String(e) }), "error");
     } finally {
       setVerifying(false);
     }
@@ -689,7 +704,7 @@ export default function QSignPage() {
                     marginBottom: 8,
                   }}
                 >
-                  AEVION · Digital Signature Platform
+                  {t("hero.kicker")}
                 </div>
                 <h1
                   style={{
@@ -700,9 +715,9 @@ export default function QSignPage() {
                     lineHeight: 1.1,
                   }}
                 >
-                  Tamper-evident proofs,
+                  {t("hero.title1")}
                   <br />
-                  publicly verifiable in one link.
+                  {t("hero.title2")}
                 </h1>
                 <p
                   style={{
@@ -713,12 +728,21 @@ export default function QSignPage() {
                     maxWidth: 640,
                   }}
                 >
-                  QSign v2 signs any JSON payload under{" "}
-                  <strong>RFC 8785 canonical form</strong> with a hybrid of{" "}
-                  <strong>HMAC-SHA256</strong> and <strong>Ed25519</strong>. Every signature is
-                  persisted, geo-anchored, revocable, and verifiable from a shareable public
-                  URL — no vendor lock-in, no trust-us.
+                  {t("hero.lead")}
                 </p>
+                {/* 20.10.2026: действие гостя на ПЕРВОМ экране. До этого кнопка подписи
+                    лежала в 2–4 экранах ниже и была disabled без подсказки (замер Продукта
+                    19.10: 390×844 — y=1964, 1463×724 — y=761). Гость → вход с возвратом сюда,
+                    вошедший → якорь на форму подписи. */}
+                {token ? (
+                  <a href="#qsign-sign" data-qsign-cta="user" style={heroCta}>
+                    {t("hero.ctaUser")}
+                  </a>
+                ) : (
+                  <Link href="/auth?next=/qsign" data-qsign-cta="guest" style={heroCta}>
+                    {t("hero.ctaGuest")}
+                  </Link>
+                )}
               </div>
               <div
                 style={{
@@ -749,7 +773,7 @@ export default function QSignPage() {
                     </span>
                   </>
                 ) : (
-                  <span style={chip("rgba(239,68,68,0.18)", "#fecaca")}>offline</span>
+                  <span style={chip("rgba(239,68,68,0.18)", "#fecaca")}>{t("hero.offline")}</span>
                 )}
               </div>
             </div>
@@ -791,11 +815,10 @@ export default function QSignPage() {
           >
             <div style={{ minWidth: 240, flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 15, color: "#065f46", marginBottom: 4 }}>
-                Try it now — no account needed
+                {t("demo.title")}
               </div>
               <div style={{ fontSize: 13, color: "#047857", lineHeight: 1.5 }}>
-                Open AEVION's demo signature and check it yourself. Verification is
-                public and stateless: change one character of the payload and it turns INVALID.
+                {t("demo.body")}
               </div>
             </div>
             <a
@@ -811,7 +834,7 @@ export default function QSignPage() {
                 flexShrink: 0,
               }}
             >
-              Verify a real signature
+              {t("demo.cta")}
             </a>
           </div>
         ) : null}
@@ -833,42 +856,41 @@ export default function QSignPage() {
             }}
           >
             <StatCard
-              label="Signatures anchored"
+              label={t("stats.anchored")}
               value={stats.signatures.total.toLocaleString("en-US")}
               accent="#0f172a"
               hint={
                 stats.signatures.last24h > 0
-                  ? `+${stats.signatures.last24h} in last 24h`
-                  : "ready for first anchor"
+                  ? t("stats.last24h", { n: stats.signatures.last24h })
+                  : t("stats.ready")
               }
             />
             <StatCard
-              label="Active"
+              label={t("stats.active")}
               value={stats.signatures.active.toLocaleString("en-US")}
               accent="#047857"
               hint={
                 stats.signatures.revoked > 0
-                  ? `${stats.signatures.revoked} revoked`
-                  : "none revoked"
+                  ? t("stats.revoked", { n: stats.signatures.revoked })
+                  : t("stats.noneRevoked")
               }
             />
             <StatCard
-              label="Unique issuers"
+              label={t("stats.issuers")}
               value={stats.issuers.unique.toLocaleString("en-US")}
               accent="#0d9488"
-              hint={`${stats.geo.uniqueCountries} countries`}
+              hint={t("stats.countries", { n: stats.geo.uniqueCountries })}
             />
             <StatCard
-              label="Active keys"
+              label={t("stats.keys")}
               value={String(
                 (stats.keys["HMAC-SHA256"]?.active || 0) +
                   (stats.keys["Ed25519"]?.active || 0),
               )}
               accent="#6366f1"
-              hint={`${Object.values(stats.keys).reduce(
-                (a, b) => a + (b?.retired || 0),
-                0,
-              )} retired (verify-only)`}
+              hint={t("stats.retired", {
+                n: Object.values(stats.keys).reduce((a, b) => a + (b?.retired || 0), 0),
+              })}
             />
           </div>
         ) : null}
@@ -887,7 +909,7 @@ export default function QSignPage() {
               fontWeight: 600,
             }}
           >
-            Payload received from: {payloadOrigin}
+            {t("deeplink.from", { origin: payloadOrigin })}
           </div>
         ) : null}
 
@@ -947,21 +969,21 @@ export default function QSignPage() {
               fontSize: 13,
             }}
           >
-            Key registry
+            {t("nav.keys")}
           </Link>
         </div>
 
         {/* ─── Auth row ─── */}
         <div style={{ ...card, marginBottom: 16, padding: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>Auth</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{t("auth.label")}</div>
             <div style={{ flex: 1, minWidth: 200 }}>
               <input
                 type={showToken ? "text" : "password"}
-                aria-label="Auth"
+                aria-label={t("auth.label")}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder="Токен доступа (подставится сам после входа)"
+                placeholder={t("auth.placeholder")}
                 style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12 }}
               />
             </div>
@@ -977,7 +999,7 @@ export default function QSignPage() {
                 cursor: "pointer",
               }}
             >
-              {showToken ? "Hide" : "Show"}
+              {showToken ? t("auth.hide") : t("auth.show")}
             </button>
             {!token ? (
               <Link
@@ -992,10 +1014,10 @@ export default function QSignPage() {
                   textDecoration: "none",
                 }}
               >
-                Sign in →
+                {t("auth.signIn")}
               </Link>
             ) : (
-              <span style={chip("rgba(16,185,129,0.12)", "#047857")}>token loaded</span>
+              <span style={chip("rgba(16,185,129,0.12)", "#047857")}>{t("auth.loaded")}</span>
             )}
           </div>
         </div>
@@ -1008,8 +1030,8 @@ export default function QSignPage() {
           }}
         >
           {/* ═══ LEFT: Sign ═══ */}
-          <div style={card}>
-            <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 12 }}>1. Sign payload</div>
+          <div style={card} id="qsign-sign">
+            <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 12 }}>{t("sign.title")}</div>
 
             <div style={{ marginBottom: 12 }}>
               <div
@@ -1020,7 +1042,7 @@ export default function QSignPage() {
                   marginBottom: 4,
                 }}
               >
-                <div style={label}>Payload (JSON)</div>
+                <div style={label}>{t("sign.payload")}</div>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                   <label
                     style={{
@@ -1033,7 +1055,7 @@ export default function QSignPage() {
                       padding: 0,
                     }}
                   >
-                    {hashingFile ? QS.hash : "📎 Hash a file"}
+                    {hashingFile ? t("busy.hash") : t("sign.hashFile")}
                     <input
                       type="file"
                       onChange={(e) => {
@@ -1064,12 +1086,12 @@ export default function QSignPage() {
                       letterSpacing: 0,
                     }}
                   >
-                    Load sample
+                    {t("sign.loadSample")}
                   </button>
                 </div>
               </div>
               <textarea
-                aria-label="Данные для подписи (JSON)"
+                aria-label={t("sign.payloadAria")}
                 value={payloadText}
                 onChange={(e) => setPayloadText(e.target.value)}
                 rows={8}
@@ -1077,11 +1099,11 @@ export default function QSignPage() {
               />
               {parseError ? (
                 <div style={{ marginTop: 6, fontSize: 11, color: "#b91c1c", fontWeight: 600 }}>
-                  JSON error: {parseError}
+                  {t("sign.jsonError", { msg: parseError })}
                 </div>
               ) : (
                 <div style={{ marginTop: 6, fontSize: 11, color: "#16a34a", fontWeight: 600 }}>
-                  ✓ Valid JSON
+                  {t("sign.jsonOk")}
                 </div>
               )}
             </div>
@@ -1104,7 +1126,7 @@ export default function QSignPage() {
                   marginBottom: 6,
                 }}
               >
-                <div style={label}>RFC 8785 canonical · SHA-256</div>
+                <div style={label}>{t("sign.canonical")}</div>
                 <button
                   onClick={() => setShowCanonical((s) => !s)}
                   style={{
@@ -1116,7 +1138,7 @@ export default function QSignPage() {
                     cursor: "pointer",
                   }}
                 >
-                  {showCanonical ? "hide canonical" : "show canonical"}
+                  {showCanonical ? t("sign.hideCanonical") : t("sign.showCanonical")}
                 </button>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1125,7 +1147,7 @@ export default function QSignPage() {
                 </code>
                 {payloadHash ? (
                   <button
-                    onClick={() => copy(payloadHash, "Hash")}
+                    onClick={() => copy(payloadHash, t("what.hash"))}
                     style={{
                       padding: "4px 10px",
                       borderRadius: 6,
@@ -1136,7 +1158,7 @@ export default function QSignPage() {
                       cursor: "pointer",
                     }}
                   >
-                    copy
+                    {t("sign.copy")}
                   </button>
                 ) : null}
               </div>
@@ -1171,8 +1193,7 @@ export default function QSignPage() {
                     fontWeight: 600,
                   }}
                 >
-                  ⚠ Canonical hash changed since signing — the stored signature will no longer
-                  verify against this payload.
+                  {t("sign.drift")}
                 </div>
               ) : null}
             </div>
@@ -1192,13 +1213,13 @@ export default function QSignPage() {
               }}
             >
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>Geo anchoring</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{t("geo.title")}</div>
                 <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
                   {gps
-                    ? `GPS: ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)} (high priority)`
+                    ? t("geo.gps", { lat: gps.lat.toFixed(4), lng: gps.lng.toFixed(4) })
                     : gpsStatus === "denied"
-                    ? "Permission denied — server will use IP-based geo"
-                    : "Opt-in to attach device GPS; otherwise server infers from IP"}
+                    ? t("geo.denied")
+                    : t("geo.optin")}
                 </div>
               </div>
               {gps ? (
@@ -1214,7 +1235,7 @@ export default function QSignPage() {
                     cursor: "pointer",
                   }}
                 >
-                  Clear
+                  {t("geo.clear")}
                 </button>
               ) : (
                 <button
@@ -1230,7 +1251,7 @@ export default function QSignPage() {
                     cursor: "pointer",
                   }}
                 >
-                  {gpsStatus === "loading" ? QS.gps : "Attach GPS"}
+                  {gpsStatus === "loading" ? t("busy.gps") : t("geo.attach")}
                 </button>
               )}
             </div>
@@ -1252,7 +1273,7 @@ export default function QSignPage() {
                   signing || !!parseError || !token ? "default" : "pointer",
               }}
             >
-              {signing ? QS.sign : "Sign with HMAC + Ed25519"}
+              {signing ? t("busy.sign") : t("sign.button")}
             </button>
 
             {rateLimit ? <RateLimitBadge rateLimit={rateLimit} /> : null}
@@ -1267,7 +1288,7 @@ export default function QSignPage() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-                  <span style={chip("rgba(16,185,129,0.12)", "#047857")}>signed</span>
+                  <span style={chip("rgba(16,185,129,0.12)", "#047857")}>{t("signed.chip")}</span>
                   <code style={{ ...mono, fontSize: 11 }}>{signed.id}</code>
                 </div>
 
@@ -1275,17 +1296,17 @@ export default function QSignPage() {
                   <SigRow
                     label={`HMAC · ${signed.hmac.kid}`}
                     value={signed.hmac.signature}
-                    onCopy={() => copy(signed.hmac.signature, "HMAC signature")}
+                    onCopy={() => copy(signed.hmac.signature, t("what.hmacSig"))}
                   />
                   <SigRow
                     label={`Ed25519 · ${signed.ed25519.kid}`}
                     value={signed.ed25519.signature}
-                    onCopy={() => copy(signed.ed25519.signature, "Ed25519 signature")}
+                    onCopy={() => copy(signed.ed25519.signature, t("what.edSig"))}
                   />
                   <SigRow
-                    label="Ed25519 public key"
+                    label={t("signed.pubkey")}
                     value={signed.ed25519.publicKey}
-                    onCopy={() => copy(signed.ed25519.publicKey, "Public key")}
+                    onCopy={() => copy(signed.ed25519.publicKey, t("what.pubkey"))}
                   />
                   {signed.dilithium ? (
                     <div
@@ -1308,7 +1329,7 @@ export default function QSignPage() {
                           ML-DSA-65 (Dilithium-3) · {signed.dilithium.mode}
                         </div>
                         <span style={chip("rgba(99,102,241,0.18)", "#4338ca")}>
-                          PQ slot reserved
+                          {t("signed.pqReserved")}
                         </span>
                       </div>
                       <code
@@ -1322,8 +1343,7 @@ export default function QSignPage() {
                         digest: {signed.dilithium.digest.slice(0, 64)}…
                       </code>
                       <div style={{ marginTop: 4, fontSize: 10, color: "#64748b" }}>
-                        Real post-quantum signature lands in v2.1; current digest is a
-                        deterministic SHA-512 fingerprint of canonical||kid.
+                        {t("signed.pqNote")}
                       </div>
                     </div>
                   ) : null}
@@ -1361,7 +1381,7 @@ export default function QSignPage() {
                       textDecoration: "none",
                     }}
                   >
-                    Open public verify page →
+                    {t("signed.openPublic")}
                   </Link>
                   <button
                     onClick={() => {
@@ -1369,7 +1389,7 @@ export default function QSignPage() {
                         typeof window !== "undefined"
                           ? `${window.location.origin}/qsign/verify/${signed.id}`
                           : signed.publicUrl;
-                      copy(verifyAbs, "Verify link");
+                      copy(verifyAbs, t("what.verifyLink"));
                     }}
                     style={{
                       padding: "8px 12px",
@@ -1381,7 +1401,7 @@ export default function QSignPage() {
                       cursor: "pointer",
                     }}
                   >
-                    Copy link
+                    {t("signed.copyLink")}
                   </button>
                   <a
                     href={apiUrl(`/api/qsign/v2/${signed.id}/pdf?download=1`)}
@@ -1398,10 +1418,10 @@ export default function QSignPage() {
                       color: "#0f172a",
                     }}
                   >
-                    Download PDF
+                    {t("signed.pdf")}
                   </a>
                   <button
-                    onClick={() => copy(JSON.stringify(signed, null, 2), "Full response")}
+                    onClick={() => copy(JSON.stringify(signed, null, 2), t("what.fullResponse"))}
                     style={{
                       padding: "8px 12px",
                       borderRadius: 8,
@@ -1412,7 +1432,7 @@ export default function QSignPage() {
                       cursor: "pointer",
                     }}
                   >
-                    Copy JSON
+                    {t("signed.copyJson")}
                   </button>
                 </div>
               </div>
@@ -1421,7 +1441,7 @@ export default function QSignPage() {
 
           {/* ═══ RIGHT: Verify (stateless) ═══ */}
           <div style={card}>
-            <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 12 }}>2. Verify (stateless)</div>
+            <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 12 }}>{t("verify.title")}</div>
             <p
               style={{
                 margin: "0 0 14px",
@@ -1430,13 +1450,13 @@ export default function QSignPage() {
                 lineHeight: 1.5,
               }}
             >
-              Re-canonicalizes the payload server-side and recomputes both signatures. No DB
-              lookup. For DB-backed verify + revocation check, open the public URL after signing.
+              {t("verify.lead")}
             </p>
 
             <div style={{ marginBottom: 10 }}>
-              <div style={label}>Payload (JSON)</div>
+              <div style={label}>{t("sign.payload")}</div>
               <textarea
+                aria-label={t("sign.payload")}
                 value={verifyPayload}
                 onChange={(e) => setVerifyPayload(e.target.value)}
                 rows={5}
@@ -1454,36 +1474,36 @@ export default function QSignPage() {
                 marginBottom: 10,
               }}
             >
-              <div style={label}>HMAC kid</div>
+              <div style={label}>{t("verify.hmacKid")}</div>
               <input
-                aria-label="Идентификатор ключа HMAC"
+                aria-label={t("verify.hmacKidAria")}
                 value={verifyHmacKid}
                 onChange={(e) => setVerifyHmacKid(e.target.value)}
-                placeholder="пусто → действующий"
+                placeholder={t("verify.kidPlaceholder")}
                 style={{ ...inputStyle, ...mono, fontSize: 11 }}
               />
-              <div style={label}>HMAC sig</div>
+              <div style={label}>{t("verify.hmacSig")}</div>
               <input
-                aria-label="Подпись HMAC"
+                aria-label={t("verify.hmacSigAria")}
                 value={verifyHmacSig}
                 onChange={(e) => setVerifyHmacSig(e.target.value)}
-                placeholder="64 шестнадцатеричных знака"
+                placeholder={t("verify.sigPlaceholder")}
                 style={{ ...inputStyle, ...mono, fontSize: 11 }}
               />
-              <div style={label}>Ed25519 kid</div>
+              <div style={label}>{t("verify.edKid")}</div>
               <input
-                aria-label="Идентификатор ключа Ed25519"
+                aria-label={t("verify.edKidAria")}
                 value={verifyEdKid}
                 onChange={(e) => setVerifyEdKid(e.target.value)}
-                placeholder="optional"
+                placeholder={t("verify.optional")}
                 style={{ ...inputStyle, ...mono, fontSize: 11 }}
               />
-              <div style={label}>Ed25519 sig</div>
+              <div style={label}>{t("verify.edSig")}</div>
               <input
-                aria-label="Подпись Ed25519"
+                aria-label={t("verify.edSigAria")}
                 value={verifyEdSig}
                 onChange={(e) => setVerifyEdSig(e.target.value)}
-                placeholder="необязательно · 128 hex"
+                placeholder={t("verify.edSigPlaceholder")}
                 style={{ ...inputStyle, ...mono, fontSize: 11 }}
               />
             </div>
@@ -1505,7 +1525,7 @@ export default function QSignPage() {
                   verifying || !verifyHmacSig || !verifyPayload ? "default" : "pointer",
               }}
             >
-              {verifying ? QS.verify : "Verify"}
+              {verifying ? t("busy.verify") : t("verify.button")}
             </button>
 
             {verifyResult ? (
@@ -1518,9 +1538,9 @@ export default function QSignPage() {
               >
                 <div style={{ marginBottom: 10 }}>
                   {verifyResult.valid ? (
-                    <span style={chip("rgba(16,185,129,0.15)", "#047857")}>✓ VALID</span>
+                    <span style={chip("rgba(16,185,129,0.15)", "#047857")}>{t("verify.valid")}</span>
                   ) : (
-                    <span style={chip("rgba(239,68,68,0.15)", "#b91c1c")}>✗ INVALID</span>
+                    <span style={chip("rgba(239,68,68,0.15)", "#b91c1c")}>{t("verify.invalid")}</span>
                   )}
                 </div>
                 <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
@@ -1529,7 +1549,7 @@ export default function QSignPage() {
                     <strong
                       style={{ color: verifyResult.hmac.valid ? "#047857" : "#b91c1c" }}
                     >
-                      {verifyResult.hmac.valid ? "valid" : "invalid"}
+                      {verifyResult.hmac.valid ? t("verify.ok") : t("verify.bad")}
                     </strong>
                   </div>
                   {verifyResult.ed25519.kid !== null ? (
@@ -1546,10 +1566,10 @@ export default function QSignPage() {
                         }}
                       >
                         {verifyResult.ed25519.valid === null
-                          ? "not checked"
+                          ? t("verify.notChecked")
                           : verifyResult.ed25519.valid
-                          ? "valid"
-                          : "invalid"}
+                          ? t("verify.ok")
+                          : t("verify.bad")}
                       </strong>
                     </div>
                   ) : null}
@@ -1567,7 +1587,7 @@ export default function QSignPage() {
                         }}
                       >
                         {verifyResult.dilithium.valid === null
-                          ? "not checked"
+                          ? t("verify.notChecked")
                           : verifyResult.dilithium.valid
                           ? `${verifyResult.dilithium.mode}-ok`
                           : `${verifyResult.dilithium.mode}-mismatch`}
@@ -1575,7 +1595,7 @@ export default function QSignPage() {
                     </div>
                   ) : null}
                   <div style={{ ...mono, color: "#64748b", fontSize: 11 }}>
-                    hash: {verifyResult.payloadHash}
+                    {t("verify.hash", { h: verifyResult.payloadHash })}
                   </div>
                 </div>
               </div>
@@ -1597,9 +1617,9 @@ export default function QSignPage() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 900, fontSize: 15 }}>Recent anchors</div>
+                <div style={{ fontWeight: 900, fontSize: 15 }}>{t("recent.title")}</div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  Live feed — public verification URLs, no identifying data.
+                  {t("recent.lead")}
                 </div>
               </div>
               {stats ? (
@@ -1610,8 +1630,7 @@ export default function QSignPage() {
                     fontFamily: "monospace",
                   }}
                 >
-                  updated{" "}
-                  {new Date(stats.asOf).toISOString().slice(11, 19)} UTC
+                  {t("recent.updated", { t: new Date(stats.asOf).toISOString().slice(11, 19) })}
                 </span>
               ) : null}
             </div>
@@ -1691,11 +1710,9 @@ export default function QSignPage() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 900, fontSize: 15 }}>Webhooks</div>
+                <div style={{ fontWeight: 900, fontSize: 15 }}>{t("webhooks.title")}</div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  HTTP callbacks fired on <code>sign</code> + <code>revoke</code>{" "}
-                  events for your signatures. Body is HMAC-SHA256 signed via the
-                  webhook secret; receivers verify the <code>X-QSign-Signature</code> header.
+                  {t("webhooks.lead")}
                 </div>
               </div>
               <span
@@ -1705,7 +1722,7 @@ export default function QSignPage() {
                   fontFamily: "monospace",
                 }}
               >
-                {webhooks ? `${webhooks.length}/10 used` : "—"}
+                {webhooks ? t("webhooks.used", { n: webhooks.length }) : "—"}
               </span>
             </div>
 
@@ -1727,7 +1744,7 @@ export default function QSignPage() {
                     marginBottom: 6,
                   }}
                 >
-                  ⚠ Save this secret — it is shown ONCE
+                  {t("webhooks.saveSecret")}
                 </div>
                 <code
                   style={{
@@ -1754,7 +1771,7 @@ export default function QSignPage() {
                 >
                   <button
                     onClick={() =>
-                      copy(newWebhookSecret.secret, "Webhook secret")
+                      copy(newWebhookSecret.secret, t("what.webhookSecret"))
                     }
                     style={{
                       padding: "6px 12px",
@@ -1766,7 +1783,7 @@ export default function QSignPage() {
                       cursor: "pointer",
                     }}
                   >
-                    Copy secret
+                    {t("webhooks.copySecret")}
                   </button>
                   <button
                     onClick={() => setNewWebhookSecret(null)}
@@ -1781,7 +1798,7 @@ export default function QSignPage() {
                       cursor: "pointer",
                     }}
                   >
-                    I saved it — dismiss
+                    {t("webhooks.dismiss")}
                   </button>
                 </div>
               </div>
@@ -1789,7 +1806,7 @@ export default function QSignPage() {
 
             <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               <input
-                aria-label="Адрес вебхука"
+                aria-label={t("webhooks.urlAria")}
                 value={webhookUrlInput}
                 onChange={(e) => setWebhookUrlInput(e.target.value)}
                 placeholder="https://your-app.example.com/qsign-webhook"
@@ -1812,12 +1829,12 @@ export default function QSignPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {creatingWebhook ? QS.webhook : "Add webhook"}
+                {creatingWebhook ? t("busy.webhook") : t("webhooks.add")}
               </button>
             </div>
 
             {webhooks === null ? (
-              <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading…</div>
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>{t("webhooks.loading")}</div>
             ) : webhooks.length === 0 ? (
               <div
                 style={{
@@ -1827,7 +1844,7 @@ export default function QSignPage() {
                   padding: "16px 0",
                 }}
               >
-                No webhooks yet. Add one above to start receiving sign / revoke events.
+                {t("webhooks.none")}
               </div>
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
@@ -1860,10 +1877,10 @@ export default function QSignPage() {
                         {wh.url}
                       </div>
                       <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
-                        events: {wh.events.join(", ")}
+                        {t("webhooks.events", { list: wh.events.join(", ") })}
                         {wh.lastFiredAt
-                          ? ` · last fired ${new Date(wh.lastFiredAt).toISOString().slice(0, 19).replace("T", " ")}${wh.lastStatus ? ` (HTTP ${wh.lastStatus})` : ""}`
-                          : " · never fired"}
+                          ? t("webhooks.lastFired", { t: new Date(wh.lastFiredAt).toISOString().slice(0, 19).replace("T", " ") }) + (wh.lastStatus ? ` (HTTP ${wh.lastStatus})` : "")
+                          : t("webhooks.neverFired")}
                         {wh.lastError ? ` · err: ${wh.lastError.slice(0, 60)}` : ""}
                       </div>
                     </div>
@@ -1873,7 +1890,7 @@ export default function QSignPage() {
                         wh.active ? "#047857" : "#475569",
                       )}
                     >
-                      {wh.active ? "active" : "off"}
+                      {wh.active ? t("webhooks.active") : t("webhooks.off")}
                     </span>
                     <button
                       onClick={() => deleteWebhook(wh.id)}
@@ -1888,7 +1905,7 @@ export default function QSignPage() {
                         cursor: "pointer",
                       }}
                     >
-                      Delete
+                      {t("webhooks.delete")}
                     </button>
                   </div>
                 ))}
@@ -1910,15 +1927,15 @@ export default function QSignPage() {
             }}
           >
             <div>
-              <div style={{ fontWeight: 900, fontSize: 15 }}>Use the API</div>
+              <div style={{ fontWeight: 900, fontSize: 15 }}>{t("api.title")}</div>
               <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                Live snippets — copy and paste. Replace{" "}
-                <code style={mono}>$TOKEN</code> with your bearer.
+                {t("api.leadA")}{" "}
+                <code style={mono}>$TOKEN</code> {t("api.leadB")}
                 {signed ? (
                   <>
                     {" "}
-                    Signature id <code style={mono}>{signed.id.slice(0, 8)}…</code> from
-                    your latest sign is preserved.
+                    {t("api.preservedA")} <code style={mono}>{signed.id.slice(0, 8)}…</code>{" "}
+                    {t("api.preservedB")}
                   </>
                 ) : null}
               </div>
@@ -1972,7 +1989,7 @@ export default function QSignPage() {
                     : sdkLang === "ts"
                       ? buildTsSnippet(signed)
                       : buildPythonSnippet(signed),
-                  "Snippet",
+                  t("what.snippet"),
                 )
               }
               style={{
@@ -1985,7 +2002,7 @@ export default function QSignPage() {
                 cursor: "pointer",
               }}
             >
-              Copy snippet
+              {t("api.copySnippet")}
             </button>
             <a
               href={apiUrl("/api/qsign/v2/openapi.json")}
@@ -2002,7 +2019,7 @@ export default function QSignPage() {
                 textDecoration: "none",
               }}
             >
-              OpenAPI 3.0 spec ↗
+              {t("api.openapi")}
             </a>
             {/* Вела на GitHub, который отдаёт 404, пока аккаунт приостановлен.
                 Уводим на собственную живую страницу /sdk («SDK for AEVION Hub»)
@@ -2021,7 +2038,7 @@ export default function QSignPage() {
                 textDecoration: "none",
               }}
             >
-              SDK packages ↗
+              {t("api.sdk")}
             </Link>
           </div>
         </div>
@@ -2037,7 +2054,7 @@ export default function QSignPage() {
           }}
         >
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>
-            How QSign v2 works
+            {t("how.title")}
           </div>
           <ol
             style={{
@@ -2048,27 +2065,11 @@ export default function QSignPage() {
               lineHeight: 1.7,
             }}
           >
-            <li>
-              Your payload is canonicalized per <strong>RFC 8785 (JCS)</strong> — keys sorted, no
-              whitespace, deterministic across clients.
-            </li>
-            <li>
-              SHA-256 of the canonical form is signed with two independent keys:
-              <strong> HMAC-SHA256</strong> (shared secret) and <strong> Ed25519</strong> (public
-              verifiable).
-            </li>
-            <li>
-              The signature row is persisted with issuer, geo, and key IDs. A shareable public URL
-              verifies it without secrets.
-            </li>
-            <li>
-              Keys rotate with an overlap window — retired keys remain valid for verifying
-              historical signatures forever.
-            </li>
-            <li>
-              Any signature can be revoked by its issuer (or admin). Revoked rows stay
-              cryptographically valid but report <code>valid=false</code>.
-            </li>
+            <li>{t("how.1")}</li>
+            <li>{t("how.2")}</li>
+            <li>{t("how.3")}</li>
+            <li>{t("how.4")}</li>
+            <li>{t("how.5")}</li>
           </ol>
         </div>
 
@@ -2078,12 +2079,11 @@ export default function QSignPage() {
             Блок сам не нарисуется, если поле на странице появится. */}
         <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
           <WaitlistIfMissing
-            lang="en"
             source="qsign-page"
-            title="Сегодня не подписываете? Оставьте почту"
-            description="We write when QSign gets new keys, formats and integrations."
-            buttonLabel="Notify me"
-            doneText="Done — your address is saved. A confirmation is already in your inbox."
+            title={t("waitlist.title")}
+            description={t("waitlist.description")}
+            buttonLabel={t("waitlist.button")}
+            doneText={t("waitlist.done")}
           />
         </div>
       </ProductPageShell>
@@ -2221,6 +2221,7 @@ def verify_qsign_webhook(raw_body: bytes, header_sig: str, secret: str) -> bool:
 // setState-per-tick bug class fixed in CyberChess #721/#740/#746,
 // QTrade #765, aev/page.tsx, and coach/page.tsx).
 function RateLimitBadge({ rateLimit }: { rateLimit: RateLimitInfo }) {
+  const t = useQsignT();
   const [, forceTick] = useState(0);
   useEffect(() => {
     if (!rateLimit.resetAt) return;
@@ -2247,7 +2248,7 @@ function RateLimitBadge({ rateLimit }: { rateLimit: RateLimitInfo }) {
         fontSize: 11,
       }}
     >
-      <span style={{ color: "#64748b", fontWeight: 700 }}>Sign rate limit (per IP)</span>
+      <span style={{ color: "#64748b", fontWeight: 700 }}>{t("rate.title")}</span>
       <span
         style={{
           ...mono,
@@ -2256,8 +2257,8 @@ function RateLimitBadge({ rateLimit }: { rateLimit: RateLimitInfo }) {
           color: low ? "#b91c1c" : "#0f172a",
         }}
       >
-        {rateLimit.remaining}/{rateLimit.limit} left
-        {secsLeft !== null ? ` · resets in ${secsLeft}s` : ""}
+        {t("rate.left", { rem: rateLimit.remaining, limit: rateLimit.limit })}
+        {secsLeft !== null ? t("rate.resets", { s: secsLeft }) : ""}
       </span>
     </div>
   );
@@ -2323,6 +2324,7 @@ function SigRow({
   value: string;
   onCopy: () => void;
 }) {
+  const t = useQsignT();
   return (
     <div
       style={{
@@ -2373,7 +2375,7 @@ function SigRow({
           cursor: "pointer",
         }}
       >
-        copy
+        {t("sign.copy")}
       </button>
     </div>
   );

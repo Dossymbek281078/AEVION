@@ -99,7 +99,26 @@ export function gradeExam(
 ): ExamReport {
   // 1. AI
   const notices = runAiAdvisor(studentLsr, object);
-  const penalty = notices.reduce((s, n) => s + noticeWeight(n.severity), 0);
+  // Штраф — только за замечания СВЕРХ тех, что советник ставит самому эталону.
+  // 20.10.2026 (замер всех 21 кейсов): эталон, проверенный против себя, получал
+  // 84–96, а не 100 — советник ставит мягкие замечания и эталонам («Индекс заметно
+  // устарел» стареет вместе с календарём, «Не указана категория грунта» и т.п.;
+  // referenceClean.test.ts их методически допускает). Студента сравнивают с
+  // эталоном, и его же замечания — не ошибка студента. Показываем все, штрафуем лишние.
+  const уЭталона = new Map<string, number>();
+  for (const n of runAiAdvisor(referenceLsr, object)) {
+    const k = `${n.scenario}|${n.title}`;
+    уЭталона.set(k, (уЭталона.get(k) ?? 0) + 1);
+  }
+  const penalty = notices.reduce((s, n) => {
+    const k = `${n.scenario}|${n.title}`;
+    const есть = уЭталона.get(k) ?? 0;
+    if (есть > 0) {
+      уЭталона.set(k, есть - 1);
+      return s;
+    }
+    return s + noticeWeight(n.severity);
+  }, 0);
   const aiScore = Math.max(0, 100 - penalty * 2);
 
   // 2. Coverage + 3. Volumes

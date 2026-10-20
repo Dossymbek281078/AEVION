@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { PRICING_TERMS } from "@/lib/products";
+import { PRICING_TERMS, PRICING_TIERS_LIST } from "@/lib/products";
 
 /**
  * 20.10.2026, окно «Приложения», задача 3 по слову оркестратора.
@@ -13,7 +13,9 @@ import { PRICING_TERMS } from "@/lib/products";
  * тарифы грузятся. Исключение — /go: своя строка под отдельным сторожем, по слову оркестратора.
  */
 const SRC = join(__dirname, "..", "..");
-const EXCEPT = new Set(["app/go/page.tsx"]);
+// 20.10.2026 (решение оркестратора «б»): начало списка сроков — своя константа PRICING_TIERS_LIST;
+// литерал живёт только в её определении, страницы берут константу.
+const EXCEPT = new Set(["app/go/page.tsx", "lib/products.ts"]);
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -27,6 +29,10 @@ function walk(dir: string, out: string[] = []): string[] {
 describe("покупка подписки — через PRICING_TERMS, не литералом", () => {
   test("константа ведёт к кнопке оплаты Планеты", () => {
     expect(PRICING_TERMS).toBe("/pricing#planet-buy");
+  });
+
+  test("вторая константа — начало списка сроков", () => {
+    expect(PRICING_TIERS_LIST).toBe("/pricing#tiers");
   });
 
   test("литерала \"/pricing#tiers\" в исходниках нет (кроме /go)", () => {

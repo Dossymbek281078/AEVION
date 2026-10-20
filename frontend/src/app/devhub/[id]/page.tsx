@@ -23,7 +23,7 @@ import { pokazyvatKartochkuSokhraneniya, klyuchSokhraneniya, kanalDlyaLista, DEV
 import { useI18nOptional } from "@/lib/i18n";
 import { tDevhub, type DevhubKey } from "../i18n";
 import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetFromPerMonth } from "@/lib/termPricing";
-import { productById } from "@/lib/products";
+import { productById, PRICING_TIERS_LIST } from "@/lib/products";
 
 /**
  * A write whose result the UI is about to act on.
@@ -87,7 +87,7 @@ const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
    «от $150/мес» и ведёт к НАЧАЛУ списка сроков (#tiers): человек сам видит,
    что $150 — при 12 мес, а без обязательства $250. Прокрутку к #tiers страница
    цен делает после прихода данных (эффект на data, урок 20.10). */
-const PLANET_TERMS_LIST = "/pricing#tiers";
+const PLANET_TERMS_LIST = PRICING_TIERS_LIST;
 
 /** Вкладки рабочего окна. Список один — из него же берутся подписи. */
 const VKLADKI = ["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const;

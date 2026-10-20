@@ -20,7 +20,7 @@ import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
 import { shagPervogoEkrana, podklyuchitSobytiyaPervogoEkrana } from "@/lib/sobytiyaPervogoEkrana";
-import { productById, fromPerMonthOf } from "@/lib/products";
+import { productById, fromPerMonthOf, PRICING_TIERS_LIST } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { stackForIdea, даннымНуженСервер, доступенРежимПриложения, стекДляРежима,
@@ -151,7 +151,7 @@ const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
    «от $150/мес» и ведёт к НАЧАЛУ списка сроков (#tiers): человек сам видит,
    что $150 — при 12 мес, а без обязательства $250. Прокрутку к #tiers страница
    цен делает после прихода данных (эффект на data, урок 20.10). */
-const PLANET_TERMS_LIST = "/pricing#tiers";
+const PLANET_TERMS_LIST = PRICING_TIERS_LIST;
 
 /**
  * Почему возможность отключена — словами человека.

@@ -12,6 +12,7 @@
  * таблицу цен и срок, который реально открывается. Любая расходится — краснеет.
  */
 import { describe, it, expect } from "vitest";
+import { PRICING_TIERS_LIST } from "@/lib/products";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -77,7 +78,9 @@ describe("плашка называет то, что откроется", () => 
     "%s: кнопка ведёт к списку сроков (#tiers) и говорит «от» по самой низкой цене плана",
     (путь) => {
       const код = readFileSync(join(process.cwd(), ...путь.split("/")), "utf8");
-      expect(код).toContain('const PLANET_TERMS_LIST = "/pricing#tiers"');
+      // 20.10.2026: адрес — из константы PRICING_TIERS_LIST (lib/products), литерал запрещён сторожем pricingTiersLiteralsGone.
+      expect(код).toContain("const PLANET_TERMS_LIST = PRICING_TIERS_LIST");
+      expect(PRICING_TIERS_LIST).toBe("/pricing#tiers");
       expect(код).toContain("href={PLANET_TERMS_LIST}");
       expect(код, "кнопка снова ведёт к кнопке Max, минуя выбор срока").not.toContain("href={STUDIO_PRO.href}");
       expect(код).toMatch(/pro\.fromPrice"\)\.replace\("\{p\}", `\$\$\{planetFromPerMonth\(\)\}`\)/);

@@ -114,6 +114,12 @@ const GUM = (permalink: string) => `https://aevion.gumroad.com/l/${permalink}?wa
  * к ней после прихода данных так, чтобы над кнопкой была видна цена (block: "end").
  */
 export const PRICING_TERMS = "/pricing#planet-buy";
+/**
+ * Начало СПИСКА сроков «Планеты» (20.10.2026, решение оркестратора). Не кнопка оплаты: DevHub
+ * продаёт выбор срока, а #planet-buy приводил к Max и кассе за $150. Литерал — только здесь
+ * (сторож pricingTiersLiteralsGone), страницы берут константу.
+ */
+export const PRICING_TIERS_LIST = "/pricing#tiers";
 
 /**
  * Покупка отдельного приложения: страница цен с выбранным приложением.

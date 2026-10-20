@@ -406,7 +406,7 @@ export default function AppsPage() {
                 <div>
                   <h2 style={{ fontSize: 26, fontWeight: 900, margin: 0, color: "#fff" }}>AEVION subscription</h2>
                   <p style={{ color: "rgba(255,255,255,0.7)", margin: 0, fontSize: 14 }}>
-                    Every module · a term of 1 to 12 months · paid up front
+                    Every module · a term of 1 to 12 months · billed monthly
                   </p>
                 </div>
               </div>
@@ -710,7 +710,7 @@ export default function AppsPage() {
             {[
               {
                 q: "How is it billed?",
-                a: "You choose a term — 1, 3, 6, 9 or 12 months — and pay for the whole term up front, in one payment. There is no monthly or annual billing. The longer the term, the cheaper the month.",
+                a: "You choose a commitment term — 1, 3, 6, 9 or 12 months — and are billed monthly at the term's price. The longer the term, the cheaper the month. You can also pay the whole term up front in one payment at a discount.",
               },
               {
                 q: "Does the subscription include future apps?",

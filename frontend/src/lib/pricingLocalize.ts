@@ -125,8 +125,8 @@ export const TIER_EN: Record<string, TierEn> = {
 export const NOTES_EN: Record<string, string> = {
   "Цены указаны в USD. Конвертация в KZT/RUB/EUR — справочная, окончательный счёт в USD.":
     "Prices are in USD. KZT/RUB/EUR conversion is for reference; the final invoice is in USD.",
-  "Тариф — это срок: Lite 1 мес, Medium 3, Pro 6, Full 9, Max 12. Оплата за срок вперёд; чем длиннее срок, тем дешевле месяц.":
-    "A tier is a term: Lite 1 month, Medium 3, Pro 6, Full 9, Max 12. You pay for the term upfront; the longer the term, the cheaper the month.",
+  "Тариф — это срок обязательства: Lite 1 мес, Medium 3, Pro 6, Full 9, Max 12. Списание ежемесячно; чем длиннее срок, тем дешевле месяц. Весь срок вперёд — скидка до 12,5 %.":
+    "A tier is a commitment term: Lite 1 month, Medium 3, Pro 6, Full 9, Max 12. Billed monthly; the longer the term, the cheaper the month. Pay the whole term up front and save up to 12.5%.",
   "Enterprise — индивидуальный договор, фиксированный SLA, NDA/DPA.":
     "Enterprise — individual contract, fixed SLA, NDA/DPA.",
 };

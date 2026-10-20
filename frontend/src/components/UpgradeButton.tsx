@@ -89,7 +89,7 @@ export function UpgradeButton({
                 {planet.title} — от ${fromPerMonthOf(planet)}/мес
               </div>
             ) : null}
-            <div className="text-xs text-gray-400 mt-0.5">Все модули включены · срок от 1 до 12 месяцев · оплата за срок вперёд</div>
+            <div className="text-xs text-gray-400 mt-0.5">Все модули включены · срок от 1 до 12 месяцев · списание ежемесячно</div>
           </div>
           <button
             onClick={handleClick}

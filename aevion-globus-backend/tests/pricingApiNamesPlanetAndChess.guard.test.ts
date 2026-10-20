@@ -50,6 +50,10 @@ describe("/api/pricing: план «Планета» и шахматы явным
     const texts = JSON.stringify(faq.body);
     expect(texts.includes("paid upfront")).toBe(false);
     expect(texts.includes("billed monthly")).toBe(true);
+    // 🔴 20.10.2026: примечание под тарифами — списание ежемесячно, вперёд — скидка из данных.
+    const notes = (r.body.notes as string[]).join("\n");
+    expect(notes).not.toContain("Оплата за срок вперёд");
+    expect(notes).toContain("Тариф — это срок обязательства: Lite 1 мес, Medium 3, Pro 6, Full 9, Max 12. Списание ежемесячно; чем длиннее срок, тем дешевле месяц. Весь срок вперёд — скидка до 12,5 %.");
   });
   test("🔴 /quote говорит про помесячное списание: monthlyCharge, prepayTotal, строка без «вперёд»", async () => {
     const m = await request(app()).post("/api/pricing/quote").send({ tierId: "medium" });

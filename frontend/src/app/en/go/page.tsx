@@ -234,7 +234,7 @@ export default async function EnGoPage({
             channel={channel}
             title="AEVION subscription"
             format="subscription · 1–12 months"
-            note="Every module for the term you choose, paid up front — the longer the term, the cheaper the month."
+            note="Every module for the term you choose, billed monthly — the longer the term, the cheaper the month."
             cta="Choose a term"
           />
         </section>

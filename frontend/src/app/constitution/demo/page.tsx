@@ -32,7 +32,7 @@ const SLIDES = [
     label: "03 / Pricing",
     title: "Free / Pro in the AEVION subscription — instant digital delivery",
     description:
-      "Free tier: 5 cloud saves, 10 AI requests/day, watermarked PDF. Pro comes with the AEVION subscription — every module for a term of 1 to 12 months, paid up front: unlimited saves, unlimited AI, clean PDF, embed widget, custom themes. All features are software-only — no physical goods, no manual work.",
+      "Free tier: 5 cloud saves, 10 AI requests/day, watermarked PDF. Pro comes with the AEVION subscription — every module for a term of 1 to 12 months, billed monthly: unlimited saves, unlimited AI, clean PDF, embed widget, custom themes. All features are software-only — no physical goods, no manual work.",
     img: "/demo/pricing.jpeg",
     live: "/constitution/pricing",
     liveLabel: "See pricing →",

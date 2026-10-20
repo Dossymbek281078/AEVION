@@ -214,7 +214,7 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
       <Link
         href={href}
         style={{ display: "inline-flex", flexWrap: "wrap", maxWidth: "100%", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
-        title={tr("moduleChip.compareTitle", "Сроки и цены: 1, 3, 6, 9 или 12 месяцев, оплата за срок вперёд")}
+        title={tr("moduleChip.compareTitle", "Сроки и цены: 1, 3, 6, 9 или 12 месяцев, списание ежемесячно")}
       >
         {app && appFrom ? (
           <>

@@ -252,7 +252,9 @@ pricingRouter.get("/", (_req, res) => {
     currencies: CURRENCY_RATES,
     notes: [
       "Цены указаны в USD. Конвертация в KZT/RUB/EUR — справочная, окончательный счёт в USD.",
-      "Тариф — это срок: Lite 1 мес, Medium 3, Pro 6, Full 9, Max 12. Оплата за срок вперёд; чем длиннее срок, тем дешевле месяц.",
+      // 20.10.2026: списание ежемесячно; вперёд — скидка. Процент из данных (ключ перевода
+      // во frontend/src/lib/pricingLocalize.ts NOTES_EN — этот же текст).
+      `Тариф — это срок обязательства: Lite 1 мес, Medium 3, Pro 6, Full 9, Max 12. Списание ежемесячно; чем длиннее срок, тем дешевле месяц. Весь срок вперёд — скидка до ${String(PLANET_PREPAY_DISCOUNT_PERCENT.max).replace(".", ",")} %.`,
       "Enterprise — индивидуальный договор, фиксированный SLA, NDA/DPA.",
     ],
   });

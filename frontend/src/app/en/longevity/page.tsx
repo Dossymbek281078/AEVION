@@ -353,8 +353,9 @@ export default async function EnLongevityPage({
               <div style={styles.buyKicker}>PDF guide</div>
               <div style={styles.buyTitle}>The Anti-Grey Protocol</div>
               <p style={styles.buyNote}>
-                The same evidence-first approach applied to pigment ageing —
-                what actually slows it, and what is overrated.
+                The same evidence-first approach applied to grey hair: what is
+                supported, what is hypothesis, what is hype. Not medical advice;
+                results not guaranteed.
               </p>
             </div>
             <div style={styles.buyRight}>

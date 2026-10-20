@@ -132,7 +132,7 @@ export default function QMelaninClient() {
     <main style={styles.page}>
       <div style={styles.wrap}>
         <div style={styles.eyebrow}>AEVION · QMelanin</div>
-        <h1 style={styles.h1}>Протокол против седины</h1>
+        <h1 style={styles.h1}>Седина: что подтверждено исследованиями</h1>
         <HealthDisclaimer />
         <p style={styles.lede}>
           Седину нельзя измерить анализом напрямую — поэтому мы измеряем биомаркеры, которые управляют
@@ -302,8 +302,8 @@ export default function QMelaninClient() {
           <a href="/qmelanin/track" style={styles.link}>Дневник седины →</a> · фотофиксация и недельный тренд.
         </p>
         <p style={styles.foot}>
-          Связанный модуль: <a href="/qrenew" style={styles.link}>QRenew</a> — программа клеточного
-          обновления, где седина рассматривается как видимый биомаркер общего старения.
+          Связанный модуль: <a href="/qrenew" style={styles.link}>QRenew</a> — биологический возраст
+          по обычным анализам крови (PhenoAge, Levine 2018).
         </p>
       </div>
     </main>

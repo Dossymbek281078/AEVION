@@ -39,11 +39,11 @@ export const EN_TEXTS: Record<
   tmuyxw: {
     titleEn: "The Anti-Grey Protocol — Russian edition",
     format: "PDF · guide · Russian",
-    desc: "The science of why hair greys and what actually slows it — no hype. Russian-language guide.",
+    desc: "A review of the research on why hair goes grey: supported, hypothesis, hype. Russian-language guide. Not medical advice; results not guaranteed.",
   },
   kkiavh: {
     format: "PDF · guide · EN",
-    desc: "The evidence-first science of pigment aging and what actually slows it.",
+    desc: "A review of the research on why hair goes grey: supported, hypothesis, hype. Not medical advice; results not guaranteed.",
   },
   ghvzq: {
     titleEn: "Gratitude ∞ Forever Young — Complete Pack",

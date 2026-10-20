@@ -11,6 +11,7 @@ import StatsStrip from "./components/StatsStrip";
 import WeeklyTrendsChart from "./components/WeeklyTrendsChart";
 import BiomarkerHistory from "./components/BiomarkerHistory";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 
 interface BiomarkerRecord {
   id: number;
@@ -68,15 +69,16 @@ export default function QLifePage() {
 
       {/* Hero */}
       <section style={styles.hero}>
-        <p style={styles.heroEyebrow}>Longevity & Anti-Aging</p>
+        <p style={styles.heroEyebrow}>Longevity · healthy habits</p>
         <h1 style={styles.heroTitle}>
-          {"Живи дольше, "}
-          <span style={styles.heroGradient}>старей медленнее</span>
+          {"Биомаркеры и привычки — "}
+          <span style={styles.heroGradient}>по данным, а не на глаз</span>
         </h1>
         <p style={styles.heroSub}>
           Логируй биомаркеры, отслеживай тренды и получай персональный AI-план
-          долголетия на основе доказательной медицины.
+          привычек по данным исследований.
         </p>
+        <HealthDisclaimer />
 
         <div style={styles.chipRow}>
           {["Blood Pressure", "Sleep", "HRV", "VO2 Max", "Glucose", "Stress"].map((c) => (
@@ -143,7 +145,7 @@ export default function QLifePage() {
           noun="concept/messages"
           accent="rose"
           sectionTitle="Longevity concept board"
-          sectionHint="Какие биомаркеры важнее для anti-aging? Какие протоколы стоит трекать?"
+          sectionHint="Какие биомаркеры важнее для долголетия? Какие протоколы стоит трекать?"
           titleField="idea"
           summaryField="rationale"
           fields={[

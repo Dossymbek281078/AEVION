@@ -76,7 +76,7 @@ export default function PlanCard() {
     <div style={styles.card}>
       <h3 style={styles.title}>AI Longevity Plan</h3>
       <p style={styles.subtitle}>
-        Get a personalized anti-aging protocol based on your age and goals.
+        Get a personal healthy-habits plan based on your age and goals. Not medical advice; results not guaranteed.
       </p>
 
       <div style={styles.controls}>

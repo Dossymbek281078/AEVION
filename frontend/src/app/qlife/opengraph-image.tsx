@@ -10,10 +10,10 @@ export default async function Image() {
     {
       code: "QLIFE",
       badge: "IDEA",
-      title: "Your entire life in one OS.",
-      accent: "entire life in one OS.",
-      subtitle: "Personal OS · shell over AEVION modules · cross-module AI insights · polyglot",
-      pills: ["🪟 Shell", "🧠 Cross-module", "🩺 Healthy", "🌐 Polyglot"],
+      title: "Longevity log: biomarkers and habits.",
+      accent: "biomarkers and habits.",
+      subtitle: "Biomarker log · trends · AI habits plan · not medical advice, results not guaranteed",
+      pills: ["🧪 Biomarkers", "📈 Trends", "🧠 AI plan", "⚕ Not medical advice"],
     },
     "emerald",
   );

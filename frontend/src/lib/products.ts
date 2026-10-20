@@ -214,8 +214,9 @@ export const GUIDES: Product[] = [
     title: "Протокол «Анти-седина»",
     format: "PDF · гайд · RU",
     desc:
-      "Наука о том, почему волос седеет и что реально её замедляет — без хайпа. " +
-      "Медь/цинк, спермидин, окислительный стресс + 12-недельный протокол.",
+      "Разбор исследований: почему волосы седеют, что подтверждено, что гипотеза, что маркетинг " +
+      "(Nature 2023, FASEB J 2009, Nature 2020). 12-недельный план с замерами, чек-лист и таблица. " +
+      "Не медицинская консультация, результат не гарантирован.",
     priceUsd: 9,
     billing: "once",
     kind: "guide",
@@ -228,8 +229,9 @@ export const GUIDES: Product[] = [
     title: "The Anti-Grey Protocol",
     format: "PDF · guide · EN",
     desc:
-      "The evidence-first science of pigment aging and what actually slows it. " +
-      "Copper/zinc, spermidine, oxidative stress + a 12-week protocol.",
+      "A review of the research: why hair goes grey, what is supported, what is hypothesis, what is hype " +
+      "(Nature 2023, FASEB J 2009, Nature 2020). A 12-week plan with measurements, a checklist and a tracking sheet. " +
+      "Not medical advice; results not guaranteed.",
     priceUsd: 19,
     billing: "once",
     kind: "guide",

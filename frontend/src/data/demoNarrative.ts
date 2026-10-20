@@ -172,7 +172,7 @@ export const moduleBenefits: Record<
     ],
   },
   qlife: {
-    tagline: "Longevity and anti-aging: biomarker plans.",
+    tagline: "Longevity: biomarker log and healthy-habit plans.",
     benefits: [
       "Premium segment with high LTV.",
       "Long data retention horizons — value for R&D partners.",

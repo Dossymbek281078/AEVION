@@ -9,7 +9,7 @@ import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 import { channelFrom, productById, withChannel } from "@/lib/products";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
-// QRenew — cellular-renewal program. Two live tools over the deterministic
+// QRenew — biological age (PhenoAge) + evidence-graded stack. Two live tools over the deterministic
 // backend: a biological-age calculator (PhenoAge / Levine 2018) and the
 // evidence-tiered intervention stack. Honest framing: only Tier A + B are
 // recommendations; C is "discuss with a doctor"; D is science-horizon only.
@@ -112,12 +112,11 @@ export default function QRenewClient() {
     <main style={styles.page}>
       <div style={styles.wrap}>
         <div style={styles.eyebrow}>AEVION · QRenew</div>
-        <h1 style={styles.h1}>Программа клеточного обновления</h1>
+        <h1 style={styles.h1}>Биологический возраст и доказательность вмешательств</h1>
         <HealthDisclaimer />
         <p style={styles.lede}>
-          Седина — видимый маркер старения стволовых клеток и митохондрий. Здесь два инструмента:
-          рассчитать биологический возраст по обычным анализам и увидеть стек вмешательств,
-          честно отсортированный по уровню доказательности.
+          Здесь два инструмента: рассчитать биологический возраст по обычным анализам и посмотреть,
+          какие вмешательства изучались и насколько сильны данные о каждом. Не медицинская консультация, результат не гарантирован.
         </p>
         <div style={{ marginTop: 14 }}>
           <ModulePricingChip moduleId="qrenew" theme="dark" />
@@ -169,7 +168,7 @@ export default function QRenewClient() {
                 </span>
               ))}
             </div>
-            <p style={styles.sub}>Подсвечены 4 признака старения, которые напрямую производят седину.</p>
+            <p style={styles.sub}>Подсвечены 4 признака старения (López-Otín и др., Cell, 2023), которые исследования связывают с сединой.</p>
 
             {(["A", "B", "C", "D"] as const).map((t) => {
               const tier = stack.tiers[t];

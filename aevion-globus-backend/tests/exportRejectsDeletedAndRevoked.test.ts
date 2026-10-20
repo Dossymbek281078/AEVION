@@ -236,8 +236,8 @@ describe("выгрузка export.zip закрыта для удалённого
   });
 });
 
-describe("verifyBearerLive: отказ базы закрывает, но не молча (1 случай)", () => {
-  test("ошибка запроса AEVIONUser → null и console.error с маршрутом", async () => {
+describe("verifyBearerLive: сбой базы не выкидывает из сессии и не молчит (1 случай)", () => {
+  test("ошибка запроса AEVIONUser → откат к проверке подписи (payload, не null → не 401) и console.error с маршрутом", async () => {
     db.userQueryThrows = true;
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const req = {
@@ -246,9 +246,11 @@ describe("verifyBearerLive: отказ базы закрывает, но не м
       baseUrl: "/api/pipeline",
       path: "/certificates/export.zip",
     } as any;
-    expect(await verifyBearerLive(req)).toBeNull();
+    const p = await verifyBearerLive(req);
+    expect(p?.sub).toBe("u-live");
     const logged = spy.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(logged).toMatch(/authLive/);
+    expect(logged).toMatch(/откат к проверке подписи/);
     expect(logged).toMatch(/\/api\/pipeline\/certificates\/export\.zip/);
     spy.mockRestore();
   });

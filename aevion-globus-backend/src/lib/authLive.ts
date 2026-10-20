@@ -16,9 +16,13 @@ import { getPool } from "./dbPool";
  *  - строки AEVIONUser нет или deletedAt стоит → null;
  *  - в токене есть sid: строки AuthSession (id, userId) нет или revokedAt
  *    стоит → null. Токен без sid (старые выпуски) — только проверка deletedAt;
- *  - ошибка базы → null И запись в журнал с маршрутом и причиной. Пускать при
- *    слепоте нельзя: это та самая выгрузка, ради которой проверка заведена;
- *    молча отказывать тоже нельзя (§16) — поэтому console.error.
+ *  - ошибка базы → откат к прежней проверке (подпись + tokenVersion) И запись
+ *    в журнал с маршрутом и причиной (§16: не молча). Не null и не throw:
+ *    null дал бы 401 и фронт выкинул бы человека из сессии при сбое базы;
+ *    throw повесил бы ручки, где помощник зовётся вне try (devhub /snippets/:id),
+ *    и сломал бы публичное чтение с необязательным входом. Сама ручка при
+ *    упавшей базе данных не отдаст — её запрос упадёт своей ошибкой. Удалённый
+ *    аккаунт при этом всё равно отсечён tokenVersion (поднят при удалении).
  */
 export async function verifyBearerLive(req: Request): Promise<JwtPayload | null> {
   const payload = verifyBearerOptional(req);
@@ -47,7 +51,7 @@ export async function verifyBearerLive(req: Request): Promise<JwtPayload | null>
     return payload;
   } catch (err) {
     const why = String((err as Error)?.message ?? err).slice(0, 200);
-    console.error(`[authLive] проверка аккаунта не выполнена, доступ закрыт: route=${route} причина=${why}`);
-    return null;
+    console.error(`[authLive] проверка аккаунта не выполнена (база), откат к проверке подписи: route=${route} причина=${why}`);
+    return payload;
   }
 }

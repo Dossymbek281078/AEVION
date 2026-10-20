@@ -923,6 +923,7 @@ const en: Record<string, string> = {
   "build.example.note": "a sample showing what a project looks like; there is no employer and no open vacancies",
   "build.vacancies.emptyNone": "No open vacancies yet — post the first one",
   "build.vacancies.postFirst": "Post a vacancy",
+  "build.vacancies.searchPlaceholder": "💬 Describe what you are looking for — “rotation in Mangystau, up to 5 years of experience”…",
   "build.home.statVacanciesNow": "vacancies right now",
   "build.home.viewVacancies": "View vacancies",
   "build.interviews.card.cancelBtn": "Cancel",

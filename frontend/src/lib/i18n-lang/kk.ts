@@ -923,6 +923,7 @@ const kk: Record<string, string> = {
   "build.example.note": "жобаның қалай көрінетінін көрсететін үлгі; онда жұмыс беруші де, ашық бос орын да жоқ",
   "build.vacancies.emptyNone": "Әзірге ашық бос орын жоқ — алғашқысын орналастырыңыз",
   "build.vacancies.postFirst": "Бос орын орналастыру",
+  "build.vacancies.searchPlaceholder": "💬 Не іздейтініңізді жазыңыз — «Маңғыстаудағы вахта, 5 жылға дейінгі тәжірибе»…",
   "build.home.statVacanciesNow": "қазіргі бос орын",
   "build.home.viewVacancies": "Бос орындарды қарау",
   "build.interviews.card.cancelBtn": "Бас тарту",

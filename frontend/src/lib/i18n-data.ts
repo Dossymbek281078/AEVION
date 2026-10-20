@@ -183,9 +183,9 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 19.10 (форма бюро): +1 — pricing.contact.industry.patentBureaus.
   // 19.10 (почта входа в кассу): +2 — tier.accessToAccount, tier.payWithLoginEmail.
   // 20.10 (QBuild): +4 — build.example.badge/note, build.vacancies.emptyNone/postFirst.
-  ru: 7435,
-  en: 7435,
-  kk: 7435,
+  ru: 7436,
+  en: 7436,
+  kk: 7436,
   de: 134,
   fr: 134,
   es: 134,

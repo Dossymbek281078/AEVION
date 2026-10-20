@@ -923,6 +923,7 @@ const ru: Record<string, string> = {
   "build.example.note": "образец, чтобы показать, как выглядит проект; работодателя и открытых вакансий в нём нет",
   "build.vacancies.emptyNone": "Открытых вакансий пока нет — разместите первую",
   "build.vacancies.postFirst": "Разместить вакансию",
+  "build.vacancies.searchPlaceholder": "💬 Опишите, что ищете — «вахта в Мангистау, до 5 лет опыта»…",
   "build.home.statVacanciesNow": "вакансий сейчас",
   "build.home.viewVacancies": "Смотреть вакансии",
   "build.interviews.card.cancelBtn": "Отменить",

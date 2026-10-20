@@ -249,7 +249,7 @@ function VacanciesFeedInner() {
               runNlSearch();
             }
           }}
-          placeholder="💬 Опишите, что ищете — «вахта в Мангистау, до 5 лет опыта»…"
+          placeholder={t("build.vacancies.searchPlaceholder")}
           className="flex-1 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-fuchsia-400/60 focus:outline-none"
         />
         <button

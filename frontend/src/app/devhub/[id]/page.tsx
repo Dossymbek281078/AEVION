@@ -245,6 +245,11 @@ const ATTR_UI: Record<string, Record<string, string>> = {
     provInfo: "После генерации хеш результата, модель и время фиксируются в публичном реестре QRight (промпт не публикуется — только его хеш). Проверяемое происхождение ИИ-кода — то, чего требует EU AI Act.",
     undoAiFiles: "Вернуть файлы, которых коснулась последняя правка ИИ",
     aiHistory: "Посмотреть все прошлые правки ИИ и вернуться к любой",
+    veImgPrompt: "Опишите картинку, например: «бирюзовый логотип-ракета на белом фоне»",
+    veAiPrompt: "Например: «сделай кнопку с бирюзовым градиентом и ссылкой на /pricing»",
+    veAlign_left: "Выровнять по левому краю",
+    veAlign_center: "Выровнять по центру",
+    veAlign_right: "Выровнять по правому краю",
     selParent: "Выбрать родительский элемент",
     selChild: "Выбрать дочерний элемент",
     textColor: "Цвет текста",
@@ -300,6 +305,11 @@ const ATTR_UI: Record<string, Record<string, string>> = {
     provInfo: "After generation the result hash, model and time are recorded in the public QRight registry (the prompt is not published — only its hash). Verifiable provenance of AI code — what the EU AI Act asks teams to show.",
     undoAiFiles: "Restore the files touched by the last AI edit",
     aiHistory: "See all past AI edits and return to any of them",
+    veImgPrompt: 'Describe the image to generate, e.g. "minimal teal rocket logo on white"',
+    veAiPrompt: 'e.g. "make this a teal gradient button that links to /pricing"',
+    veAlign_left: "Align left",
+    veAlign_center: "Align center",
+    veAlign_right: "Align right",
     selParent: "Select the parent element",
     selChild: "Select the child element",
     textColor: "Text color",
@@ -355,6 +365,11 @@ const ATTR_UI: Record<string, Record<string, string>> = {
     provInfo: "Генерациядан кейін нәтиже хеші, модель мен уақыт жария QRight тізілімінде тіркеледі (промпт жарияланбайды — тек оның хеші). ЖИ кодының тексерілетін шығу тегі — EU AI Act талап ететін нәрсе.",
     undoAiFiles: "Соңғы ЖИ түзетуі қозғаған файлдарды қайтару",
     aiHistory: "Барлық өткен ЖИ түзетулерін көріп, кез келгеніне оралу",
+    veImgPrompt: "Суретті сипаттаңыз, мысалы: «ақ фондағы көгілдір зымыран логотипі»",
+    veAiPrompt: "Мысалы: «батырманы көгілдір градиентпен жасап, /pricing сілтемесін қос»",
+    veAlign_left: "Сол жаққа туралау",
+    veAlign_center: "Ортаға туралау",
+    veAlign_right: "Оң жаққа туралау",
     selParent: "Ата элементті таңдау",
     selChild: "Бала элементті таңдау",
     textColor: "Мәтін түсі",
@@ -4851,12 +4866,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {project?.stack !== "static" && project?.stack !== "react" && !project?.deployUrl ? (
                     <div style={{ fontSize: 13, color: "#64748b" }}>
-                      Deploy this project once to use Visual Edit — the deployed page renders above, and clicked
-                      elements become context for AI edits to the source.
+                      Выкатите проект один раз, чтобы включить визуальную правку: выкаченная страница появится выше,
+                      а выбранные на ней элементы станут подсказкой ИИ для правки исходника.
                     </div>
                   ) : !visualEditSelected ? (
                     <div style={{ fontSize: 13, color: "#64748b" }}>
-                      Click any text element in the preview above to select and edit it in place.
+                      Нажмите на любой текст в превью выше, чтобы выбрать его и поправить на месте.
                     </div>
                   ) : (
                     <>
@@ -4900,8 +4915,8 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {visualEditSelected.src ? (
                             <div style={{ fontSize: 12, color: "#64748b", wordBreak: "break-all" }}>
-                              Current image: {visualEditSelected.src.startsWith("data:")
-                                ? "embedded inline image"
+                              Текущая картинка: {visualEditSelected.src.startsWith("data:")
+                                ? "встроена в страницу"
                                 : visualEditSelected.src.slice(0, 120) + (visualEditSelected.src.length > 120 ? "…" : "")}
                             </div>
                           ) : (
@@ -4910,7 +4925,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                           <textarea
                             value={visualEditImgPrompt}
                             onChange={(e) => setVisualEditImgPrompt(e.target.value)}
-                            placeholder='Describe the image to generate, e.g. "minimal teal rocket logo on white"'
+                            placeholder={AL.veImgPrompt}
                             style={{ width: "100%", minHeight: 60, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
                           />
                           <button
@@ -4966,7 +4981,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                             <button
                               key={align}
                               onClick={() => setVisualStyle("textAlign", align)}
-                              title={`Align ${align}`}
+                              title={AL[`veAlign_${align}`]}
                               style={{
                                 width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, cursor: "pointer",
                                 background: (visualEditStyleEdits.textAlign ?? visualEditStyleBase.textAlign) === align ? "#ccfbf1" : "#fff",
@@ -4996,7 +5011,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         <textarea
                           value={visualEditAiPrompt}
                           onChange={(e) => setVisualEditAiPrompt(e.target.value)}
-                          placeholder='e.g. "make this a teal gradient button that links to /pricing"'
+                          placeholder={AL.veAiPrompt}
                           style={{ width: "100%", minHeight: 60, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
                         />
                         <button

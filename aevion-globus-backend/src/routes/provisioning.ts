@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, ren
 import { join, dirname } from "path";
 import type { TierId } from "../data/pricing";
 import { TERM_MONTHS, isTermTier } from "../data/pricing";
+import { expectedPlanetChargeUsd } from "../data/lemonSqueezyVariants";
 import { projects } from "../data/projects";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
@@ -187,6 +188,16 @@ export interface Subscription {
    * целиком — вебхук, права, письмо.
    */
   testMode?: boolean;
+  /**
+   * Режим оплаты плана «Планета» у LemonSqueezy: "monthly" — помесячно при
+   * обязательстве на срок, "prepaid" — срок оплачен вперёд; null — покупка без
+   * custom_data плана (старый вариант тарифа). Поля нет у записей до 21.10.2026
+   * и у других касс. Только запись данных: штрафа за досрочную отмену по нему
+   * нет (нет решения основателя), обещаний покупателю оно не добавляет.
+   */
+  billing?: "monthly" | "prepaid" | null;
+  /** Начало обязательства — created_at подписки у кассы (не время события: subscription_updated приходит при каждом продлении). null — когда billing null. */
+  commitStartedAt?: string | null;
 }
 
 function ensureDir(file: string) {
@@ -953,6 +964,9 @@ export async function provisionSubscription(input: {
   channel?: string;
   /** Покупка из тестового режима кассы — см. Subscription.testMode. */
   testMode?: boolean;
+  /** См. Subscription.billing; undefined — поле не пишется (другие кассы). */
+  billing?: "monthly" | "prepaid" | null;
+  commitStartedAt?: string | null;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const termMonths = input.termMonths ?? (isTermTier(input.tierId) ? TERM_MONTHS[input.tierId] : null);
@@ -975,6 +989,7 @@ export async function provisionSubscription(input: {
     source: input.source,
     channel: input.channel,
     ...(input.testMode ? { testMode: true } : {}),
+    ...(input.billing !== undefined ? { billing: input.billing, commitStartedAt: input.commitStartedAt ?? null } : {}),
   };
 
   writeSubscription(subscription);
@@ -1323,6 +1338,78 @@ provisioningRouter.get("/subscriptions/by-channel", (req, res) => {
 });
 
 const HISTORY_LIMIT = 100;
+
+/**
+ * 21.10.2026: разовая дозапись режима оплаты (billing, commitStartedAt) в строки
+ * LemonSqueezy, купленные до того, как вебхук стал его писать.
+ *
+ * Источник — сама строка, без запроса к кассе: пара (ступень = срок, списанная
+ * сумма) у плана «Планета» однозначна — помесячные цены 250/225/200/175/150 и
+ * суммы вперёд 641.25/1110/1417.50/1575 не пересекаются (expectedPlanetChargeUsd).
+ * Начало обязательства — время ПЕРВОЙ строки той же подписки кассы.
+ * Строки до запуска плана (19.10.2026) и строки, где сумма не сходится ровно
+ * с одной парой, не трогаются и считаются отдельно. Ничего, кроме двух полей,
+ * не меняется; строки других касс не трогаются.
+ */
+export const НАЧАЛО_ПЛАНА_ПЛАНЕТА = "2026-10-19T00:00:00.000Z";
+export function дозаписатьРежимОплаты(dryRun: boolean): {
+  dryRun: boolean; строкLs: number; безПоля: number; monthly: number; prepaid: number; неОпределено: number; доПлана: number; записано: number; ids: string[];
+} {
+  const file = subsFile();
+  const итог = { dryRun, строкLs: 0, безПоля: 0, monthly: 0, prepaid: 0, неОпределено: 0, доПлана: 0, записано: 0, ids: [] as string[] };
+  if (!existsSync(file)) return итог;
+  const lines = readFileSync(file, "utf8").split(String.fromCharCode(10)).filter((l) => l.trim().length > 0);
+  const разобрано = lines.map((l) => { try { return JSON.parse(l) as Subscription; } catch { return null; } });
+  const перваяСтрока = new Map<string, string>();
+  for (const s of разобрано) {
+    if (s?.source !== "lemonsqueezy" || !s.providerPaymentId) continue;
+    const было = перваяСтрока.get(s.providerPaymentId);
+    if (!было || Date.parse(s.ts) < Date.parse(было)) перваяСтрока.set(s.providerPaymentId, s.ts);
+  }
+  const начало = Date.parse(НАЧАЛО_ПЛАНА_ПЛАНЕТА);
+  const out = lines.map((line, i) => {
+    const s = разобрано[i];
+    if (!s || s.source !== "lemonsqueezy") return line;
+    итог.строкLs += 1;
+    if (Object.prototype.hasOwnProperty.call(s, "billing")) return line;
+    итог.безПоля += 1;
+    if (!(Date.parse(s.ts) >= начало)) { итог.доПлана += 1; return line; }
+    const режимы = (["monthly", "prepaid"] as const).filter((b) => {
+      const ждём = expectedPlanetChargeUsd(s.tierId, b);
+      return ждём !== null && typeof s.amountUsd === "number" && Math.abs(s.amountUsd - ждём) < 0.005;
+    });
+    if (режимы.length !== 1) { итог.неОпределено += 1; return line; }
+    итог[режимы[0]] += 1;
+    итог.ids.push(s.id);
+    const нов: Subscription = { ...s, billing: режимы[0], commitStartedAt: (s.providerPaymentId && перваяСтрока.get(s.providerPaymentId)) || s.ts };
+    return JSON.stringify(нов);
+  });
+  if (!dryRun && итог.ids.length > 0) {
+    const tmp = file + ".tmp";
+    writeFileSync(tmp, out.join(String.fromCharCode(10)) + String.fromCharCode(10), "utf8");
+    renameSync(tmp, file);
+    итог.записано = итог.ids.length;
+  }
+  return итог;
+}
+
+/** POST /api/pricing/provisioning/subscriptions/backfill-billing {dryRun?: boolean} — по умолчанию dryRun. Закрыто без ADMIN_TOKEN. */
+provisioningRouter.post("/subscriptions/backfill-billing", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) return res.status(503).json({ error: "admin_token_not_configured" });
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) return res.status(401).json({ error: "unauthorized" });
+  const dryRun = (req.body as { dryRun?: unknown } | undefined)?.dryRun !== false;
+  try {
+    const итог = дозаписатьРежимОплаты(dryRun);
+    console.log(`[provisioning] backfill-billing dryRun=${dryRun}: monthly ${итог.monthly}, prepaid ${итог.prepaid}, не определено ${итог.неОпределено}, до плана ${итог.доПлана}, записано ${итог.записано}`);
+    return res.json({ ok: true, ...итог });
+  } catch (err) {
+    capture(err);
+    console.error("[provisioning] backfill-billing не удалось:", err instanceof Error ? err.message : err);
+    return res.status(500).json({ ok: false, error: "backfill_failed" });
+  }
+});
 
 provisioningRouter.get("/healthz", (_req, res) => {
   const file = subsFile();

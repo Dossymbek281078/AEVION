@@ -107,6 +107,12 @@ async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promis
 
 const capture = makeServiceCapture("lemonSqueezyWebhook");
 
+/** created_at подписки у кассы, если это дата; иначе — сейчас (первое событие и есть начало). */
+function началоОбязательства(createdAt: unknown): string {
+  const t = typeof createdAt === "string" ? Date.parse(createdAt) : NaN;
+  return Number.isFinite(t) ? new Date(t).toISOString() : new Date().toISOString();
+}
+
 export const lemonSqueezyWebhookRouter = Router();
 
 interface LsSubscriptionPayload {
@@ -130,6 +136,8 @@ interface LsSubscriptionPayload {
       status?: string;
       renews_at?: string | null;
       ends_at?: string | null;
+      /** Когда касса создала подписку — начало обязательства (не меняется при продлениях). */
+      created_at?: string;
       /**
        * Фактически списанная сумма, в минорных единицах.
        *
@@ -541,6 +549,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       const планCd = payload.meta?.custom_data;
       const планЕсть = планCd?.term !== undefined || планCd?.billing !== undefined;
       let планTerm: string | null = null;
+      let планBilling: "monthly" | "prepaid" | null = null;
       if (планЕсть) {
         const ожидаемо = expectedPlanetChargeUsd(планCd?.term, планCd?.billing);
         if (ожидаемо === null || typeof планCd?.term !== "string" || !isTermTier(планCd.term)) {
@@ -556,6 +565,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
           return res.status(409).json({ ok: false, error: "plan_amount_mismatch", expectedUsd: ожидаемо, paidUsd });
         }
         планTerm = планCd.term;
+        планBilling = планCd.billing === "prepaid" ? "prepaid" : "monthly";
       }
       const tierId = планTerm && isTermTier(планTerm) ? планTerm : tierForLemonSqueezyReference(ref);
       const customModule = payload.meta?.custom_data?.module;
@@ -665,6 +675,9 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
           ? { bureauIntentId: String(payload.meta.custom_data.bureauIntentId) }
           : {}),
         ...(channel ? { channel } : {}),
+        // 21.10.2026: режим оплаты плана — только запись. Без custom_data плана — null.
+        billing: планBilling,
+        commitStartedAt: планBilling ? началоОбязательства(attrs.created_at) : null,
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
       // То же, что у ветки приложений: ступень «оплатили» двигает подтверждение

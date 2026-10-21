@@ -17,6 +17,7 @@ import {
   SLIDER_SHORT_LABELS,
   type Sliders,
 } from "@/lib/constitution";
+import { METRIC_LABELS, REGIME_TEXT, SHORT_LABELS, type ConstitutionLang } from "@/lib/constitutionI18n";
 
 type Size = "sm" | "md";
 
@@ -29,10 +30,17 @@ export function ConstitutionEmbed({
   sliders,
   label,
   size = "md",
+  lang,
 }: {
   sliders: Sliders;
   label?: string;
   size?: Size;
+  /**
+   * 21.10.2026: явный язык подписей (ru/en/kk) из lib/constitutionI18n — тогда виджет
+   * под translate="no" и не зависит от живого перевода. Без него — прежние русские
+   * подписи lib/constitution, их доводит живой переводчик (остальные страницы).
+   */
+  lang?: ConstitutionLang;
 }) {
   const dim = SIZES[size];
   const W = dim.svg;
@@ -55,11 +63,18 @@ export function ConstitutionEmbed({
 
   const metrics = computeMetrics(sliders);
   const regime = classify(sliders);
+  const чужой = lang === "en" || lang === "kk" ? lang : null;
+  const оси = чужой ? SHORT_LABELS[чужой] : SLIDER_SHORT_LABELS;
+  const режим = чужой && REGIME_TEXT[regime.id]
+    ? { name: REGIME_TEXT[regime.id].name[чужой], era: REGIME_TEXT[regime.id].era[чужой] }
+    : { name: regime.name, era: regime.era };
+  const метрики = METRIC_LABELS[lang ?? "ru"];
 
   return (
     <div
       className={`bg-[#0b1736]/85 border border-[#d4af37]/30 rounded-lg ${dim.card} text-[#e7ecf8]`}
       style={{ width: W + 24 }}
+      translate={lang ? "no" : undefined}
     >
       {label && (
         <div className="text-[#d4af37] font-semibold mb-1 truncate">{label}</div>
@@ -105,7 +120,7 @@ export function ConstitutionEmbed({
                   textAnchor={anchor}
                   dominantBaseline="middle"
                 >
-                  {SLIDER_SHORT_LABELS[m.key]}
+                  {оси[m.key]}
                 </text>
               )}
             </g>
@@ -124,16 +139,16 @@ export function ConstitutionEmbed({
         })}
       </svg>
       <div className="mt-1">
-        <div className="text-[#f5d27a] font-semibold truncate">{regime.name}</div>
-        <div className="text-[#9aa3c0] truncate text-[10px]">{regime.era}</div>
+        <div className="text-[#f5d27a] font-semibold truncate">{режим.name}</div>
+        <div className="text-[#9aa3c0] truncate text-[10px]">{режим.era}</div>
       </div>
       <div className="mt-1 flex justify-between gap-2">
         <span className="text-[#9aa3c0]">
-          Инновация{" "}
+          {метрики.innovation}{" "}
           <span className="text-emerald-400 font-mono">{metrics.innovation}</span>
         </span>
         <span className="text-[#9aa3c0]">
-          Устойчивость{" "}
+          {метрики.stability}{" "}
           <span className="text-emerald-400 font-mono">{metrics.stability}</span>
         </span>
       </div>

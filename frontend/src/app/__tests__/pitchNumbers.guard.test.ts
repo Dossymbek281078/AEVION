@@ -27,6 +27,8 @@ const SURFACES = [
   // ради canonical, и числа питча живут теперь здесь. Путь обновлён, охват
   // сторожа не изменился.
   "src/app/_home.tsx",
+  // 21.10.2026: тексты инвест-блока главной уехали в словарь ru/en/kk — охват тот же.
+  "src/data/homeInvest.ts",
   "src/app/pitch/page.tsx",
   "src/app/pitch/print/page.tsx",
   "src/app/pitch/opengraph-image.tsx",

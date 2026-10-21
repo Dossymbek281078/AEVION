@@ -10,6 +10,8 @@ import { useI18n } from "@/lib/i18n";
 import { getAuthToken } from "@/lib/auth";
 import { HOME_CARDS, moduleLang, moduleTitle, buyTitle } from "@/data/moduleNames";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
+import { homeText } from "@/data/homeTexts";
+import { INVEST_CARDS, INVEST_HEAD } from "@/data/homeInvest";
 import { channelNow, сыраяМеткаКанала } from "@/lib/channelNow";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
 import dynamic from "next/dynamic";
@@ -30,7 +32,7 @@ import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PageTracking } from "@/components/PageTracking";
 import { countryByGlobusName } from "@/lib/constitution";
-import { MODULE_NODES, TAM, BOTTOM_UP_REGIONAL_ARR, BOTTOM_UP_BEACHHEAD_ARR } from "@/data/pitchFacts";
+import { MODULE_NODES } from "@/data/pitchFacts";
 
 type ModuleRuntime = {
   tier: "mvp_live" | "platform_api" | "portal_only";
@@ -96,6 +98,9 @@ export default function HomePage() {
   // до заголовка он доходит последним; словарь отдаёт строку сразу.
   const { t, lang } = useI18n();
   const L = moduleLang(lang);
+  // 21.10.2026: подписи из data/homeTexts — под translate="no" только на своём языке (ru/en/kk);
+  // на прочих их по-прежнему доводит живой переводчик.
+  const trH = lang === "ru" || lang === "en" || lang === "kk" ? ("no" as const) : undefined;
   // 21.10.2026: служебные подписи (Demo pipeline, runtime, OpenAPI) — только вошедшему;
   // гостю они на трёх языках не нужны и живым переводом не переводились.
   const [вошёл, setВошёл] = useState(false);
@@ -461,7 +466,8 @@ const DEMO_NOTE =
               { k: "Planet participants", v: planetStats ? String(planetStats.eligibleParticipants) : "…" },
               { k: "Certified", v: planetStats ? String(planetStats.certifiedArtifactVersions) : "…" },
               { k: "Planet submissions", v: planetStats ? String(planetStats.submissions) : "…" },
-              { k: "Stack", v: "Next + Node + PG" },
+              // Служебное (стек) — только вошедшему, как runtime-подписи (оркестратор 21.10).
+              ...(вошёл ? [{ k: "Stack", v: "Next + Node + PG" }] : []),
             ].map((row) => (
               <div
                 key={row.k}
@@ -624,15 +630,15 @@ const DEMO_NOTE =
       <section style={{ background: "#0b1120", color: "#cbd5e1", padding: "18px 24px 26px" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
           <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#64748b", marginBottom: 10 }}>
-            Other modules
+            <span translate={trH}>{homeText("otherModules", L)}</span>
           </div>
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 14.5, lineHeight: 1.9 }}>
-            <Link href="/qright" style={ссылкаСписка}>QRight Registry</Link>
-            <Link href="/multichat-engine" style={ссылкаСписка}>QCoreAI · Multi-agent</Link>
-            <Link href="/awards/music" style={ссылкаСписка}>Music Awards</Link>
-            <Link href="/awards/film" style={ссылкаСписка}>Film Awards</Link>
-            <Link href="/demo" style={ссылкаСписка}>Full demo</Link>
-            <Link href="/pitch" style={ссылкаСписка}>Investor pitch</Link>
+            <Link href="/qright" style={ссылкаСписка} translate={trH}>{homeText("qrightRegistry", L)}</Link>
+            <Link href="/multichat-engine" style={ссылкаСписка} translate={trH}>{homeText("qcoreMulti", L)}</Link>
+            <Link href="/awards/music" style={ссылкаСписка} translate={trH}>{homeText("musicAwards", L)}</Link>
+            <Link href="/awards/film" style={ссылкаСписка} translate={trH}>{homeText("filmAwards", L)}</Link>
+            <Link href="/demo" style={ссылкаСписка} translate={trH}>{homeText("fullDemo", L)}</Link>
+            <Link href="/pitch" style={ссылкаСписка} translate={trH}>{homeText("investorPitch", L)}</Link>
             <Link href="/qventure" style={ссылкаСписка} translate="no">{moduleTitle("qventure", lang, "QVenture — AI Investment Analyst")}</Link>
           </div>
         </div>
@@ -698,35 +704,29 @@ const DEMO_NOTE =
 
         {/* Why invest */}
         <section style={{ marginBottom: 28, padding: "24px", borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", background: "#fff" }}>
-          <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#7c3aed", marginBottom: 8 }}>FOR INVESTORS</div>
-          <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.02em", color: "#0f172a" }}>Why partner with AEVION</h2>
+          <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#7c3aed", marginBottom: 8 }} translate={trH}>{INVEST_HEAD.kicker[L]}</div>
+          <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.02em", color: "#0f172a" }} translate={trH}>{INVEST_HEAD.title[L]}</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-            {[
-              { title: "First-mover lead", desc: "A first-mover, fully integrated proof-of-authorship bureau. The moat is the integrated Trust Graph and network effects — a competitor must rebuild all five layers as one system, not just copy the idea.", metric: "5-in-1", sub: "integrated pipeline" },
-              { title: `${TAM} addressable market`, desc: "IP licensing ($180B) + Creator economy ($104B) + Digital payments ($56B). AEVION sits at the intersection of all three.", metric: TAM, sub: "TAM" },
-              { title: "4 network effects", desc: "Trust Graph (data), Creator Economy (economic), Financial (switching costs), Cross-module (scope) — each one alone justifies investment.", metric: "4x", sub: "compounding moats" },
-              { title: `${MODULE_NODES} product nodes`, desc: "Not slides. Working code deployed at aevion.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: `${MODULE_NODES}`, sub: "nodes on the map" },
-              { title: "Quantum-resistant", desc: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Ready for post-quantum migration. No other IP platform has this.", metric: "3-layer", sub: "crypto shield" },
-              { title: "Bottom-up revenue model", desc: `Conservative bottom-up from real published prices on 3 of the modules: ${BOTTOM_UP_BEACHHEAD_ARR} beachhead → ${BOTTOM_UP_REGIONAL_ARR} regional modelled ARR. The rest is upside. Company is pre-revenue today.`, metric: BOTTOM_UP_REGIONAL_ARR, sub: "modelled ARR · 3 flagships" },
-            ].map((card) => (
-              <div key={card.title} style={{ padding: "18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>
+            {/* 21.10.2026: тексты карточек — data/homeInvest.ts на ru/en/kk, числа из pitchFacts. */}
+            {INVEST_CARDS.map((card) => (
+              <div key={card.sub.en} translate={trH} style={{ padding: "18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                  <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{card.title}</div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{card.title[L]}</div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 900, fontSize: 20, color: "#7c3aed" }}>{card.metric}</div>
-                    <div style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>{card.sub}</div>
+                    <div style={{ fontWeight: 900, fontSize: 20, color: "#7c3aed" }}>{typeof card.metric === "string" ? card.metric : card.metric[L]}</div>
+                    <div style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>{card.sub[L]}</div>
                   </div>
                 </div>
-                <div style={{ fontSize: 15, color: "#475569", lineHeight: 1.5 }}>{card.desc}</div>
+                <div style={{ fontSize: 15, color: "#475569", lineHeight: 1.5 }}>{card.desc[L]}</div>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link href="/demo" style={{ padding: "10px 18px", borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", fontWeight: 800, fontSize: 15.5, textDecoration: "none", boxShadow: "0 4px 14px rgba(124,58,237,0.3)" }}>
-              Full investor demo →
+              <span translate={trH}>{INVEST_HEAD.demo[L]}</span>
             </Link>
             <Link href="/qright" style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.2)", color: "#0f172a", fontWeight: 700, fontSize: 15.5, textDecoration: "none" }}>
-              Try the pipeline yourself →
+              <span translate={trH}>{INVEST_HEAD.tryIt[L]}</span>
             </Link>
           </div>
         </section>
@@ -1010,7 +1010,8 @@ const DEMO_NOTE =
                   fontWeight: 650,
                 }}
               >
-                QRight
+                {/* 21.10.2026: живой переводчик делал из «QRight» «Registry», из «QSign» «Қолтаңба» (замер kk). */}
+                <span translate="no">QRight</span>
               </Link>
               <Link
                 href="/qsign"
@@ -1023,7 +1024,7 @@ const DEMO_NOTE =
                   fontWeight: 650,
                 }}
               >
-                QSign
+                <span translate="no">QSign</span>
               </Link>
               <Link
                 href="/bureau"
@@ -1036,7 +1037,7 @@ const DEMO_NOTE =
                   fontWeight: 650,
                 }}
               >
-                IP Bureau
+                <span translate={trH}>{homeText("ipBureau", L)}</span>
               </Link>
               <Link
                 href="/planet"
@@ -1049,7 +1050,7 @@ const DEMO_NOTE =
                   fontWeight: 650,
                 }}
               >
-                Planet
+                <span translate={trH}>{homeText("planet", L)}</span>
               </Link>
               <Link
                 href="/multichat-engine"
@@ -1066,7 +1067,7 @@ const DEMO_NOTE =
                   background: "rgba(124,58,237,0.06)",
                 }}
               >
-                QCoreAI
+                <span translate="no">QCoreAI</span>
                 <span
                   style={{
                     fontSize: 9,
@@ -1079,7 +1080,7 @@ const DEMO_NOTE =
                     color: "#6d28d9",
                   }}
                 >
-                  Multi-agent
+                  <span translate={trH}>{homeText("multiAgent", L)}</span>
                 </span>
               </Link>
               <Link
@@ -1093,7 +1094,7 @@ const DEMO_NOTE =
                   fontWeight: 650,
                 }}
               >
-                Auth
+                <span translate={trH}>{homeText("auth", L)}</span>
               </Link>
               <a
                 href={`${backendOrigin}/api/openapi.json`}
@@ -1358,18 +1359,16 @@ const DEMO_NOTE =
         >
           <ConstitutionEmbed
             sliders={{ floor: 75, ruleOfLaw: 85, rotation: 70, transparency: 80, multiStatus: 75, skinInGame: 70, polycentricity: 65, positiveSum: 80 }}
-            label="Отпечаток AEVION"
+            label={homeText("constLabel", L)}
             size="md"
+            lang={trH ? L : undefined}
           />
           <div style={{ flex: 1, minWidth: 280 }}>
             <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
-              Какой социальный контракт строит AEVION
+              <span translate={trH}>{homeText("constTitle", L)}</span>
             </h2>
-            <p style={{ fontSize: 16, color: "#475569", lineHeight: 1.55, marginBottom: 10 }}>
-              Open Access как философия экосистемы: высокий пол снизу, закон
-              над верхом, ротация, прозрачность, полицентричность. Это не
-              маркетинг — это конкретные 8 ползунков, заложенных в дизайн
-              каждого модуля платформы.
+            <p translate={trH} style={{ fontSize: 16, color: "#475569", lineHeight: 1.55, marginBottom: 10 }}>
+              {homeText("constText", L)}
             </p>
             <a
               href="/constitution"
@@ -1384,7 +1383,7 @@ const DEMO_NOTE =
                 textDecoration: "none",
               }}
             >
-              Построить свою конституцию →
+              <span translate={trH}>{homeText("constCta", L)}</span>
             </a>
           </div>
         </section>

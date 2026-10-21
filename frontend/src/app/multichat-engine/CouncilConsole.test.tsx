@@ -148,3 +148,30 @@ describe("Консилиум: чужой результат на экране", 
     expect(screen.queryByText(/Ответ на ПЕРВЫЙ вопрос/)).toBeNull();
   });
 });
+
+describe("Консилиум: метка захода в диалоге", () => {
+  // Замер 21.10.2026: 34 диалога в базе не делились на живых людей и наши
+  // пробы — диалог не знал, откуда пришёл человек. Метка из адреса обязана
+  // уехать в тело создания беседы.
+  test("?c=…&probe=… уезжает в entryTag при создании беседы", async () => {
+    window.history.replaceState(null, "", "/multichat-engine?c=yt-council&probe=prodakt");
+    const bodies: unknown[] = [];
+    stubFetch((url, init) => {
+      if (url.includes("/conversations") && !url.includes("dispatch")) {
+        bodies.push(JSON.parse(String(init?.body ?? "{}")));
+        return okJson({ id: "conv_tag" });
+      }
+      if (url.includes("dispatch")) return okJson({ results: [], dissent: null });
+      return okJson({});
+    });
+
+    render(<CouncilConsole />);
+    const textarea = screen.getByPlaceholderText(/стоит ли запускать платный тариф/i);
+    fireEvent.change(textarea, { target: { value: "Вопрос с меткой" } });
+    fireEvent.click(screen.getByText("Спросить консилиум"));
+
+    await waitFor(() => expect(bodies.length).toBe(1));
+    expect((bodies[0] as { entryTag?: unknown }).entryTag).toBe("yt-council");
+    window.history.replaceState(null, "", "/");
+  });
+});

@@ -180,7 +180,7 @@ export function buildIntegrityChecks(data: VerdictInput): IntegrityCheck[] {
           : `Status: ${integrity.quantumShieldStatus}`,
       tip: {
         name: "Quantum Shield",
-        text: "AEVION's protection envelope. Combines Ed25519 signing with Shamir secret-sharing so no single party can recover the private key alone.",
+        text: "AEVION's protection envelope. Combines Ed25519 signing with 2-of-3 Shamir secret-sharing. AEVION keeps 2 of the 3 shards, so the platform alone can recover the key.",
       },
     },
     {
@@ -193,7 +193,7 @@ export function buildIntegrityChecks(data: VerdictInput): IntegrityCheck[] {
           : `${integrity.shards} shards, threshold ${integrity.threshold} (Shamir SSS)`,
       tip: {
         name: "Shamir Secret Sharing",
-        text: "The Ed25519 private key is split into 3 shards. Any 2 reconstruct it; any 1 alone reveals nothing. AEVION never holds 2 of them.",
+        text: "The Ed25519 private key is split into 3 shards. Any 2 reconstruct it; any 1 alone reveals nothing. AEVION keeps 2 of the 3 (vault + public witness), so the platform alone can reconstruct it.",
       },
     },
     cosign,

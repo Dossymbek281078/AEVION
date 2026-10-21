@@ -27,6 +27,10 @@ const ЛОЖЬ: RegExp[] = [
   /не больше 1 доли из 3/,
   /не более 1 доли из 3/,
   /ең көбі 1-еуі/,
+  // 21.10.2026 (окно Приложения, замер языка главной): ещё 6 фраз прошли мимо сторожа — /, /privacy,
+  // /qright, /quantum-shield, /verify ×2 говорили «AEVION never holds 2 / never holds enough / no single party».
+  /never holds? (2|two|enough)/i,
+  /no single party/i,
 ];
 /** Правдивая фраза — контроль, что прибор читает те же файлы. */
 const ПРАВДА = /AEVION keeps 2 of the 3 shards|У AEVION 2 доли из 3|AEVION-да 3 үлестің 2-еуі бар/;
@@ -68,5 +72,7 @@ describe("осколки: витрина не обещает «у AEVION не б
   test("КОНТРОЛЬ прибора: подложенная ложь ловится", () => {
     expect(ЛОЖЬ.some((re) => re.test("AEVION holds at most 1 of 3, so we cannot forge"))).toBe(true);
     expect(ЛОЖЬ.some((re) => re.test("У AEVION не больше 1 доли из 3"))).toBe(true);
+    expect(ЛОЖЬ.some((re) => re.test("AEVION never holds 2 of them."))).toBe(true);
+    expect(ЛОЖЬ.some((re) => re.test("no single party (including AEVION) ever holds enough to forge"))).toBe(true);
   });
 });

@@ -10,24 +10,26 @@
 // stays in sync with other tabs and in-page toggles via subscribeAiOffline.
 import { useEffect, useState } from "react";
 import { isAiOffline, setAiOffline, subscribeAiOffline } from "@/lib/aiOfflinePref";
+import { useChromeLang } from "@/components/siteChromeI18n";
 
 export default function AiOfflineToggle() {
   const [on, setOn] = useState(false);
+  // 21.10.2026: подпись и подсказка — из словаря шапки (ru/en/kk); на kk «AI: Cloud» шёл английским.
+  const { t, own } = useChromeLang();
 
   useEffect(() => {
     setOn(isAiOffline());
     return subscribeAiOffline(setOn);
   }, []);
 
-  const label = on ? "AI: On-prem" : "AI: Cloud";
-  const tip = on
-    ? "AI runs on the local / on-prem fleet — no data leaves your infrastructure. Click for the cloud free fleet."
-    : "AI runs on the cloud free fleet. Click to switch every module to the local / on-prem fleet (offline, no network egress).";
+  const label = on ? t("aiOnPrem") : t("aiCloud");
+  const tip = on ? t("aiTipOnPrem") : t("aiTipCloud");
 
   return (
     <button
       type="button"
       onClick={() => setAiOffline(!on)}
+      translate={own ? "no" : undefined}
       title={tip}
       aria-label={tip}
       aria-pressed={on}

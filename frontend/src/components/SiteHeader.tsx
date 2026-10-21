@@ -14,6 +14,7 @@ import PlatformAiSavings from "@/components/PlatformAiSavings";
 import RevenueGoalBadge from "@/components/RevenueGoalBadge";
 import AiOfflineToggle from "@/components/AiOfflineToggle";
 import SkipToContent from "@/components/SkipToContent";
+import { useChromeLang, type ChromeKey } from "@/components/siteChromeI18n";
 
 /**
  * Разделы шапки — ОДИН список на полную строку и на телефонное меню.
@@ -21,26 +22,33 @@ import SkipToContent from "@/components/SkipToContent";
  * телефоне его нет, и никто этого не заметит.
  */
 /** Три главные кнопки — тоже один список на обе раскладки. */
-const ГЛАВНЫЕ = [
-  { href: "/demo", label: "Demo", color: "#fff", bg: "linear-gradient(135deg, #0d9488, #0ea5e9)" },
-  { href: "/explore", label: "Explore", color: "#1a1205", bg: "linear-gradient(135deg, #a9761f, #e6b24a)" },
-  { href: "/shop", label: "Shop", color: "#fff", bg: "linear-gradient(135deg, #059669, #10b981)" },
+// 21.10.2026: подпись — ключ словаря siteChromeI18n (ru/en/kk), а не английский литерал;
+// у имён продуктов ключа нет — они пишутся как есть.
+const ГЛАВНЫЕ: { href: string; key: ChromeKey; color: string; bg: string }[] = [
+  { href: "/demo", key: "demo", color: "#fff", bg: "linear-gradient(135deg, #0d9488, #0ea5e9)" },
+  { href: "/explore", key: "explore", color: "#1a1205", bg: "linear-gradient(135deg, #a9761f, #e6b24a)" },
+  { href: "/shop", key: "shop", color: "#fff", bg: "linear-gradient(135deg, #059669, #10b981)" },
 ];
 
-const РАЗДЕЛЫ = [
-  { href: "/auth", label: "Auth" },
-  { href: "/qright", label: "QRight" },
-  { href: "/qsign", label: "QSign" },
-  { href: "/bureau", label: "Bureau" },
-  { href: "/planet", label: "Planet" },
-  { href: "/awards", label: "Awards" },
-  { href: "/bank", label: "Bank" },
-  { href: "/cyberchess", label: "Chess" },
-  { href: "/pricing", label: "Pricing" },
+const РАЗДЕЛЫ: { href: string; key?: ChromeKey; brand?: string }[] = [
+  { href: "/auth", key: "auth" },
+  { href: "/qright", brand: "QRight" },
+  { href: "/qsign", brand: "QSign" },
+  { href: "/bureau", key: "bureau" },
+  { href: "/planet", key: "planet" },
+  { href: "/awards", key: "awards" },
+  { href: "/bank", key: "bank" },
+  { href: "/cyberchess", key: "chess" },
+  { href: "/pricing", key: "pricing" },
 ];
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
+  const { t, own } = useChromeLang();
+  // translate="no" — только когда подпись уже на языке посетителя (ru/en/kk);
+  // на прочих языках ярлык остаётся живому переводчику.
+  const tr = own ? ("no" as const) : undefined;
+  const подпись = (x: { key?: ChromeKey; brand?: string }) => (x.key ? t(x.key) : x.brand);
   const headerRef = useRef<HTMLElement | null>(null);
 
   // Шапка публикует свою ВЫСОТУ, чтобы прилипающие полосы разделов могли
@@ -146,8 +154,8 @@ export function SiteHeader() {
       >
         <KeepChannelLink href="/" style={{ textDecoration: "none", color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.02em" }}>AEVION</span>
-          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
-            Trust · IP · Globus
+          <span translate={tr} style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+            {t("tagline")}
           </span>
         </KeepChannelLink>
 
@@ -161,7 +169,7 @@ export function SiteHeader() {
             телефон сначала получил бы широкую шапку и перерисовал её после
             гидрации — а меряется именно первый экран. */}
         <details className="aev-hdr-menu">
-          <summary aria-label="Меню разделов">☰</summary>
+          <summary aria-label={t("menuAria")}>☰</summary>
           <nav className="aev-hdr-menu-panel">
             {/* Три главные кнопки идут первыми и во всю ширину: на телефоне они
                 и есть то, ради чего меню открывают. */}
@@ -171,12 +179,12 @@ export function SiteHeader() {
                 href={x.href}
                 style={{ gridColumn: "1 / -1", padding: "11px 12px", borderRadius: 10, textDecoration: "none", fontWeight: 800, fontSize: 15, color: x.color, background: x.bg, textAlign: "center" }}
               >
-                {x.label}
+                <span translate={tr}>{подпись(x)}</span>
               </KeepChannelLink>
             ))}
             {РАЗДЕЛЫ.map((x) => (
               <KeepChannelLink key={x.href} href={x.href} style={{ padding: "10px 12px", textDecoration: "none", color: "#0f172a", fontSize: 15, fontWeight: 700 }}>
-                {x.label}
+                <span translate={tr}>{подпись(x)}</span>
               </KeepChannelLink>
             ))}
             <a
@@ -193,12 +201,12 @@ export function SiteHeader() {
         <div className="aev-hdr-full" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
           {ГЛАВНЫЕ.map((x) => (
             <KeepChannelLink key={x.href} href={x.href} style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: x.color, background: x.bg }}>
-              {x.label}
+              <span translate={tr}>{подпись(x)}</span>
             </KeepChannelLink>
           ))}
           {РАЗДЕЛЫ.map((x) => (
             <KeepChannelLink key={x.href} href={x.href} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
-              {x.label}
+              <span translate={tr}>{подпись(x)}</span>
             </KeepChannelLink>
           ))}
           <a href={`${origin}/api/openapi.json`} target="_blank" rel="noreferrer" style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#0d9488", fontSize: 12, fontWeight: 600, border: "1px solid rgba(13,148,136,0.3)" }}>

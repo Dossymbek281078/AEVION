@@ -1,8 +1,11 @@
+"use client";
+
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { KeepChannelLink } from "./KeepChannelLink";
 import { repoUrl } from "@/lib/repoUrl";
 import { FooterWaitlist } from "./FooterWaitlist";
+import { useChromeLang } from "./siteChromeI18n";
 
 /**
  * Ссылка подвала. Раньше тот же объект стиля был вписан в каждую из двенадцати
@@ -31,6 +34,10 @@ const footerLinkMuted: CSSProperties = { ...footerLink, color: "#64748b" };
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
+  // 21.10.2026: подписи — из словаря siteChromeI18n (ru/en/kk). translate="no" только при
+  // своём словаре: на прочих языках подвал по-прежнему переводит живой переводчик.
+  const { t, own } = useChromeLang();
+  const tr = own ? ("no" as const) : undefined;
   return (
     <footer
       style={{
@@ -61,51 +68,51 @@ export function SiteFooter() {
           <div style={{ fontWeight: 900, fontSize: 18, color: "#f8fafc", marginBottom: 8, letterSpacing: "-0.02em" }}>
             AEVION
           </div>
-          <p style={{ margin: 0, lineHeight: 1.6, fontSize: 13, color: "#94a3b8" }}>
-            Global trust infrastructure for digital content, intellectual property and creator economy.
+          <p translate={tr} style={{ margin: 0, lineHeight: 1.6, fontSize: 13, color: "#94a3b8" }}>
+            {t("about")}
           </p>
-          <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-            Astana, Kazakhstan
+          <div translate={tr} style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
+            {t("city")}
           </div>
         </div>
 
         {/* Products */}
         <div>
-          <div style={{ fontWeight: 700, fontSize: 12, color: "#e2e8f0", marginBottom: 10, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
-            Products
+          <div style={{ fontWeight: 700, fontSize: 12, color: "#e2e8f0", marginBottom: 10, textTransform: "uppercase" as const, letterSpacing: "0.06em" }} translate={tr}>
+            {t("products")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <KeepChannelLink href="/qright" style={footerLink}>QRight — IP Registry</KeepChannelLink>
-            <KeepChannelLink href="/qsign" style={footerLink}>QSign — Signatures</KeepChannelLink>
-            <KeepChannelLink href="/bureau" style={footerLink}>IP Bureau</KeepChannelLink>
-            <KeepChannelLink href="/planet" style={footerLink}>Planet Compliance</KeepChannelLink>
-            <KeepChannelLink href="/awards" style={footerLink}>Awards</KeepChannelLink>
-            <KeepChannelLink href="/bank" style={footerLink}>AEVION Bank</KeepChannelLink>
-            <KeepChannelLink href="/cyberchess" style={footerLink}>CyberChess</KeepChannelLink>
+            <KeepChannelLink href="/qright" style={footerLink}><span translate={tr}>{t("qrightLink")}</span></KeepChannelLink>
+            <KeepChannelLink href="/qsign" style={footerLink}><span translate={tr}>{t("qsignLink")}</span></KeepChannelLink>
+            <KeepChannelLink href="/bureau" style={footerLink}><span translate={tr}>{t("ipBureau")}</span></KeepChannelLink>
+            <KeepChannelLink href="/planet" style={footerLink}><span translate={tr}>{t("planetCompliance")}</span></KeepChannelLink>
+            <KeepChannelLink href="/awards" style={footerLink}><span translate={tr}>{t("awards")}</span></KeepChannelLink>
+            <KeepChannelLink href="/bank" style={footerLink}><span translate={tr}>{t("aevionBank")}</span></KeepChannelLink>
+            <KeepChannelLink href="/cyberchess" style={footerLink}><span translate="no">CyberChess</span></KeepChannelLink>
           </div>
         </div>
 
         {/* Company */}
         <div>
-          <div style={{ fontWeight: 700, fontSize: 12, color: "#e2e8f0", marginBottom: 10, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
-            Company
+          <div style={{ fontWeight: 700, fontSize: 12, color: "#e2e8f0", marginBottom: 10, textTransform: "uppercase" as const, letterSpacing: "0.06em" }} translate={tr}>
+            {t("company")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <KeepChannelLink href="/demo" style={footerLink}>Demo</KeepChannelLink>
-            <KeepChannelLink href="/terms" style={footerLink}>Terms of Service</KeepChannelLink>
-            <KeepChannelLink href="/privacy" style={footerLink}>Privacy Policy</KeepChannelLink>
-            <KeepChannelLink href="/help" style={footerLink}>Help Center</KeepChannelLink>
+            <KeepChannelLink href="/demo" style={footerLink}><span translate={tr}>{t("demo")}</span></KeepChannelLink>
+            <KeepChannelLink href="/terms" style={footerLink}><span translate={tr}>{t("termsOfService")}</span></KeepChannelLink>
+            <KeepChannelLink href="/privacy" style={footerLink}><span translate={tr}>{t("privacyPolicy")}</span></KeepChannelLink>
+            <KeepChannelLink href="/help" style={footerLink}><span translate={tr}>{t("helpCenter")}</span></KeepChannelLink>
           </div>
         </div>
 
         {/* Contact */}
         <div>
-          <div style={{ fontWeight: 700, fontSize: 12, color: "#e2e8f0", marginBottom: 10, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
-            Contact
+          <div style={{ fontWeight: 700, fontSize: 12, color: "#e2e8f0", marginBottom: 10, textTransform: "uppercase" as const, letterSpacing: "0.06em" }} translate={tr}>
+            {t("contact")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <a href="mailto:data@aevion.app" style={footerLink}>data@aevion.app</a>
-            <span>Astana, Kazakhstan</span>
+            <span translate={tr}>{t("city")}</span>
             <span>+7 702 625 83 77</span>
           </div>
           <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
@@ -144,11 +151,11 @@ export function SiteFooter() {
           color: "#64748b",
         }}
       >
-        <div>&copy; {year} AEVION. All rights reserved.</div>
+        <div translate={tr}>&copy; {year} AEVION. {t("rights")}</div>
         <div style={{ display: "flex", gap: 16 }}>
-          <KeepChannelLink href="/terms" style={footerLinkMuted}>Terms</KeepChannelLink>
-          <KeepChannelLink href="/privacy" style={footerLinkMuted}>Privacy</KeepChannelLink>
-          <KeepChannelLink href="/help" style={footerLinkMuted}>Help</KeepChannelLink>
+          <KeepChannelLink href="/terms" style={footerLinkMuted}><span translate={tr}>{t("terms")}</span></KeepChannelLink>
+          <KeepChannelLink href="/privacy" style={footerLinkMuted}><span translate={tr}>{t("privacy")}</span></KeepChannelLink>
+          <KeepChannelLink href="/help" style={footerLinkMuted}><span translate={tr}>{t("help")}</span></KeepChannelLink>
         </div>
       </div>
     </footer>

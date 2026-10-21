@@ -757,12 +757,12 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "tile.more": "Тағы",
     "tile.video": "Бейне",
     "tile.videoOn": "Бейне✓",
-    "btn.resign": "🏳 Берілу",
+    "btn.resign": "🏳 Берілу", // черновик: «сдаться» — слова в файле раньше не было, на вычитку носителя
     "btn.resignConfirm": "Расымен берілесіз бе? ✓",
     "btn.draw": "½ Тең",
     "btn.drawConfirm": "Тең ойын ұсынасыз ба? ✓",
     "btn.undo": "↩ Жүрісті болдырмау",
-    "btn.hint": "💡 Кеңес",
+    "btn.hint": "💡 Кеңес", // черновик: «подсказка» — слова в файле раньше не было, на вычитку носителя
     "btn.voice": "🎤 Дауыс",
     "btn.voiceListening": "🔴 Тыңдап тұрмын (кідірту үшін басыңыз)",
     "btn.textMove": "⌨️ Мәтінмен жүріс",

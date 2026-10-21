@@ -7702,7 +7702,7 @@ export default function CyberChessPage(){
           display:"flex",alignItems:"center",gap:SPACE[2],padding:"4px 12px 4px 4px",
           background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.full,
           boxShadow:SHADOW.sm
-        }} title={`Рейтинг ${rat} · ${rk.t}`}>
+        }} title={`${cc.t("chip.rating")} ${rat} · ${cc.locale==="en"?rk.en:cc.locale==="kk"?rk.kk:rk.t}`}>
           <div style={{
             width:28,height:28,borderRadius:"50%",
             background:CC.goldSoft,color:CC.gold,

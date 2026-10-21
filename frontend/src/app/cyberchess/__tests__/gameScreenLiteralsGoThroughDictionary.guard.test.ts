@@ -17,6 +17,7 @@ describe("игровой экран не зашивает русский", () =>
     expect(P.includes(">Войти →</button>"), "«Войти →» зашито").toBe(false);
     expect(P.includes('as const}}>Ходы</div>'), "«Ходы» зашито").toBe(false);
     expect(P.includes("{gRank(rat).t}"), "звание берётся только русским полем").toBe(false);
+    expect(P.includes("title={`Рейтинг ${rat} · ${rk.t}`}"), "подсказка значка рейтинга зашита русской").toBe(false);
     expect(P).toContain('cc.t("game.you")');
     expect(P).toContain('cc.t("rp.moves")');
   });

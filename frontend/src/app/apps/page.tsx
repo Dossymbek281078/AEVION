@@ -710,7 +710,7 @@ export default function AppsPage() {
             {[
               {
                 q: "How is it billed?",
-                a: "You choose a commitment term — 1, 3, 6, 9 or 12 months — and are billed monthly at the term's price. The longer the term, the cheaper the month. You can also pay the whole term up front in one payment at a discount.",
+                a: "You choose a commitment term — 1, 3, 6, 9 or 12 months — and are billed monthly at the term's price. The longer the term, the cheaper the month. You can also pay the whole term up front at a discount — that is a subscription that renews for the same term until you cancel it.",
               },
               {
                 q: "Does the subscription include future apps?",

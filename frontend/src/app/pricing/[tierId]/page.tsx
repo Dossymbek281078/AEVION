@@ -374,6 +374,10 @@ export default function TierDetailPage() {
                 <>
                   <br />
                   {t("pricing.home.tier.prepay", { total: displayPrice(tier.pricePrepayTotal), percent: String(PLANET_PREPAY_DISCOUNT_PERCENT[tier.id]) })}
+                  <br />
+                  <span data-testid={`renewal-${tier.id}`}>
+                    {t("pricing.home.tier.prepayRenews", { total: displayPrice(tier.pricePrepayTotal), months: String(tier.termMonths), unit: t(termUnitKey(tier.termMonths)) })}
+                  </span>
                 </>
               )}
             </div>

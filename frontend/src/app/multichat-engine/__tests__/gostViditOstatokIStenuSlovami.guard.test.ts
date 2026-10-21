@@ -19,7 +19,7 @@ const ИСХОДНИК = readFileSync(join(process.cwd(), "src/app/multichat-eng
 
 describe("гость Мультичата видит остаток и стену словами", () => {
   it("🔴 остаток пересчитывается после каждого вопроса: finally увеличивает пересчёт, эффект зависит от него", () => {
-    const ask = ИСХОДНИК.slice(ИСХОДНИК.indexOf("async function ask()"), ИСХОДНИК.indexOf("async function ask()") + 3000);
+    const ask = ИСХОДНИК.slice(ИСХОДНИК.indexOf("async function ask()"), ИСХОДНИК.indexOf("async function runExample")); // граница — следующая функция, не 3000 символов (21.10: комментарий сдвинул finally на 3056)
     const finallyI = ask.indexOf("} finally {");
     expect(finallyI).toBeGreaterThan(-1);
     expect(ask.slice(finallyI, finallyI + 200)).toContain("setПересчёт((n) => n + 1)");

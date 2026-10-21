@@ -964,6 +964,8 @@ export async function provisionSubscription(input: {
   channel?: string;
   /** Покупка из тестового режима кассы — см. Subscription.testMode. */
   testMode?: boolean;
+  /** Наш идентификатор намерения из custom_data — см. Subscription.bureauIntentId. До 21.10.2026 поля здесь не было, и вебхук LS терял его молча. */
+  bureauIntentId?: string;
   /** См. Subscription.billing; undefined — поле не пишется (другие кассы). */
   billing?: "monthly" | "prepaid" | null;
   commitStartedAt?: string | null;
@@ -986,6 +988,7 @@ export async function provisionSubscription(input: {
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,
     providerPaymentId: input.providerPaymentId,
+    ...(input.bureauIntentId ? { bureauIntentId: input.bureauIntentId } : {}),
     source: input.source,
     channel: input.channel,
     ...(input.testMode ? { testMode: true } : {}),

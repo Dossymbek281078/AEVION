@@ -9980,9 +9980,9 @@ export default function CyberChessPage(){
                 </div>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <span style={{fontSize:13,fontWeight:800,color:CC.text}}>Вы</span>
+                    <span style={{fontSize:13,fontWeight:800,color:CC.text}}>{cc.t("game.you")}</span>
                     <span style={{fontSize:10,fontWeight:700,color:CC.accent,background:CC.accentSoft,padding:"1px 5px",borderRadius:4}}>{rat}</span>
-                    <span style={{fontSize:10,color:CC.textDim}}>{gRank(rat).t}</span>
+                    <span style={{fontSize:10,color:CC.textDim}}>{(()=>{const r=gRank(rat);return cc.locale==="en"?r.en:cc.locale==="kk"?r.kk:r.t;})()}</span>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:2,marginTop:1}}>
                     {myCaptures.map((c,i)=><span key={i} style={{fontSize:12,lineHeight:1,color:CC.textDim}}>{c}</span>)}
@@ -12006,7 +12006,7 @@ export default function CyberChessPage(){
                 <span style={{fontSize:13,fontWeight:800,letterSpacing:"0.05em",color:T.purple}}>{cc.t("analysis.variant")}</span>
                 <span style={{fontSize:10,color:T.dim,fontStyle:"italic"}}>{cc.t("analysis.variantHint")}</span>
               </div>
-              <button onClick={enterScratch} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.3,boxShadow:"0 2px 6px rgba(124,58,237,0.3)"}}>Войти →</button>
+              <button onClick={enterScratch} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.3,boxShadow:"0 2px 6px rgba(124,58,237,0.3)"}}>{cc.t("login.signIn")} →</button>
             </div>:<div style={{display:"flex",flexDirection:"column",gap:6}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                 <span style={{fontSize:13,fontWeight:900,letterSpacing:"0.08em",color:"#92400e"}}>🔍 РЕЖИМ АНАЛИЗА</span>
@@ -16709,7 +16709,7 @@ ${question.trim()}`;
               </Card>}
               {/* Move list */}
               <Card padding={0} tone="surface1">
-                <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,borderBottom:`1px solid ${CC.border}`,fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const}}>Ходы</div>
+                <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,borderBottom:`1px solid ${CC.border}`,fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const}}>{cc.t("rp.moves")}</div>
                 <div style={{maxHeight:220,overflowY:"auto"}}>
                   {Array.from({length:Math.ceil(totalPly/2)}).map((_,i)=>{
                     const wIdx=i*2,bIdx=i*2+1;

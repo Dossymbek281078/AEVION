@@ -32,6 +32,6 @@ export function новыйРейтинг(текущий: number, силаСоп�
  * Титулы CM/FM/IM/GM оставлены как есть — это принятые шахматные звания,
  * а не жаргон.
  */
-export const RANKS = [{min:0,t:"Начинающий",en:"Novice",i:"●"},{min:600,t:"Новичок",en:"Beginner",i:"◆"},{min:900,t:"Любитель",en:"Amateur",i:"■"},{min:1200,t:"Клубный",en:"Club",i:"▲"},{min:1500,t:"Турнирный",en:"Tournament",i:"★"},{min:1800,t:"CM",en:"CM",i:"✦"},{min:2000,t:"FM",en:"FM",i:"✧"},{min:2200,t:"IM",en:"IM",i:"✪"},{min:2400,t:"GM",en:"GM",i:"♛"}];
+export const RANKS = [{min:0,t:"Начинающий",en:"Novice",kk:"Жаңадан бастаушы",i:"●"},{min:600,t:"Новичок",en:"Beginner",kk:"Бастаушы",i:"◆"},{min:900,t:"Любитель",en:"Amateur",kk:"Әуесқой",i:"■"},{min:1200,t:"Клубный",en:"Club",kk:"Клубтық",i:"▲"},{min:1500,t:"Турнирный",en:"Tournament",kk:"Турнирлік",i:"★"},{min:1800,t:"CM",en:"CM",kk:"CM",i:"✦"},{min:2000,t:"FM",en:"FM",kk:"FM",i:"✧"},{min:2200,t:"IM",en:"IM",kk:"IM",i:"✪"},{min:2400,t:"GM",en:"GM",kk:"GM",i:"♛"}];
 
 export function gRank(e:number){return[...RANKS].reverse().find(r=>e>=r.min)||RANKS[0]}

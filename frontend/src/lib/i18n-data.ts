@@ -184,9 +184,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 19.10 (почта входа в кассу): +2 — tier.accessToAccount, tier.payWithLoginEmail.
   // 20.10 (QBuild): +4 — build.example.badge/note, build.vacancies.emptyNone/postFirst.
   // 20.10 (бюро «Мои сертификаты»): +7 — bureau.mine.title/empty/protectFirst/verify/protectedAt, qright.registry.mine/all.
-  ru: 7443,
-  en: 7443,
-  kk: 7443,
+  // 21.10 (бюро «Проверено», ручная проверка): +26 — bureau.kycm.* (страница /bureau/kyc-manual/[id]).
+  ru: 7469,
+  en: 7469,
+  kk: 7469,
   de: 134,
   fr: 134,
   es: 134,

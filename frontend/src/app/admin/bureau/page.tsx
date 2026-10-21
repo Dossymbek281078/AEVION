@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { KycManualQueue } from "./KycManualQueue";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
@@ -239,6 +240,13 @@ export default function AdminBureauPage() {
           <p style={{ color: "#475569", fontSize: 13, marginTop: 6, marginBottom: 24 }}>
             Logged in as <strong>{whoami?.email}</strong>. Audit trail captures every action below.
           </p>
+
+          {/* Ручная проверка личности (бюро «Проверено») */}
+          {whoami?.isAdmin && (
+            <div style={{ ...card, marginBottom: 16 }}>
+              <KycManualQueue authHeaders={authHeaders} notify={showToast} />
+            </div>
+          )}
 
           {/* Force-verify */}
           <div style={{ ...card, marginBottom: 16 }}>

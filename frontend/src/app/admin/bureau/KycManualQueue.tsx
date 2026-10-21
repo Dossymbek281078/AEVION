@@ -162,10 +162,10 @@ export function KycManualQueue({
             </div>
             {it.hasFiles && !it.purgedAt && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-                <button type="button" style={btn} onClick={() => void openFile(it.id, "document")}>
+                <button type="button" data-kyc-action="document" style={btn} onClick={() => void openFile(it.id, "document")}>
                   Open document
                 </button>
-                <button type="button" style={btn} onClick={() => void openFile(it.id, "selfie")}>
+                <button type="button" data-kyc-action="selfie" style={btn} onClick={() => void openFile(it.id, "selfie")}>
                   Open selfie
                 </button>
               </div>
@@ -187,6 +187,7 @@ export function KycManualQueue({
                 />
                 <button
                   type="button"
+                  data-kyc-action="approve"
                   style={{ ...btn, background: "#16a34a", color: "#fff", border: "none" }}
                   onClick={() => void decide(it, "approved")}
                 >
@@ -200,6 +201,7 @@ export function KycManualQueue({
                 />
                 <button
                   type="button"
+                  data-kyc-action="reject"
                   style={{ ...btn, color: "#dc2626", borderColor: "rgba(220,38,38,0.4)" }}
                   onClick={() => void decide(it, "rejected")}
                 >

@@ -184,9 +184,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 19.10 (почта входа в кассу): +2 — tier.accessToAccount, tier.payWithLoginEmail.
   // 20.10 (QBuild): +4 — build.example.badge/note, build.vacancies.emptyNone/postFirst.
   // 20.10 (бюро «Мои сертификаты»): +7 — bureau.mine.title/empty/protectFirst/verify/protectedAt, qright.registry.mine/all.
-  ru: 7443,
-  en: 7443,
-  kk: 7443,
+  // 21.10 (оплата вперёд — это подписка): +1 — pricing.home.tier.prepayRenews; «одним платежом» снято (касса LS: billed every N months).
+  ru: 7444,
+  en: 7444,
+  kk: 7444,
   de: 134,
   fr: 134,
   es: 134,

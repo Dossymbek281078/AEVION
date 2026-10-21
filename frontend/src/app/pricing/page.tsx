@@ -1534,6 +1534,11 @@ export default function PricingPage() {
                       <>
                         <br />
                         {t("pricing.home.tier.prepay", { total: displayPrice(tier.pricePrepayTotal), percent: String(PLANET_PREPAY_DISCOUNT_PERCENT[tier.id]) })}
+                        {/* 21.10.2026: касса LS оформляет «вперёд» ПОДПИСКОЙ «billed every N months» на custom_price = этот итог. */}
+                        <br />
+                        <span data-testid={`renewal-${tier.id}`}>
+                          {t("pricing.home.tier.prepayRenews", { total: displayPrice(tier.pricePrepayTotal), months: String(tier.termMonths), unit: t(termUnitKey(tier.termMonths)) })}
+                        </span>
                       </>
                     )}
                   </div>
@@ -2600,6 +2605,11 @@ export default function PricingPage() {
                   >
                     {checkingOut === `${calcTier}:prepaid` ? tp("calc.opening") : t("pricing.home.tier.prepayCta", { total: `${symbol}${formatMoneyAmount(quote.prepayTotal)}` })}
                   </button>
+                )}
+                {calcTier !== "free" && calcTier !== "enterprise" && calcSeats <= 1 && !calcPromo && isTermTier(calcTier) && quote.termMonths !== null && quote.termMonths > 1 && typeof quote.prepayTotal === "number" && quote.prepayTotal < quote.total && продаётсяВперёд(calcTier) && (
+                  <p data-testid="calc-renewal" style={{ margin: "6px 0 0", fontSize: 12.5, lineHeight: 1.45, color: "#94a3b8" }}>
+                    {t("pricing.home.tier.prepayRenews", { total: `${symbol}${formatMoneyAmount(quote.prepayTotal)}`, months: String(quote.termMonths), unit: t(termUnitKey(quote.termMonths)) })}
+                  </p>
                 )}
                 {calcTier === "enterprise" && (
                   <Link

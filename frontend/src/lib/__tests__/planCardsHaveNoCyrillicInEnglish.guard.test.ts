@@ -54,7 +54,7 @@ describe("карточки плана при en — без кириллицы", 
       e.features.forEach((f, i) => expect(sameDigits(t.features[i], f), `${t.id}[${i}] ${f}`).toBe(true));
     }
     const medium = localizeTier(pricing.tiers.find((t) => t.id === "medium")!, "en");
-    expect(medium.features).toContain("$225 a month, billed monthly — 3 payments, $675 for 3 months; up front in one payment — $641.25");
+    expect(medium.features).toContain("$225 a month, billed monthly — 3 payments, $675 for 3 months; up front — $641.25 every 3 months until you cancel");
     expect(medium.features).toContain("Save 10% vs. one month without a term");
   });
 

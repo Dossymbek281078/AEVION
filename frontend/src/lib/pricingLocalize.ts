@@ -208,8 +208,10 @@ const RULES_EN: Array<[RegExp, (...m: string[]) => string]> = [
   [/^Выбрать (Lite|Medium|Pro|Full|Max)$/, (_, t) => `Choose ${t}`],
   [/^\$(\d+(?:\.\d+)?) за месяц, без обязательств$/, (_, p) => `$${p} for one month, no commitment`],
   [
-    /^\$(\d+(?:\.\d+)?) в месяц, списание ежемесячно — (\d+) (?:платежа|платежей), \$(\d+(?:\.\d+)?) за (\d+) (?:месяца|месяцев); вперёд одним платежом — \$(\d+(?:\.\d+)?)$/,
-    (_, per, n, total, m, prepay) => `$${per} a month, billed monthly — ${n} payments, $${total} for ${monthsEn(m)}; up front in one payment — $${prepay}`,
+    // 21.10.2026: «вперёд» — подписка с продлением. Прежнюю форму бэка («одним
+    // платежом») тоже принимаем: сайт и бэк выкатываются порознь.
+    /^\$(\d+(?:\.\d+)?) в месяц, списание ежемесячно — (\d+) (?:платежа|платежей), \$(\d+(?:\.\d+)?) за (\d+) (?:месяца|месяцев); вперёд(?: одним платежом)? — \$(\d+(?:\.\d+)?)(?: раз в \d+ (?:месяца|месяцев), пока не отмените)?$/,
+    (_, per, n, total, m, prepay) => `$${per} a month, billed monthly — ${n} payments, $${total} for ${monthsEn(m)}; up front — $${prepay} every ${monthsEn(m)} until you cancel`,
   ],
   [/^Экономия (\d+(?:\.\d+)?)% против месяца без срока$/, (_, p) => `Save ${p}% vs. one month without a term`],
   // Строки и примечания расчёта /api/pricing/quote (data/pricing.ts, buildQuote).

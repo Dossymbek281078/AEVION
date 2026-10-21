@@ -47,7 +47,8 @@ describe("блок покупки на главной", () => {
   });
 
   it("имя товара помечено translate=\"no\"", () => {
-    expect(src).toMatch(/<span\s+translate="no"[^>]*>\{п\.название\}<\/span>/);
+    // 21.10.2026: описательный заголовок («Every AEVION module») переводит словарь buyTitle — по-прежнему под translate="no".
+    expect(src).toMatch(/<span\s+translate="no"[^>]*>\{(?:buyTitle\()?п\.название(?:, lang\))?\}<\/span>/);
   });
 
   it("вид и цена НЕ помечены — их переводить нужно", () => {

@@ -58,6 +58,10 @@ const БАЗА = {
     + "России, не принимаются.",
   en: "Payment is taken by card through international payment systems. Cards issued "
     + "in Russia are not accepted.",
+  // 21.10.2026: kk-главная показывала русский — компонент знал только ru/en, а главная
+  // не передавала язык. kk — черновик на вычитку носителю.
+  kk: "Төлем халықаралық төлем жүйелері арқылы картамен қабылданады. Ресейде шығарылған "
+    + "карталар қабылданбайды.",
 } as const;
 
 /** Оговорка про тенге — только когда состояние ИЗВЕСТНО. */
@@ -65,21 +69,25 @@ const ТЕНГЕ = {
   нет: {
     ru: " Оплата в тенге и местными картами пока недоступна.",
     en: " Payment in tenge or with local cards is not available yet.",
+    kk: " Теңгемен және жергілікті карталармен төлеу әзірге қолжетімсіз.",
   },
   есть: {
     ru: " Можно заплатить в тенге местной картой.",
     en: " Payment in tenge with a local card is available.",
+    kk: " Жергілікті картамен теңгемен төлеуге болады.",
   },
 } as const;
 
 
 export function PaymentReachNotice({
   style,
-  lang = "ru",
+  lang: явныйЯзык,
 }: {
   style?: React.CSSProperties;
-  lang?: "ru" | "en";
+  lang?: "ru" | "en" | "kk";
 }) {
+  // Без явного языка — ru, как раньше, и живой перевод страницы переводит текст сам.
+  const lang = явныйЯзык ?? "ru";
   const [kztReady, setKztReady] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -107,7 +115,9 @@ export function PaymentReachNotice({
   const оговорка = kztReady === null ? "" : kztReady ? ТЕНГЕ.есть[lang] : ТЕНГЕ.нет[lang];
 
   return (
-    <p style={style}>
+    // translate="no": текст уже на языке посетителя; оговорка приходит после запроса,
+    // и живой перевод её не догонял (kk-главная 21.10 — русский на экране).
+    <p style={style} translate={явныйЯзык ? "no" : undefined}>
       {БАЗА[lang]}
       {оговорка}
     </p>

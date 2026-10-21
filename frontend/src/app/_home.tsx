@@ -7,6 +7,8 @@ import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
 import { BuyLink } from "@/components/BuyLink";
 import { useI18n } from "@/lib/i18n";
+import { getAuthToken } from "@/lib/auth";
+import { HOME_CARDS, moduleLang, moduleTitle, buyTitle } from "@/data/moduleNames";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import { channelNow, сыраяМеткаКанала } from "@/lib/channelNow";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
@@ -92,7 +94,12 @@ export default function HomePage() {
   // То есть русский гость пять секунд читал английский заголовок, когда
   // остальная страница уже была русской. Литерал переводит слой перевода, и
   // до заголовка он доходит последним; словарь отдаёт строку сразу.
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const L = moduleLang(lang);
+  // 21.10.2026: служебные подписи (Demo pipeline, runtime, OpenAPI) — только вошедшему;
+  // гостю они на трёх языках не нужны и живым переводом не переводились.
+  const [вошёл, setВошёл] = useState(false);
+  useEffect(() => { setВошёл(!!getAuthToken()); }, []);
   /** Только после mount: избегаем гонок ref/layout и проблем с отдельным async-чанком `dynamic()`. */
   const [globeClient, setGlobeClient] = useState(false);
   useEffect(() => {
@@ -563,7 +570,7 @@ const DEMO_NOTE =
                       в точке платежа. Вид карточки и цену переводить наоборот
                       НУЖНО, поэтому метка стоит только на имени.
                     */}
-                    <span translate="no" style={{ fontSize: 15, fontWeight: 800 }}>{п.название}</span>
+                    <span translate="no" style={{ fontSize: 15, fontWeight: 800 }}>{buyTitle(п.название, lang)}</span>
                     <span style={{ fontSize: 18, fontWeight: 900 }}>{п.цена}</span>
                   </>
                 );
@@ -603,7 +610,7 @@ const DEMO_NOTE =
               Компонент общий, тот же, что на /shop и /go: своя копия строки
               разошлась бы с ним молча.
             */}
-            <PaymentReachNotice />
+            <PaymentReachNotice lang={L} />
           </div>
         </div>
       </section>
@@ -626,7 +633,7 @@ const DEMO_NOTE =
             <Link href="/awards/film" style={ссылкаСписка}>Film Awards</Link>
             <Link href="/demo" style={ссылкаСписка}>Full demo</Link>
             <Link href="/pitch" style={ссылкаСписка}>Investor pitch</Link>
-            <Link href="/qventure" style={ссылкаСписка}>QVenture — AI Investment Analyst</Link>
+            <Link href="/qventure" style={ссылкаСписка} translate="no">{moduleTitle("qventure", lang, "QVenture — AI Investment Analyst")}</Link>
           </div>
         </div>
       </section>
@@ -641,51 +648,11 @@ const DEMO_NOTE =
             marginBottom: 28,
           }}
         >
-          {[
-            {
-              t: "QRight",
-              d: "Forever-verifiable IP. SHA-256, Ed25519, distributed Shamir shards, Bitcoin-anchored timestamps — works offline if AEVION goes dark.",
-              href: "/qright",
-            },
-            {
-              t: "QSign",
-              d: "Cryptographic data integrity via HMAC — same payload format as Bureau.",
-              href: "/qsign",
-            },
-            {
-              t: "IP Bureau",
-              d: "Sign and verify registry records — certificate-ready compliance.",
-              href: "/bureau",
-            },
-            {
-              t: "Planet",
-              d: "Compliance layer, evidence root, and transparency for regulatory reporting.",
-              href: "/planet",
-            },
-            {
-              t: "AEVION Bank",
-              d: "Digital wallet, P2P transfers, auto-royalties, and AEC credits economy.",
-              href: "/bank",
-            },
-            {
-              t: "CyberChess",
-              d: "Next-gen chess platform — play AI, solve puzzles, earn ratings and titles.",
-              href: "/cyberchess",
-            },
-            {
-              t: "Music Awards",
-              d: "AEVION Music Awards showcase — submit via Planet and earn community votes.",
-              href: "/awards/music",
-            },
-            {
-              t: "Film Awards",
-              d: "AEVION Film Awards showcase — submit via Planet and earn community votes.",
-              href: "/awards/film",
-            },
-          ].map((c) => (
+          {HOME_CARDS.map((c) => ({ t: c.t[L], d: c.d[L], href: c.href })).map((c) => (
             <Link
               key={c.t}
               href={c.href}
+              translate="no"
               style={{
                 textDecoration: "none",
                 color: "inherit",
@@ -963,6 +930,7 @@ const DEMO_NOTE =
           </div>
         ) : null}
 
+        {вошёл ? (
         <div
           style={{
             marginBottom: 16,
@@ -1005,6 +973,7 @@ const DEMO_NOTE =
             ))}
           </div>
         </div>
+        ) : null}
 
         <div style={{ marginBottom: 18, color: "#475569", fontSize: 15 }}>
           Interactive 3D Globus: nodes are clickable. Any module opens the same product pipeline on
@@ -1158,9 +1127,11 @@ const DEMO_NOTE =
               </a>
             </div>
 
+            {вошёл ? (
             <div style={{ marginTop: 14, color: "#64748b", lineHeight: 1.5, fontSize: 15.5 }}>
               Data from API; <code>runtime</code> field is for monitoring and integrations.
             </div>
+            ) : null}
 
             <div
               style={{
@@ -1181,7 +1152,7 @@ const DEMO_NOTE =
                         href={directLinks[p.id] ?? `/${p.id}`}
                         style={{ color: "#0f172a", textDecoration: "none", fontWeight: 600 }}
                       >
-                        {p.code}: {p.name}
+                        <span translate="no">{вошёл ? `${p.code}: ` : ""}{moduleTitle(p.id, lang, p.name)}</span>
                       </Link>
                       <span
                         style={{
@@ -1210,10 +1181,12 @@ const DEMO_NOTE =
                         </span>
                       ) : null}
                     </div>
+                    {вошёл ? (
                     <div style={{ fontSize: 15, color: "#64748b" }}>
                       {p.kind} • {p.status}
                       {p.runtime?.hint ? ` — ${p.runtime.hint}` : ""}
                     </div>
+                    ) : null}
                   </div>
                 );
               })}

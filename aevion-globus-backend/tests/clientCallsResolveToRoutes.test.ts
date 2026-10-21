@@ -41,6 +41,11 @@ const FRONTEND = path.join(__dirname, "..", "..", "frontend", "src");
  * Остальные — предел прибора, а не дефекты.
  */
 const BASELINE: Record<string, string> = {
+  "/api/bureau/admin/kyc-manual": "НЕ дефект: ручки собирает фабрика manualKycRouter(deps) в routes/bureauManualKyc.ts (зависимости подменяются в тестах), статический обход её не раскрывает; запросами их держит tests/bureauManualKyc.test.ts",
+  "/api/bureau/admin/kyc-manual/:p/file/:p": "НЕ дефект: ручки собирает фабрика manualKycRouter(deps) в routes/bureauManualKyc.ts (зависимости подменяются в тестах), статический обход её не раскрывает; запросами их держит tests/bureauManualKyc.test.ts",
+  "/api/bureau/admin/kyc-manual/:p/decide": "НЕ дефект: ручки собирает фабрика manualKycRouter(deps) в routes/bureauManualKyc.ts (зависимости подменяются в тестах), статический обход её не раскрывает; запросами их держит tests/bureauManualKyc.test.ts",
+  "/api/bureau/kyc-manual/:p": "НЕ дефект: ручки собирает фабрика manualKycRouter(deps) в routes/bureauManualKyc.ts (зависимости подменяются в тестах), статический обход её не раскрывает; запросами их держит tests/bureauManualKyc.test.ts",
+  "/api/bureau/kyc-manual/:p/submit": "НЕ дефект: ручки собирает фабрика manualKycRouter(deps) в routes/bureauManualKyc.ts (зависимости подменяются в тестах), статический обход её не раскрывает; запросами их держит tests/bureauManualKyc.test.ts",
   "/api/build/quick-apply": "ДЕФЕКТ: ручки нет вовсе; кнопка «Быстрый отклик» на карточке вакансии",
   "/api/build/workers/my-availability": "ДЕФЕКТ: сервер отдаёт /api/build/availability/me",
   "/api/build/workers/availability": "ДЕФЕКТ: сервер отдаёт /api/build/availability",

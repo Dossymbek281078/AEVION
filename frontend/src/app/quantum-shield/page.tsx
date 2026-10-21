@@ -405,7 +405,7 @@ export default function QuantumShieldPage() {
                 </div>
               </div>
               <p style={{ margin: "0 0 12px", fontSize: 14, opacity: 0.82, lineHeight: 1.6, maxWidth: 600 }}>
-                Ed25519 with the private key Shamir-split across three independent locations &#8212; any 2 of 3 reconstruct it, no single party (including AEVION) ever holds enough to forge.
+                Ed25519 with the private key Shamir-split across three independent locations &#8212; any 2 of 3 reconstruct it. AEVION keeps 2 of the 3 shards (vault + public witness), so the platform alone can reconstruct it; only the author co-signature key stays in your browser.
               </p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
                 {["Ed25519 + SSS", "Threshold " + (health?.threshold ?? 2) + "/" + (health?.totalShards ?? 3), "Auto via QSign", "HMAC v" + (health?.hmacKeyVersion ?? 1)].map((tag) => (

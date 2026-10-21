@@ -14,12 +14,18 @@
 import { Router, type Request, type Response } from "express";
 import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
-import { BUREAU_VERIFIED_REFERENCE } from "../data/lemonSqueezyVariants";
+import {
+  BUREAU_VERIFIED_REFERENCE,
+  BUREAU_VERIFIED_VARIANT_ENV,
+  resolveLemonSqueezyVariant,
+} from "../data/lemonSqueezyVariants";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
 import { internalMintForDevice } from "./aev";
 import { getPool } from "../lib/dbPool";
+import { getManualKycStore } from "../lib/kyc/manualProvider";
+import { manualKycRouter } from "./bureauManualKyc";
 import { captureException } from "../lib/sentry";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getKycProvider } from "../lib/kyc";
@@ -100,7 +106,8 @@ const pool = getPool();
  * нельзя), но он не может тихо разойтись: тест `kycModeIsHonest` спрашивает
  * саму фабрику по каждому имени и краснеет, если она решает иначе.
  */
-const KYC_LIVE_IDS = new Set(["sumsub"]);
+// "manual" — документ проверяет сотрудник AEVION (21.10.2026, routes/bureauManualKyc.ts).
+const KYC_LIVE_IDS = new Set(["sumsub", "manual"]);
 
 /**
  * Общее правило для обоих барьеров.
@@ -860,6 +867,18 @@ bureauRouter.post("/payment/intent", bureauAnonWriteRateLimit, async (req, res) 
     }
 
     const pay = getPaymentProvider();
+    /*
+     * Шаг 2 «Проверено» (21.10.2026): товар отметки в кассе — свой вариант из
+     * LEMON_SQUEEZY_VARIANT_BUREAU_VERIFIED. Пока основатель его не завёл,
+     * отвечаем 503 с причиной ДО создания счёта: раньше провайдер бросал, и
+     * человек видел 500 «webhook rejected», будто сломалось у него.
+     */
+    if (pay.id === "lemonsqueezy" && !resolveLemonSqueezyVariant(BUREAU_VERIFIED_REFERENCE)) {
+      return res.status(503).json({
+        error: "verified_variant_not_configured",
+        detail: `Verified tier is not on sale yet: ${BUREAU_VERIFIED_VARIANT_ENV} is empty`,
+      });
+    }
     const amountCents = getVerifiedTierPriceCents();
     const currency = getVerifiedTierCurrency();
     /*
@@ -1886,6 +1905,16 @@ bureauRouter.post("/org/accept/:token", async (req, res) => {
 });
 
 /* ─────────────────── Stub-only helper for demo flow ─────────────────── */
+
+// Ручная проверка личности: ручки живут отдельно, флаг один — BUREAU_KYC_PROVIDER=manual.
+bureauRouter.use(
+  manualKycRouter({
+    store: getManualKycStore,
+    enabled: () => (process.env.BUREAU_KYC_PROVIDER || "").toLowerCase() === "manual",
+    isAdmin: isBureauAdmin,
+    audit: (o) => logBureauAudit({ action: o.action, certId: null, verificationId: null, actor: o.actor, payload: o.payload }),
+  }),
+);
 
 bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
   // Спрашиваем ту же функцию, что отдаёт состояние наружу, а не своё третье

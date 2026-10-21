@@ -185,9 +185,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 20.10 (QBuild): +4 — build.example.badge/note, build.vacancies.emptyNone/postFirst.
   // 20.10 (бюро «Мои сертификаты»): +7 — bureau.mine.title/empty/protectFirst/verify/protectedAt, qright.registry.mine/all.
   // 21.10 (оплата вперёд — это подписка): +1 — pricing.home.tier.prepayRenews; «одним платежом» снято (касса LS: billed every N months).
-  ru: 7444,
-  en: 7444,
-  kk: 7444,
+  // 21.10 (бюро «Проверено», ручная проверка): +26 — bureau.kycm.* (страница /bureau/kyc-manual/[id]).
+  ru: 7470,
+  en: 7470,
+  kk: 7470,
   de: 134,
   fr: 134,
   es: 134,

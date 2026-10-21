@@ -28,6 +28,7 @@ import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { T } from "./theme";
 import { agentFailure, agentTitle, retryHint } from "./failureText";
 import { заголовкиУстройства } from "@/lib/гостевоеУстройство";
+import { меткаЗаходаДляЗаписи } from "@/lib/channelNow";
 
 type AgentResult = {
   agentId: string;
@@ -331,7 +332,9 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       const conv = await fetch(apiUrl("/api/multichat/conversations"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...заголовкиУстройства(), ...getAuthHeaders() },
-        body: JSON.stringify({ title: q.slice(0, 80) }),
+        // Метка захода едет в диалог: без неё 34 диалога в базе (замер 21.10)
+        // не делились на живых людей и наши пробы — у гостя нет адреса почты.
+        body: JSON.stringify({ title: q.slice(0, 80), entryTag: меткаЗаходаДляЗаписи() }),
       }).then((r) => r.json());
       if (!conv?.id) {
         // 402 модульной стены приходит сюда кодом upgrade_required — человеку нужен текст, а

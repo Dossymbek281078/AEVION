@@ -25,6 +25,7 @@ import { getPool } from "../lib/dbPool";
 import { readJsonFile, updateJsonFile } from "../lib/jsonFileStore";
 import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
+import { меткаЗахода } from "../lib/entryTag";
 import { countChatTurns, listChatTurns, recordChatTurn, type ChatTurn } from "../lib/chatHistory";
 import { monthlyQuotaHeadroom, QUOTA_CALL_ESTIMATE_TOKENS } from "../lib/qcoreQuota";
 import { usageToTokens } from "../lib/usageTokens";
@@ -79,6 +80,8 @@ type Conversation = {
   userId: string;
   title: string;
   shareToken?: string | null;
+  /** Метка захода (?c= или probe-<окно>), с которой начат диалог; null — не знаем. */
+  entryTag?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -98,6 +101,8 @@ CREATE INDEX IF NOT EXISTS idx_multichat_user_updated
 ALTER TABLE multichat_conversations ADD COLUMN IF NOT EXISTS share_token TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_multichat_share_token
   ON multichat_conversations (share_token) WHERE share_token IS NOT NULL;
+-- 21.10.2026: без метки 34 диалога в базе не делились на живых и наши пробы.
+ALTER TABLE multichat_conversations ADD COLUMN IF NOT EXISTS entry_tag TEXT;
 `;
 
 function isPg(): boolean {
@@ -111,20 +116,21 @@ async function ensureSchema(): Promise<void> {
   schemaApplied = true;
 }
 
-async function createConv(userId: string, title: string): Promise<Conversation> {
+async function createConv(userId: string, title: string, entryTag: string | null = null): Promise<Conversation> {
   const c: Conversation = {
     id: `conv_${randomUUID()}`,
     userId,
     title: title.slice(0, 200) || "New conversation",
+    entryTag,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   if (isPg()) {
     await ensureSchema();
     await getPool().query(
-      `INSERT INTO multichat_conversations (id, user_id, title, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [c.id, c.userId, c.title, c.createdAt, c.updatedAt],
+      `INSERT INTO multichat_conversations (id, user_id, title, entry_tag, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [c.id, c.userId, c.title, c.entryTag, c.createdAt, c.updatedAt],
     );
   } else {
     // updateJsonFile, а не пара read+write: список бесед общий на всех, и
@@ -493,7 +499,7 @@ multichatRouter.post("/conversations", async (req, res) => {
   const userId = req.auth!.sub;
   const title = typeof req.body?.title === "string" ? req.body.title : "New conversation";
   try {
-    const c = await createConv(userId, title);
+    const c = await createConv(userId, title, меткаЗахода(req.body?.entryTag));
     res.status(201).json(c);
   } catch (err: any) {
     captureMultichatError(err, { route: "create-conversation" });
@@ -1211,7 +1217,7 @@ multichatRouter.post("/presets/:id/launch", async (req, res) => {
     const title = typeof req.body?.title === "string" && req.body.title.trim()
       ? req.body.title.trim()
       : `${preset.emoji} ${preset.name}`;
-    const conv = await createConv(userId, title);
+    const conv = await createConv(userId, title, меткаЗахода(req.body?.entryTag));
     res.status(201).json({
       conversation: conv,
       preset: {

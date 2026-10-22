@@ -22,6 +22,7 @@
 // not claim an anchor we do not have.
 import crypto from "crypto";
 import { trustScore, type TrustScore } from "./moduleDataQuality";
+import { classifyPlatformKey, retiredSigningKeysPublic, type PlatformKeyStatus } from "./retiredSigningKeys";
 
 function loadSignKey(): { key: crypto.KeyObject; ephemeral: boolean } {
   const env = process.env.AEVION_TRUST_SIGN_SK || process.env.QSKYWAY_SIGN_SK;
@@ -144,8 +145,17 @@ export interface VerifyResult {
   hashValid: boolean;
   /** the signature verifies against the embedded public key */
   signatureValid: boolean;
-  /** the embedded public key is this server's live signing key */
+  /**
+   * the embedded public key is a platform key: the live one OR one retired by rotation
+   * (AEVION_RETIRED_SIGN_PKS, 22.10.2026). `keyStatus` tells which.
+   */
   isPlatformKey: boolean;
+  /** active — live key; retired — former platform key (see retiredAt); foreign — not ours */
+  keyStatus: PlatformKeyStatus;
+  /** YYYY-MM-DD the key was retired (only for keyStatus === "retired") */
+  retiredAt?: string;
+  /** оговорка для отставленного ключа: без якоря времени подпись «до» и «после» отставки неразличимы */
+  keyNote?: string;
   keyFingerprint: string;
   reason?: string;
 }
@@ -163,6 +173,7 @@ export function verifySignedTrustScore(input: unknown): VerifyResult {
     hashValid: false,
     signatureValid: false,
     isPlatformKey: false,
+    keyStatus: "foreign",
     keyFingerprint: KEY_FINGERPRINT,
   };
   if (!input || typeof input !== "object") return { ...base, reason: "body is not an object" };
@@ -197,19 +208,35 @@ export function verifySignedTrustScore(input: unknown): VerifyResult {
     return { ...base, hashValid, reason: "public key or signature not decodable" };
   }
 
-  const isPlatformKey = att.publicKey === SIGN_PK_B64;
+  // Ротация 22.10.2026: ключ платформы — живой ИЛИ отставленный (AEVION_RETIRED_SIGN_PKS). До этого дня
+  // документ, подписанный прежним ключом, после ротации отвечал бы isPlatformKey: false — «чужая подпись».
+  const who = classifyPlatformKey(att.publicKey, SIGN_PK_B64);
+  const isPlatformKey = who.status !== "foreign";
   const valid = hashValid && signatureValid;
   return {
     valid,
     hashValid,
     signatureValid,
     isPlatformKey,
+    keyStatus: who.status,
+    retiredAt: who.retiredAt,
+    keyNote:
+      who.status === "retired"
+        ? `Подписано ключом платформы, отставленным ${who.retiredAt}. Подлинность доказуема для документов, выданных до этой даты; время подписи сервер не удостоверяет.`
+        : undefined,
     keyFingerprint: KEY_FINGERPRINT,
     reason: valid ? undefined : !hashValid ? "content hash mismatch (value tampered)" : "signature does not verify",
   };
 }
 
 /** Public signing key + fingerprint — so a verifier can pin AEVION's key. */
-export function trustSigningKey(): { alg: "Ed25519"; publicKey: string; keyFingerprint: string; ephemeral: boolean } {
-  return { alg: "Ed25519", publicKey: SIGN_PK_B64, keyFingerprint: KEY_FINGERPRINT, ephemeral: SIGN_EPHEMERAL };
+export function trustSigningKey(): {
+  alg: "Ed25519";
+  publicKey: string;
+  keyFingerprint: string;
+  ephemeral: boolean;
+  /** former platform keys still accepted for verification, with the day each was retired */
+  retired: Array<{ publicKey: string; keyFingerprint: string; retiredAt: string }>;
+} {
+  return { alg: "Ed25519", publicKey: SIGN_PK_B64, keyFingerprint: KEY_FINGERPRINT, ephemeral: SIGN_EPHEMERAL, retired: retiredSigningKeysPublic() };
 }

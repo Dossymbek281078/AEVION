@@ -28,6 +28,7 @@ import { isSmokeSlot, isDemoSlot, countLiveSlots } from "../lib/slotOrigin";
 import { просятПробы } from "../lib/probeRows";
 import { heightReviewFor, heightReviewsForCity } from "../data/qskywayHeightReview";
 import { rateLimit } from "../lib/rateLimit";
+import { retiredSigningKeysPublic, verifyWithPlatformKeys } from "../lib/retiredSigningKeys";
 
 /**
  * AEVION QSkyway — навигационный слой городского неба для аэротакси.
@@ -1506,6 +1507,8 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
       alg: "Ed25519",
       publicKey: SIGN_PK_B64,
       ephemeral: SIGN_EPHEMERAL,
+      // Отставленные ключи (ротация 22.10.2026): документы, подписанные ими до даты отставки, подлинные.
+      retired: retiredSigningKeysPublic(),
       note: SIGN_EPHEMERAL
         ? "Ключ создан при старте процесса и сменится при перезапуске: документы, подписанные до него, этим ключом не проверятся."
         : "Постоянный ключ службы. Сверьте его с полем attestation.publicKey в документе.",
@@ -2312,10 +2315,11 @@ qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) 
     });
   const contentHash = crypto.createHash("sha256").update(JSON.stringify(document)).digest("hex");
   const hashValid = contentHash === attestation.contentHash;
-  let signatureValid = false;
-  try {
-    signatureValid = crypto.verify(null, Buffer.from(attestation.contentHash, "hex"), SIGN_PK, Buffer.from(attestation.signature, "base64"));
-  } catch { signatureValid = false; }
+  // Ротация 22.10.2026: подпись сверяется живым ключом, а при неудаче — отставленными открытыми ключами
+  // из AEVION_RETIRED_SIGN_PKS. Иначе после смены ключа каждая выданная ранее бумага отвечала бы
+  // «чужая подпись». Отставленный ключ в ответе назван вместе с датой отставки.
+  const signedBy = verifyWithPlatformKeys(String(attestation.contentHash), String(attestation.signature), { keyObject: SIGN_PK, publicKey: SIGN_PK_B64 });
+  const signatureValid = signedBy !== null;
   // Reported separately on purpose: a tampered value and a forged signature are
   // different failures, and one verdict would hide which happened.
   // Версия формата проверяемого документа — и оговорка, если она старая.
@@ -2344,6 +2348,14 @@ qskywayRouter.post("/route/justification/verify", (req: Request, res: Response) 
     hashValid,
     signatureValid,
     isPlatformKey: signatureValid,
+    keyStatus: signedBy?.status ?? "foreign",
+    retiredAt: signedBy?.status === "retired" ? signedBy.retiredAt : undefined,
+    keyNote: signedBy?.status === "retired"
+      ? `Подписано ключом платформы, отставленным ${signedBy.retiredAt}. Подлинность доказуема для документов, выданных до этой даты; время подписи служба не удостоверяет.`
+      : undefined,
+    keyNoteEn: signedBy?.status === "retired"
+      ? `Signed with a platform key retired on ${signedBy.retiredAt}. Authenticity is provable for documents issued before that date; the service does not attest the signing time.`
+      : undefined,
     documentFormat: kind,
     scopeUnderSignature: !legacyScope && !!kind,
     formatNote,

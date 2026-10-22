@@ -48,7 +48,7 @@ import { verifyBearerOptional, verifyBearerToken } from "../lib/authJwt";
 import { captureException } from "../lib/sentry";
 import { emitVeilNetXEntry, emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { validateOr400 } from "../lib/qpaynetValidate";
-import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
+import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption, openSecret, prevKeyCount } from "../lib/qpaynetCrypto";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { queryNumber, queryIsoTimestamp } from "../lib/queryNumber";
 import { safeErrorText } from "../lib/safeError";
@@ -1619,6 +1619,55 @@ qpaynetRouter.post("/admin/kyc/:ownerId/verify", async (req, res) => {
   if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_not_pending" });
   void notify(pool, req.params.ownerId, "kyc_verified", "KYC верифицирован", "Месячный лимит снят. Все суммы доступны.");
   res.json({ ok: true });
+});
+
+// POST /api/qpaynet/admin/reencrypt — 🔴 22.10.2026, ротация QPAYNET_ENCRYPTION_KEY после утечки
+// переменных Railway. Ленивая миграция (ниже по файлу: «прочитал → перешифровал») переводит строку на
+// текущий ключ только при касании; эта ручка проходит все строки с секретами и перешифровывает те, что
+// открываются лишь прежним ключом (QPAYNET_ENCRYPTION_KEY_PREV) или лежат открытым текстом.
+// ?dryRun=1 — только посчитать. Когда в ответе prev = 0 и unreadable = 0 по всем таблицам, PREV можно
+// убрать из окружения (canDropPrev). Секреты в ответе не печатаются — только числа.
+qpaynetRouter.post("/admin/reencrypt", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+  if (!isEncryptionEnabled()) {
+    return res.status(409).json({ error: "encryption_disabled", detail: "QPAYNET_ENCRYPTION_KEY не задан — перешифровывать нечем" });
+  }
+  const dryRun = req.query.dryRun === "1" || req.body?.dryRun === true;
+  const pool = getPool();
+  const targets = [
+    { table: "qpaynet_merchant_webhooks", column: "secret" },
+    { table: "qpaynet_payment_requests", column: "notify_secret" },
+  ];
+  const tables: Array<Record<string, unknown>> = [];
+  for (const t of targets) {
+    const row: Record<string, unknown> = { table: t.table, column: t.column, total: 0, current: 0, prev: 0, plain: 0, unreadable: 0, rewritten: 0 };
+    try {
+      const r = await pool.query(`SELECT id, "${t.column}" AS v FROM ${t.table} WHERE "${t.column}" IS NOT NULL AND "${t.column}" <> ''`);
+      row.total = r.rows.length;
+      for (const rec of r.rows as Array<{ id: string; v: string }>) {
+        let opened: ReturnType<typeof openSecret>;
+        try {
+          opened = openSecret(String(rec.v));
+        } catch {
+          row.unreadable = (row.unreadable as number) + 1;
+          continue;
+        }
+        if (opened.key === "current") { row.current = (row.current as number) + 1; continue; }
+        if (opened.key === "prev") row.prev = (row.prev as number) + 1; else row.plain = (row.plain as number) + 1;
+        if (!dryRun) {
+          await pool.query(`UPDATE ${t.table} SET "${t.column}"=$1 WHERE id=$2`, [encryptSecret(opened.plaintext), rec.id]);
+          row.rewritten = (row.rewritten as number) + 1;
+        }
+      }
+    } catch (err) {
+      row.error = safeErrorText(err, "query failed", "qpaynet");
+    }
+    tables.push(row);
+  }
+  const clean = tables.every((t) => !t.error && t.prev === 0 && t.plain === 0 && t.unreadable === 0);
+  res.json({ ok: true, dryRun, prevKeysConfigured: prevKeyCount(), tables, canDropPrev: clean });
 });
 
 // POST /api/qpaynet/admin/kyc/:ownerId/reject — admin rejects KYC

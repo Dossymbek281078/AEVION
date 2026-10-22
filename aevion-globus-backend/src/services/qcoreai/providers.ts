@@ -549,7 +549,27 @@ export function providerOutageReason(e: unknown): string | null {
     l.includes("billing") ||
     /\b402\b/.test(l) ||
     l.includes("regain access");
-  return closed ? m.slice(0, 200) : null;
+  /*
+   * 🔴 22.10.2026, утечка переменных Railway: засвеченные ключи поставщиков отключают (OpenRouter сам
+   * отключил свой 02:21Z, ключ Anthropic отключит основатель). Отозванный ключ — такой же закрытый счёт,
+   * как исчерпанный лимит: Anthropic отвечает 401 {"type":"authentication_error","message":"invalid
+   * x-api-key"}, OpenRouter — 401 "User not found.", Gemini — 400 "API key not valid". До этой правки
+   * такой отказ НЕ считался закрытием → callProvider бросал ошибку, не пробуя следующего, и чат падал
+   * при живом Gemini. Теперь отказ по ключу закрывает поставщика на умолчательный срок и уводит вызов
+   * к следующему; после замены ключа в окружении поставщик вернётся сам по истечении срока.
+   */
+  const revoked =
+    l.includes("authentication_error") ||
+    l.includes("invalid x-api-key") ||
+    l.includes("invalid api key") ||
+    l.includes("incorrect api key") ||
+    l.includes("api key not valid") ||
+    l.includes("api_key_invalid") ||
+    l.includes("permission_error") ||
+    l.includes("user not found") ||
+    /\b401\b/.test(l) ||
+    /\b403\b/.test(l);
+  return closed || revoked ? m.slice(0, 200) : null;
 }
 
 /** Срок закрытия: дата из текста поставщика («regain access on 2026-10-01 at 00:00 UTC»), иначе полчаса. */

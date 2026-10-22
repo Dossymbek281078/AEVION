@@ -119,6 +119,53 @@ interface Review {
 
 // In-memory fallback
 const memProducts = new Map<string, Product & { featured?: boolean }>();
+
+/** Ключ названия для склейки дублей: без регистра и краевых пробелов. */
+const ключНазвания = (t: unknown): string => String(t ?? "").trim().toLowerCase();
+
+/*
+ * 🔴 22.10.2026, замер прода (GET /api/qstore/products): 21 товар = 5 названий × 4 копии + 1 — сид
+ * демо-контента до 21.08 проверял «есть ли уже» неработающим параметром и создавал копию каждым запуском
+ * (см. scripts/seed-demo-content.js). Витрина показывала одно и то же четырежды, и покупатель это видел.
+ * Решение (слово оркестратора 22.10): в ВЫДАЧЕ на одно название остаётся самый ранний товар; в базе ничего не
+ * удаляется, карточки копий по прямому id открываются, ссылки не ломаются. Порядок сортировки сохраняется —
+ * победитель стоит там, где стоял.
+ */
+function раньше(a: { id: string; createdAt: string | Date }, b: { id: string; createdAt: string | Date }): boolean {
+  const ta = new Date(a.createdAt).getTime();
+  const tb = new Date(b.createdAt).getTime();
+  if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return ta < tb;
+  return a.id < b.id;
+}
+export function безДублейПоНазванию<T extends { id: string; title: string; createdAt: string | Date }>(rows: T[]): T[] {
+  const поНазванию = new Map<string, T>();
+  for (const r of rows) {
+    const k = ключНазвания(r.title);
+    const было = поНазванию.get(k);
+    if (!было || раньше(r, было)) поНазванию.set(k, r);
+  }
+  const победители = new Set(поНазванию.values());
+  return rows.filter((r) => победители.has(r));
+}
+
+/** Подборки витрины из одного списка публичных товаров (уже без дублей). */
+function подборки(allPublic: Product[], limit: number) {
+  const popular = [...allPublic].sort((a, b) => b.salesCount - a.salesCount).slice(0, limit);
+  const newest = [...allPublic].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, limit);
+  const topRated = [...allPublic]
+    .filter((p) => (p.avgRating || 0) > 0)
+    .sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0) || b.salesCount - a.salesCount)
+    .slice(0, limit);
+  const trending = [...allPublic]
+    .map((p) => {
+      const ageDays = Math.max(1, (Date.now() - new Date(p.createdAt).getTime()) / 86400000);
+      return { ...p, _score: (p.salesCount || 0) / ageDays };
+    })
+    .sort((a, b) => b._score - a._score)
+    .slice(0, limit)
+    .map(({ _score, ...rest }) => rest as Product);
+  return { popular, newest, trending, topRated };
+}
 const memPurchases = new Map<string, Purchase>();
 // key: `${productId}:${userId}`
 const memReviews = new Map<string, Review>();
@@ -189,11 +236,17 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
       if (q) { params.push(`%${q}%`); conditions.push(`("title" ILIKE $${params.length} OR "description" ILIKE $${params.length})`); }
       params.push(limit);
       const where = `WHERE ${conditions.join(" AND ")}`;
+      // DISTINCT ON — до LIMIT, иначе страница из 20 строк схлопнулась бы в 5 названий; в коде — та же
+      // склейка вторым рубежом (и для памяти).
       const rows = await pool.query(
-        `SELECT * FROM "QStoreProduct" ${where} ORDER BY ${orderClause} LIMIT $${params.length}`,
+        `SELECT * FROM (
+           SELECT DISTINCT ON (lower(trim("title"))) * FROM "QStoreProduct" ${where}
+           ORDER BY lower(trim("title")), "createdAt" ASC, "id" ASC
+         ) AS odin ORDER BY ${orderClause} LIMIT $${params.length}`,
         params,
       );
-      res.json({ products: rows.rows, total: rows.rowCount ?? rows.rows.length, sort });
+      const products = безДублейПоНазванию(rows.rows as Product[]);
+      res.json({ products, total: products.length, sort });
       return;
     } catch (e) {
       // Магазин: «товар не найден» при отказе базы — это несостоявшаяся
@@ -205,7 +258,7 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
     }
   }
 
-  let products = Array.from(memProducts.values()).filter((p) => p.isPublic);
+  let products = безДублейПоНазванию(Array.from(memProducts.values()).filter((p) => p.isPublic));
   if (category) products = products.filter((p) => p.category === category);
   if (q) products = products.filter((p) =>
     p.title.toLowerCase().includes(q.toLowerCase()) ||
@@ -291,6 +344,27 @@ qstoreRouter.post("/me/products", async (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
+
+  // 🔴 22.10.2026: повторное создание тем же продавцом товара с тем же названием не плодит копию —
+  // отдаётся существующий (200, existing: true). Так сид и любой повторный запуск идемпотентны на сервере,
+  // а не только по доброй воле клиента (сид проверял «есть ли уже» и до 21.08 делал это неверно).
+  const ключ = ключНазвания(product.title);
+  if (isQStoreDbReady()) {
+    try {
+      const такойЕсть = await pool.query(
+        `SELECT * FROM "QStoreProduct" WHERE "sellerId" = $1 AND lower(trim("title")) = $2 ORDER BY "createdAt" ASC, "id" ASC LIMIT 1`,
+        [auth.sub, ключ],
+      );
+      if (такойЕсть.rows.length > 0) { res.status(200).json({ product: такойЕсть.rows[0], existing: true }); return; }
+    } catch (e) {
+      console.error("[QStore] POST /me/products duplicate check DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
+    }
+  } else {
+    const было = Array.from(memProducts.values()).find((p) => p.sellerId === auth.sub && ключНазвания(p.title) === ключ);
+    if (было) { res.status(200).json({ product: было, existing: true }); return; }
+  }
 
   if (isQStoreDbReady()) {
     try {
@@ -613,65 +687,22 @@ qstoreRouter.get("/products/:id/reviews", async (req: Request, res: Response) =>
 qstoreRouter.get("/featured", async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 12);
 
-  // Try DB first
+  // Try DB first. Один запрос вместо четырёх: подборки считаются из общего списка БЕЗ дублей по
+  // названию (22.10.2026) — иначе «популярные» из 5 мест отдавали 4 копии одного товара.
   if (isQStoreDbReady()) {
     try {
-      const [popRes, newRes, ratedRes] = await Promise.all([
-        pool.query(
-          `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE ORDER BY "salesCount" DESC LIMIT $1`,
-          [limit],
-        ),
-        pool.query(
-          `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE ORDER BY "createdAt" DESC LIMIT $1`,
-          [limit],
-        ),
-        pool.query(
-          `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE AND "avgRating" > 0 ORDER BY "avgRating" DESC, "salesCount" DESC LIMIT $1`,
-          [limit],
-        ),
-      ]);
-      const popular = popRes.rows;
-      const newest = newRes.rows;
-      const topRated = ratedRes.rows;
-      // Trending: sales weighted by recency
       const allPublicRes = await pool.query(
         `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE`,
       );
-      const trending = [...allPublicRes.rows]
-        .map((p: any) => {
-          const ageDays = Math.max(1, (Date.now() - new Date(p.createdAt).getTime()) / 86400000);
-          return { ...p, _score: (p.salesCount || 0) / ageDays };
-        })
-        .sort((a: any, b: any) => b._score - a._score)
-        .slice(0, limit)
-        .map(({ _score, ...rest }: any) => rest);
-      res.json({ popular, newest, trending, topRated });
+      res.json(подборки(безДублейПоНазванию(allPublicRes.rows as Product[]), limit));
       return;
     } catch {
       // fall through
     }
   }
 
-  const allPublic = Array.from(memProducts.values()).filter((p) => p.isPublic);
-  const popular = [...allPublic]
-    .sort((a, b) => b.salesCount - a.salesCount)
-    .slice(0, limit);
-  const newest = [...allPublic]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, limit);
-  const topRated = [...allPublic]
-    .filter((p) => (p.avgRating || 0) > 0)
-    .sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0) || b.salesCount - a.salesCount)
-    .slice(0, limit);
-  const trending = [...allPublic]
-    .map((p) => {
-      const ageDays = Math.max(1, (Date.now() - new Date(p.createdAt).getTime()) / 86400000);
-      return { ...p, _score: (p.salesCount || 0) / ageDays };
-    })
-    .sort((a, b) => b._score - a._score)
-    .slice(0, limit)
-    .map(({ _score, ...rest }) => rest as typeof allPublic[number]);
-  res.json({ popular, newest, trending, topRated });
+  const allPublic = безДублейПоНазванию(Array.from(memProducts.values()).filter((p) => p.isPublic));
+  res.json(подборки(allPublic, limit));
 });
 
 // GET /api/qstore/me/sales — products I own that have been purchased

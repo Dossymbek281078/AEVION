@@ -15,6 +15,7 @@
  */
 
 import * as Sentry from "@sentry/node";
+import { resolveSentryRelease } from "../sentryRelease";
 
 let active = false;
 
@@ -30,10 +31,14 @@ export function initSentry(): boolean {
 
   const env = process.env.NODE_ENV || "development";
   const tracesSampleRate = Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? "0");
+  // 23.10.2026: release из build-info.json (та же отметка, что /health → commit); раньше брали
+  // SENTRY_RELEASE, которой на Railway нет, и события шли без версии. См. lib/sentryRelease.ts.
+  const release = resolveSentryRelease();
 
   Sentry.init({
     dsn,
     environment: env,
+    release,
     tracesSampleRate: Number.isFinite(tracesSampleRate) ? tracesSampleRate : 0,
     serverName: process.env.RAILWAY_SERVICE_NAME || "aevion-globus-backend",
     initialScope: {
@@ -42,7 +47,7 @@ export function initSentry(): boolean {
   });
 
   active = true;
-  console.log(`[qsign v2] Sentry initialized (env=${env}, tracing=${tracesSampleRate})`);
+  console.log(`[qsign v2] Sentry initialized (env=${env}, release=${release ?? "—"}, tracing=${tracesSampleRate})`);
   return true;
 }
 

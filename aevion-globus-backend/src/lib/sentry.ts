@@ -14,6 +14,8 @@
 //     most local + CI runs don't need. Keeping it optional keeps the
 //     test container small and dev installs fast.
 
+import { resolveSentryRelease } from "./sentryRelease";
+
 type SentryLike = {
   init(opts: Record<string, unknown>): void;
   captureException(err: unknown): void;
@@ -35,7 +37,7 @@ function tryInit(): void {
     sentry.init({
       dsn,
       tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || "0"),
-      release: process.env.SENTRY_RELEASE,
+      release: resolveSentryRelease(), // 23.10.2026: из build-info, см. lib/sentryRelease.ts
       environment: process.env.NODE_ENV || "development",
     });
     console.log("[sentry] initialised");

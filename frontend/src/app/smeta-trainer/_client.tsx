@@ -45,6 +45,12 @@ export default function SmetaTrainerPage() {
           <ThemeToggle />
         </div>
       </header>
+      {/* 22.10.2026 (Продукт): чип подписки в шапке скрыт на телефоне (hidden md:block) — замер на проде 390×844:
+          после «Пропустить» на странице ни одной кнопки «Купить»/«Тарифы», путь к оплате с телефона обрывался на входе.
+          На узком экране чип выводится отдельной строкой под шапкой; на столе — как раньше, в шапке. */}
+      <div className="md:hidden bg-slate-900 px-4 py-2 border-t border-slate-800" data-testid="smeta-pricing-chip-mobile">
+        <ModulePricingChip moduleId="smeta-trainer" theme="dark" />
+      </div>
       <OnboardingModal />
       <LevelHome />
     </main>

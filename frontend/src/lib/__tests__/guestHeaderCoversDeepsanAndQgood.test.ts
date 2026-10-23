@@ -11,6 +11,8 @@ describe("заголовок гостя уходит туда, где он ну�
     expect(isDevhubApiUrl("/api/qgood/mood/trends")).toBe(true);
     // 24.10.2026: и биомаркеры qlife — вес гостя видел следующий гость
     expect(isDevhubApiUrl("/api/qlife/biomarkers?limit=30")).toBe(true);
+    // и сессии QCoreAI — 50 чужих гостевых переписок отдавались любому
+    expect(isDevhubApiUrl("/api/qcoreai/sessions")).toBe(true);
   });
   test("DevHub — по-прежнему да", () => {
     expect(isDevhubApiUrl("/api/devhub/projects")).toBe(true);

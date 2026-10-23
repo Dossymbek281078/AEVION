@@ -231,6 +231,8 @@ export async function listSessions(
 ): Promise<SessionRow[]> {
   await ensureQCoreTables(pool);
   const lim = Math.max(1, Math.min(200, limit));
+  // Без владельца — пусто: общий список null-сессий был виден любому (24.10.2026).
+  if (!userId) return [];
 
   if (!isDbReady()) {
     const all = Array.from(memSessions.values());
@@ -272,7 +274,7 @@ export async function archiveSession(id: string, userId: string | null, archive:
     return true;
   }
   const r = await pool.query(
-    `UPDATE "QCoreSession" SET "archivedAt"=${archive ? "NOW()" : "NULL"} WHERE "id"=$1 AND ("userId"=$2 OR "userId" IS NULL) RETURNING "id"`,
+    `UPDATE "QCoreSession" SET "archivedAt"=${archive ? "NOW()" : "NULL"} WHERE "id"=$1 AND "userId"=$2 RETURNING "id"`,
     [id, userId]
   );
   return (r.rowCount ?? 0) > 0;
@@ -283,8 +285,10 @@ export async function getSession(id: string, userId: string | null): Promise<Ses
 
   const check = (row: SessionRow | undefined): SessionRow | null => {
     if (!row) return null;
-    if (row.userId && userId && row.userId !== userId) return null;
-    if (row.userId && !userId) return null;
+    // 24.10.2026: сессия без владельца (все гостевые до этой даты) — общая,
+    // её отдавали ЛЮБОМУ: гостю, вошедшему, curl. Теперь не отдаём никому.
+    if (!row.userId) return null;
+    if (row.userId !== userId) return null;
     return row;
   };
 
@@ -618,7 +622,7 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsSumm
     return analyticsFromMemory(userId, scope);
   }
 
-  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const userPredicate = userId ? `s."userId" = $1` : `FALSE`; // без владельца — ничего (24.10.2026)
   const params = userId ? [userId] : [];
 
   const runsQ = await pool.query(
@@ -1201,7 +1205,7 @@ export async function searchRuns(
     return hits.slice(0, lim);
   }
 
-  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const userPredicate = userId ? `s."userId" = $1` : `FALSE`; // без владельца — ничего (24.10.2026)
   const params: any[] = userId ? [userId, `%${q}%`, lim] : [`%${q}%`, lim];
   const qParam = userId ? `$2` : `$1`;
   const limParam = userId ? `$3` : `$2`;
@@ -1278,7 +1282,7 @@ export async function getTopUserTags(
       .map(([tag, count]) => ({ tag, count }));
   }
 
-  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const userPredicate = userId ? `s."userId" = $1` : `FALSE`; // без владельца — ничего (24.10.2026)
   const params: any[] = userId ? [userId, lim] : [lim];
   const limParam = userId ? `$2` : `$1`;
   const r = await pool.query(
@@ -1326,7 +1330,7 @@ export async function getCostTimeseries(
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const userPredicate = userId ? `s."userId" = $1` : `FALSE`; // без владельца — ничего (24.10.2026)
   const params: any[] = userId ? [userId] : [];
   const r = await pool.query(
     `SELECT to_char(date_trunc('day', r."startedAt"), 'YYYY-MM-DD') AS date,
@@ -3156,7 +3160,7 @@ export async function pinSession(id: string, userId: string | null, pinned: bool
     return true;
   }
   const r = await pool.query(
-    `UPDATE "QCoreSession" SET "pinned"=$1 WHERE "id"=$2 AND ("userId"=$3 OR "userId" IS NULL) RETURNING "id"`,
+    `UPDATE "QCoreSession" SET "pinned"=$1 WHERE "id"=$2 AND "userId"=$3 RETURNING "id"`,
     [pinned, id, userId]
   );
   return (r.rowCount ?? 0) > 0;

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Priority } from "./TaskCard";
+import { useDeepsanT, type Key } from "../i18n";
 
 interface AddTaskFormProps {
   onAdd: (payload: {
@@ -24,6 +25,7 @@ const PRIORITY_ACTIVE: Record<Priority, string> = {
 };
 
 export default function AddTaskForm({ onAdd, busy }: AddTaskFormProps) {
+  const t = useDeepsanT();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
@@ -69,7 +71,7 @@ export default function AddTaskForm({ onAdd, busy }: AddTaskFormProps) {
             fontWeight: 600,
           }}
         >
-          + Add task
+          {t("add.open")}
         </button>
       ) : (
         <form
@@ -86,7 +88,7 @@ export default function AddTaskForm({ onAdd, busy }: AddTaskFormProps) {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Task title *"
+              placeholder={t("add.titlePh")}
               autoFocus
               required
               style={{
@@ -106,7 +108,7 @@ export default function AddTaskForm({ onAdd, busy }: AddTaskFormProps) {
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Description (optional)"
+              placeholder={t("add.descPh")}
               rows={2}
               style={{
                 width: "100%",
@@ -142,7 +144,7 @@ export default function AddTaskForm({ onAdd, busy }: AddTaskFormProps) {
                   cursor: "pointer",
                 }}
               >
-                {p}
+                {t(`pr.${p}` as Key)}
               </button>
             ))}
           </div>
@@ -166,7 +168,7 @@ export default function AddTaskForm({ onAdd, busy }: AddTaskFormProps) {
               type="text"
               value={tags}
               onChange={(e) => setTags(e.target.value)}
-              placeholder="tags, comma, separated"
+              placeholder={t("add.tagsPh")}
               style={{
                 flex: 2,
                 background: "rgba(15,23,42,0.7)",
@@ -195,7 +197,7 @@ export default function AddTaskForm({ onAdd, busy }: AddTaskFormProps) {
                 opacity: busy || !title.trim() ? 0.5 : 1,
               }}
             >
-              {busy ? "Adding…" : "Add task"}
+              {busy ? t("add.adding") : t("add.submit")}
             </button>
             <button
               type="button"
@@ -210,7 +212,7 @@ export default function AddTaskForm({ onAdd, busy }: AddTaskFormProps) {
                 cursor: "pointer",
               }}
             >
-              Cancel
+              {t("add.cancel")}
             </button>
           </div>
         </form>

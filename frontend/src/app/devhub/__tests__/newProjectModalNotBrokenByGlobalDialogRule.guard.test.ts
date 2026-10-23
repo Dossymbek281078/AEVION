@@ -25,3 +25,14 @@ describe("окно «Новый проект» не разбирает глоб�
     expect(PAGE.slice(i, i + 200)).toContain("data-dialog-panel");
   });
 });
+
+describe("панель ИИ-помощника не разбирает глобальное правило окон", () => {
+  // Тот же замер 23.10, 390×844: у панели AgentDock все 3 блока были fixed —
+  // заголовок и сообщения пропали, поле ввода прилипло к низу экрана.
+  test("панель AgentDock помечена data-dialog-panel", () => {
+    const DOCK = fs.readFileSync(path.resolve(__dirname, "..", "..", "..", "components", "AgentDock.tsx"), "utf8");
+    const i = DOCK.indexOf("aria-label={D.panel}");
+    expect(i, "панель помощника не найдена").toBeGreaterThan(-1);
+    expect(DOCK.slice(i, i + 300)).toContain("data-dialog-panel");
+  });
+});

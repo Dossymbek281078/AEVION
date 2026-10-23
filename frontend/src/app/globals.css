@@ -995,8 +995,11 @@ button:focus:not(:focus-visible) {
     overflow-y: auto;
   }
 
-  /* Modal — full screen */
-  [role="dialog"] > div {
+  /* Modal — full screen. Правило ждёт role="dialog" на ПОДЛОЖКЕ, а панель —
+     её ребёнком. Где роль стоит на самой панели, оно делало fixed каждый её
+     блок (окно «Новый проект» DevHub на 390, 23.10) — такие панели помечены
+     data-dialog-panel и правило их не трогает. */
+  [role="dialog"]:not([data-dialog-panel]) > div {
     max-height: 95vh !important;
     width: 100% !important;
     border-radius: 14px 14px 0 0 !important;

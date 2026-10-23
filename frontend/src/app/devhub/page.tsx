@@ -1727,6 +1727,7 @@ export default function DevHubPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="devhub-new-project-title"
+            data-dialog-panel
             style={{ background: "#fff", borderRadius: 16, padding: "20px clamp(16px, 4vw, 32px)", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}
           >
             <h2 id="devhub-new-project-title" style={{ fontSize: 20, fontWeight: 800, marginBottom: 20, color: "#0f172a" }}>{t("modal.title")}</h2>

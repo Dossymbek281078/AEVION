@@ -322,6 +322,9 @@ export function AgentDock() {
     <div
       role="dialog"
       aria-label={D.panel}
+      // Роль на самой панели: без пометки правило окон из globals.css (≤768)
+      // делало fixed все три её блока — на 390 панель была пустой (23.10).
+      data-dialog-panel
       style={{
         position: "fixed",
         bottom: 16,

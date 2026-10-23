@@ -14,6 +14,8 @@ import { generationLimit } from "../lib/rateLimit";
 
 import { Router } from "express";
 import { callProvider, type ChatMessage } from "../services/qcoreai/providers";
+import { getPool } from "../lib/dbPool";
+import { createI18nCacheStore, type CacheRow } from "../lib/i18nCacheStore";
 
 export const i18nRouter = Router();
 
@@ -94,6 +96,19 @@ function unprotectBrands(text: string): string {
 // Bounded; survives within a deploy. Client localStorage covers cross-deploy.
 const cache = new Map<string, string>();
 const MAX_CACHE = 60_000;
+/*
+ * 23.10.2026: кэш только в памяти обнулялся каждой выкаткой (6564 → 540), и страницы en/kk снова шли в Claude
+ * партиями — 659 платных вызовов за 4 часа. Теперь Map зеркалится в Postgres (lib/i18nCacheStore): прогрев при
+ * первом запросе, дозапись новых переводов, очистка обеих сторон. База недоступна → как раньше, в памяти.
+ */
+const cacheStore = createI18nCacheStore((sql, params) => getPool().query(sql, params as never[]));
+let warmPromise: Promise<number> | null = null;
+let warmedRows = 0;
+function warmCacheOnce(): Promise<number> {
+  if (!warmPromise) warmPromise = cacheStore.warm(cache, MAX_CACHE).then((n) => { warmedRows = n; if (n) console.log(`[i18n] кэш переводов прогрет из базы: ${n} записей`); return n; });
+  return warmPromise;
+}
+export function __i18nCacheDbState(): { available: boolean | null; warmedRows: number } { return { available: cacheStore.available, warmedRows }; }
 const MAX_TEXTS = 200;
 const MAX_LEN = 5_000;
 
@@ -342,9 +357,11 @@ i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res)
 
     let degraded = false;
     let degradedReason: string | undefined;
+    await warmCacheOnce();
     const out: string[] = new Array(texts.length);
     const missIdx: number[] = [];
     const missTexts: string[] = [];
+    const новые: CacheRow[] = [];
     for (let i = 0; i < texts.length; i++) {
       const hit = cache.get(ckey(target, texts[i]));
       if (hit !== undefined) out[i] = hit;
@@ -373,8 +390,11 @@ i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res)
         out[missIdx[j]] = tr;
         if (!batch.degraded && shouldCache(missTexts[j], engine) && cache.size < MAX_CACHE) {
           cache.set(ckey(target, missTexts[j]), tr);
+          новые.push({ key: ckey(target, missTexts[j]), target, source: missTexts[j], translated: tr });
         }
       }
+      // дозапись в базу — не блокируя ответ; отказ попадёт в журнал одной строкой (внутри store)
+      if (новые.length) void cacheStore.persist(новые);
     }
 
     // Неудачный перевод не кэшируем и на границе: сутки держать английский
@@ -406,7 +426,7 @@ i18nRouter.post("/translate", generationLimit("i_n_translate"), async (req, res)
  * endpoint would be a way to burn the budget; without ADMIN_TOKEN configured it
  * refuses rather than allowing anyone to clear it.
  */
-i18nRouter.post("/cache/clear", (req, res) => {
+i18nRouter.post("/cache/clear", async (req, res) => {
   const required = process.env.ADMIN_TOKEN?.trim();
   if (!required) {
     return res.status(503).json({ error: "ADMIN_TOKEN not configured; refusing to expose cache control" });
@@ -424,7 +444,8 @@ i18nRouter.post("/cache/clear", (req, res) => {
     cleared = cache.size;
     cache.clear();
   }
-  res.json({ cleared, remaining: cache.size, target: target || "all" });
+  const clearedDb = await cacheStore.clear(target || undefined);
+  res.json({ cleared, remaining: cache.size, target: target || "all", clearedDb });
 });
 
 /*
@@ -467,6 +488,8 @@ i18nRouter.get("/health", (_req, res) => {
       : anthropicConfigured ? "claude(all)" : "none",
     languages: Array.from(new Set([...Object.keys(DEEPL_TARGET), ...Object.keys(LANG_NAME)])).sort(),
     cacheSize: cache.size,
+    cacheDb: cacheStore.available,
+    cacheWarmedRows: warmedRows,
   });
 });
 

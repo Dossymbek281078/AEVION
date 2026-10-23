@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders } from "@/lib/auth";
 
 const BIOMARKER_TYPES = [
   { value: "blood_pressure", label: "Blood Pressure", unit: "mmHg", placeholder: "120/80" },
@@ -36,7 +37,7 @@ export default function BiomarkerForm({ onLogged }: Props) {
     try {
       const resp = await fetch(apiUrl("/api/qlife/biomarkers"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           type,
           value: parseFloat(value),

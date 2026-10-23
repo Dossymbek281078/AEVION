@@ -260,6 +260,22 @@ import {
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
 import { csvNeutralizeFormula } from "../lib/csv";
+import { requesterId } from "../lib/devhubGuest";
+
+/**
+ * Чьи сессии и прогоны: вошедший (JWT sub), иначе гость этого браузера
+ * (guest:<id> из заголовка, который ставит сайт). До 24.10.2026 все гости
+ * были владельцем null, а хранилище отдавало null-сессии любому: GET
+ * /api/qcoreai/sessions без входа возвращал 50 чужих гостевых сессий
+ * (заголовки и aiSummary), /sessions/:id — переписку целиком (userInput,
+ * finalContent). Без заголовка — null: такие сессии больше не читаются
+ * никем (store.ts), а старые общие остаются закрытыми.
+ */
+function qcoreOwner(req: { headers: Record<string, unknown> }, auth: { sub?: string } | null | undefined): string | null {
+  if (auth?.sub) return auth.sub;
+  const g = requesterId(req as Parameters<typeof requesterId>[0], null);
+  return g === "anonymous" ? null : g;
+}
 
 export const qcoreaiRouter = Router();
 
@@ -1397,7 +1413,7 @@ qcoreaiRouter.get("/quota-policy", (_req, res) => {
 qcoreaiRouter.get("/sessions", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
-    const rows = await listSessions(auth?.sub ?? null, 50);
+    const rows = await listSessions(qcoreOwner(req, auth), 50);
     res.json({ items: rows, total: rows.length, scope: auth ? "mine" : "anonymous" });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "list-sessions" });
@@ -1412,7 +1428,7 @@ qcoreaiRouter.get("/sessions", async (req, res) => {
 qcoreaiRouter.get("/sessions/archived", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
-    const rows = await listSessions(auth?.sub ?? null, 100, true);
+    const rows = await listSessions(qcoreOwner(req, auth), 100, true);
     const archived = rows.filter((s) => s.archivedAt);
     res.json({ items: archived, total: archived.length });
   } catch (err: any) {
@@ -1424,7 +1440,7 @@ qcoreaiRouter.get("/sessions/archived", async (req, res) => {
 qcoreaiRouter.get("/sessions/:id", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
-    const session = await getSession(req.params.id, auth?.sub ?? null);
+    const session = await getSession(req.params.id, qcoreOwner(req, auth));
     if (!session) return res.status(404).json({ error: "session not found" });
     const runs = await listRuns(session.id, 200);
     res.json({ session, runs });
@@ -1439,7 +1455,7 @@ qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
     const auth = verifyBearerOptional(req);
     const title = typeof req.body?.title === "string" ? req.body.title : "";
     if (!title.trim()) return res.status(400).json({ error: "title required" });
-    const updated = await renameSession(req.params.id, auth?.sub ?? null, title);
+    const updated = await renameSession(req.params.id, qcoreOwner(req, auth), title);
     if (!updated) return res.status(404).json({ error: "session not found" });
     res.json({ session: updated });
   } catch (err: any) {
@@ -1453,7 +1469,7 @@ qcoreaiRouter.patch("/sessions/:id/pin", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     const pinned = typeof req.body?.pinned === "boolean" ? req.body.pinned : true;
-    const ok = await pinSession(String(req.params.id), auth?.sub ?? null, pinned);
+    const ok = await pinSession(String(req.params.id), qcoreOwner(req, auth), pinned);
     if (!ok) return res.status(404).json({ error: "session not found" });
     res.json({ ok: true, pinned });
   } catch (err: any) {
@@ -1469,7 +1485,7 @@ qcoreaiRouter.patch("/sessions/:id/tags", async (req, res) => {
     const { tags } = req.body || {};
     const normalized = Array.isArray(tags) ? tags.slice(0, 10).map((t: unknown) => String(t).trim().toLowerCase().slice(0, 32)).filter(Boolean) : [];
     if (!isDbReady()) return res.json({ ok: true, persisted: false, note: "Сейчас база недоступна: изменение действует только до перезапуска сервера и не сохранится." });
-    await pool.query(`UPDATE "QCoreSession" SET "tags"=$1,"updatedAt"=NOW() WHERE "id"=$2 AND ("userId"=$3 OR "userId" IS NULL)`, [normalized, req.params.id, auth?.sub ?? null]);
+    await pool.query(`UPDATE "QCoreSession" SET "tags"=$1,"updatedAt"=NOW() WHERE "id"=$2 AND "userId"=$3`, [normalized, req.params.id, qcoreOwner(req, auth)]);
     res.json({ ok: true, tags: normalized });
   } catch (err: any) { captureQCoreAIError(err, { route: "sessions-tags" }); res.status(500).json({ error: "set session tags failed" }); }
 });
@@ -1479,7 +1495,7 @@ qcoreaiRouter.patch("/sessions/:id/archive", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const archive = req.body?.archive !== false; // default true
   try {
-    const ok = await archiveSession(String(req.params.id), auth?.sub ?? null, archive);
+    const ok = await archiveSession(String(req.params.id), qcoreOwner(req, auth), archive);
     if (!ok) return res.status(404).json({ error: "session not found" });
     // V41: fire session.archived event
     void notifyEvent({ event: "session.archived", sessionId: String(req.params.id), archived: archive, archivedAt: new Date().toISOString() }, null, auth?.sub);
@@ -1499,7 +1515,7 @@ qcoreaiRouter.post("/sessions/:id/merge", async (req, res) => {
     const { sourceSessionId } = req.body || {};
     if (!sourceSessionId?.trim()) return res.status(400).json({ error: "sourceSessionId required" });
     if (sourceSessionId === req.params.id) return res.status(400).json({ error: "cannot merge a session into itself" });
-    const result = await mergeSessions(String(req.params.id), String(sourceSessionId), auth?.sub ?? null);
+    const result = await mergeSessions(String(req.params.id), String(sourceSessionId), qcoreOwner(req, auth));
     res.json({ ok: true, moved: result.moved });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "sessions-merge" });
@@ -1510,7 +1526,7 @@ qcoreaiRouter.post("/sessions/:id/merge", async (req, res) => {
 qcoreaiRouter.delete("/sessions/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const ok = await deleteSession(req.params.id, auth?.sub ?? null);
+    const ok = await deleteSession(req.params.id, qcoreOwner(req, auth));
     if (!ok) return res.status(404).json({ error: "session not found" });
     res.json({ ok: true });
   } catch (err: any) {
@@ -1524,7 +1540,7 @@ qcoreaiRouter.get("/runs/:id", async (req, res) => {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "run not found" });
     const auth = await verifyBearerLive(req);
-    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    const session = await getSession(run.sessionId, qcoreOwner(req, auth));
     if (!session) return res.status(403).json({ error: "forbidden" });
     const messages = await listMessages(run.id);
     res.json({ run, messages });
@@ -1541,7 +1557,7 @@ qcoreaiRouter.get("/runs/:id", async (req, res) => {
 qcoreaiRouter.post("/runs/:id/share", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const token = await shareRun(req.params.id, auth?.sub ?? null);
+    const token = await shareRun(req.params.id, qcoreOwner(req, auth));
     if (!token) return res.status(404).json({ error: "run not found" });
     res.json({ token });
   } catch (err: any) {
@@ -1553,7 +1569,7 @@ qcoreaiRouter.post("/runs/:id/share", async (req, res) => {
 qcoreaiRouter.delete("/runs/:id/share", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const ok = await unshareRun(req.params.id, auth?.sub ?? null);
+    const ok = await unshareRun(req.params.id, qcoreOwner(req, auth));
     if (!ok) return res.status(404).json({ error: "run not found or not shared" });
     res.json({ ok: true });
   } catch (err: any) {
@@ -1644,7 +1660,7 @@ qcoreaiRouter.post("/shared/:token/comments", sharedLimiter, async (req, res) =>
 qcoreaiRouter.get("/analytics", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
-    const summary = await getAnalytics(auth?.sub ?? null);
+    const summary = await getAnalytics(qcoreOwner(req, auth));
     res.json(summary);
   } catch (err: any) {
     captureQCoreAIError(err, { route: "list-analytics" });
@@ -1688,7 +1704,7 @@ qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
     const auth = verifyBearerOptional(req);
     const run = await getRun(String(req.params.id));
     if (!run) return res.status(404).json({ error: "run not found" });
-    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    const session = await getSession(run.sessionId, qcoreOwner(req, auth));
     if (!session) return res.status(403).json({ error: "forbidden" });
     if (run.status === "running") {
       return res.status(409).json({ error: "run is still streaming — wait for it to finish" });
@@ -1813,7 +1829,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
     const q = String(req.query.q ?? "").trim().slice(0, 200);
     const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1)));
     if (!q) return res.json({ items: [], query: "" });
-    const items = await searchRuns(auth?.sub ?? null, q, limit);
+    const items = await searchRuns(qcoreOwner(req, auth), q, limit);
     res.json({ items, query: q });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "search" });
@@ -1830,7 +1846,7 @@ qcoreaiRouter.get("/tags", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
     const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1)));
-    const items = await getTopUserTags(auth?.sub ?? null, limit);
+    const items = await getTopUserTags(qcoreOwner(req, auth), limit);
     res.json({ items });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "list-tags" });
@@ -1850,7 +1866,7 @@ qcoreaiRouter.patch("/runs/:id/tags", async (req, res) => {
     if (incoming === null) {
       return res.status(400).json({ error: "tags must be an array of strings" });
     }
-    const updated = await setRunTags(String(req.params.id), auth?.sub ?? null, incoming);
+    const updated = await setRunTags(String(req.params.id), qcoreOwner(req, auth), incoming);
     if (!updated) return res.status(404).json({ error: "run not found or forbidden" });
     res.json({ ok: true, tags: updated.tags ?? [] });
   } catch (err: any) {
@@ -1952,7 +1968,7 @@ qcoreaiRouter.get("/analytics/timeseries", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
     const days = Math.max(1, Math.min(365, parseInt(String(req.query.days ?? "30"), 10) || 30));
-    const items = await getCostTimeseries(auth?.sub ?? null, days);
+    const items = await getCostTimeseries(qcoreOwner(req, auth), days);
     res.json({ items, days });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "analytics-timeseries" });
@@ -2121,7 +2137,7 @@ qcoreaiRouter.get("/analytics/by-tag", async (req, res) => {
        GROUP BY t.tag
        ORDER BY "totalCostUsd" DESC
        LIMIT $2`,
-      [auth?.sub ?? null, limit]
+      [qcoreOwner(req, auth), limit]
     );
     res.json({ items: r.rows });
   } catch (err: any) {
@@ -2139,7 +2155,7 @@ qcoreaiRouter.get("/analytics/sessions", async (req, res) => {
     const auth = await verifyBearerLive(req);
     const days = Math.min(90, parseInt(String(req.query.days || "7"), 10) || 7);
     const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1));
-    const items = await getSessionCostSummary(auth?.sub ?? null, days, limit);
+    const items = await getSessionCostSummary(qcoreOwner(req, auth), days, limit);
     res.json({ items });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "analytics-sessions" });
@@ -2155,7 +2171,7 @@ qcoreaiRouter.get("/analytics/export", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
     const days = Math.min(90, parseInt(String(req.query.days || "30"), 10) || 30);
-    const data = await getCostTimeseries(auth?.sub ?? null, days);
+    const data = await getCostTimeseries(qcoreOwner(req, auth), days);
     const csv = [
       "date,runs,costUsd",
       ...data.map((r: any) => `${r.date},${r.runs},${(r.costUsd ?? 0).toFixed(6)}`),
@@ -2258,7 +2274,7 @@ qcoreaiRouter.get("/analytics/provider-compare", async (req, res) => {
 qcoreaiRouter.get("/sessions/:id/export", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
-    const session = await getSession(String(req.params.id), auth?.sub ?? null);
+    const session = await getSession(String(req.params.id), qcoreOwner(req, auth));
     if (!session) return res.status(404).json({ error: "session not found or forbidden" });
     const runs = await listRuns(session.id, 200);
     const format = req.query.format === "md" ? "md" : "json";
@@ -2300,7 +2316,7 @@ qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "run not found" });
     const auth = await verifyBearerLive(req);
-    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    const session = await getSession(run.sessionId, qcoreOwner(req, auth));
     if (!session) return res.status(403).json({ error: "forbidden" });
     const messages = await listMessages(run.id);
     const fmt = req.query.format === "md" ? "md" : req.query.format === "csv" ? "csv" : "json";
@@ -2350,7 +2366,7 @@ qcoreaiRouter.get("/runs/:id/thread", async (req, res) => {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "run not found" });
     const auth = await verifyBearerLive(req);
-    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    const session = await getSession(run.sessionId, qcoreOwner(req, auth));
     if (!session) return res.status(403).json({ error: "forbidden" });
     const threadId = run.threadId ?? run.id;
     const runs = await getThread(threadId);
@@ -2448,7 +2464,7 @@ qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) =>
 qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? null;
+  const userId = qcoreOwner(req, auth);
 
   const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
   if (!userInput) {
@@ -4155,7 +4171,7 @@ qcoreaiRouter.post("/runs/:id/rate", async (req, res) => {
     const auth = verifyBearerOptional(req);
     const { rating, note } = req.body || {};
     if (rating !== 1 && rating !== -1) return res.status(400).json({ error: "rating must be 1 or -1" });
-    const row = await rateRun(String(req.params.id), auth?.sub ?? null, rating as 1 | -1, note);
+    const row = await rateRun(String(req.params.id), qcoreOwner(req, auth), rating as 1 | -1, note);
     const summary = await getRatingsSummary(String(req.params.id));
     res.json({ rating: row, summary });
   } catch (err: any) {
@@ -4168,7 +4184,7 @@ qcoreaiRouter.get("/runs/:id/rating", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
     const [mine, summary] = await Promise.all([
-      getRating(String(req.params.id), auth?.sub ?? null),
+      getRating(String(req.params.id), qcoreOwner(req, auth)),
       getRatingsSummary(String(req.params.id)),
     ]);
     res.json({ mine, summary });
@@ -4182,7 +4198,7 @@ qcoreaiRouter.get("/ratings/top", async (req, res) => {
   try {
     const auth = await verifyBearerLive(req);
     const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1));
-    const items = await listTopRatedRuns(auth?.sub ?? null, limit);
+    const items = await listTopRatedRuns(qcoreOwner(req, auth), limit);
     res.json({ items });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "ratings-top" });
@@ -6255,7 +6271,7 @@ qcoreaiRouter.delete("/me/memories/:id", async (req, res) => {
 // Suggest must come before :id routes
 qcoreaiRouter.post("/templates/suggest", assistLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? null;
+  const userId = qcoreOwner(req, auth);
 
   const STATIC_FALLBACK = [
     { name: "Research Summary", description: "Summarize recent findings on a topic", input: "Summarize the key findings on [topic] from the last 2 years.", strategy: "sequential" },
@@ -6691,8 +6707,8 @@ qcoreaiRouter.get("/analytics/cohorts", async (req, res) => {
     if (!isDbReady()) {
       return res.json({ cohorts: [] });
     }
-    const userId = auth?.sub ?? null;
-    const userFilter = userId ? `AND s."userId"=$1` : `AND s."userId" IS NULL`;
+    const userId = qcoreOwner(req, auth);
+    const userFilter = userId ? `AND s."userId"=$1` : `AND FALSE`; // без владельца — ничего (24.10.2026)
     const params: any[] = userId ? [userId] : [];
     const r = await pool.query(
       `SELECT
@@ -6728,10 +6744,10 @@ qcoreaiRouter.get("/analytics/top-hours", async (req, res) => {
     if (!isDbReady()) {
       return res.json({ hours: [] });
     }
-    const userId = auth?.sub ?? null;
+    const userId = qcoreOwner(req, auth);
     const userFilter = userId
       ? `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND s."userId"=$1`
-      : `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND s."userId" IS NULL`;
+      : `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND FALSE`; // без владельца — ничего
     const params: any[] = userId ? [userId] : [];
     const r = await pool.query(
       `SELECT
@@ -6762,10 +6778,10 @@ qcoreaiRouter.get("/analytics/run-quality", async (req, res) => {
     if (!isDbReady()) {
       return res.json({ brief: 0, standard: 0, detailed: 0, avgLengthByStrategy: [] });
     }
-    const userId = auth?.sub ?? null;
+    const userId = qcoreOwner(req, auth);
     const userFilter = userId
       ? `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND s."userId"=$1`
-      : `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND s."userId" IS NULL`;
+      : `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND FALSE`; // без владельца — ничего
     const params: any[] = userId ? [userId] : [];
 
     const [qualR, stratR] = await Promise.all([
@@ -6813,7 +6829,7 @@ qcoreaiRouter.get("/analytics/run-quality", async (req, res) => {
 
 qcoreaiRouter.post("/runs/:id/branch", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? null;
+  const userId = qcoreOwner(req, auth);
   const parentRunId = req.params.id;
   const { reason, alternativeInput, strategy } = req.body || {};
 
@@ -6875,7 +6891,7 @@ const exportRateLimitMap = new Map<string, number>();
 
 qcoreaiRouter.post("/export/session-bundle", async (req, res) => {
   const auth = await verifyBearerLive(req);
-  const userId = auth?.sub ?? null;
+  const userId = qcoreOwner(req, auth);
   if (!userId) return res.status(401).json({ error: "auth required" });
 
   const { sessionId, includeMessages } = req.body || {};
@@ -6934,7 +6950,7 @@ qcoreaiRouter.post("/export/session-bundle", async (req, res) => {
 
 qcoreaiRouter.post("/export/full-account", async (req, res) => {
   const auth = await verifyBearerLive(req);
-  const userId = auth?.sub ?? null;
+  const userId = qcoreOwner(req, auth);
   if (!userId) return res.status(401).json({ error: "auth required" });
 
   // Rate limit: 1 export per hour
@@ -6986,7 +7002,7 @@ qcoreaiRouter.post("/export/full-account", async (req, res) => {
 
 qcoreaiRouter.post("/me/routing-rules", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? null;
+  const userId = qcoreOwner(req, auth);
   if (!userId) return res.status(401).json({ error: "auth required" });
 
   const { rules } = req.body || {};
@@ -7012,7 +7028,7 @@ qcoreaiRouter.post("/me/routing-rules", async (req, res) => {
 
 qcoreaiRouter.get("/me/routing-rules", async (req, res) => {
   const auth = await verifyBearerLive(req);
-  const userId = auth?.sub ?? null;
+  const userId = qcoreOwner(req, auth);
   if (!userId) return res.status(401).json({ error: "auth required" });
 
   try {
@@ -7032,7 +7048,7 @@ qcoreaiRouter.get("/me/routing-rules", async (req, res) => {
 
 qcoreaiRouter.post("/runs/:id/branch", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = auth?.sub ?? null;
+  const userId = qcoreOwner(req, auth);
   const parentRunId = req.params.id;
   const { reason, alternativeInput, strategy } = req.body || {};
 

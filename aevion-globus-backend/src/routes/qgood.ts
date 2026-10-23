@@ -32,7 +32,7 @@
  *   POST   /api/qgood/exercises/:id/complete — log exercise completion, return streak
  */
 
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { спроситьИИ } from "../lib/дешёвыйИИ";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
@@ -43,6 +43,19 @@ import rateLimit from "express-rate-limit";
 import { ensureQGoodTables, isQGoodDbReady } from "../lib/ensureQGoodTables";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { queryDate } from "../lib/queryDate";
+import { requesterId } from "../lib/devhubGuest";
+
+/**
+ * Чей дневник: вошедший (JWT sub), иначе гость этого браузера (guest:<id> из
+ * заголовка, который ставит сайт). До 23.10.2026 все разлогиненные были одной
+ * строкой "anonymous": настроение и «что происходит» одного гостя читал
+ * следующий. Без заголовка остаётся "anonymous" — туда можно писать, но
+ * читать эту корзину не даёт никто (см. ANON_READ_EMPTY).
+ */
+function qgoodOwner(req: Request): string {
+  return requesterId(req, verifyBearerOptional(req)?.sub);
+}
+const ANON = "anonymous";
 
 export const qgoodRouter = Router();
 
@@ -725,7 +738,7 @@ qgoodRouter.post("/mood", moodLimit, async (req, res) => {
   const context = body.context ? String(body.context).slice(0, 500) : null;
   // Bind mental-health data to the authenticated user (JWT sub) — never trust
   // a client-supplied userId. No token → shared "anonymous" bucket (unchanged).
-  const userId = verifyBearerOptional(req)?.sub ?? "anonymous";
+  const userId = qgoodOwner(req);
 
   if (isQGoodDbReady()) {
     try {
@@ -759,7 +772,9 @@ qgoodRouter.get("/mood", readLimit, async (req, res) => {
   await initPsychTables();
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1), 100);
   // Privacy: read only own (JWT sub) or anonymous moods — never another user's.
-  const userId = verifyBearerOptional(req)?.sub ?? "anonymous";
+  const userId = qgoodOwner(req);
+  // ANON_READ_EMPTY: общая корзина без личности — чужие записи, не отдаём.
+  if (userId === ANON) return res.json({ moods: [], total: 0 });
 
   if (isQGoodDbReady()) {
     try {
@@ -783,7 +798,8 @@ qgoodRouter.get("/mood", readLimit, async (req, res) => {
 qgoodRouter.get("/mood/trends", readLimit, async (req, res) => {
   await initPsychTables();
   // Privacy: trends only over own (JWT sub) or anonymous moods.
-  const userId = verifyBearerOptional(req)?.sub ?? "anonymous";
+  const userId = qgoodOwner(req);
+  if (userId === ANON) return res.json({ period: "7d", avg_score: null, total_entries: 0, emotion_frequency: [], daily: [] });
 
   if (isQGoodDbReady()) {
     try {
@@ -905,7 +921,7 @@ qgoodRouter.post("/exercises/:id/complete", moodLimit, async (req, res) => {
     return res.status(404).json({ error: "exercise_not_found" });
   }
   // Bind completion to authenticated user (JWT sub); no token → anonymous.
-  const userId = verifyBearerOptional(req)?.sub ?? "anonymous";
+  const userId = qgoodOwner(req);
 
   if (isQGoodDbReady()) {
     try {

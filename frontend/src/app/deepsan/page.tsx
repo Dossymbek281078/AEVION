@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { useDeepsanT, type Key } from "./i18n";
+import { getAuthHeaders } from "@/lib/auth";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
@@ -30,7 +32,9 @@ interface ApiOk<T> {
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), {
     ...opts,
-    headers: { "content-type": "application/json", ...opts?.headers },
+    // Токен — чтобы вошедший видел свою доску на любом устройстве; гостю
+    // личность браузера ставит перехватчик (lib/devhubGuest).
+    headers: { "content-type": "application/json", ...getAuthHeaders(), ...opts?.headers },
   });
   const json = (await res.json()) as ApiOk<T> | { success: false; error: string };
   if (!json.success) throw new Error((json as { success: false; error: string }).error ?? "api error");
@@ -60,6 +64,7 @@ const COL_ACCENT: Record<"todo" | "inprogress" | "done", string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DeepSanPage() {
+  const t = useDeepsanT();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -87,11 +92,11 @@ export default function DeepSanPage() {
       const data = await apiFetch<Task[]>("/api/deepsan/tasks?limit=100");
       setTasks(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load tasks");
+      setError(e instanceof Error ? e.message : t("err.load"));
     } finally {
       setTasksLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // ── Fetch stats ────────────────────────────────────────────────────────────
 
@@ -142,9 +147,9 @@ export default function DeepSanPage() {
       });
       setTasks((prev) => [task, ...prev]);
       loadStats();
-      showToast("Task added");
+      showToast(t("toast.added"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add task");
+      setError(e instanceof Error ? e.message : t("err.add"));
     } finally {
       setAddBusy(false);
     }
@@ -164,7 +169,7 @@ export default function DeepSanPage() {
     } catch (e) {
       // revert
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !done } : t)));
-      setError(e instanceof Error ? e.message : "Failed to update task");
+      setError(e instanceof Error ? e.message : t("err.update"));
     }
   }
 
@@ -175,10 +180,10 @@ export default function DeepSanPage() {
     try {
       await apiFetch<{ deleted: number }>(`/api/deepsan/tasks/${id}`, { method: "DELETE" });
       loadStats();
-      showToast("Task deleted");
+      showToast(t("toast.deleted"));
     } catch (e) {
       loadTasks(); // re-fetch to restore
-      setError(e instanceof Error ? e.message : "Failed to delete task");
+      setError(e instanceof Error ? e.message : t("err.delete"));
     }
   }
 
@@ -191,10 +196,10 @@ export default function DeepSanPage() {
         body: JSON.stringify({ taskId, durationMin }),
       });
       setActiveFocusId(session.id);
-      showToast(`Focus session started (${durationMin} min)`);
+      showToast(t("toast.focusStarted", { n: durationMin }));
       return session.id;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start focus session");
+      setError(e instanceof Error ? e.message : t("err.focusStart"));
       return null;
     }
   }
@@ -209,9 +214,9 @@ export default function DeepSanPage() {
       });
       setActiveFocusId(null);
       loadStats();
-      showToast(`Focus session complete! ${actualMin} min logged.`);
+      showToast(t("toast.focusDone", { n: actualMin }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to complete session");
+      setError(e instanceof Error ? e.message : t("err.focusDone"));
     }
   }
 
@@ -265,7 +270,7 @@ export default function DeepSanPage() {
               padding: "3px 8px",
             }}
           >
-            Anti-chaos MVP
+            {t("hero.badge")}
           </span>
         </div>
       </header>
@@ -282,7 +287,7 @@ export default function DeepSanPage() {
               marginBottom: "8px",
             }}
           >
-            Productivity · Focus · Anti-chaos
+            {t("hero.kicker")}
           </div>
           <h1
             style={{
@@ -293,11 +298,11 @@ export default function DeepSanPage() {
               lineHeight: 1.15,
             }}
           >
-            Structure your chaos.{" "}
-            <span style={{ color: "#f97316" }}>Ship what matters.</span>
+            {t("hero.h1a")}{" "}
+            <span style={{ color: "#f97316" }}>{t("hero.h1b")}</span>
           </h1>
           <p style={{ color: "#64748b", fontSize: "14px", maxWidth: "560px", margin: 0 }}>
-            Tasks as states + deep focus sessions. No noise, no overwhelm.
+            {t("hero.sub")}
           </p>
         </div>
 
@@ -322,6 +327,7 @@ export default function DeepSanPage() {
             {error}
             <button
               onClick={() => setError(null)}
+              aria-label={t("err.close")}
               style={{
                 background: "none",
                 border: "none",
@@ -368,7 +374,7 @@ export default function DeepSanPage() {
             <AddTaskForm onAdd={handleAddTask} busy={addBusy} />
             {tasksLoading ? (
               <div style={{ color: "#475569", fontSize: "13px", padding: "20px 0" }}>
-                Loading tasks…
+                {t("loading")}
               </div>
             ) : (
               <div
@@ -413,7 +419,7 @@ export default function DeepSanPage() {
                             color: COL_ACCENT[col],
                           }}
                         >
-                          {COL_LABELS[col]}
+                          {t(`col.${col}` as Key)}
                         </span>
                         <span
                           style={{
@@ -436,7 +442,7 @@ export default function DeepSanPage() {
                             borderRadius: "8px",
                           }}
                         >
-                          empty
+                          {t("col.empty")}
                         </div>
                       ) : (
                         colTasks.map((task) => (
@@ -447,7 +453,7 @@ export default function DeepSanPage() {
                             onDelete={handleDeleteTask}
                             onStartFocus={(id) => {
                               setFocusTaskId(id);
-                              showToast("Task selected for focus. Press Start Focus.");
+                              showToast(t("toast.selected"));
                             }}
                           />
                         ))
@@ -476,9 +482,10 @@ export default function DeepSanPage() {
                   alignItems: "center",
                 }}
               >
-                <span>Task #{focusTaskId} selected</span>
+                <span>{t("sel.task", { id: focusTaskId })}</span>
                 <button
                   onClick={() => setFocusTaskId(null)}
+                  aria-label={t("sel.clear")}
                   style={{ background: "none", border: "none", color: "#f97316", cursor: "pointer", fontSize: "14px", padding: 0 }}
                 >
                   ×
@@ -503,12 +510,12 @@ export default function DeepSanPage() {
               }}
             >
               <div style={{ fontSize: "11px", color: "#475569", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                AEVION modules
+                {t("links.title")}
               </div>
               {[
-                { href: "/qcoreai", label: "QCoreAI", desc: "AI agent engine" },
-                { href: "/multichat-engine", label: "Multichat", desc: "Inbox action items" },
-                { href: "/qpersona", label: "QPersona", desc: "AI twin" },
+                { href: "/qcoreai", label: "QCoreAI", desc: t("links.qcoreai") },
+                { href: "/multichat-engine", label: "Multichat", desc: t("links.multichat") },
+                { href: "/qpersona", label: "QPersona", desc: t("links.qpersona") },
               ].map((link) => (
                 <Link
                   key={link.href}
@@ -556,7 +563,7 @@ export default function DeepSanPage() {
       )}
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 16px" }}>
-        <PaddleUpgradeButton variant="banner" appId="deepsan" label="DeepSan Pro — убери хаос насовсем" />
+        <PaddleUpgradeButton variant="banner" appId="deepsan" label={t("upgrade")} />
       </div>
 
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
@@ -564,14 +571,14 @@ export default function DeepSanPage() {
           moduleId="deepsan"
           noun="concept/messages"
           accent="emerald"
-          sectionTitle="Anti-chaos concept board"
-          sectionHint="Какие практики реально снижают хаос? Что должен делать таймер, чтобы помочь сфокусироваться?"
+          sectionTitle={t("board.title")}
+          sectionHint={t("board.hint")}
           titleField="idea"
           summaryField="rationale"
           fields={[
-            { key: "idea", label: "Идея / практика", placeholder: "напр.: 90-min ultradian блоки вместо 25-min Pomodoro", required: true },
-            { key: "rationale", label: "Зачем это работает", type: "textarea", placeholder: "Какой механизм / исследование / личный опыт" },
-            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            { key: "idea", label: t("board.idea"), placeholder: t("board.ideaPh"), required: true },
+            { key: "rationale", label: t("board.why"), type: "textarea", placeholder: t("board.whyPh") },
+            { key: "author", label: t("board.author"), placeholder: "anon" },
           ]}
         />
       </section>

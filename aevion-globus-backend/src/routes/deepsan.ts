@@ -6,6 +6,8 @@ import rateLimit from "express-rate-limit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureDeepSanTables, isDeepSanDbReady } from "../lib/ensureDeepSanTables";
+import { requesterId } from "../lib/devhubGuest";
+import { verifyBearerOptional } from "../lib/authJwt";
 
 const captureDeepSanError = makeServiceCapture("deepsan");
 
@@ -36,6 +38,7 @@ deepSanRouter.use(limiter);
 
 interface DeepSanTask {
   id: number;
+  owner_id: string;
   title: string;
   description: string | null;
   priority: "low" | "medium" | "high" | "critical";
@@ -48,6 +51,7 @@ interface DeepSanTask {
 
 interface DeepSanSession {
   id: number;
+  owner_id: string;
   task_id: number | null;
   duration_min: number;
   actual_duration_min: number | null;
@@ -64,6 +68,19 @@ const memTasks = new Map<number, DeepSanTask>();
 const memSessions = new Map<number, DeepSanSession>();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Чья доска: вошедший (JWT sub), иначе гость этого браузера (guest:<id> из
+ * заголовка, который ставит сайт). До 23.10.2026 владельца не было вовсе —
+ * одна доска на всех посетителей: список, счётчики и фокус-время общие, а
+ * PATCH/DELETE /tasks/:id пускали любого к чужой задаче.
+ * Без личности ("anonymous") читать нечего, а писать нельзя: такая запись
+ * снова легла бы в общую корзину.
+ */
+const ANON = "anonymous";
+function owner(req: Request): string {
+  return requesterId(req, verifyBearerOptional(req)?.sub);
+}
 
 const VALID_PRIORITIES = ["low", "medium", "high", "critical"] as const;
 
@@ -92,6 +109,8 @@ deepSanRouter.get("/health", (_req: Request, res: Response) => {
 // ─── GET /api/deepsan/tasks ───────────────────────────────────────────────────
 
 deepSanRouter.get("/tasks", async (req: Request, res: Response) => {
+  const me = owner(req);
+  if (me === ANON) return ok(res, []);
   const priority = req.query.priority as string | undefined;
   const done = req.query.done as string | undefined;
   // ?? ловит только null/undefined, поэтому Number("zzz") давало NaN, а
@@ -103,9 +122,9 @@ deepSanRouter.get("/tasks", async (req: Request, res: Response) => {
 
   if (isDeepSanDbReady()) {
     try {
-      const conditions: string[] = [];
-      const params: unknown[] = [];
-      let idx = 1;
+      const conditions: string[] = ["owner_id = $1"];
+      const params: unknown[] = [me];
+      let idx = 2;
 
       if (priority && validPriority(priority)) {
         conditions.push(`priority = $${idx++}`);
@@ -131,7 +150,7 @@ deepSanRouter.get("/tasks", async (req: Request, res: Response) => {
   }
 
   // in-memory
-  let tasks = Array.from(memTasks.values());
+  let tasks = Array.from(memTasks.values()).filter((t) => t.owner_id === me);
   if (priority && validPriority(priority)) tasks = tasks.filter((t) => t.priority === priority);
   if (done !== undefined) {
     const wantDone = done === "true" || done === "1";
@@ -144,6 +163,8 @@ deepSanRouter.get("/tasks", async (req: Request, res: Response) => {
 // ─── POST /api/deepsan/tasks ──────────────────────────────────────────────────
 
 deepSanRouter.post("/tasks", async (req: Request, res: Response) => {
+  const me = owner(req);
+  if (me === ANON) return fail(res, "guest identity required");
   const { title, description, priority = "medium", dueDate, tags } = req.body ?? {};
 
   if (!title || typeof title !== "string" || !title.trim()) {
@@ -163,10 +184,10 @@ deepSanRouter.post("/tasks", async (req: Request, res: Response) => {
   if (isDeepSanDbReady()) {
     try {
       const result = await pool.query(
-        `INSERT INTO deepsan_tasks (title, description, priority, due_date, tags)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO deepsan_tasks (title, description, priority, due_date, tags, owner_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [titleClean, descClean, priority, dueDateClean, tagsClean],
+        [titleClean, descClean, priority, dueDateClean, tagsClean, me],
       );
       return ok(res, result.rows[0], 201);
     } catch (e) {
@@ -179,6 +200,7 @@ deepSanRouter.post("/tasks", async (req: Request, res: Response) => {
   const now = new Date().toISOString();
   const task: DeepSanTask = {
     id: memTaskSeq++,
+    owner_id: me,
     title: titleClean,
     description: descClean,
     priority,
@@ -197,6 +219,8 @@ deepSanRouter.post("/tasks", async (req: Request, res: Response) => {
 deepSanRouter.patch("/tasks/:id", async (req: Request, res: Response) => {
   const id = pgIntId(req.params.id);
   if (id === null) return fail(res, "invalid id");
+  const me = owner(req);
+  if (me === ANON) return fail(res, "task not found", 404);
 
   const { title, done, priority, dueDate } = req.body ?? {};
   if (priority !== undefined && !validPriority(priority)) {
@@ -214,9 +238,9 @@ deepSanRouter.patch("/tasks/:id", async (req: Request, res: Response) => {
       if (priority !== undefined) { sets.push(`priority = $${idx++}`); params.push(priority); }
       if (dueDate !== undefined)  { sets.push(`due_date = $${idx++}`); params.push(dueDate || null); }
 
-      params.push(id);
+      params.push(id, me);
       const result = await pool.query(
-        `UPDATE deepsan_tasks SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`,
+        `UPDATE deepsan_tasks SET ${sets.join(", ")} WHERE id = ${idx} AND owner_id = ${idx + 1} RETURNING *`,
         params,
       );
       if (!result.rowCount) return fail(res, "task not found", 404);
@@ -229,7 +253,7 @@ deepSanRouter.patch("/tasks/:id", async (req: Request, res: Response) => {
   }
 
   const task = memTasks.get(id);
-  if (!task) return fail(res, "task not found", 404);
+  if (!task || task.owner_id !== me) return fail(res, "task not found", 404);
   if (title !== undefined) task.title = String(title).trim().slice(0, 512);
   if (done !== undefined)  task.done = Boolean(done);
   if (priority !== undefined) task.priority = priority;
@@ -243,10 +267,12 @@ deepSanRouter.patch("/tasks/:id", async (req: Request, res: Response) => {
 deepSanRouter.delete("/tasks/:id", async (req: Request, res: Response) => {
   const id = pgIntId(req.params.id);
   if (id === null) return fail(res, "invalid id");
+  const me = owner(req);
+  if (me === ANON) return fail(res, "task not found", 404);
 
   if (isDeepSanDbReady()) {
     try {
-      const result = await pool.query("DELETE FROM deepsan_tasks WHERE id = $1 RETURNING id", [id]);
+      const result = await pool.query("DELETE FROM deepsan_tasks WHERE id = $1 AND owner_id = $2 RETURNING id", [id, me]);
       if (!result.rowCount) return fail(res, "task not found", 404);
       return ok(res, { deleted: id });
     } catch (e) {
@@ -256,7 +282,7 @@ deepSanRouter.delete("/tasks/:id", async (req: Request, res: Response) => {
     }
   }
 
-  if (!memTasks.has(id)) return fail(res, "task not found", 404);
+  if (memTasks.get(id)?.owner_id !== me) return fail(res, "task not found", 404);
   memTasks.delete(id);
   return ok(res, { deleted: id });
 });
@@ -264,6 +290,8 @@ deepSanRouter.delete("/tasks/:id", async (req: Request, res: Response) => {
 // ─── POST /api/deepsan/focus ──────────────────────────────────────────────────
 
 deepSanRouter.post("/focus", async (req: Request, res: Response) => {
+  const me = owner(req);
+  if (me === ANON) return fail(res, "guest identity required");
   const { taskId, durationMin = 25 } = req.body ?? {};
   const duration = Number(durationMin);
   if (!Number.isInteger(duration) || duration < 1 || duration > 180) {
@@ -274,8 +302,8 @@ deepSanRouter.post("/focus", async (req: Request, res: Response) => {
   if (isDeepSanDbReady()) {
     try {
       const result = await pool.query(
-        `INSERT INTO deepsan_sessions (task_id, duration_min) VALUES ($1, $2) RETURNING *`,
-        [taskIdNum, duration],
+        `INSERT INTO deepsan_sessions (task_id, duration_min, owner_id) VALUES ($1, $2, $3) RETURNING *`,
+        [taskIdNum, duration, me],
       );
       return ok(res, result.rows[0], 201);
     } catch (e) {
@@ -288,6 +316,7 @@ deepSanRouter.post("/focus", async (req: Request, res: Response) => {
   const now = new Date().toISOString();
   const session: DeepSanSession = {
     id: memSessionSeq++,
+    owner_id: me,
     task_id: taskIdNum,
     duration_min: duration,
     actual_duration_min: null,
@@ -301,11 +330,14 @@ deepSanRouter.post("/focus", async (req: Request, res: Response) => {
 
 // ─── GET /api/deepsan/focus/active ───────────────────────────────────────────
 
-deepSanRouter.get("/focus/active", async (_req: Request, res: Response) => {
+deepSanRouter.get("/focus/active", async (req: Request, res: Response) => {
+  const me = owner(req);
+  if (me === ANON) return ok(res, null);
   if (isDeepSanDbReady()) {
     try {
       const result = await pool.query(
-        `SELECT * FROM deepsan_sessions WHERE status = 'active' ORDER BY started_at DESC LIMIT 1`,
+        `SELECT * FROM deepsan_sessions WHERE status = 'active' AND owner_id = $1 ORDER BY started_at DESC LIMIT 1`,
+        [me],
       );
       return ok(res, result.rows[0] ?? null);
     } catch (e) {
@@ -316,7 +348,7 @@ deepSanRouter.get("/focus/active", async (_req: Request, res: Response) => {
   }
 
   const active = Array.from(memSessions.values())
-    .filter((s) => s.status === "active")
+    .filter((s) => s.status === "active" && s.owner_id === me)
     .sort((a, b) => b.started_at.localeCompare(a.started_at))[0] ?? null;
   return ok(res, active);
 });
@@ -326,6 +358,8 @@ deepSanRouter.get("/focus/active", async (_req: Request, res: Response) => {
 deepSanRouter.patch("/focus/:id/done", async (req: Request, res: Response) => {
   const id = pgIntId(req.params.id);
   if (id === null) return fail(res, "invalid id");
+  const me = owner(req);
+  if (me === ANON) return fail(res, "session not found", 404);
 
   const { actualDurationMin } = req.body ?? {};
   const actual = actualDurationMin != null ? Number(actualDurationMin) : null;
@@ -335,8 +369,8 @@ deepSanRouter.patch("/focus/:id/done", async (req: Request, res: Response) => {
       const result = await pool.query(
         `UPDATE deepsan_sessions
          SET status = 'done', ended_at = NOW(), actual_duration_min = $1
-         WHERE id = $2 RETURNING *`,
-        [actual, id],
+         WHERE id = $2 AND owner_id = $3 RETURNING *`,
+        [actual, id, me],
       );
       if (!result.rowCount) return fail(res, "session not found", 404);
       return ok(res, result.rows[0]);
@@ -348,7 +382,7 @@ deepSanRouter.patch("/focus/:id/done", async (req: Request, res: Response) => {
   }
 
   const session = memSessions.get(id);
-  if (!session) return fail(res, "session not found", 404);
+  if (!session || session.owner_id !== me) return fail(res, "session not found", 404);
   session.status = "done";
   session.ended_at = new Date().toISOString();
   session.actual_duration_min = actual;
@@ -357,7 +391,9 @@ deepSanRouter.patch("/focus/:id/done", async (req: Request, res: Response) => {
 
 // ─── GET /api/deepsan/stats ───────────────────────────────────────────────────
 
-deepSanRouter.get("/stats", async (_req: Request, res: Response) => {
+deepSanRouter.get("/stats", async (req: Request, res: Response) => {
+  const me = owner(req);
+  if (me === ANON) return ok(res, { totalTasks: 0, doneTasks: 0, totalFocusMin: 0, streakDays: 0 });
   if (isDeepSanDbReady()) {
     try {
       const [tasksRow, sessionsRow, streakRow] = await Promise.all([
@@ -365,17 +401,17 @@ deepSanRouter.get("/stats", async (_req: Request, res: Response) => {
           SELECT
             COUNT(*)::int                          AS total_tasks,
             COUNT(*) FILTER (WHERE done)::int      AS done_tasks
-          FROM deepsan_tasks
-        `),
+          FROM deepsan_tasks WHERE owner_id = $1
+        `, [me]),
         pool.query(`
           SELECT COALESCE(SUM(COALESCE(actual_duration_min, duration_min)), 0)::int AS total_focus_min
-          FROM deepsan_sessions WHERE status = 'done'
-        `),
+          FROM deepsan_sessions WHERE status = 'done' AND owner_id = $1
+        `, [me]),
         pool.query(`
           WITH daily AS (
             SELECT DISTINCT DATE(started_at AT TIME ZONE 'UTC') AS d
             FROM deepsan_sessions
-            WHERE status = 'done'
+            WHERE status = 'done' AND owner_id = $1
             ORDER BY d DESC
           ),
           numbered AS (
@@ -385,7 +421,7 @@ deepSanRouter.get("/stats", async (_req: Request, res: Response) => {
           SELECT COUNT(*)::int AS streak
           FROM numbered
           WHERE d = CURRENT_DATE - CAST((rn - 1) AS INT)
-        `),
+        `, [me]),
       ]);
       return ok(res, {
         totalTasks: tasksRow.rows[0].total_tasks,
@@ -401,8 +437,8 @@ deepSanRouter.get("/stats", async (_req: Request, res: Response) => {
   }
 
   // in-memory stats
-  const tasks = Array.from(memTasks.values());
-  const sessions = Array.from(memSessions.values()).filter((s) => s.status === "done");
+  const tasks = Array.from(memTasks.values()).filter((t) => t.owner_id === me);
+  const sessions = Array.from(memSessions.values()).filter((s) => s.status === "done" && s.owner_id === me);
   const totalFocusMin = sessions.reduce(
     (acc, s) => acc + (s.actual_duration_min ?? s.duration_min),
     0,

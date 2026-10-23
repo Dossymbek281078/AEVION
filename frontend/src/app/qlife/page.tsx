@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders } from "@/lib/auth";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import BiomarkerForm from "./components/BiomarkerForm";
 import TrendCard from "./components/TrendCard";
@@ -30,7 +31,7 @@ export default function QLifePage() {
   const loadBiomarkers = useCallback(async () => {
     setBLoading(true);
     try {
-      const r = await fetch(apiUrl("/api/qlife/biomarkers?limit=30"), { cache: "no-store" });
+      const r = await fetch(apiUrl("/api/qlife/biomarkers?limit=30"), { cache: "no-store", headers: getAuthHeaders() });
       const d = await r.json();
       if (d.ok) setBiomarkers(d.biomarkers ?? []);
     } catch {

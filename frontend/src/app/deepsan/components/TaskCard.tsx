@@ -1,3 +1,4 @@
+import { useDeepsanT, type Key } from "../i18n";
 "use client";
 
 export type Priority = "low" | "medium" | "high" | "critical";
@@ -36,6 +37,7 @@ const PRIORITY_BG: Record<Priority, string> = {
 };
 
 export default function TaskCard({ task, onToggleDone, onDelete, onStartFocus }: TaskCardProps) {
+  const t = useDeepsanT();
   return (
     <div
       style={{
@@ -65,7 +67,7 @@ export default function TaskCard({ task, onToggleDone, onDelete, onStartFocus }:
             padding: 0,
             marginTop: "2px",
           }}
-          title={task.done ? "Mark as todo" : "Mark as done"}
+          title={task.done ? t("card.markTodo") : t("card.markDone")}
         >
           {task.done && (
             <span style={{ color: "#fff", fontSize: "11px", lineHeight: 1 }}>✓</span>
@@ -110,7 +112,7 @@ export default function TaskCard({ task, onToggleDone, onDelete, onStartFocus }:
                 padding: "1px 6px",
               }}
             >
-              {task.priority}
+              {t(`pr.${task.priority}` as Key)}
             </span>
             {task.due_date && (
               <span style={{ fontSize: "10px", color: "#94a3b8" }}>
@@ -148,7 +150,7 @@ export default function TaskCard({ task, onToggleDone, onDelete, onStartFocus }:
               cursor: "pointer",
             }}
           >
-            Focus
+            {t("card.focus")}
           </button>
         )}
         <button
@@ -163,7 +165,7 @@ export default function TaskCard({ task, onToggleDone, onDelete, onStartFocus }:
             cursor: "pointer",
           }}
         >
-          Delete
+          {t("card.delete")}
         </button>
       </div>
     </div>

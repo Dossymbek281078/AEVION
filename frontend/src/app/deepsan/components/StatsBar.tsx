@@ -1,3 +1,4 @@
+import { useDeepsanT } from "../i18n";
 "use client";
 
 interface Stats {
@@ -13,13 +14,14 @@ interface StatsBarProps {
 }
 
 export default function StatsBar({ stats, loading }: StatsBarProps) {
+  const t = useDeepsanT();
   const items = [
-    { label: "Total tasks", value: stats?.totalTasks ?? "—", accent: "#f97316" },
-    { label: "Done", value: stats?.doneTasks ?? "—", accent: "#22c55e" },
-    { label: "Streak", value: stats ? `${stats.streakDays}d` : "—", accent: "#a78bfa" },
+    { label: t("stats.total"), value: stats?.totalTasks ?? "—", accent: "#f97316" },
+    { label: t("stats.done"), value: stats?.doneTasks ?? "—", accent: "#22c55e" },
+    { label: t("stats.streak"), value: stats ? t("stats.days", { n: stats.streakDays }) : "—", accent: "#a78bfa" },
     {
-      label: "Focus time",
-      value: stats ? `${Math.floor(stats.totalFocusMin / 60)}h ${stats.totalFocusMin % 60}m` : "—",
+      label: t("stats.focus"),
+      value: stats ? t("stats.hm", { h: Math.floor(stats.totalFocusMin / 60), m: stats.totalFocusMin % 60 }) : "—",
       accent: "#38bdf8",
     },
   ];

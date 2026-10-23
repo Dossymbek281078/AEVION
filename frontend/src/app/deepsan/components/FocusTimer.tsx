@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useDeepsanT } from "../i18n";
 
 interface FocusTimerProps {
   activeFocusId: number | null;
@@ -21,6 +22,7 @@ function getStoredMin(): number {
 }
 
 export default function FocusTimer({ activeFocusId, onStart, onComplete, taskId }: FocusTimerProps) {
+  const t = useDeepsanT();
   const [durationMin, setDurationMin] = useState<number>(25);
   const [sessionId, setSessionId] = useState<number | null>(activeFocusId);
   const [secLeft, setSecLeft] = useState<number>(0);
@@ -112,13 +114,13 @@ export default function FocusTimer({ activeFocusId, onStart, onComplete, taskId 
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
         <h2 style={{ color: "#fed7aa", fontSize: "15px", fontWeight: 700, margin: 0 }}>
-          Focus Timer
+          {t("timer.title")}
         </h2>
         {!running && (
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <label style={{ fontSize: "11px", color: "#94a3b8" }}>min:</label>
+            <label style={{ fontSize: "11px", color: "#94a3b8" }}>{t("timer.min")}</label>
             <input
-              aria-label="Focus duration, minutes"
+              aria-label={t("timer.durAria")}
               type="number"
               value={durationMin}
               onChange={handleDurationChange}
@@ -189,7 +191,7 @@ export default function FocusTimer({ activeFocusId, onStart, onComplete, taskId 
               cursor: "pointer",
             }}
           >
-            Complete session
+            {t("timer.complete")}
           </button>
         ) : running ? (
           <>
@@ -206,7 +208,7 @@ export default function FocusTimer({ activeFocusId, onStart, onComplete, taskId 
                 cursor: "pointer",
               }}
             >
-              Pause
+              {t("timer.pause")}
             </button>
             <button
               onClick={handleComplete}
@@ -221,7 +223,7 @@ export default function FocusTimer({ activeFocusId, onStart, onComplete, taskId 
                 cursor: "pointer",
               }}
             >
-              Finish early
+              {t("timer.finish")}
             </button>
           </>
         ) : (
@@ -238,7 +240,7 @@ export default function FocusTimer({ activeFocusId, onStart, onComplete, taskId 
               cursor: "pointer",
             }}
           >
-            Start Focus
+            {t("timer.start")}
           </button>
         )}
       </div>

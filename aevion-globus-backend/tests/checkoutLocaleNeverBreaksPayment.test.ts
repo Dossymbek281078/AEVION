@@ -31,9 +31,9 @@ describe("язык страницы оплаты не может сломать 
     expect(localeForCheckout("ar"), "арабский").toBeUndefined();
   });
 
-  it("🔴 казахский → русский как запасной язык кассы (23.10: без языка касса открывалась по-болгарски)", () => {
-    expect(localeForCheckout("kk"), "kk").toBe("ru");
-    expect(localeForCheckout("kk-KZ"), "kk-KZ").toBe("ru");
+  it("🔴 казахский → английский как запасной язык кассы (23.10: «ru» LS отбрасывает — русского нет, kk-браузер получал болгарский)", () => {
+    expect(localeForCheckout("kk"), "kk").toBe("en");
+    expect(localeForCheckout("kk-KZ"), "kk-KZ").toBe("en");
     expect(localeForCheckout("ru"), "ru остаётся ru").toBe("ru");
     expect(localeForCheckout("en"), "en остаётся en").toBe("en");
     expect(localeForCheckout("ar"), "прочие неизвестные — прежнее поведение").toBeUndefined();

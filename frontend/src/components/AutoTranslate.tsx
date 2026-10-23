@@ -399,6 +399,20 @@ const LETTER_RE = /[A-Za-zЀ-ӿ]/;
 
 // Whether a visible string still needs translation for the target — the script
 // heuristic skips strings already in the target language (saves API quota).
+/**
+ * Наша ли это проба. 23.10.2026: после выкатки счётчик платных вызовов без учёта вырос до 659 за 4 часа —
+ * заметную долю дали наши же прогоны Playwright по en/kk-страницам с холодным кэшем перевода (одна /pricing на kk
+ * ≈ 400 строк ≈ 35 вызовов Claude). Проба и так не человек: ей живой перевод не нужен, словари применяются.
+ * Признаки — только явные: navigator.webdriver (его ставит Playwright/Selenium) и метка канала ?c=probe-*.
+ */
+export function isProbeVisit(
+  nav: { webdriver?: boolean } | undefined = typeof navigator !== "undefined" ? navigator : undefined,
+  search: string = typeof location !== "undefined" ? location.search : "",
+): boolean {
+  if (nav?.webdriver === true) return true;
+  return /[?&]c=probe-/.test(search);
+}
+
 function shouldTranslate(s: string, lang: Lang): boolean {
   if (s.length < 2 || !LETTER_RE.test(s)) return false;
   if (/^https?:\/\//i.test(s) || /^\S+@\S+\.\S+$/.test(s)) return false; // url / email
@@ -418,6 +432,8 @@ const WS_TRAIL = /\s*$/;
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "CODE", "PRE", "SVG", "NOSCRIPT"]);
 
 export function AutoTranslate({ children, observe = true }: { children: React.ReactNode; observe?: boolean }) {
+  // Пробе живой перевод не нужен (см. isProbeVisit): считается один раз на монтирование.
+  const probeVisit = isProbeVisit();
   const { lang, langReady } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -614,7 +630,7 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
       // inFlight guard: never run two /translate requests at once. Prevents the
       // observer and the debounce timer from firing overlapping batches that
       // overload the backend (the original cause of the 502s).
-      if (destroyed || inFlight || pending.size === 0 || serviceLies) return;
+      if (destroyed || inFlight || pending.size === 0 || serviceLies || probeVisit) return;
       inFlight = true;
       const batch = Array.from(pending).slice(0, 100);
       batch.forEach((b) => pending.delete(b));

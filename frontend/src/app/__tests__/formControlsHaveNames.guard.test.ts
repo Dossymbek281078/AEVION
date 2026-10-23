@@ -161,9 +161,11 @@ describe("поля, найденные широким обходом 29.08.2026"
       join(process.cwd(), "src/components/build/BuildShell.tsx"), "utf8");
     // Placeholder исчезает при вводе — форма становится безымянной ровно
     // тогда, когда в ней работают.
-    for (const имя of ["Email", "Password"])
+    // 24.10.2026: подписи формы входа — из словаря оболочки (buildShellI18n),
+    // имя у поля по-прежнему отдельное от placeholder.
+    for (const [имя, ключ] of [["Email", "auth.email"], ["Password", "auth.password"]])
       expect(s, `поле «${имя}» формы входа снова опирается только на placeholder`)
-        .toContain(`aria-label="${имя}"`);
+        .toContain(`aria-label={tr("${ключ}")}`);
   });
 });
 

@@ -19,6 +19,19 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { requesterId } from "../lib/devhubGuest";
+
+/**
+ * Чьи биомаркеры: вошедший (JWT sub), иначе гость этого браузера (guest:<id>
+ * из заголовка, который ставит сайт). До 24.10.2026 все разлогиненные были
+ * одной строкой "anonymous" — вес и заметки одного гостя видел следующий
+ * (прод: запись weight 70 кг от 19.06 у любого гостя), а /trends сводил
+ * показатели ВСЕХ пользователей. Без личности читать нечего, писать нельзя.
+ */
+const ANON = "anonymous";
+function qlifeOwner(req: Request): string {
+  return requesterId(req, verifyBearerOptional(req)?.sub);
+}
 
 export const qlifeRouter = Router();
 
@@ -82,9 +95,9 @@ function memList(type?: string, limit = 30, userId?: string): BiomarkerRecord[] 
     .slice(0, limit);
 }
 
-function memTrends(): Record<string, { type: string; week: string; avg: number; count: number }[]> {
+function memTrends(userId: string): Record<string, { type: string; week: string; avg: number; count: number }[]> {
   const grouped: Record<string, Record<string, { sum: number; count: number }>> = {};
-  for (const r of memBiomarkers) {
+  for (const r of memBiomarkers.filter((x) => x.user_id === userId)) {
     const d = new Date(r.measured_at);
     // ISO week approximation: floor to Monday
     const dayMs = 86_400_000;
@@ -184,7 +197,7 @@ async function dbList(type?: string, limit = 30, userId?: string): Promise<Bioma
   }));
 }
 
-async function dbTrends(): Promise<Record<string, { type: string; week: string; avg: number; count: number }[]>> {
+async function dbTrends(userId: string): Promise<Record<string, { type: string; week: string; avg: number; count: number }[]>> {
   const { rows } = await pool.query(`
     SELECT
       type,
@@ -192,9 +205,10 @@ async function dbTrends(): Promise<Record<string, { type: string; week: string; 
       ROUND(AVG(value)::numeric, 2)               AS avg,
       COUNT(*)::int                               AS count
     FROM qlife_biomarkers
+    WHERE user_id = $1
     GROUP BY type, date_trunc('week', measured_at)
     ORDER BY type, week DESC
-  `);
+  `, [userId]);
   const out: Record<string, { type: string; week: string; avg: number; count: number }[]> = {};
   for (const row of rows) {
     const t: string = row.type;
@@ -247,9 +261,11 @@ qlifeRouter.get("/stats", readLimit, async (_req: Request, res: Response) => {
 });
 
 /** GET /api/qlife/biomarkers/trends — must be registered before /:id style routes */
-qlifeRouter.get("/biomarkers/trends", readLimit, async (_req: Request, res: Response) => {
+qlifeRouter.get("/biomarkers/trends", readLimit, async (req: Request, res: Response) => {
   try {
-    const trends = isQLifeDbReady() ? await dbTrends() : memTrends();
+    const me = qlifeOwner(req);
+    if (me === ANON) { res.json({ ok: true, trends: {} }); return; }
+    const trends = isQLifeDbReady() ? await dbTrends(me) : memTrends(me);
     res.json({ ok: true, trends });
   } catch (e: any) {
     captureQLifeError(e, { route: "GET /biomarkers/trends" });
@@ -264,8 +280,8 @@ qlifeRouter.get("/biomarkers", readLimit, async (req: Request, res: Response) =>
     // Privacy: a reader only ever sees their own data (JWT sub) or the shared
     // anonymous bucket — never another user's biomarkers via a client-supplied
     // ?userId. Health data must not be enumerable across users.
-    const auth   = verifyBearerOptional(req);
-    const userId = auth?.sub ?? "anonymous";
+    const userId = qlifeOwner(req);
+    if (userId === ANON) { res.json({ ok: true, biomarkers: [], count: 0 }); return; }
     const limit  = Math.min(Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1), 200);
 
     if (type && !VALID_TYPES.includes(type as BiomarkerType)) {
@@ -296,7 +312,8 @@ qlifeRouter.post("/biomarkers", writeLimit, async (req: Request, res: Response) 
     // Bind the reading to the authenticated user (JWT sub) — never trust a
     // client-supplied userId, which would let anyone write into another user's
     // health record. No token → the shared "anonymous" bucket (unchanged UX).
-    const auth = verifyBearerOptional(req);
+    const me = qlifeOwner(req);
+    if (me === ANON) { res.status(400).json({ ok: false, error: "guest identity required" }); return; }
 
     if (!type || !VALID_TYPES.includes(type as BiomarkerType)) {
       res.status(400).json({
@@ -315,7 +332,7 @@ qlifeRouter.post("/biomarkers", writeLimit, async (req: Request, res: Response) 
     }
 
     const fields: Omit<BiomarkerRecord, "id"> = {
-      user_id:     auth?.sub ? String(auth.sub).slice(0, 128) : "anonymous",
+      user_id:     me.slice(0, 128),
       type:        type as BiomarkerType,
       value:       Number(value),
       unit:        String(unit).slice(0, 32),

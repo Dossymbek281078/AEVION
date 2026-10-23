@@ -23,11 +23,13 @@ vi.mock("../src/lib/dbPool", () => ({ getPool: () => ({ query: vi.fn().mockRejec
 
 import { deepSanRouter } from "../src/routes/deepsan";
 import { qgoodRouter } from "../src/routes/qgood";
+import { qlifeRouter } from "../src/routes/qlife";
 
 const app = express();
 app.use(express.json());
 app.use("/api/deepsan", deepSanRouter);
 app.use("/api/qgood", qgoodRouter);
+app.use("/api/qlife", qlifeRouter);
 
 const A = { "x-devhub-guest": "guestAAAA1111" };
 const B = { "x-devhub-guest": "guestBBBB2222" };
@@ -97,5 +99,27 @@ describe("qgood: дневник настроения гостя виден то�
     expect(none.body.moods).toEqual([]);
     const tr = await request(app).get("/api/qgood/mood/trends");
     expect(tr.body.total_entries).toBe(0);
+  });
+});
+
+describe("qlife: биомаркеры и тренды гостя видны только ему", () => {
+  // 24.10.2026, прод: гость видел чужую запись weight 70 кг от 19.06, а
+  // /biomarkers/trends сводил показатели ВСЕХ пользователей.
+  test("запись A не видна B, без личности — пусто, писать без личности нельзя", async () => {
+    const w = await request(app).post("/api/qlife/biomarkers").set(A).send({ type: "weight_kg", value: 81, unit: "kg", notes: "личное A" });
+    expect(w.status).toBeLessThan(300);
+    const a = await request(app).get("/api/qlife/biomarkers").set(A);
+    const b = await request(app).get("/api/qlife/biomarkers").set(B);
+    const none = await request(app).get("/api/qlife/biomarkers");
+    expect(a.body.biomarkers.length, "знаменатель: A видит своё").toBe(1);
+    expect(b.body.biomarkers).toEqual([]);
+    expect(none.body.biomarkers).toEqual([]);
+    expect((await request(app).post("/api/qlife/biomarkers").send({ type: "weight_kg", value: 1, unit: "kg" })).status).toBe(400);
+  });
+  test("тренды — только свои", async () => {
+    const ta = await request(app).get("/api/qlife/biomarkers/trends").set(A);
+    const tb = await request(app).get("/api/qlife/biomarkers/trends").set(B);
+    expect(Object.keys(ta.body.trends), "знаменатель: у A тренд веса").toContain("weight_kg");
+    expect(tb.body.trends).toEqual({});
   });
 });

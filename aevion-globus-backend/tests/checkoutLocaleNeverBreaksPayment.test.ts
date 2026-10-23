@@ -27,8 +27,16 @@ describe("язык страницы оплаты не может сломать 
 
   it("🔴 языки, которых у кассы НЕТ, не уходят наружу вовсе", () => {
     // казахский и арабский: передать их — риск отказа при создании оплаты
-    expect(localeForCheckout("kk"), "казахский").toBeUndefined();
+    // 23.10.2026: казахский — исключение, см. тест ниже (касса без языка открывалась по-болгарски)
     expect(localeForCheckout("ar"), "арабский").toBeUndefined();
+  });
+
+  it("🔴 казахский → русский как запасной язык кассы (23.10: без языка касса открывалась по-болгарски)", () => {
+    expect(localeForCheckout("kk"), "kk").toBe("ru");
+    expect(localeForCheckout("kk-KZ"), "kk-KZ").toBe("ru");
+    expect(localeForCheckout("ru"), "ru остаётся ru").toBe("ru");
+    expect(localeForCheckout("en"), "en остаётся en").toBe("en");
+    expect(localeForCheckout("ar"), "прочие неизвестные — прежнее поведение").toBeUndefined();
   });
 
   it("региональный код сводится к языку, а не отбрасывается", () => {

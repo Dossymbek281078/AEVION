@@ -70,7 +70,12 @@ export function rotateDevhubGuestId(): string | null {
   }
 }
 
-/** Адрес ручки DevHub — только таким запросам добавляется заголовок. */
+/**
+ * Адрес ручки, которой нужна личность гостя — только таким запросам
+ * добавляется заголовок. Кроме DevHub — deepsan (доска задач) и qgood
+ * (дневник настроения): до 23.10.2026 у них все разлогиненные были одним
+ * пользователем, и доска/дневник одного гостя были видны следующему.
+ */
 export function isDevhubApiUrl(input: unknown): boolean {
   let url = "";
   if (typeof input === "string") url = input;
@@ -79,8 +84,10 @@ export function isDevhubApiUrl(input: unknown): boolean {
     if (typeof o.href === "string") url = o.href;
     else if (typeof o.url === "string") url = o.url;
   }
-  return url.includes("/api/devhub/") || url.endsWith("/api/devhub");
+  return GUEST_API_PREFIXES.some((p) => url.includes(`${p}/`) || url.endsWith(p));
 }
+
+const GUEST_API_PREFIXES = ["/api/devhub", "/api/deepsan", "/api/qgood"];
 
 /**
  * Добавляет заголовок, сохраняя те, что уже были. `Headers` принимает все три

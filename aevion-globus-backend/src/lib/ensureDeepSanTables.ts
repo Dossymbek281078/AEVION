@@ -60,6 +60,12 @@ export async function ensureDeepSanTables(pool: PgPoolInstance): Promise<void> {
                               CHECK (status IN ('active','done','abandoned'))
       );
     `);
+    // 23.10.2026: владелец. Строки до этой даты остаются с NULL — их не видит
+    // никто: они были общими на всех, и чьи они, узнать уже нельзя.
+    await pool.query(`ALTER TABLE deepsan_tasks ADD COLUMN IF NOT EXISTS owner_id TEXT`);
+    await pool.query(`ALTER TABLE deepsan_sessions ADD COLUMN IF NOT EXISTS owner_id TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_deepsan_tasks_owner ON deepsan_tasks(owner_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_deepsan_sessions_owner ON deepsan_sessions(owner_id, status)`);
     dbReady = true;
     console.log("[DeepSan] Tables ready");
   } catch (e: unknown) {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from '@/lib/apiBase';
+import { getAuthHeaders } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 
 interface MoodEntry {
@@ -49,8 +50,8 @@ export default function MoodTrend({ userId = 'anonymous', refreshKey = 0 }: Prop
     setLoading(true);
     try {
       const [mRes, tRes] = await Promise.all([
-        fetch(apiUrl(`/api/qgood/mood?limit=7&userId=${encodeURIComponent(userId)}`)),
-        fetch(apiUrl(`/api/qgood/mood/trends?userId=${encodeURIComponent(userId)}`)),
+        fetch(apiUrl(`/api/qgood/mood?limit=7&userId=${encodeURIComponent(userId)}`), { headers: getAuthHeaders() }),
+        fetch(apiUrl(`/api/qgood/mood/trends?userId=${encodeURIComponent(userId)}`), { headers: getAuthHeaders() }),
       ]);
       if (mRes.ok) {
         const d = await mRes.json() as { moods?: MoodEntry[] };

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { apiUrl } from '@/lib/apiBase';
+import { getAuthHeaders } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 
 const EMOTIONS = [
@@ -43,7 +44,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
     try {
       const res = await fetch(apiUrl('/api/qgood/mood'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ score, emotion: emotion || undefined, context: context || undefined, userId }),
       });
       if (!res.ok) throw new Error('Ошибка сохранения');

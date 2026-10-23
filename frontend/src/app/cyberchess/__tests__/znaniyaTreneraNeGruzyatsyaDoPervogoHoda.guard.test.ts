@@ -17,7 +17,9 @@ import { join } from "node:path";
  */
 const КОРЕНЬ = join(process.cwd(), "src/app/cyberchess");
 const СТРАНИЦА = readFileSync(join(КОРЕНЬ, "page.tsx"), "utf8");
-const ПРЕДЕЛ_БАЙТ = 1_040_000; // 13.10: было 1 196 766 с coachKnowledge, стало ~1 033 600
+// 23.10: +~36 КБ — словарь подписей (126 атрибутов × ru/en/kk, были русскими
+// литералами); знания тренера по-прежнему не в статике. Было 1 040 000.
+const ПРЕДЕЛ_БАЙТ = 1_080_000; // 13.10: было 1 196 766 с coachKnowledge, стало ~1 033 600
 
 function статическиеЛокальныеИмпорты(src: string): string[] {
   const out: string[] = [];

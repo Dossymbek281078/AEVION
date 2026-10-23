@@ -877,14 +877,15 @@ function sqLuma(hex:string):number{
    (1463×724: ряд под доской стоил 26 px, доска 538 = 74 % vh при планке lichess 76 %). */
 type PalitraProps={boardTheme:number;onTheme:(i:number)=>void;boardScale:number;onScale:(f:(s:number)=>number)=>void;cc:{text:string;textMute:string;border:string;surface1:string}};
 const PalitraIMasshtab=React.memo(function PalitraIMasshtab({boardTheme,onTheme,boardScale,onScale,cc:CC}:PalitraProps){
+  const cc=useCcI18n();
   const sBoardTheme=onTheme,sBoardScale=onScale;
   return (
     <div data-cc-palitra="1" style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
       {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
       <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
-      <button title="Уменьшить доску (Ctrl+-)" aria-label="Уменьшить доску" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
-      <span title="Размер доски" style={{fontSize:9.5,color:CC.textMute,fontWeight:800,minWidth:28,textAlign:"center",fontFamily:"ui-monospace,monospace"}}>{Math.round(boardScale*100)}%</span>
-      <button title="Увеличить доску (Ctrl+=)" aria-label="Увеличить доску" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
+      <button title={cc.t("attr.shrink_board_ctrl")} aria-label={cc.t("board.zoomOut")} onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
+      <span title={cc.t("board.zoomSize")} style={{fontSize:9.5,color:CC.textMute,fontWeight:800,minWidth:28,textAlign:"center",fontFamily:"ui-monospace,monospace"}}>{Math.round(boardScale*100)}%</span>
+      <button title={cc.t("attr.enlarge_board_ctrl")} aria-label={cc.t("board.zoomIn")} onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
     </div>
   );
 });
@@ -7483,8 +7484,8 @@ export default function CyberChessPage(){
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
       {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>
         <div style={{padding:"6px 12px",background:"rgba(124,58,237,0.2)",border:"1px solid rgba(124,58,237,0.4)",borderRadius:8,color:"#a78bfa",fontSize:12,fontWeight:800,letterSpacing:"0.05em"}}>📺 РЕЖИМ СТРИМЕРА</div>
-        <button onClick={()=>streamerToolbarRef.current?.showYT()} title="Показать панель YouTube" style={{padding:"6px 10px",background:"rgba(255,0,51,0.18)",border:"1px solid rgba(255,0,51,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ YT</button>
-        <button onClick={()=>streamerToolbarRef.current?.showTW()} title="Показать панель Twitch" style={{padding:"6px 10px",background:"rgba(145,70,255,0.18)",border:"1px solid rgba(145,70,255,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ Twitch</button>
+        <button onClick={()=>streamerToolbarRef.current?.showYT()} title={cc.t("attr.show_youtube_panel")} style={{padding:"6px 10px",background:"rgba(255,0,51,0.18)",border:"1px solid rgba(255,0,51,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ YT</button>
+        <button onClick={()=>streamerToolbarRef.current?.showTW()} title={cc.t("attr.show_twitch_panel")} style={{padding:"6px 10px",background:"rgba(145,70,255,0.18)",border:"1px solid rgba(145,70,255,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ Twitch</button>
         <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
       </div>}
       {/* Sticky glass header */}
@@ -7587,7 +7588,7 @@ export default function CyberChessPage(){
             boxShadow:"0 2px 6px rgba(251,146,60,0.2)",
             transition:`all ${MOTION.fast} ${MOTION.ease}`
           }}
-          title="Активный режим — клик чтобы сменить">
+          title={cc.t("attr.active_mode_click_to_change")}>
           <span style={{fontSize:14}}>{VARIANTS.find(v=>v.id===variant)?.emoji}</span>
           <span>{VARIANTS.find(v=>v.id===variant)?.name}</span>
         </button>}
@@ -7598,7 +7599,7 @@ export default function CyberChessPage(){
             ЧЕТЫРЕ ряда кнопок над содержимым. Доступ не теряется: навигация
             есть в «Все разделы» рядом, а сама палитра открывается из панели
             быстрых действий в партии («⚙ Ещё»). */}
-        {!isMobileLayout&&vwPx>=1700&&<button onClick={()=>sPalOpen(true)} title="Поиск любого действия (Ctrl+K)" className="cc-focus-ring"
+        {!isMobileLayout&&vwPx>=1700&&<button onClick={()=>sPalOpen(true)} title={cc.t("attr.search_any_action_ctrl_k")} className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
             padding:"7px 12px 7px 10px",borderRadius:RADIUS.full,
@@ -7620,7 +7621,7 @@ export default function CyberChessPage(){
         {/* «Все разделы» — видимый навигационный хаб. Делает обнаружимыми ВСЕ режимы и
             киллер-фичи (Турниры/Экономика/Тренинг/Реплеи/Студия/CPI), которые раньше были
             доступны только по прямому URL или через Ctrl+K. Зелёный акцент = заметность. */}
-        {vwPx>=1700&&<button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
+        {vwPx>=1700&&<button onClick={()=>sShowSections(true)} title={cc.t("attr.all_sections_tournaments_economy_training")} className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
             padding:"7px 14px",borderRadius:RADIUS.full,
@@ -7637,7 +7638,7 @@ export default function CyberChessPage(){
         {vwPx<769&&<a href={ccBuyHref} data-cc-buy="header-phone" onClick={учестьКликПоПокупке} className="cc-touch" title={`${cc.t("buy.card.title")} · ${ccBuyLabel}`} aria-label={`Купить CyberChess · ${ccBuyLabel}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 8px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel.match(/\$\d+/)?.[0]||ccBuyLabel}</a>}
         {vwPx>=769&&<a href={ccBuyHref} data-cc-buy="header" onClick={учестьКликПоПокупке} className="cc-touch" title={cc.t("buy.card.title")} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabelLoc}</a>}
         {vwPx>=1700&&<div style={{position:"relative",flexShrink:0}}>
-          <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title="Помощь — тур по интерфейсу, горячие клавиши, что такое Chessy" aria-label="Помощь" className="cc-focus-ring"
+          <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title={cc.t("attr.help_interface_tour_keyboard_shortcuts")} aria-label={cc.t("nav.help")} className="cc-focus-ring"
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 13px",borderRadius:RADIUS.full,
               border:`1.5px solid ${helpMenuOpen?"#2563eb":"#3b82f6"}`,background:helpMenuOpen?"rgba(37,99,235,0.18)":"rgba(59,130,246,0.12)",color:"#2563eb",
               fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
@@ -7672,7 +7673,7 @@ export default function CyberChessPage(){
               <span style={{fontSize:13,lineHeight:1}}>✓</span>
               <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{(ccAuth.user.name||ccAuth.user.email||"Аккаунт").split("@")[0]}</span>
             </a>
-          : <a href="/auth?next=/cyberchess" title="Войти в аккаунт AEVION — рейтинг, история и Chessy будут синхронизироваться между устройствами" className="cc-focus-ring"
+          : <a href="/auth?next=/cyberchess" title={cc.t("attr.sign_in_to_your_aevion")} className="cc-focus-ring"
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 13px",borderRadius:RADIUS.full,
                 border:`1.5px solid ${CC.borderStrong}`,background:CC.surface1,color:CC.textDim,
                 fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",textDecoration:"none"}}>
@@ -7720,7 +7721,7 @@ export default function CyberChessPage(){
           <button
             onClick={()=>sShowShop(true)}
             title={`Chessy за задачи, уроки и достижения · баланс ${chessy.balance} · всего заработано ${chessy.lifetime} · клик → магазин`}
-            aria-label="Магазин Chessy"
+            aria-label={cc.t("attr.chessy_shop")}
             className="cc-touch"
             style={{
               display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
@@ -7754,19 +7755,19 @@ export default function CyberChessPage(){
             {srvWallet==="failed"&&(
               <span
                 data-testid="chessy-server-unknown"
-                title="Не удалось запросить серверный счёт Chessy. Это НЕ значит, что он пуст."
+                title={cc.t("attr.could_not_fetch_the_server")}
                 style={{fontSize:11,fontWeight:800,marginLeft:4,opacity:0.55}}
               >
                 ?
               </span>
             )}
-            {chessy.owned.puzzle_boost&&<span title="Ускорение задач включено!" style={{fontSize:9,marginLeft:2,color:"#ea580c",fontWeight:900}}>⚡</span>}
-            {chessy.owned.streak_shield&&<span title="Щит серии включён!" style={{fontSize:9,marginLeft:1,color:"#3b82f6",fontWeight:900}}>🛡</span>}
+            {chessy.owned.puzzle_boost&&<span title={cc.t("attr.puzzle_boost_is_on")} style={{fontSize:9,marginLeft:2,color:"#ea580c",fontWeight:900}}>⚡</span>}
+            {chessy.owned.streak_shield&&<span title={cc.t("attr.streak_shield_is_on")} style={{fontSize:9,marginLeft:1,color:"#3b82f6",fontWeight:900}}>🛡</span>}
           </button>
           <button
             onClick={()=>sShowChessyInfo(true)}
-            title="Что такое Chessy?"
-            aria-label="Что такое Chessy"
+            title={cc.t("attr.what_is_chessy")}
+            aria-label={cc.t("attr.what_is_chessy_2")}
             className="cc-touch"
             style={{
               display:"inline-flex",alignItems:"center",justifyContent:"center",
@@ -7786,7 +7787,7 @@ export default function CyberChessPage(){
 
         {/* Часто нужное — настройки, звук, мобильная панель — остаётся в шапке */}
         <div style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
-        <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title="Настройки" ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
+        <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title={cc.t("attr.settings")} ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
         {vwPx>=769&&<Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>}
         {/* Mobile sidebar toggle — visible only on mobile via CSS */}
         <button onClick={()=>sMobileSidebarOpen(v=>!v)} title={mobileSidebarOpen?"Свернуть боковую панель":(tab==="puzzles"?"Открыть панель задачи: подсказка, решение, следующая":"Открыть боковую панель")}
@@ -7818,7 +7819,7 @@ export default function CyberChessPage(){
         {/* ⚙ Ещё — overflow-меню. Свернули «Инструменты» (клавиши/музыка/стрим/фулскрин/
             онлайн) и «Навигацию» (раскладка/язык/экосистема) в одно меню → чистая шапка. */}
         <div style={{position:"relative",flexShrink:0}}>
-          {!шапкаКомпактна&&<button onClick={()=>sMoreMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={moreMenuOpen} title="Ещё — клавиши, музыка, стрим, раскладка, язык, экосистема" className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:RADIUS.full,border:`1px solid ${moreMenuOpen?CC.brand:CC.borderStrong}`,background:moreMenuOpen?CC.brandSoft:CC.surface1,color:moreMenuOpen?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
+          {!шапкаКомпактна&&<button onClick={()=>sMoreMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={moreMenuOpen} title={cc.t("attr.more_shortcuts_music_stream_layout")} className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:RADIUS.full,border:`1px solid ${moreMenuOpen?CC.brand:CC.borderStrong}`,background:moreMenuOpen?CC.brandSoft:CC.surface1,color:moreMenuOpen?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
             <span style={{fontSize:14}} aria-hidden>⚙</span>{vwPx>=769&&<span>{cc.t("nav.more")}</span>}<span style={{fontSize:9}} aria-hidden>▾</span>
           </button>}
           {moreMenuOpen&&<>
@@ -7854,7 +7855,7 @@ export default function CyberChessPage(){
             Строка шапки сдвигает контент вниз — накрывать ей нечего по построению; и отступ
             152px под скроллером больше не нужен. С 19.09.2026 так на ЛЮБОЙ ширине: десктопная
             fixed-пилюля top:156 при прокрутке «Анализа» ложилась на 8-ю горизонталь доски. */}
-        {pokazatVozvratVPartiyu({идётПартия:on,конецПартии:!!over,вкладка:tab,партияСЧеловеком:!!isHumanGame,задачаНаДоске:!!pzCurrent})&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:vwPx<769?"1 1 100%":"0 0 auto",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
+        {pokazatVozvratVPartiyu({идётПартия:on,конецПартии:!!over,вкладка:tab,партияСЧеловеком:!!isHumanGame,задачаНаДоске:!!pzCurrent})&&<button onClick={()=>sTab("play")} title={cc.t("attr.back_to_the_game_the")} className="cc-focus-ring" style={{flex:vwPx<769?"1 1 100%":"0 0 auto",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
           <span style={{fontSize:15,lineHeight:1}}>▶</span><span>Вернуться к партии</span><span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
         </button>}
       </div>}
@@ -8056,7 +8057,7 @@ export default function CyberChessPage(){
             {(()=>{
               const cs=ldCPIState();const nh=cs.history.length;
               if(nh===0)return(
-                <Link href="/cyberchess/cpi/dashboard" style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:RADIUS.full,background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",border:"1px solid #c4b5fd",fontSize:10,fontWeight:900,color:"#5b21b6",letterSpacing:0.4,textDecoration:"none"}} title="AEVION CPI — сыграй и разбери партию чтобы начать">
+                <Link href="/cyberchess/cpi/dashboard" style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:RADIUS.full,background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",border:"1px solid #c4b5fd",fontSize:10,fontWeight:900,color:"#5b21b6",letterSpacing:0.4,textDecoration:"none"}} title={cc.t("attr.aevion_cpi_play_and_review")}>
                   <span>📊</span><span>CPI —</span>
                 </Link>
               );
@@ -8084,7 +8085,7 @@ export default function CyberChessPage(){
               border:"1px solid #6ee7b7",
               fontSize:10,fontWeight:900,color:"#047857",letterSpacing:0.4,
               cursor:"pointer"
-            }} title="Полная статистика: W/L/D, дебюты, тайминг, тренд рейтинга, FIDE-калибровка">
+            }} title={cc.t("attr.full_stats_w_l_d")}>
               <span>📈</span><span>Стата</span>
             </button>
           </div>}
@@ -8253,13 +8254,13 @@ export default function CyberChessPage(){
                       <span>{name}</span>
                     </button>;
                   })}
-                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Случайный цвет"
+                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title={cc.t("attr.random_color")}
                     /* Имя, а не значок. Содержимое кнопки — 🎲, и по правилам
                        имени оно ПОБЕЖДАЕТ title: читалка объявляла «игральная
                        кость, кнопка» — роль есть, дела нет. Замер вкладки
                        доступности: из 67 кнопок страницы безымянна была ровно
                        эта. Передана 02.09, дожила до 04.09. */
-                    aria-label="Случайный цвет"
+                    aria-label={cc.t("attr.random_color")}
                     className="cc-focus-ring"
                     style={{display:"inline-flex",alignItems:"center",
                       padding:"4px 10px",borderRadius:RADIUS.full,border:"none",
@@ -8319,7 +8320,7 @@ export default function CyberChessPage(){
                   onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform="";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 12px 28px rgba(5,150,105,0.42), inset 0 1px 0 rgba(255,255,255,0.25)"}}
                   onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.99)"}}
                   onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)"}}
-                  aria-label="Начать новую партию">
+                  aria-label={cc.t("attr.start_a_new_game")}>
                   <Icon.Play width={24} height={24}/> ИГРАТЬ
                 </button>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:SPACE[2]}}>
@@ -8344,7 +8345,7 @@ export default function CyberChessPage(){
                 </Btn>
                 {/* Онлайн-матч с реальными игроками (matchmaking) — первый класс, как «Play online» у lichess */}
                 <Btn size="lg" variant="secondary" onClick={()=>{window.location.href="/cyberchess/matchmaking"}}
-                  aria-label="Онлайн-матч с реальным соперником"
+                  aria-label={cc.t("attr.online_match_with_a_real")}
                   style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",
                     border:"1px solid #ddd6fe",color:"#6d28d9"}}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
@@ -8470,7 +8471,7 @@ export default function CyberChessPage(){
                 {/* Рейтинг-платформа: лидерборд (с текущим онлайн-рейтингом) и история партий */}
                 <Link href="/cyberchess/leaderboard"
                   className="cc-focus-ring"
-                  aria-label="Таблица лидеров по рейтингу онлайн-матчей"
+                  aria-label={cc.t("attr.online_match_rating_leaderboard")}
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,textDecoration:"none",
                     border:"1px solid #fcd34d",background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
@@ -8604,7 +8605,7 @@ export default function CyberChessPage(){
                           {total>0&&<span style={{fontSize:9,color:CC.textMute,fontWeight:700}}>{stats.w}/{total}</span>}
                         </button>;
                       })}
-                      <button onClick={()=>sShowVariants(true)} title="Все 12 режимов"
+                      <button onClick={()=>sShowVariants(true)} title={cc.t("attr.all_12_modes")}
                         style={{padding:"10px 6px",borderRadius:RADIUS.md,border:`1px dashed ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:CC.textDim}}>
                         <span style={{fontSize:18,lineHeight:1}}>···</span>
                         <span style={{fontSize:11,fontWeight:800,lineHeight:1.15}}>Ещё {VARIANTS.length-tiles.length}</span>
@@ -9072,7 +9073,7 @@ export default function CyberChessPage(){
                   <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                     <span style={{fontSize:13,fontWeight:800,color:CC.gold}}>{g.rating}</span>
                     <Badge tone={catBadge} size="xs">{g.category}</Badge>
-                    {g.moves.length>4&&<button title="⚔ Дуэль с прошлым собой" onClick={evt=>{
+                    {g.moves.length>4&&<button title={cc.t("attr.duel_with_your_past_self")} onClick={evt=>{
                       evt.stopPropagation();
                       const src:GhostSourceGame={id:g.id,date:g.date,moves:g.moves,playerColor:g.playerColor as "w"|"b",result:g.result,rating:g.rating,aiLevel:g.aiLevel,opening:g.opening};
                       const cfg=makeDuelConfig(src,"rematch");
@@ -9125,7 +9126,7 @@ export default function CyberChessPage(){
               <span style={{fontSize:14}}>{c.icon}</span><span>{c.label}</span>
             </button>
           ))}
-          {isHumanGame&&<span title="В партии с человеком нельзя открыть анализ/коуча — это была бы подсказка движком против соперника" style={{
+          {isHumanGame&&<span title={cc.t("attr.analysis_and_the_coach_are")} style={{
             display:"inline-flex",alignItems:"center",gap:5,
             padding:"7px 12px",borderRadius:9,
             border:`1px solid ${CC.border}`,background:CC.surface2,color:CC.textMute,
@@ -9274,7 +9275,7 @@ export default function CyberChessPage(){
                       <span style={{fontSize:13,fontWeight:800,color:CC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
                       <span style={{fontSize:10,fontWeight:700,color:isAI?al.color:CC.accent,background:isAI?al.color+"18":CC.accentSoft,padding:"1px 5px",borderRadius:4}}>{elo}</span>
                       {/* In-game stats trigger — только на строке игрока, открывает PlayerStatsDashboard прямо во время партии. */}
-                      {!isAI&&<button onClick={()=>sShowStatsDashboard(true)} title="Моя статистика: W/L/D, дебюты, тайминг, тренд рейтинга"
+                      {!isAI&&<button onClick={()=>sShowStatsDashboard(true)} title={cc.t("attr.my_stats_w_l_d")}
                         style={{fontSize:11,lineHeight:1,padding:"1px 4px",borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,cursor:"pointer",flexShrink:0}}>📊</button>}
                       {isAI&&think&&<span style={{fontSize:9,color:al.color,fontWeight:700,letterSpacing:2,animation:"cc-dots 1.2s ease-in-out infinite"}}>●●●</span>}
                     </div>
@@ -9879,7 +9880,7 @@ export default function CyberChessPage(){
                         ▶ Новая
                       </button>
                       <button onClick={()=>{sShowGameOver(true);}}
-                        title="Полные результаты"
+                        title={cc.t("attr.full_results")}
                         style={{padding:"8px 13px",borderRadius:8,border:"1px solid rgba(99,102,241,0.3)",
                           background:"rgba(99,102,241,0.07)",color:"#818cf8",fontSize:13,fontWeight:800,cursor:"pointer"}}>
                         📊
@@ -9893,7 +9894,7 @@ export default function CyberChessPage(){
                           const dataUrl=await QRCode.toDataURL(url,{width:220,margin:2,color:{dark:"#bababa",light:"#161512"}});
                           sQrDataUrl(dataUrl);
                         }catch{showToast("QR не удалось создать","error")}
-                      }} title="QR-код партии"
+                      }} title={cc.t("attr.game_qr_code")}
                         style={{padding:"8px 13px",borderRadius:8,border:"1px solid rgba(255,255,255,0.12)",
                           background:"rgba(255,255,255,0.05)",color:"#878481",fontSize:13,fontWeight:800,cursor:"pointer"}}>
                         QR
@@ -9905,7 +9906,7 @@ export default function CyberChessPage(){
               })()}
               {/* Drag-corner resize handle */}
               <div
-                title="Потяни чтобы изменить размер доски"
+                title={cc.t("attr.drag_to_resize_the_board")}
                 style={{position:"absolute",bottom:0,right:0,width:14,height:14,cursor:"nwse-resize",zIndex:8,opacity:0.35,background:"radial-gradient(circle at 70% 70%, rgba(255,255,255,0.6) 0%, transparent 70%)",borderBottomRightRadius:6}}
                 onPointerDown={e=>{e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);boardResizeRef.current={startX:e.clientX,startY:e.clientY,startScale:boardScale};}}
                 onPointerMove={e=>{if(!boardResizeRef.current)return;const delta=(e.clientX-boardResizeRef.current.startX+e.clientY-boardResizeRef.current.startY)/2;const newPx=Math.max(320,Math.min(800,baseBoardPx*boardResizeRef.current.startScale+delta));sBoardScale(parseFloat((newPx/baseBoardPx).toFixed(3)));}}
@@ -10003,7 +10004,7 @@ export default function CyberChessPage(){
             border:"1px solid #d97706",background:"#fff7ed",color:"#7c2d12",fontSize:13,
             display:"flex",alignItems:"center",gap:8}}>
             <span style={{flex:1}}>{ошибкаСсылки}</span>
-            <button type="button" aria-label="Закрыть сообщение" onClick={()=>sОшибкаСсылки(null)}
+            <button type="button" aria-label={cc.t("attr.close_message")} onClick={()=>sОшибкаСсылки(null)}
               style={{background:"transparent",border:"none",color:"#7c2d12",fontSize:16,cursor:"pointer",padding:4}}>×</button>
           </div>}
 
@@ -10020,7 +10021,7 @@ export default function CyberChessPage(){
              * начиналась на y=770 при окне 844, поле и кнопка «Получать» были за
              * кадром, и видимые 40–75 px её верха накрывала нижняя панель
              * `cc-bottom-nav` — playwright прямо отказался нажать крестик:
-             * «button aria-label="Профиль" … intercepts pointer events».
+             * «button aria-label={cc.t("nav.profile")} … intercepts pointer events».
              * Нужно было прокрутить 154–209 px. Предложение, которое надо
              * прокручивать, человек не видит, а значит его нет.
              *
@@ -10105,7 +10106,7 @@ export default function CyberChessPage(){
                 элемент с z-index 9999 — попадаемая площадь ужалась до нижней
                 половины (центр давал чужой DIV). Воевать z-index’ами с соседом
                 хуже, чем отойти: слева накрытия нет ни на одной из шести пар. */}
-            <button type="button" aria-label="Закрыть предложение" onClick={()=>sStrokaAdresa(false)}
+            <button type="button" aria-label={cc.t("attr.close_offer")} onClick={()=>sStrokaAdresa(false)}
               style={{position:"absolute",top:строкаПрилипла?2:4,left:6,background:"transparent",border:"none",
                 color:CC.textDim,fontSize:16,lineHeight:1,cursor:"pointer",padding:4,zIndex:1}}>×</button>
             <WaitlistCapture
@@ -10154,7 +10155,7 @@ export default function CyberChessPage(){
           {!(зашёлЗаЗадачей&&!isMobileLayout)&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>{cc.t("pz.flip")}</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>{cc.t("pz.newGame")}</Btn>
-            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
+            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title={cc.t("attr.mirror_mode_the_opponent_copies")}>🪞</Btn>}
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?cc.t("btn.voiceListening"):cc.t("btn.voice"),()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
@@ -10336,11 +10337,11 @@ export default function CyberChessPage(){
               }catch{showToast(`Невозможный ход: ${san}`,"error")}
             }}>{cc.t("btn.textMove")}</Btn>}
             {over&&<Btn size="md" variant="gold" onClick={()=>newG()}>🔁 Ещё партию</Btn>}
-            {over&&<Btn size="md" variant="secondary" title="Скопировать итог партии" onClick={()=>{
+            {over&&<Btn size="md" variant="secondary" title={cc.t("attr.copy_game_result")} onClick={()=>{
               const summary=`AEVION CyberChess · ${ruResult(over)} · ${hist.length} ходов · ${currentOpening?.name||"Стандарт"} · ELO ${rat}\nhttps://aevion.app/cyberchess`;
               try{navigator.clipboard.writeText(summary).then(()=>showToast("📤 Итог скопирован в буфер","success")).catch(()=>showToast("Не удалось скопировать","error"))}catch{showToast("Буфер обмена недоступен","error")}
             }}>📤 Поделиться</Btn>}
-            {over&&!hotseat&&<Btn size="md" variant="secondary" title="Новая партия с теми же настройками против другого уровня ИИ" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
+            {over&&!hotseat&&<Btn size="md" variant="secondary" title={cc.t("attr.new_game_with_the_same")} onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
                 Removed from this bottom controls row to avoid duplication. */}
           </div>}
@@ -10364,7 +10365,7 @@ export default function CyberChessPage(){
              * 🔴 ПОПРАВКА 11.10.2026 по кадру приёмки: `sticky` здесь НЕ сработал.
              * Замер: ряд встал на 792–836 при окне 844, то есть в 8 px от низа, а
              * не в 78, как просил `bottom`, — и его накрыла нижняя панель
-             * (775–844). Настоящий клик отбился: «button aria-label="Играть" from
+             * (775–844). Настоящий клик отбился: «button aria-label={cc.t("nav.play")} from
              * div.cc-bottom-nav intercepts pointer events». Причина в устройстве
              * sticky: элемент липнет только в пределах СВОЕГО родителя, а он здесь
              * кончается почти сразу за рядом — липнуть некуда.
@@ -10506,9 +10507,9 @@ export default function CyberChessPage(){
                 const phase=minor<=6?"Эндшпиль":(ply<16&&minor>=11)?"Дебют":"Миттельшпиль";
                 const phaseIcon=phase==="Эндшпиль"?"♔":phase==="Дебют"?"♙":"♘";
                 return <div style={{fontSize:10,color:CC.textMute,marginTop:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                  <span title="Материальный баланс (твоя сторона)" style={{fontWeight:900,fontFamily:"ui-monospace,monospace",color:myDiff>0?"#10b981":myDiff<0?"#ef4444":CC.textMute}}>{myDiff>0?`+${myDiff}`:myDiff<0?`${myDiff}`:"="}</span>
+                  <span title={cc.t("attr.material_balance_your_side")} style={{fontWeight:900,fontFamily:"ui-monospace,monospace",color:myDiff>0?"#10b981":myDiff<0?"#ef4444":CC.textMute}}>{myDiff>0?`+${myDiff}`:myDiff<0?`${myDiff}`:"="}</span>
                   <span style={{opacity:0.4}}>·</span>
-                  <span title="Фаза партии">{phaseIcon} {phase}</span>
+                  <span title={cc.t("attr.game_phase")}>{phaseIcon} {phase}</span>
                   {currentOpening?.name&&<><span style={{opacity:0.4}}>·</span><span title={currentOpening.eco?`ECO ${currentOpening.eco}`:undefined} style={{maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{currentOpening.eco?`${currentOpening.eco} `:""}{currentOpening.name}</span></>}
                 </div>;
               })()}
@@ -10585,14 +10586,14 @@ export default function CyberChessPage(){
             padding:"6px 8px",borderRadius:RADIUS.md,
             background:CC.surface1,border:`1px solid ${CC.border}`,
           }}>
-            <button onClick={()=>sShowThreatMap(v=>!v)} title="Карта контроля доски"
+            <button onClick={()=>sShowThreatMap(v=>!v)} title={cc.t("attr.board_control_map")}
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
                 background:showThreatMap?CC.brandSoft:CC.surface2,
                 color:showThreatMap?CC.brand:CC.textDim}}>
               {cc.t("pz.threatMap")}
             </button>
             <button onClick={async()=>{try{const t=await whisperAndSpeak(game.fen(),evalCp,evalMate);showToast(`🔊 ${t}`,"info")}catch{showToast("Голос недоступен","error")}}}
-              title="Голосовой анализ позиции"
+              title={cc.t("attr.voice_analysis_of_the_position")}
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
                 background:CC.surface2,color:CC.textDim}}>
               {cc.t("pz.aloud")}
@@ -10986,7 +10987,7 @@ export default function CyberChessPage(){
                   <span style={{fontWeight:800,color:noDiceOptions?CC.danger:CC.text}}>
                     Только: <b style={{color:CC.danger,padding:"2px 8px",borderRadius:RADIUS.sm,background:"rgba(220,38,38,0.08)"}}>{diceLabel}</b>
                   </span>
-                  {noDiceOptions&&<button title="Нет ходов выбранной фигурой — пропустить ход"
+                  {noDiceOptions&&<button title={cc.t("attr.no_moves_for_the_selected")}
                     onClick={()=>{
                       try{
                         const parts=game.fen().split(" ");parts[1]=parts[1]==="w"?"b":"w";parts[3]="-";
@@ -11545,7 +11546,7 @@ export default function CyberChessPage(){
             <div style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,background:"#faf5ff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:T.purple}}>🌳 Варианты · d{mpvLines[0]?.depth||mpvDepth}</span>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <button onClick={()=>sShowEngBest(v=>!v)} title="Стрелка лучшего хода движка на доске (как у lichess)"
+                <button onClick={()=>sShowEngBest(v=>!v)} title={cc.t("attr.engine_best_move_arrow_on")}
                   style={{fontSize:10,fontWeight:800,cursor:"pointer",padding:"2px 8px",borderRadius:999,
                     border:`1px solid ${showEngBest?"#06b6d4":T.border}`,
                     background:showEngBest?"rgba(6,182,212,0.10)":"transparent",
@@ -11709,9 +11710,9 @@ export default function CyberChessPage(){
                   onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color="#94a3b8"}}>✕</button>
               </span>))}
               <span style={{flex:1}}/>
-              <button onClick={()=>{sPms(p=>p.slice(0,-1));snd("premove")}} title="Отменить последний премув"
+              <button onClick={()=>{sPms(p=>p.slice(0,-1));snd("premove")}} title={cc.t("attr.cancel_the_last_premove")}
                 style={{padding:cmp?"2px 6px":"3px 8px",borderRadius:6,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:800,cursor:"pointer"}}>↶</button>
-              <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title="Отменить все премувы"
+              <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title={cc.t("attr.cancel_all_premoves")}
                 style={{padding:cmp?"2px 6px":"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ всё</button>
             </div>;})()}
             <div style={{padding:"7px 10px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -11727,25 +11728,25 @@ export default function CyberChessPage(){
                 {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>⚡ уточняю d18...</span>}
               </span>
               {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
-                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);navigator.clipboard.writeText(pgn).then(()=>showToast("PGN скопирован","success")).catch(()=>showToast("Ошибка копирования","error"));}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скопировать PGN в буфер">📋</button>
-                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${denPoMestnomu()}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast("PGN скачан","success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скачать PGN">⬇</button>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);navigator.clipboard.writeText(pgn).then(()=>showToast("PGN скопирован","success")).catch(()=>showToast("Ошибка копирования","error"));}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title={cc.t("attr.copy_pgn_to_clipboard")}>📋</button>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${denPoMestnomu()}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast("PGN скачан","success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title={cc.t("attr.download_pgn")}>⬇</button>
                 <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
-                <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
-                <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>
+                <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title={cc.t("attr.to_the_start")}>⏮</button>
+                <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title={cc.t("attr.back")}>◀</button>
                 <button onClick={()=>{
                   if(replaying){sReplaying(false);return}
                   // If at end, rewind to start before starting replay
                   if(browseIdx<0||browseIdx>=hist.length-1){try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null)}catch{}}
                   sReplaying(true);
                 }} style={{padding:"3px 9px",borderRadius:4,border:`1px solid ${replaying?T.accent:T.border}`,background:replaying?"rgba(5,150,105,0.1)":"#fff",color:replaying?T.accent:T.text,fontSize:11,fontWeight:800,cursor:"pointer"}} title={replaying?"Пауза":"Авто-воспроизведение"}>{replaying?"❚❚":"▶"}</button>
-                {replaying&&<select aria-label="Скорость повтора" value={replaySpeed} onChange={e=>sReplaySpeed(+e.target.value)} style={{padding:"2px 4px",borderRadius:4,border:`1px solid ${T.border}`,fontSize:11,cursor:"pointer",background:"#fff"}} title="Скорость">
+                {replaying&&<select aria-label={cc.t("attr.replay_speed")} value={replaySpeed} onChange={e=>sReplaySpeed(+e.target.value)} style={{padding:"2px 4px",borderRadius:4,border:`1px solid ${T.border}`,fontSize:11,cursor:"pointer",background:"#fff"}} title={cc.t("attr.speed")}>
                   <option value={2000}>0.5x</option>
                   <option value={1000}>1x</option>
                   <option value={500}>2x</option>
                   <option value={250}>4x</option>
                 </select>}
-                <button onClick={()=>{sReplaying(false);const ni=browseIdx<0?hist.length:Math.min(hist.length,browseIdx+1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni>=hist.length?-1:ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Вперёд">▶</button>
-                <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title="К последнему">⏭</button>
+                <button onClick={()=>{sReplaying(false);const ni=browseIdx<0?hist.length:Math.min(hist.length,browseIdx+1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni>=hist.length?-1:ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title={cc.t("attr.forward")}>▶</button>
+                <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title={cc.t("attr.to_the_last_move")}>⏭</button>
                 {/* Навигация по ключевым моментам: зевки/ошибки/блестящие. Прыжок на позицию
                     ПЕРЕД ходом (browseIdx=ply), как 📌 — чтобы искать лучший ход. */}
                 {tab==="analysis"&&analysis.length>0&&(()=>{
@@ -11759,8 +11760,8 @@ export default function CyberChessPage(){
                   const nb=(enabled:boolean):React.CSSProperties=>({padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,fontWeight:800,cursor:enabled?"pointer":"default",opacity:enabled?1:0.4,color:T.danger});
                   return <>
                     <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
-                    <button disabled={prev===undefined} onClick={()=>prev!==undefined&&jump(prev)} style={nb(prev!==undefined)} title="Пред. ключевой момент — зевок/ошибка/блеск (клавиша J)">⟨◆</button>
-                    <button disabled={next===undefined} onClick={()=>next!==undefined&&jump(next)} style={nb(next!==undefined)} title="След. ключевой момент — зевок/ошибка/блеск (клавиша K)">◆⟩</button>
+                    <button disabled={prev===undefined} onClick={()=>prev!==undefined&&jump(prev)} style={nb(prev!==undefined)} title={cc.t("attr.previous_key_moment_blunder_mistake")}>⟨◆</button>
+                    <button disabled={next===undefined} onClick={()=>next!==undefined&&jump(next)} style={nb(next!==undefined)} title={cc.t("attr.next_key_moment_blunder_mistake")}>◆⟩</button>
                   </>;
                 })()}
               </div>}
@@ -11907,7 +11908,7 @@ export default function CyberChessPage(){
                     {tab==="analysis"&&(commentEditPly===wIdx||commentEditPly===bIdx)&&<div style={{gridColumn:"1 / -1",padding:"4px 8px",background:"#f0f0ff",borderBottom:"1px solid #c7d2fe",display:"flex",gap:4,alignItems:"flex-start"}}>
                       <textarea aria-label={`Комментарий к ходу ${Math.floor(wIdx/2)+1}`} autoFocus value={commentEditVal} onChange={e=>sCommentEditVal(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();const ply=commentEditPly!;if(commentEditVal.trim()){sMoveComments(p=>({...p,[ply]:commentEditVal.trim()}))}else{sMoveComments(p=>{const n={...p};delete n[ply];return n})}sCommentEditPly(null);}else if(e.key==="Escape"){sCommentEditPly(null);}}}
-                        placeholder="Заметка к ходу… Enter — сохранить, Esc — отмена"
+                        placeholder={cc.t("attr.move_note_enter_save_esc")}
                         rows={2} style={{flex:1,fontSize:11,padding:"4px 6px",borderRadius:4,border:"1px solid #a5b4fc",resize:"vertical",background:"#ffffff",color:"#312e81",outline:"none"}}/>
                       <button onClick={()=>{const ply=commentEditPly!;if(commentEditVal.trim()){sMoveComments(p=>({...p,[ply]:commentEditVal.trim()}))}else{sMoveComments(p=>{const n={...p};delete n[ply];return n})}sCommentEditPly(null);}} style={{padding:"4px 8px",borderRadius:4,border:"none",background:"#4f46e5",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer",flexShrink:0}}>✓</button>
                       <button onClick={()=>sCommentEditPly(null)} style={{padding:"4px 8px",borderRadius:4,border:"1px solid #c7d2fe",background:"#fff",fontSize:11,cursor:"pointer",color:"#6366f1",flexShrink:0}}>✕</button>
@@ -12011,8 +12012,8 @@ export default function CyberChessPage(){
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                 <span style={{fontSize:13,fontWeight:900,letterSpacing:"0.08em",color:"#92400e"}}>🔍 РЕЖИМ АНАЛИЗА</span>
                 <div style={{display:"flex",gap:5}}>
-                  <button onClick={resetScratch} title="Сбросить к актуальной позиции" style={{padding:"4px 10px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",fontSize:11,fontWeight:800,cursor:"pointer"}}>↺ Сброс</button>
-                  <button onClick={exitScratch} title="Вернуться к партии" style={{padding:"4px 10px",borderRadius:6,border:"none",background:T.danger,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ Выйти</button>
+                  <button onClick={resetScratch} title={cc.t("attr.reset_to_the_current_position")} style={{padding:"4px 10px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",fontSize:11,fontWeight:800,cursor:"pointer"}}>↺ Сброс</button>
+                  <button onClick={exitScratch} title={cc.t("attr.back_to_the_game")} style={{padding:"4px 10px",borderRadius:6,border:"none",background:T.danger,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ Выйти</button>
                 </div>
               </div>
               {scratchHist.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"4px 0"}}>{scratchHist.map((s,i)=><span key={i} style={{padding:"1px 5px",borderRadius:3,background:"rgba(255,255,255,0.6)",color:"#92400e",fontSize:11,fontWeight:700,fontFamily:"monospace"}}>{i%2===0?`${Math.floor(i/2)+1}.`:""}{s}</span>)}</div>}
@@ -12023,7 +12024,7 @@ export default function CyberChessPage(){
           {tab==="puzzles"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
             {/* ── Mode Selector — FIRST so Puzzle Rush is immediately visible ── */}
             <Card padding={SPACE[2]} tone="surface1">
-              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?(rushKind==="survival"?`Survival · 3 ошибки · адаптивно`:`Timed ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · адаптивно`):pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
+              <SectionHeader title={cc.t("attr.mode")} hint={pzMode==="rush"?(rushKind==="survival"?`Survival · 3 ошибки · адаптивно`:`Timed ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · адаптивно`):pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
                 {([["learn","📚",cc.t("pz.mode.learn")],["timed3","3⏱",cc.t("pz.mode.3min")],["timed5","5⏱",cc.t("pz.mode.5min")],["custom","⚙",cc.t("pz.mode.custom")],["rush","⚡","Серия"]] as const).map(([m,ic,label])=>{
                   const active=pzMode===m;
@@ -12052,7 +12053,7 @@ export default function CyberChessPage(){
                         fontSize:11,fontWeight:800,cursor:"pointer"}}>{label}</button>;
                   })}
                   <span style={{fontSize:11,color:CC.textMute,marginLeft:4}}>сек:</span>
-                  <input aria-label="Время на задачу, секунд" type="number" min={30} max={3600} step={30}
+                  <input aria-label={cc.t("attr.time_per_puzzle_seconds")} type="number" min={30} max={3600} step={30}
                     value={pzCustomSec}
                     onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=3600){sPzCustomSec(v);sPzTimeLeft(v)}}}
                     style={{width:78,padding:"5px 8px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:12,fontFamily:"ui-monospace,monospace",fontWeight:800,color:CC.text,background:CC.surface1}}/>
@@ -12087,11 +12088,11 @@ export default function CyberChessPage(){
                         fontSize:11,fontWeight:800,cursor:"pointer",
                         transition:`all ${MOTION.fast} ${MOTION.ease}`}}>{label}</button>;
                   })}
-                  <input aria-label="Время на партию, секунд" type="number" min={30} max={1800} step={30}
+                  <input aria-label={cc.t("attr.time_per_game_seconds")} type="number" min={30} max={1800} step={30}
                     value={[90,180,300,600].includes(rushDuration)?"":rushDuration}
                     onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=1800)sRushDuration(v)}}
-                    placeholder="свой"
-                    title="Своё время (30-1800 сек)"
+                    placeholder={cc.t("attr.custom")}
+                    title={cc.t("attr.custom_time_30_1800_sec")}
                     style={{padding:"6px 4px",borderRadius:RADIUS.sm,
                       border:![90,180,300,600].includes(rushDuration)?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                       background:CC.surface1,color:CC.text,fontSize:11,fontWeight:800,textAlign:"center",
@@ -12238,11 +12239,11 @@ export default function CyberChessPage(){
                 {/* Actions */}
                 <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
                   <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ Следующая</Btn>
-                  <Btn size="md" variant="secondary" onClick={randomPz} title="Случайная">🎲</Btn>
-                  <Btn size="md" variant="secondary" onClick={()=>pzFileInputRef.current?.click()} title="Загрузить позицию FEN/PGN">📂</Btn>
+                  <Btn size="md" variant="secondary" onClick={randomPz} title={cc.t("attr.random")}>🎲</Btn>
+                  <Btn size="md" variant="secondary" onClick={()=>pzFileInputRef.current?.click()} title={cc.t("attr.load_fen_pgn_position")}>📂</Btn>
                   <input ref={pzFileInputRef} type="file" accept=".fen,.pgn,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)loadPzFile(f);e.target.value="";}}/>
                   {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>Заново</Btn>}
-                  {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title="Проиграть решение на доске">Решение</Btn>}
+                  {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title={cc.t("attr.play_the_solution_on_the")}>Решение</Btn>}
                   {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown");
                     soobschitOPodskazke(pzCurrent,pzWrongTriesRef.current.fen===pzCurrent?.fen?pzWrongTriesRef.current.n:0)}}>Подсказка · 5</Btn>}
                   {/* 🔴 ВХОД К ТРЕНЕРУ ПРЯМО ОТСЮДА. Во вкладке «Задачи» кнопки коуча
@@ -12473,7 +12474,7 @@ export default function CyberChessPage(){
                 </div>
                 <div>
                   <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Тема</div>
-                  <select aria-label="Тема задач" value={pzFilterTheme} onChange={e=>{sPzFilterTheme(e.target.value);sPzI(0)}} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,color:T.text,cursor:"pointer",fontWeight:600}}>
+                  <select aria-label={cc.t("attr.puzzle_theme")} value={pzFilterTheme} onChange={e=>{sPzFilterTheme(e.target.value);sPzI(0)}} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,color:T.text,cursor:"pointer",fontWeight:600}}>
                     <option value="all">Все темы</option>
                     {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{temaZadachiRu(th)}</option>)}
                   </select>
@@ -12577,7 +12578,7 @@ export default function CyberChessPage(){
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                 <div style={{fontSize:11,fontWeight:900,letterSpacing:0.5,textTransform:"uppercase" as const,color:T.purple}}>📈 Эval graph · {pts.length} ходов</div>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <button onClick={()=>{try{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}catch{}}} style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}} title="Скопировать FEN текущей позиции">📋 Скопировать FEN</button>
+                  <button onClick={()=>{try{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}catch{}}} style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}} title={cc.t("attr.copy_fen_of_the_current")}>📋 Скопировать FEN</button>
                   <div style={{fontSize:10,color:T.dim,fontWeight:700}}>клик по точке → переход к ходу</div>
                 </div>
               </div>
@@ -12627,7 +12628,7 @@ export default function CyberChessPage(){
                 const isUserCaused=((pCol==="w")===(swingIdx%2===0));
                 const moveSan=hist[swingIdx]||`ход ${Math.floor(swingIdx/2)+1}`;
                 const cpChange=((p.cp-prev.cp)/100).toFixed(1);
-                return <div role="button" tabIndex={0} aria-label="Перейти к переломному моменту партии" className="cc-focus-ring" onClick={()=>goToPly(swingIdx)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();goToPly(swingIdx)}}} style={{
+                return <div role="button" tabIndex={0} aria-label={cc.t("attr.go_to_the_turning_point")} className="cc-focus-ring" onClick={()=>goToPly(swingIdx)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();goToPly(swingIdx)}}} style={{
                   marginTop:4,padding:"7px 10px",borderRadius:8,cursor:"pointer",
                   background:isUserCaused?"rgba(220,38,38,0.06)":"rgba(5,150,105,0.06)",
                   border:`1px solid ${isUserCaused?"#fca5a5":"#a7f3d0"}`,
@@ -12791,7 +12792,7 @@ export default function CyberChessPage(){
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <span style={{fontSize:14,color:T.dim,fontWeight:700}}>Глубина</span>
-                  <input type="range" aria-label="Глубина расчёта" min={8} max={22} value={mpvDepth} onChange={e=>sMpvDepth(+e.target.value)} style={{width:80,accentColor:T.purple}}/>
+                  <input type="range" aria-label={cc.t("attr.search_depth")} min={8} max={22} value={mpvDepth} onChange={e=>sMpvDepth(+e.target.value)} style={{width:80,accentColor:T.purple}}/>
                   <span style={{fontSize:13,fontWeight:900,color:T.purple,minWidth:20}}>{mpvDepth}</span>
                 </div>
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
@@ -12800,7 +12801,7 @@ export default function CyberChessPage(){
               </div>
               {/* Current FEN display only (import buttons are in "Источник позиции" above) */}
               <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                <input aria-label="Позиция в формате FEN" value={game.fen()} readOnly onClick={e=>(e.target as HTMLInputElement).select()} style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
+                <input aria-label={cc.t("attr.position_in_fen_format")} value={game.fen()} readOnly onClick={e=>(e.target as HTMLInputElement).select()} style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
                 <button onClick={()=>{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>📋 Копировать</button>
               </div>
               {/* Position Notes — user annotations for current analysis session */}
@@ -12809,7 +12810,7 @@ export default function CyberChessPage(){
                 const[note,sNote]=typeof window!=="undefined"?[localStorage.getItem(PN_KEY)||"",(v:string)=>{try{localStorage.setItem(PN_KEY,v)}catch{}}]:["",()=>{}];
                 return<div style={{marginTop:8}}>
                   <div style={{fontSize:10,fontWeight:800,color:T.dim,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:4}}>📝 Заметки к позиции</div>
-                  <textarea aria-label="Заметка к партии" defaultValue={note} onChange={e=>{sNote(e.target.value)}} placeholder="Запиши идею, план или комментарий к этой позиции…" rows={2}
+                  <textarea aria-label={cc.t("attr.game_note")} defaultValue={note} onChange={e=>{sNote(e.target.value)}} placeholder={cc.t("attr.write_an_idea_plan_or")} rows={2}
                     style={{width:"100%",padding:"6px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,color:T.text,resize:"vertical",background:"#fafafa",boxSizing:"border-box"}}/>
                 </div>;
               })()}
@@ -13138,7 +13139,7 @@ ${question.trim()}`;
                   <span style={{fontSize:14}}>💬</span>
                   <span style={{fontSize:11,fontWeight:900,color:T.blue,letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Спроси тренера — разговор с ИИ-тренером</span>
                   {coachChat.length>0&&<span style={{fontSize:9,color:T.dim,fontWeight:600}}>{coachChat.length} сообщ.</span>}
-                  {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title="Очистить историю" style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
+                  {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title={cc.t("attr.clear_history")} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
                 </div>
                 {(()=>{const пометка=пометкаОВыключенномРазборе();return пометка?(
                   <div style={{fontSize:10,color:"#7c2d12",padding:"5px 8px",borderRadius:6,background:"rgba(251,146,60,0.12)",border:"1px solid #fdba74",lineHeight:1.5}}>
@@ -13175,7 +13176,7 @@ ${question.trim()}`;
                   </div>}
                 </div>}
                 <div style={{display:"flex",gap:6}}>
-                  <input aria-label="Сообщение коучу"
+                  <input aria-label={cc.t("attr.message_to_the_coach")}
                     value={coachChatInput}
                     onChange={e=>sCoachChatInput(e.target.value)}
                     onKeyDown={e=>{if(e.key==="Enter"&&coachChatInput.trim()&&!coachChatLoading){sendChat(coachChatInput)}}}
@@ -13277,7 +13278,7 @@ ${question.trim()}`;
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
                 <span style={{fontSize:14}}>📕</span>
                 <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Зевок-бук · {blunderBook.length} позиций</span>
-                <button onClick={()=>sBlunderBook([])} title="Очистить" style={{fontSize:10,fontWeight:700,color:"#6b7280",border:"1px solid #fca5a5",borderRadius:4,padding:"2px 6px",background:"#fff",cursor:"pointer"}}>× очистить</button>
+                <button onClick={()=>sBlunderBook([])} title={cc.t("attr.clear")} style={{fontSize:10,fontWeight:700,color:"#6b7280",border:"1px solid #fca5a5",borderRadius:4,padding:"2px 6px",background:"#fff",cursor:"pointer"}}>× очистить</button>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 {blunderBook.slice(0,5).map((b,i)=>(
@@ -13521,8 +13522,8 @@ ${question.trim()}`;
             <div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"8px 10px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
               <span style={{fontSize:11,color:T.dim,fontWeight:800}}>Режим тренера:</span>
               <div style={{display:"flex",gap:4}}>
-                <button onClick={()=>sCoachAIEnabled(true)} title="ИИ-разбор: ИИ-тренер анализирует позицию движком (Stockfish) и объясняет на уровне супер-GM — отвечает на вопросы, показывает планы и ошибки." style={{padding:"6px 10px",borderRadius:6,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>🤖 ИИ-разбор</button>
-                <button onClick={()=>sCoachAIEnabled(false)} title="Свободный чат без авто-разбора позиции — просто диалог с тренером." style={{padding:"6px 10px",borderRadius:6,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>✏️ Свободно</button>
+                <button onClick={()=>sCoachAIEnabled(true)} title={cc.t("attr.ai_review_the_ai_coach")} style={{padding:"6px 10px",borderRadius:6,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>🤖 ИИ-разбор</button>
+                <button onClick={()=>sCoachAIEnabled(false)} title={cc.t("attr.free_chat_without_automatic_position")} style={{padding:"6px 10px",borderRadius:6,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>✏️ Свободно</button>
               </div>
               {coachAIEnabled&&<><span style={{width:1,height:20,background:T.border}}/>
               <span style={{fontSize:11,color:T.dim,fontWeight:700}}>Уровень:{!coachLevelTouched.current&&<span title={`Авто по рейтингу ${rat}`} style={{marginLeft:3,fontSize:9,color:T.accent,fontWeight:800}}>авто</span>}</span>
@@ -13684,7 +13685,7 @@ ${question.trim()}`;
             }}
           />}
 
-          {showFlashcards&&coachKnowledge&&(()=>{const cards=coachKnowledge.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label="Флеш-карточки коуча" style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
+          {showFlashcards&&coachKnowledge&&(()=>{const cards=coachKnowledge.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label={cc.t("attr.coach_flashcards")} style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span>🃏</span><span style={{fontSize:11,fontWeight:900,letterSpacing:1,color:"#a78bfa",textTransform:"uppercase" as const}}>Флеш-карточки</span><span style={{marginLeft:"auto",fontSize:11,color:"#94a3b8"}}>{(flashcardIdx%cards.length)+1}/{cards.length}</span><button onClick={()=>sShowFlashcards(false)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✕</button></div>
             <div style={{textAlign:"center",marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:"#f1f5f9",marginBottom:4}}>{card.t}</div><div style={{fontSize:11,color:"#a78bfa",padding:"1px 8px",borderRadius:999,background:"rgba(124,58,237,0.15)",display:"inline-block"}}>{card.cat}</div></div>
             <button onClick={()=>sFlashcardFlipped(v=>!v)} style={{width:"100%",padding:"12px",borderRadius:10,border:"1px solid rgba(167,139,250,0.4)",background:flashcardFlipped?"rgba(124,58,237,0.18)":"transparent",color:"#e9d5ff",fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:10}}>{flashcardFlipped?`✓ Ход: ${card.b}`:"👁 Показать ответ"}</button>
@@ -13865,10 +13866,10 @@ ${question.trim()}`;
 
         {/* Search + filter row */}
         <div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[2],flexWrap:"wrap",alignItems:"center"}}>
-          <input aria-label="Поиск по партиям" value={gamesSearch} onChange={e=>sGamesSearch(e.target.value)}
-            placeholder="🔎 Поиск по дебюту, уровню ИИ, результату…"
+          <input aria-label={cc.t("attr.search_games")} value={gamesSearch} onChange={e=>sGamesSearch(e.target.value)}
+            placeholder={cc.t("attr.search_by_opening_ai_level")}
             style={{flex:"2 1 220px",minWidth:200,padding:"8px 12px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,background:CC.surface1,color:CC.text,outline:"none"}}/>
-          <select aria-label="Сортировка партий" value={gamesSort} onChange={e=>sGamesSort(e.target.value as any)}
+          <select aria-label={cc.t("attr.sort_games")} value={gamesSort} onChange={e=>sGamesSort(e.target.value as any)}
             style={{padding:"8px 10px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:12,fontWeight:700,background:CC.surface1,color:CC.text,cursor:"pointer"}}>
             <option value="date">📅 Сначала новые</option>
             <option value="rating">⭐ По рейтингу</option>
@@ -13936,7 +13937,7 @@ ${question.trim()}`;
                   <div style={{fontSize:10,color:CC.textDim,marginTop:2}}>{date.toLocaleDateString("ru-RU")}</div>
                 </div>
               </button>
-              <button onClick={e=>{e.stopPropagation();deleteOne(g.id)}} title="Удалить партию"
+              <button onClick={e=>{e.stopPropagation();deleteOne(g.id)}} title={cc.t("attr.delete_game")}
                 style={{padding:"0 14px",border:"none",borderLeft:`1px solid ${CC.border}`,background:"transparent",
                   color:CC.textDim,fontSize:14,cursor:"pointer",fontWeight:700}}
                 onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.color=CC.danger;(e.currentTarget as HTMLButtonElement).style.background="rgba(220,38,38,0.06)"}}
@@ -14308,7 +14309,7 @@ ${question.trim()}`;
 
     {/* Endgame trainer modal */}
     <Modal open={showEndgames} onClose={()=>sShowEndgames(false)} size="lg"
-      title="🏰 Тренировка эндшпилей">
+      title={cc.t("attr.endgame_training")}>
       <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
         12 классических позиций от KP–K до KBN–K. Победил = Chessy + разбор от Алексея.
       </div>
@@ -14454,7 +14455,7 @@ ${question.trim()}`;
       >Включить</button>
       <button
         type="button"
-        aria-label="Скрыть подсказку"
+        aria-label={cc.t("attr.hide_hint")}
         onClick={dismissPipSuggest}
         style={{
           background:"transparent",color:"rgba(255,255,255,0.6)",border:"none",
@@ -14584,7 +14585,7 @@ ${question.trim()}`;
     />
 
     {/* Keyboard Shortcuts Help Overlay — расширенная версия с группировкой */}
-    <Modal open={showHelp} onClose={()=>sShowHelp(false)} size="md" title="⌨ Горячие клавиши">
+    <Modal open={showHelp} onClose={()=>sShowHelp(false)} size="md" title={cc.t("attr.keyboard_shortcuts")}>
       <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Работают во всех вкладках, пока курсор не в поле ввода.</div>
       {([
         {title:"Ввод хода (когда твой ход)",rows:[
@@ -14660,7 +14661,7 @@ ${question.trim()}`;
     {/* ☰ Навигационный хаб «Все разделы» — делает обнаружимыми ВСЕ маршруты и киллер-фичи.
         Раньше 12 из 14 разделов были «сиротами» (только прямой URL / Ctrl+K). Теперь всё
         сгруппировано и видно: Играть · Учиться · Соревноваться · Смотреть · Экономика. */}
-    <Modal open={showSections} onClose={()=>sShowSections(false)} size="lg" title="☰ Все разделы CyberChess">
+    <Modal open={showSections} onClose={()=>sShowSections(false)} size="lg" title={cc.t("attr.all_cyberchess_sections")}>
       <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Все режимы, обучение, соревнования, трансляции и экономика — в одном месте.</div>
       {(()=>{
         const go=(fn:()=>void)=>{sShowSections(false);fn();};
@@ -14772,15 +14773,15 @@ ${question.trim()}`;
     </Modal>
 
     {/* Opening Trainer modal — выбор дебюта */}
-    <Modal open={showOpeningTrainer} onClose={()=>sShowOpeningTrainer(false)} size="lg" title="🎓 Тренажёр дебютов">
+    <Modal open={showOpeningTrainer} onClose={()=>sShowOpeningTrainer(false)} size="lg" title={cc.t("attr.opening_trainer")}>
       <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
         Выбери дебют — бот сыграет чёрными, ты ведёшь белыми по скрипту. За безошибочный — <b>+10 Chessy</b>, с ошибками — <b>+5</b>.
       </div>
-      <input aria-label="Фильтр дебютов"
+      <input aria-label={cc.t("attr.opening_filter")}
         type="text"
         value={openingDrillFilter}
         onChange={e=>sOpeningDrillFilter(e.target.value)}
-        placeholder="🔍 Поиск: Сицилианская, Italian, B20..."
+        placeholder={cc.t("attr.search_sicilian_italian_b20")}
         className="cc-focus-ring"
         style={{width:"100%",padding:"8px 12px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,marginBottom:SPACE[3]}}
       />
@@ -14879,7 +14880,7 @@ ${question.trim()}`;
 
         {/* Insights list */}
         <Card padding={SPACE[3]} tone="surface1">
-          <SectionHeader title="🔍 ИНСАЙТЫ" hint={`${gameDna.insights.length} персональных`}/>
+          <SectionHeader title={cc.t("attr.insights")} hint={`${gameDna.insights.length} персональных`}/>
           <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>
             {gameDna.insights.map((ins,i)=><div key={i} style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,background:CC.surface2,borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,color:CC.text,lineHeight:1.5}}>
               {ins}
@@ -14890,7 +14891,7 @@ ${question.trim()}`;
         {/* Openings breakdown */}
         {gameDna.bestOpening&&<div style={{display:"grid",gridTemplateColumns:gameDna.worstOpening?"1fr 1fr":"1fr",gap:SPACE[2]}}>
           <Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderColor:"#a7f3d0"}}>
-            <SectionHeader title="🟢 СИЛЬНЫЙ ДЕБЮТ"/>
+            <SectionHeader title={cc.t("attr.strong_opening")}/>
             <div style={{fontSize:14,fontWeight:800,color:CC.text,marginTop:SPACE[1]}}>{gameDna.bestOpening.opening}</div>
             <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
               <Badge tone="brand" size="xs">{gameDna.bestOpening.winPct}% побед</Badge>
@@ -14899,7 +14900,7 @@ ${question.trim()}`;
           </Card>
           {gameDna.worstOpening&&gameDna.worstOpening.opening!==gameDna.bestOpening.opening&&
             <Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#fef2f2,#fff1f2)",borderColor:"#fca5a5"}}>
-              <SectionHeader title="🔴 СЛАБЫЙ ДЕБЮТ"/>
+              <SectionHeader title={cc.t("attr.weak_opening")}/>
               <div style={{fontSize:14,fontWeight:800,color:CC.text,marginTop:SPACE[1]}}>{gameDna.worstOpening.opening}</div>
               <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
                 <Badge tone="danger" size="xs">{gameDna.worstOpening.winPct}% побед</Badge>
@@ -14911,7 +14912,7 @@ ${question.trim()}`;
         {/* Timing & length */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:SPACE[2]}}>
           {gameDna.bestHour!==null&&<Card padding={SPACE[3]} tone="surface1">
-            <SectionHeader title="⏰ ЛУЧШЕЕ ВРЕМЯ"/>
+            <SectionHeader title={cc.t("attr.best_time")}/>
             <div style={{fontSize:20,fontWeight:900,color:CC.text,marginTop:SPACE[1]}}>
               {gameDna.bestHour}:00–{(gameDna.bestHour+1)%24}:00
             </div>
@@ -14920,14 +14921,14 @@ ${question.trim()}`;
             </div>
           </Card>}
           <Card padding={SPACE[3]} tone="surface1">
-            <SectionHeader title="⚡ ДЛИНА ПАРТИИ"/>
+            <SectionHeader title={cc.t("attr.game_length")}/>
             <div style={{fontSize:13,color:CC.text,marginTop:SPACE[1]}}>
               Победы: <b>{Math.round(gameDna.avgLengthWin/2)}</b> ходов<br/>
               Поражения: <b>{Math.round(gameDna.avgLengthLoss/2)}</b> ходов
             </div>
           </Card>
           <Card padding={SPACE[3]} tone="surface1">
-            <SectionHeader title="📊 РЕЙТИНГ"/>
+            <SectionHeader title={cc.t("attr.rating")}/>
             <div style={{fontSize:20,fontWeight:900,color:gameDna.ratingGrowth>=0?CC.brand:CC.danger,marginTop:SPACE[1]}}>
               {gameDna.ratingGrowth>=0?"+":""}{gameDna.ratingGrowth}
             </div>
@@ -14970,7 +14971,7 @@ ${question.trim()}`;
               </div>)}
             </div>
             {trophies.length>0&&<div style={{marginBottom:SPACE[3]}}>
-              <SectionHeader title="ТРОФЕИ"/>
+              <SectionHeader title={cc.t("attr.trophies")}/>
               <div style={{display:"flex",gap:SPACE[2],overflowX:"auto",paddingBottom:4,marginTop:SPACE[2]}}>
                 {trophies.slice(0,10).map((tr,i)=>{
                   const vMeta=tr.variant?VARIANTS.find(v=>v.id===tr.variant):null;
@@ -14985,7 +14986,7 @@ ${question.trim()}`;
             </div>}
             {/* Variant selector for tournament format */}
             <div style={{marginBottom:SPACE[3]}}>
-              <SectionHeader title="ФОРМАТ ТУРНИРА"/>
+              <SectionHeader title={cc.t("attr.tournament_format")}/>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:SPACE[2],marginTop:SPACE[2]}}>
                 {VARIANTS.map(v=>{
                   const sel=tournamentVariantPick===v.id;
@@ -15152,7 +15153,7 @@ ${question.trim()}`;
             {renderArmy(builderWhite,sBuilderWhite,"⚪ Белые",wBudget,CC.text)}
             {renderArmy(builderBlack,sBuilderBlack,"⚫ Чёрные",bBudget,CC.text)}
           </div>
-          <SectionHeader title="ПРЕСЕТЫ"/>
+          <SectionHeader title={cc.t("attr.presets")}/>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:SPACE[1],marginTop:SPACE[2],marginBottom:SPACE[3]}}>
             {ARMY_PRESETS.map((p,i)=><div key={i} style={{display:"flex",flexDirection:"column",gap:4,padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface1,border:`1px solid ${CC.border}`}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -15278,7 +15279,7 @@ ${question.trim()}`;
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:15,fontWeight:900,display:"flex",alignItems:"center",gap:6}}>
                     {v.name}
-                    {isDaily&&<span title="Задача дня — +50 Chessy за победу" style={{fontSize:10,fontWeight:900,color:"#fff",background:"linear-gradient(90deg,#7c3aed,#a78bfa)",padding:"1px 6px",borderRadius:RADIUS.full}}>⭐ ДЕНЬ +50</span>}
+                    {isDaily&&<span title={cc.t("attr.puzzle_of_the_day_50")} style={{fontSize:10,fontWeight:900,color:"#fff",background:"linear-gradient(90deg,#7c3aed,#a78bfa)",padding:"1px 6px",borderRadius:RADIUS.full}}>⭐ ДЕНЬ +50</span>}
                   </div>
                   <div style={{fontSize:11,color:CC.textDim}}>{v.shortDesc}</div>
                 </div>
@@ -15445,8 +15446,8 @@ ${question.trim()}`;
           {renderMiniBoard()}
           {!brilliancyState.solved&&!brilliancyState.givenUp&&<>
             <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3]}}>
-              <input aria-label="Ход-кандидат" type="text" value={brilliancyInput} onChange={e=>{sBrilliancyInput(e.target.value);sBrilliancyResult(null)}}
-                placeholder="Введи ход (напр. Be7, Nxc3, O-O, e5)"
+              <input aria-label={cc.t("attr.candidate_move")} type="text" value={brilliancyInput} onChange={e=>{sBrilliancyInput(e.target.value);sBrilliancyResult(null)}}
+                placeholder={cc.t("attr.enter_a_move_e_g")}
                 style={{flex:1,padding:"10px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:14,fontFamily:"ui-monospace, monospace",background:CC.surface1}}
                 onKeyDown={e=>{
                   if(e.key==="Enter"&&brilliancyInput.trim()){
@@ -15505,7 +15506,7 @@ ${question.trim()}`;
             </div>
           </div>
           {brilliancyState.history.length>0&&<div style={{marginTop:SPACE[3]}}>
-            <SectionHeader title="ИСТОРИЯ"/>
+            <SectionHeader title={cc.t("attr.history")}/>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:SPACE[2]}}>
               {brilliancyState.history.slice(0,14).map((h,i)=><div key={i} title={`${h.date}: ${h.solved?`✓ ${h.attempts} попыт.`:"✗"}`}
                 style={{width:24,height:24,borderRadius:6,background:h.solved?CC.brand:CC.danger,opacity:h.solved?1:0.6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff"}}>
@@ -15582,8 +15583,8 @@ ${question.trim()}`;
           <b>Импортируй до 50 партий с Lichess</b> — мы проанализируем дебюты, тактику, агрессию, размены — и создадим <b>бота-клона</b> с твоим стилем. Поделись ссылкой — друг сыграет «против тебя».
         </div>
         <div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[3]}}>
-          <input aria-label="Ник игрока на Lichess" type="text" value={clonerUsername} onChange={e=>sClonerUsername(e.target.value.trim())}
-            placeholder="Lichess username (например, DrNykterstein)"
+          <input aria-label={cc.t("attr.player_lichess_username")} type="text" value={clonerUsername} onChange={e=>sClonerUsername(e.target.value.trim())}
+            placeholder={cc.t("attr.lichess_username_e_g_drnykterstein")}
             style={{flex:1,padding:"10px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:14,background:CC.surface1}}/>
           <Btn variant="primary" size="md" disabled={!clonerUsername||clonerLoading} onClick={async()=>{
             sClonerError("");sClonerLoading(true);
@@ -15694,7 +15695,7 @@ ${question.trim()}`;
           </div>
           <div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:CC.surface1,border:`1px solid ${CC.border}`}}>
             <label style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const,display:"block"}}>Скорость хода</label>
-            <input type="range" aria-label="Скорость ролика" min={150} max={800} step={50} value={reelSpeed} onChange={e=>sReelSpeed(+e.target.value)}
+            <input type="range" aria-label={cc.t("attr.clip_speed")} min={150} max={800} step={50} value={reelSpeed} onChange={e=>sReelSpeed(+e.target.value)}
               style={{width:"100%",accentColor:CC.brand}}/>
             <div style={{fontSize:12,color:CC.text,marginTop:2}}>{reelSpeed} мс / ход</div>
             <div style={{fontSize:10,color:CC.textDim}}>{reelSpeed<300?"быстро":reelSpeed<500?"средне":"медленно"}</div>
@@ -15969,7 +15970,7 @@ ${question.trim()}`;
 
     {/* ═══ Coordinates Trainer (killer #13) ═══ */}
     <Modal open={showCoord} onClose={()=>{sShowCoord(false);sCoordSession(null);sCoordResult(null)}} size="lg"
-      title="🎯 Тренажёр координат">
+      title={cc.t("attr.coordinate_trainer")}>
       {!coordSession?(()=>{
         const top=coordLB[0];
         return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
@@ -16084,7 +16085,7 @@ ${question.trim()}`;
 
     {/* ═══ Personality Quiz (killer #14) ═══ */}
     <Modal open={showQuiz} onClose={()=>{sShowQuiz(false);sQuizAnswers([]);sQuizResult(null)}} size="lg"
-      title="🧠 Шахматный характер">
+      title={cc.t("attr.chess_personality")}>
       {(()=>{
         if(quizResult){
           const top=QUIZ_PLAYERS[quizResult.topId];
@@ -16178,7 +16179,7 @@ ${question.trim()}`;
 
     {/* ═══ Board Editor (killer #15) ═══ */}
     <Modal open={showEditor} onClose={()=>sShowEditor(false)} size="xl"
-      title="♛ Редактор позиции">
+      title={cc.t("attr.position_editor")}>
       {(()=>{
         const fenPreview=edToFen(editorBoard,editorSide);
         const palette:[("p"|"n"|"b"|"r"|"q"|"k"),"w"|"b"][]=ED_PIECES.flatMap(t=>[[t,"w" as const],[t,"b" as const]]);
@@ -16245,7 +16246,7 @@ ${question.trim()}`;
             </Card>
             <Card padding={SPACE[2]} tone="surface1">
               <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:6}}>FEN</div>
-              <textarea aria-label="Позиция в формате FEN" readOnly value={fenPreview} rows={3}
+              <textarea aria-label={cc.t("attr.position_in_fen_format")} readOnly value={fenPreview} rows={3}
                 style={{width:"100%",padding:6,borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontFamily:"ui-monospace, monospace",fontSize:11,resize:"none",background:CC.surface2,color:CC.text}}/>
               <Btn size="sm" variant="secondary" full onClick={()=>{
                 navigator.clipboard?.writeText(fenPreview);
@@ -16276,7 +16277,7 @@ ${question.trim()}`;
 
     {/* ═══ Settings — единая панель управления ═══ */}
     <Modal open={showSettings} onClose={()=>sShowSettings(false)} size="md"
-      title="⚙ Настройки">
+      title={cc.t("attr.settings_2")}>
       {(()=>{
         const Row=({label,desc,checked,onChange,disabled}:{label:string;desc:string;checked:boolean;onChange:()=>void;disabled?:boolean})=>(
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:SPACE[3],padding:`${SPACE[2]}px 0`,borderBottom:`1px solid ${CC.border}`,opacity:disabled?0.55:1}}>
@@ -16537,7 +16538,7 @@ ${question.trim()}`;
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>⚡ Очередь премувов</div>
             <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,color:CC.textDim,fontWeight:600}}>
               <span>Лимит: <b style={{color:CC.text}}>{pmLim}</b></span>
-              <input type="range" aria-label="Предел премувов" min={1} max={50} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
+              <input type="range" aria-label={cc.t("attr.premove_limit")} min={1} max={50} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
             </label>
           </div>
           <div>
@@ -16558,7 +16559,7 @@ ${question.trim()}`;
 
     {/* ═══ Master Games + Guess the Move (killer #17) ═══ */}
     <Modal open={showMasters} onClose={()=>{sShowMasters(false);sMasterCurrent(null)}} size="xl"
-      title="♛ Партии мастеров">
+      title={cc.t("attr.master_games")}>
       {(()=>{
         const games=ldMasterGames();
         if(!masterCurrent){
@@ -16674,7 +16675,7 @@ ${question.trim()}`;
               {masterMode==="guess"&&isGuessTurn&&<Card padding={SPACE[2]} tone="surface1" style={{background:"#ecfdf5",borderColor:"#6ee7b7"}}>
                 <div style={{fontSize:11,color:"#047857",fontWeight:800,marginBottom:4}}>Угадай ход {g.guessSide==="w"?"белых":"чёрных"} (SAN, например <code>Nf3</code> или <code>e4</code>):</div>
                 <div style={{display:"flex",gap:4}}>
-                  <input aria-label="Ваш ход" value={masterGuessInput} onChange={e=>sMasterGuessInput(e.target.value)}
+                  <input aria-label={cc.t("game.yourMove")} value={masterGuessInput} onChange={e=>sMasterGuessInput(e.target.value)}
                     onKeyDown={e=>{if(e.key==="Enter"){
                       const actual=g.moves[ply];
                       const result=masterScoreGuess(actual,masterGuessInput.trim());
@@ -16741,7 +16742,7 @@ ${question.trim()}`;
 
     {/* ═══ Insights v2 (killer #16) ═══ */}
     <Modal open={showInsights} onClose={()=>sShowInsights(false)} size="xl"
-      title="📊 Разбор">
+      title={cc.t("attr.review")}>
       {(()=>{
         if(savedGames.length<3){
           return <Card padding={SPACE[4]} tone="surface1" style={{textAlign:"center"}}>
@@ -16957,7 +16958,7 @@ ${question.trim()}`;
           backdropFilter:"blur(8px)",
           animation:"cc-board-enter 350ms ease-out both",
         }} onClick={()=>sShowGameOver(false)}>
-          <div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label="Итог партии" style={{
+          <div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label={cc.t("attr.game_result")} style={{
             width:420,maxWidth:"calc(100vw - 32px)",
             background:"#141210",border:`1px solid ${accentClr}55`,
             borderRadius:20,overflow:"hidden",
@@ -17166,7 +17167,7 @@ ${question.trim()}`;
                 padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.1)",
                 background:"transparent",color:"rgba(255,255,255,0.45)",fontSize:13,cursor:"pointer",fontWeight:700,
               }}>QR</button>
-              <button onClick={()=>sShowGameOver(false)} aria-label="Закрыть" style={{
+              <button onClick={()=>sShowGameOver(false)} aria-label={cc.t("oshibka.close")} style={{
                 padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.2)",
                 background:"transparent",color:"rgba(255,255,255,0.7)",fontSize:13,cursor:"pointer",
               }}>✕</button>
@@ -17182,7 +17183,7 @@ ${question.trim()}`;
         display:"flex", alignItems:"center", justifyContent:"center",
         padding:16,
       }} onClick={()=>sShowQuickSetupModal(false)}>
-        <div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label="Быстрая настройка партии" style={{
+        <div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label={cc.t("attr.quick_game_setup")} style={{
           background:"#1e1c19", border:"1px solid #3d3b39",
           borderRadius:16, padding:24, width:"100%", maxWidth:440,
           boxShadow:"0 24px 64px rgba(0,0,0,0.7)",
@@ -17256,12 +17257,12 @@ ${question.trim()}`;
     />
     {/* QR modal */}
     {qrDataUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sQrDataUrl(null)}>
-      <div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label="QR-код партии" style={{background:"#1e1c19",border:"1px solid #3d3b39",borderRadius:16,padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:12,boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+      <div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label={cc.t("attr.game_qr_code")} style={{background:"#1e1c19",border:"1px solid #3d3b39",borderRadius:16,padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:12,boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
         <div style={{fontSize:13,fontWeight:900,color:"#bababa",letterSpacing:-0.2}}>📱 QR-код партии</div>
         <img src={qrDataUrl} alt="QR code" style={{width:220,height:220,borderRadius:8,imageRendering:"pixelated"}}/>
         <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center"}}>Отсканируй чтобы открыть партию</div>
         <button onClick={()=>{const a=document.createElement("a");a.href=qrDataUrl;a.download="chess-qr.png";a.click();}} style={{padding:"8px 18px",borderRadius:8,border:"1px solid rgba(117,153,0,0.4)",background:"rgba(117,153,0,0.1)",color:"#a3c832",fontSize:12,fontWeight:800,cursor:"pointer"}}>⬇ Скачать PNG</button>
-        <button onClick={()=>sQrDataUrl(null)} aria-label="Закрыть" style={{position:"absolute",top:12,right:12,background:"none",border:"none",color:"#b0aeac",cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
+        <button onClick={()=>sQrDataUrl(null)} aria-label={cc.t("oshibka.close")} style={{position:"absolute",top:12,right:12,background:"none",border:"none",color:"#b0aeac",cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
       </div>
     </div>}
     {/* Move tooltip — rich hover popup showing quality + cpLoss */}

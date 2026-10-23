@@ -95,7 +95,10 @@ export default function QRenewClient() {
       });
       const data = await res.json();
       if (!res.ok) {
-        const miss = Array.isArray(data?.missing) ? data.missing.join(", ") : "";
+        // Подписями полей, а не именами из кода: «albumin, crp, lymphocytePct»
+        // человеку ничего не говорили (прод 24.10.2026).
+        const подпись = (k: string) => BIO_FIELDS.find((f) => f.key === k)?.label ?? k;
+        const miss = Array.isArray(data?.missing) ? (data.missing as string[]).map(подпись).join(", ") : "";
         throw new Error(miss ? `Не хватает показателей: ${miss}` : `Сервер вернул ${res.status}`);
       }
       setBio(data as BioResult);
@@ -130,7 +133,7 @@ export default function QRenewClient() {
               <label key={f.key} style={styles.field}>
                 <span style={styles.fieldLabel}>{f.label} <span style={styles.unit}>{f.unit}</span></span>
                 <input
-                  type="number" inputMode="decimal" placeholder={f.placeholder}
+                  type="number" inputMode="decimal" placeholder={`напр. ${f.placeholder}`}
                   value={vals[f.key] ?? ""} onChange={(e) => setVal(f.key, e.target.value)}
                   style={styles.input}
                 />

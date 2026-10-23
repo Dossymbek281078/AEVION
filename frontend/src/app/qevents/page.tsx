@@ -5,6 +5,7 @@ import { getAuthToken } from "@/lib/auth";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { useQeventsT, type Key } from "./i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
@@ -49,10 +50,10 @@ function getAuthSub(): string | null {
   }
 }
 
-function formatEventDate(iso: string): string {
+function formatEventDate(iso: string, locale: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
-    " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric" }) +
+    " " + d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -78,6 +79,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
 };
 
 function CategoryBadge({ category }: { category: string }) {
+  const { t, locale } = useQeventsT();
   const color = CATEGORY_COLORS[category] ?? { bg: "#f1f5f9", fg: "#475569" };
   const icon = CATEGORY_ICONS[category] ?? "🎉";
   return (
@@ -94,7 +96,7 @@ function CategoryBadge({ category }: { category: string }) {
         gap: 4,
       }}
     >
-      {icon} {category}
+      {icon} {t(`cat.${category}` as Key) ?? category}
     </span>
   );
 }
@@ -112,6 +114,7 @@ function EventCard({
   onRSVP: (id: string, status: string, attendeeCount: number) => void;
   isPast: boolean;
 }) {
+  const { t, locale } = useQeventsT();
   const [rsvping, setRsvping] = useState(false);
   const [rsvpStatus, setRsvpStatus] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -175,7 +178,7 @@ function EventCard({
         {/* Category + date */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
           <CategoryBadge category={event.category} />
-          <span style={{ fontSize: 12, color: "#94a3b8" }}>{formatEventDate(event.startAt)}</span>
+          <span style={{ fontSize: 12, color: "#94a3b8" }}>{formatEventDate(event.startAt, locale)}</span>
         </div>
 
         {/* Title */}
@@ -186,7 +189,7 @@ function EventCard({
         {/* Location + price */}
         <div style={{ display: "flex", gap: 12, fontSize: 13, color: "#64748b", marginBottom: 10, flexWrap: "wrap" }}>
           <span>📍 {event.location}</span>
-          <span>{event.price === 0 ? "Free" : `$${event.price}`}</span>
+          <span>{event.price === 0 ? t("card.free") : `$${event.price}`}</span>
           <span>👥 {event.attendeeCount}/{event.capacity}</span>
         </div>
 
@@ -196,7 +199,7 @@ function EventCard({
             onClick={() => setShowDetails(!showDetails)}
             style={{ background: "none", border: "none", cursor: "pointer", color: "#6366f1", fontSize: 12, fontWeight: 600, padding: 0, textAlign: "left", marginBottom: 10 }}
           >
-            {showDetails ? "Hide details ▲" : "Details ▼"}
+            {showDetails ? t("card.hide") : t("card.details")}
           </button>
         )}
 
@@ -225,12 +228,12 @@ function EventCard({
                 transition: "all 0.15s",
               }}
             >
-              {rsvping ? "..." : isGoing ? "Going ✓" : "RSVP"}
+              {rsvping ? "..." : isGoing ? t("card.going") : t("card.rsvp")}
             </button>
           )}
           {!isPast && !currentUserId && (
             <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
-              Sign in to RSVP
+              {t("card.signIn")}
             </div>
           )}
           {isPast && (
@@ -245,12 +248,12 @@ function EventCard({
                 fontWeight: 600,
               }}
             >
-              Past event
+              {t("card.past")}
             </div>
           )}
           <button
             onClick={handleIcsDownload}
-            title="Download .ics file to add this event to your calendar"
+            title={t("card.ics")}
             style={{
               width: "100%",
               background: "#fff",
@@ -268,7 +271,7 @@ function EventCard({
               transition: "all 0.15s",
             }}
           >
-            📅 Add to calendar
+            {t("card.addCal")}
           </button>
         </div>
       </div>
@@ -279,6 +282,7 @@ function EventCard({
 // ─── Create Event Modal ───────────────────────────────────────────────────────
 
 function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreated: (event: QEvent, storage?: string) => void }) {
+  const { t, locale } = useQeventsT();
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -295,7 +299,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title || !form.startAt) {
-      setError("Title and start date are required");
+      setError(t("err.required"));
       return;
     }
     setBusy(true);
@@ -313,7 +317,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
       });
       if (!resp.ok) {
         const j = await resp.json().catch(() => ({})) as { error?: string };
-        setError(j.error ?? "Failed to create");
+        setError(j.error ?? t("err.create"));
         return;
       }
       // Бэкенд с 19.08.2026 честно говорит, куда легло событие: при
@@ -324,7 +328,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
       onCreated(event, storage);
       onClose();
     } catch {
-      setError("Network error");
+      setError(t("err.network"));
     } finally {
       setBusy(false);
     }
@@ -372,21 +376,21 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 20, color: "#0f172a" }}>
-          Create Event
+          {t("form.title")}
         </div>
         <form onSubmit={handleSubmit}>
-          <input placeholder="Event title *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} style={inputStyle} />
-          <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+          <input placeholder={t("form.titlePh")} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} style={inputStyle} />
+          <textarea placeholder={t("form.descPh")} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical" }} />
           <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={inputStyle}>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {CATEGORIES.map((c) => <option key={c} value={c}>{t(`cat.${c}` as Key)}</option>)}
           </select>
-          <input placeholder="Location (default: Online)" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} style={inputStyle} />
-          <label style={{ fontSize: 13, color: "#64748b", display: "block", marginBottom: 4 }}>Start date & time *</label>
+          <input placeholder={t("form.locationPh")} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} style={inputStyle} />
+          <label style={{ fontSize: 13, color: "#64748b", display: "block", marginBottom: 4 }}>{t("form.start")}</label>
           <input type="datetime-local" value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} style={inputStyle} />
-          <label style={{ fontSize: 13, color: "#64748b", display: "block", marginBottom: 4 }}>End date & time</label>
+          <label style={{ fontSize: 13, color: "#64748b", display: "block", marginBottom: 4 }}>{t("form.end")}</label>
           <input type="datetime-local" value={form.endAt} onChange={(e) => setForm({ ...form, endAt: e.target.value })} style={inputStyle} />
-          <input placeholder="Capacity (default: 100)" type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} style={inputStyle} />
-          <input placeholder="Price in USD (0 = free)" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} style={inputStyle} />
+          <input placeholder={t("form.capacityPh")} type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} style={inputStyle} />
+          <input placeholder={t("form.pricePh")} type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} style={inputStyle} />
           {error && <p style={{ color: "#ef4444", margin: "0 0 12px", fontSize: 13 }}>{error}</p>}
           <div style={{ display: "flex", gap: 10 }}>
             <button
@@ -404,7 +408,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 fontSize: 14,
               }}
             >
-              {busy ? "Creating..." : "Create Event"}
+              {busy ? t("form.creating") : t("form.submit")}
             </button>
             <button
               type="button"
@@ -421,7 +425,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 fontSize: 14,
               }}
             >
-              Cancel
+              {t("form.cancel")}
             </button>
           </div>
         </form>
@@ -451,10 +455,12 @@ type WhenFilter = "upcoming" | "past";
 // month grid; clicking a day reveals that day's events as full EventCards
 // (RSVP / ICS reused). Monday-first week.
 
-const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-const MONTHS_RU = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+/** Пн…Вс на языке страницы: 1–7 января 2024 — понедельник…воскресенье. */
+const заглавная = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+const weekdays = (locale: string) => Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(locale, { weekday: "short" }));
 
 function EventCalendar({ currentUserId }: { currentUserId: string | null }) {
+  const { t, locale } = useQeventsT();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1); // 1-12
@@ -513,13 +519,13 @@ function EventCalendar({ currentUserId }: { currentUserId: string | null }) {
       {/* Month nav */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <button onClick={() => shift(-1)} style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 700, color: "#475569" }}>‹</button>
-        <div style={{ fontWeight: 800, fontSize: 18, color: "#0f172a" }}>{MONTHS_RU[month - 1]} {year}</div>
+        <div style={{ fontWeight: 800, fontSize: 18, color: "#0f172a" }}>{заглавная(new Date(year, month - 1, 1).toLocaleDateString(locale, { month: "long", year: "numeric" }))}</div>
         <button onClick={() => shift(1)} style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 700, color: "#475569" }}>›</button>
       </div>
 
       {/* Weekday header */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 6 }}>
-        {WEEKDAYS.map((w) => (
+        {weekdays(locale).map((w) => (
           <div key={w} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>{w}</div>
         ))}
       </div>
@@ -555,7 +561,7 @@ function EventCalendar({ currentUserId }: { currentUserId: string | null }) {
                   {CATEGORY_ICONS[e.category] ?? "🎉"} {e.title}
                 </span>
               ))}
-              {evs.length > 2 && <span style={{ fontSize: 10, color: "#6366f1", fontWeight: 700 }}>+{evs.length - 2} ещё</span>}
+              {evs.length > 2 && <span style={{ fontSize: 10, color: "#6366f1", fontWeight: 700 }}>{t("cal.more", { n: evs.length - 2 })}</span>}
             </button>
           );
         })}
@@ -565,11 +571,11 @@ function EventCalendar({ currentUserId }: { currentUserId: string | null }) {
       {selected && (
         <div style={{ marginTop: 20 }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a", marginBottom: 12 }}>
-            {new Date(selected + "T00:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
-            {selectedEvents.length > 0 && <span style={{ color: "#94a3b8", fontWeight: 600 }}> · {selectedEvents.length} событий</span>}
+            {new Date(selected + "T00:00:00").toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}
+            {selectedEvents.length > 0 && <span style={{ color: "#94a3b8", fontWeight: 600 }}> · {t("cal.count", { n: selectedEvents.length })}</span>}
           </div>
           {selectedEvents.length === 0 ? (
-            <div style={{ color: "#94a3b8", fontSize: 14, padding: 20, textAlign: "center", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12 }}>Событий в этот день нет.</div>
+            <div style={{ color: "#94a3b8", fontSize: 14, padding: 20, textAlign: "center", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12 }}>{t("cal.none")}</div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 20 }}>
               {selectedEvents.map((event) => (
@@ -584,6 +590,7 @@ function EventCalendar({ currentUserId }: { currentUserId: string | null }) {
 }
 
 export default function QEventsPage() {
+  const { t, locale } = useQeventsT();
   const [events, setEvents] = useState<QEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("");
@@ -624,7 +631,7 @@ export default function QEventsPage() {
     // перезапуск, он должен узнать это сейчас, а не когда придут гости.
     setStorageWarning(
       storage === "memory"
-        ? "Хранилище временно недоступно. Событие создано, но НЕ переживёт перезапуск сервиса — сохраните данные и создайте его заново позже."
+        ? t("storage.warn")
         : null,
     );
   }
@@ -660,7 +667,7 @@ export default function QEventsPage() {
               fontSize: 14, lineHeight: 1.55,
             }}
           >
-            <b>Событие сохранено не насовсем.</b> {storageWarning}
+            <b>{t("storage.bold")}</b> {storageWarning}
           </div>
         )}
         {/* Header */}
@@ -670,7 +677,7 @@ export default function QEventsPage() {
               QEvents
             </h1>
             <p style={{ margin: 0, color: "#64748b", fontSize: 15 }}>
-              Discover and RSVP to upcoming events in the AEVION ecosystem.
+              {t("hero.sub")}
             </p>
             <div style={{ marginTop: 10 }}>
               <ModulePricingChip moduleId="qevents" />
@@ -690,7 +697,7 @@ export default function QEventsPage() {
                 fontSize: 15,
               }}
             >
-              + Create Event
+              {t("hero.create")}
             </button>
           )}
         </div>
@@ -705,7 +712,7 @@ export default function QEventsPage() {
                 onClick={() => setViewMode(v)}
                 style={{ padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: active ? "#6366f1" : "transparent", color: active ? "#fff" : "#64748b", transition: "all 0.15s" }}
               >
-                {v === "list" ? "☰ Список" : "🗓 Календарь"}
+                {v === "list" ? t("view.list") : t("view.calendar")}
               </button>
             );
           })}
@@ -726,7 +733,7 @@ export default function QEventsPage() {
             gap: 4,
           }}
           role="tablist"
-          aria-label="Time filter"
+          aria-label={t("time.aria")}
         >
           {(["upcoming", "past"] as WhenFilter[]).map((w) => {
             const active = when === w;
@@ -748,7 +755,7 @@ export default function QEventsPage() {
                   transition: "all 0.15s",
                 }}
               >
-                {w === "upcoming" ? "🔜 Upcoming" : "📜 Past"}
+                {w === "upcoming" ? t("time.upcoming") : t("time.past")}
               </button>
             );
           })}
@@ -762,7 +769,7 @@ export default function QEventsPage() {
               style={tabStyle(category === cat.id)}
               onClick={() => setCategory(cat.id)}
             >
-              {CATEGORY_ICONS[cat.id] ?? ""} {cat.label}
+              {CATEGORY_ICONS[cat.id] ?? ""} {t((cat.id ? `cat.${cat.id}` : "cat.all") as Key)}
             </button>
           ))}
         </div>
@@ -770,7 +777,7 @@ export default function QEventsPage() {
         {/* Events grid */}
         {loading && (
           <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>
-            Loading events...
+            {t("loading")}
           </p>
         )}
         {!loading && events.length === 0 && (
@@ -788,12 +795,12 @@ export default function QEventsPage() {
               {when === "upcoming" ? "🎉" : "📜"}
             </div>
             <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>
-              {when === "upcoming" ? "No upcoming events" : "No past events"}
+              {when === "upcoming" ? t("empty.upcomingH") : t("empty.pastH")}
             </div>
             <div style={{ fontSize: 14 }}>
               {when === "upcoming"
-                ? "Be the first to create an event!"
-                : "Past events will appear here once they end."}
+                ? t("empty.upcoming")
+                : t("empty.past")}
             </div>
           </div>
         )}

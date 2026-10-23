@@ -55,7 +55,9 @@ describe("отзыв после результата", () => {
     expect(СТРАНИЦА.slice(k - 900, k)).toContain('<OtzyvPosleRezultata kontekst="game"');
     const i = СТРАНИЦА.indexOf('data-cc-resheno="1"');
     expect(СТРАНИЦА.slice(i, i + 2500)).toContain('<OtzyvPosleRezultata kontekst="puzzle"');
-    const j = СТРАНИЦА.indexOf('aria-label="Итог партии"');
+    // 23.10.2026: подпись окна ушла в словарь (attr.game_result = «Итог партии»)
+    const j = СТРАНИЦА.indexOf('aria-label={cc.t("attr.game_result")}');
+    expect(j, "окно «Итог партии» не найдено").toBeGreaterThan(0);
     expect(СТРАНИЦА.slice(j)).toContain('<OtzyvPosleRezultata kontekst="game"');
   });
 });

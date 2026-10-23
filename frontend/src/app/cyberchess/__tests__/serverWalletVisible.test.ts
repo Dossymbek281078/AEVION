@@ -39,7 +39,9 @@ describe("серверный счёт Chessy", () => {
     const s = src();
     expect(s).toMatch(/chessy-server-balance/);
     expect(s).toMatch(/chessy-server-unknown/);
-    expect(s).toMatch(/НЕ значит, что он пуст/);
+    // 23.10.2026: текст ушёл в словарь — страница зовёт ключ, словарь держит слова
+    expect(s).toContain('cc.t("attr.could_not_fetch_the_server")');
+    expect(fs.readFileSync(path.join(path.dirname(SRC), "i18n.ts"), "utf-8")).toMatch(/НЕ значит, что он пуст/);
     // Мало показать, что ветка отрисовки есть: надо, чтобы отказ до неё
     // ДОХОДИЛ. Первая редакция этого не проверяла — я подменил обработчик
     // отказа нулевым балансом, и тест остался зелёным.

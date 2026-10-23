@@ -44,7 +44,7 @@ interface Props {
 }
 
 export function PaywallScreen({ payload, backHref = "/", backLabel = "← На главную" }: Props) {
-  const { module, plan, requiredTiers, upgradeUrl, authState, loginUrl } = payload;
+  const { plan, requiredTiers, upgradeUrl, authState, loginUrl } = payload;
   // Не вошёл → возможно, уже оплатил: главный шаг — вход под почтой оплаты, а
   // не «выбрать тариф» (иначе плательщику предлагают платить второй раз).
   const anonymous = authState === "anonymous";
@@ -86,13 +86,15 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
 
         <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 12px", lineHeight: 1.15 }}>
           {requiredTiers.includes("full")
-            ? `Модуль «${module}» входит в любую платную подписку`
-            : `Модуль «${module}» доступен на старших тарифах`}
+            // Без служебного имени: «Модуль «qai»…» человеку ничего не говорит
+            // (прод /qai, 24.10.2026); название модуля он и так видит в адресе и меню.
+            ? "Этот модуль входит в любую платную подписку"
+            : "Этот модуль доступен на старших тарифах"}
         </h1>
 
         <p style={{ fontSize: 14, color: "#475569", margin: "0 0 24px", lineHeight: 1.5 }}>
           Ваш текущий план — <strong style={{ color: "#0f172a" }}>{tierLabel(plan)}</strong>.
-          Чтобы открыть {module}, выберите один из тарифов ниже.
+          Чтобы открыть его, выберите один из тарифов ниже.
         </p>
 
         <div

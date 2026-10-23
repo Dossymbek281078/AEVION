@@ -98,3 +98,15 @@ describe("стена называет самый дешёвый вход", () =>
   });
 });
 
+
+describe("экран стены без служебного имени модуля", () => {
+  // 24.10.2026, прод /qai: «Модуль «qai» входит в любую платную подписку».
+  it("в исходнике заголовка нет «${module}»", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(__dirname, "..", "PaywallScreen.tsx"), "utf8");
+    expect(src).not.toMatch(/Модуль «\$\{module\}»/);
+    expect(src).not.toMatch(/открыть \{module\}/);
+    expect(src).toContain("Этот модуль входит в любую платную подписку");
+  });
+});

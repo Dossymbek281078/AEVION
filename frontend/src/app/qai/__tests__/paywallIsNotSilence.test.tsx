@@ -17,7 +17,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
   usePathname: () => "/qai",
 }));
-vi.mock("@/lib/i18n", () => ({
+// Частичный мок: модуль страницы зовёт и другие экспорты (языкИзАдреса) —
+// полный подменный объект ронял рендер, и сторож молча мерил пустой <div/>.
+vi.mock("@/lib/i18n", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/i18n")>()),
   useI18n: () => ({ t: (k: string) => k, lang: "ru" }),
   useI18nOptional: () => null,
 }));

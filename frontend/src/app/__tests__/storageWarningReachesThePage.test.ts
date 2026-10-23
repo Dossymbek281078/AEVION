@@ -18,7 +18,8 @@ import { join } from "node:path";
 const ROOT = join(__dirname, "..");
 
 const PAGES: Array<[string, string[]]> = [
-  ["QEvents", ["qevents/page.tsx"]],
+  // 24.10.2026: текст предупреждения QEvents ушёл в словарь ru/en/kk
+  ["QEvents", ["qevents/page.tsx", "qevents/i18n.ts"]],
   ["PsyApp", ["psyapp-deps/page.tsx", "psyapp-deps/components/Onboarding.tsx"]],
   ["LifeBox", ["lifebox/page.tsx"]],
 ];

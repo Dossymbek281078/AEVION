@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { stripComments } from "./helpers/sourceCode";
 import { join } from "node:path";
 
@@ -18,8 +18,7 @@ import { join } from "node:path";
 const ROOT = join(__dirname, "..");
 
 const PAGES: Array<[string, string[]]> = [
-  // 24.10.2026: текст предупреждения QEvents ушёл в словарь ru/en/kk
-  ["QEvents", ["qevents/page.tsx", "qevents/i18n.ts"]],
+  ["QEvents", ["qevents/page.tsx"]],
   ["PsyApp", ["psyapp-deps/page.tsx", "psyapp-deps/components/Onboarding.tsx"]],
   ["LifeBox", ["lifebox/page.tsx"]],
 ];
@@ -70,7 +69,10 @@ describe("страница показывает признак хранилищ�
     const all = files.map((f) => stripComments(readFileSync(join(ROOT, f), "utf8"))).join("\n");
     // role="alert" — не украшение: без него экранный диктор промолчит.
     expect(all, "нет видимой плашки с role=alert").toMatch(/role="alert"/);
-    expect(all, "нет текста про недоступное хранилище").toMatch(/недоступно/);
+    // 24.10.2026: у страниц со своим словарём (qevents/i18n.ts) текст живёт там.
+    const словари = [...new Set(files.map((f) => join(ROOT, f.split("/")[0], "i18n.ts")))].filter((p) => existsSync(p));
+    const сословарём = all + "\n" + словари.map((p) => readFileSync(p, "utf8")).join("\n");
+    expect(сословарём, "нет текста про недоступное хранилище").toMatch(/недоступно/);
   });
 });
 

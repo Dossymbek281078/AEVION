@@ -17,8 +17,10 @@ import { join } from "node:path";
  */
 const СТРАНИЦА = readFileSync(join(process.cwd(), "src/app/cyberchess/page.tsx"), "utf8");
 const СЛОВАРЬ = readFileSync(join(process.cwd(), "src/app/cyberchess/i18n.ts"), "utf8");
-const РУССКИЙ_АТРИБУТ = /(?:aria-label|title|placeholder)="[^"]*[а-яА-ЯёЁ][^"]*"/g;
-const ПРЕДЕЛ_ЛИТЕРАЛОВ = 127;
+const РУССКИЙ_АТРИБУТ = /(?:aria-label|title|placeholder|alt)="[^"]*[а-яА-ЯёЁ][^"]*"/g;
+// 23.10.2026: все 126 (с alt) переведены в словарь — живой перевод на проде
+// не работал (ключ отключён), en/kk-гость слышал их по-русски навсегда. Предел — 0.
+const ПРЕДЕЛ_ЛИТЕРАЛОВ = 0;
 
 describe("aria-подписи шахмат — из словаря", () => {
   it("🔴 «Сила соперника» и «Запустить Puzzle Rush» больше не жёсткие литералы, а ключи", () => {
@@ -39,7 +41,8 @@ describe("aria-подписи шахмат — из словаря", () => {
 
   it(`храповик: жёстких русских атрибутов на странице не больше ${ПРЕДЕЛ_ЛИТЕРАЛОВ}`, () => {
     const n = (СТРАНИЦА.match(РУССКИЙ_АТРИБУТ) || []).length;
-    expect(n, "знаменатель: литералов найдено").toBeGreaterThan(50);
+    // знаменатель: прибор видит атрибуты-ключи страницы (их больше сотни)
+    expect((СТРАНИЦА.match(/\b(?:aria-label|title|placeholder|alt)=\{cc\.t\(/g) || []).length).toBeGreaterThan(100);
     expect(n).toBeLessThanOrEqual(ПРЕДЕЛ_ЛИТЕРАЛОВ);
   });
 

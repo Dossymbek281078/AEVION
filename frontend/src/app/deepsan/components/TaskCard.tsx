@@ -1,5 +1,5 @@
-import { useDeepsanT, type Key } from "../i18n";
 "use client";
+import { useDeepsanT, type Key } from "../i18n";
 
 export type Priority = "low" | "medium" | "high" | "critical";
 

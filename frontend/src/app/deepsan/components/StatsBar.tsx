@@ -1,5 +1,5 @@
-import { useDeepsanT } from "../i18n";
 "use client";
+import { useDeepsanT } from "../i18n";
 
 interface Stats {
   totalTasks: number;

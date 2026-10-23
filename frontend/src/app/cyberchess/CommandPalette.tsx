@@ -171,7 +171,7 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
       animation: "fadeInUp 0.18s ease-out",
     }}>
       <div onClick={e => e.stopPropagation()} onKeyDown={onKey}
-        role="dialog" aria-modal="true" aria-label="Палитра команд"
+        role="dialog" data-dialog-panel aria-modal="true" aria-label="Палитра команд"
         style={{
           width: "min(620px, 92vw)",
           background: "#fff",

@@ -409,6 +409,9 @@ export function isProbeVisit(
   nav: { webdriver?: boolean } | undefined = typeof navigator !== "undefined" ? navigator : undefined,
   search: string = typeof location !== "undefined" ? location.search : "",
 ): boolean {
+  // ?autotranslate=live — явный обход ТОЛЬКО для приборов замера языка (слово оркестратора 23.10 19:29):
+  // снимает запрет перевода для пробы; метр, лимиты и метка ?c=probe-* для воронки остаются как есть.
+  if (/[?&]autotranslate=live(?:&|$)/.test(search)) return false;
   if (nav?.webdriver === true) return true;
   return /[?&]c=probe-/.test(search);
 }

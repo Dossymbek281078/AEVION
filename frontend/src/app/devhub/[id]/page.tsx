@@ -904,7 +904,10 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
       role="status"
       aria-live={type === "error" ? "assertive" : "polite"}
       style={{
-        position: "fixed", bottom: 24, right: 24, background: bg, color: fg,
+        // Над кнопкой ИИ-помощника (AgentDock: bottom 16, right 16, z 9998): при
+        // bottom 24 она лежала на правом нижнем углу тоста — крестик и хвост
+        // адреса «выкатка живая: …» (п.2 очереди Приложений, 23.10).
+        position: "fixed", bottom: "calc(80px + var(--aevion-install-h, 0px))", right: 24, background: bg, color: fg,
         padding: "12px 18px", borderRadius: 10, fontWeight: 600, fontSize: 14,
         boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 200, maxWidth: 380,
         display: "flex", alignItems: "center", gap: 10,
@@ -7045,7 +7048,10 @@ if (/Месячная норма исчерпана|Месячный лимит[
           role="status"
           style={{
             position: "fixed", left: "50%", transform: "translateX(-50%)",
-            bottom: 18, zIndex: 60, maxWidth: 560, width: "calc(100% - 32px)",
+            // Над кнопкой ИИ-помощника (AgentDock: bottom 16 + высота ~50, справа):
+            // при bottom 18 она накрывала правый хвост плашки — «Подключить покупку»
+            // и крестик — на 390 и 540 (замер 23.10: перекрытие 39×48 px).
+            bottom: "calc(76px + var(--aevion-install-h, 0px))", zIndex: 60, maxWidth: 560, width: "calc(100% - 32px)",
             background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
             borderRadius: 12, padding: "12px 16px", color: "#fff",
             boxShadow: "0 8px 30px rgba(15, 23, 42, 0.35)",

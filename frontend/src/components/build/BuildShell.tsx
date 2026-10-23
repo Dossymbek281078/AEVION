@@ -322,7 +322,7 @@ function NavDrawer({
         onClick={onClose}
       />
       <aside
-        role="dialog"
+        role="dialog" data-dialog-panel
         aria-label="Navigation menu"
         aria-modal="true"
         className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r shadow-2xl transition-transform ${skin.drawer} ${

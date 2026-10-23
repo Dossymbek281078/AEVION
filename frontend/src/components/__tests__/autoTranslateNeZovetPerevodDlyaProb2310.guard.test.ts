@@ -20,6 +20,15 @@ describe("AutoTranslate не зовёт живой перевод для наш�
     expect(isProbeVisit({ webdriver: false }, "?c=microprobe-x")).toBe(false);
   });
 
+  it("?autotranslate=live — обход для приборов: webdriver/probe × live/нет (4 случая)", () => {
+    expect(isProbeVisit({ webdriver: true }, "?c=probe-apps&lang=kk&autotranslate=live"), "webdriver + live").toBe(false);
+    expect(isProbeVisit({ webdriver: false }, "?c=probe-apps&autotranslate=live"), "probe-метка + live").toBe(false);
+    expect(isProbeVisit({ webdriver: true }, "?c=probe-apps&lang=kk"), "webdriver без live").toBe(true);
+    expect(isProbeVisit({ webdriver: false }, "?c=probe-apps"), "probe-метка без live").toBe(true);
+    // чужое значение параметра обход не даёт
+    expect(isProbeVisit({ webdriver: true }, "?autotranslate=on"), "не live").toBe(true);
+  });
+
   it("flush живого перевода проверяет признак пробы (исходник)", () => {
     const src = readFileSync(join(process.cwd(), "src/components/AutoTranslate.tsx"), "utf8");
     expect(src).toContain("const probeVisit = isProbeVisit();");

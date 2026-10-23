@@ -200,12 +200,23 @@ export default function QRealClient() {
   async function watchDemoFilm() {
     if (busy) return;
     setBusy(true);
+    // Вкладку открываем СРАЗУ, в самом нажатии: window.open после await браузер
+    // уже не считает ответом на жест — iOS Safari блокирует его всегда, Chrome —
+    // если ожидание дольше ~5 с. Человек нажимал «Смотреть» и не видел ничего
+    // (23.10.2026). Адрес фильма ставим, когда кадры готовы; окно заблокировали
+    // всё равно — открываем фильм в этой же вкладке.
+    const вкладка = window.open("about:blank", "_blank");
+    const фильм = apiUrl("/api/qreal/projects/demo-steppe-morning/film");
     try {
       await fetch(apiUrl("/api/qreal/projects/demo-steppe-morning/render-all"), {
         method: "POST", headers: { "Content-Type": "application/json" }, body: '{"engine":"kling"}',
       });
-      window.open(apiUrl("/api/qreal/projects/demo-steppe-morning/film"), "_blank");
-    } catch { setNote(t("qreal.note.backend.down")); }
+      if (вкладка && !вкладка.closed) вкладка.location.href = фильм;
+      else window.location.assign(фильм);
+    } catch {
+      вкладка?.close();
+      setNote(t("qreal.note.backend.down"));
+    }
     finally { setBusy(false); }
   }
 

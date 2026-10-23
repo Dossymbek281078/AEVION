@@ -8,33 +8,34 @@ import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/
 import { ToastProvider } from "./Toast";
 import { HeaderSearch } from "./HeaderSearch";
 import { CompareBar } from "./CompareBar";
+import { useShellT, type ShellKey } from "./buildShellI18n";
 
 const NAV: { href: string; label: string; authOnly?: boolean }[] = [
-  { href: "/build", label: "Projects" },
-  { href: "/build/vacancies", label: "Vacancies" },
-  { href: "/build/talent", label: "Talent", authOnly: true },
-  { href: "/build/coach", label: "AI Coach", authOnly: true },
-  { href: "/build/applications", label: "My Apps", authOnly: true },
-  { href: "/build/interviews", label: "📅 Interviews", authOnly: true },
-  { href: "/build/alerts", label: "🔔 Алерты", authOnly: true },
-  { href: "/build/safety-briefing", label: "⚠️ Safety", authOnly: true },
-  { href: "/build/trials", label: "Trials", authOnly: true },
-  { href: "/build/reviews", label: "Reviews", authOnly: true },
-  { href: "/build/saved", label: "Saved", authOnly: true },
-  { href: "/build/dashboard", label: "Dashboard", authOnly: true },
-  { href: "/build/create-project", label: "New project", authOnly: true },
-  { href: "/build/profile", label: "Profile", authOnly: true },
-  { href: "/build/documents", label: "📄 Docs", authOnly: true },
-  { href: "/build/portfolio", label: "🖼 Portfolio", authOnly: true },
-  { href: "/build/messages", label: "Messages", authOnly: true },
-  { href: "/build/pipeline", label: "Pipeline", authOnly: true },
-  { href: "/build/calendar", label: "Calendar", authOnly: true },
-  { href: "/build/pricing", label: "Pricing" },
-  { href: "/build/loyalty", label: "Loyalty" },
-  { href: "/build/leaderboard", label: "Leaderboard" },
-  { href: "/build/success-stories", label: "Success Stories" },
-  { href: "/build/help", label: "Help" },
-  { href: "/build/why-aevion", label: "Why us" },
+  { href: "/build", label: "nav.projects" },
+  { href: "/build/vacancies", label: "nav.vacancies" },
+  { href: "/build/talent", label: "nav.talent", authOnly: true },
+  { href: "/build/coach", label: "nav.coach", authOnly: true },
+  { href: "/build/applications", label: "nav.apps", authOnly: true },
+  { href: "/build/interviews", label: "nav.interviews", authOnly: true },
+  { href: "/build/alerts", label: "nav.alerts", authOnly: true },
+  { href: "/build/safety-briefing", label: "nav.safety", authOnly: true },
+  { href: "/build/trials", label: "nav.trials", authOnly: true },
+  { href: "/build/reviews", label: "nav.reviews", authOnly: true },
+  { href: "/build/saved", label: "nav.saved", authOnly: true },
+  { href: "/build/dashboard", label: "nav.dashboard", authOnly: true },
+  { href: "/build/create-project", label: "nav.newProject", authOnly: true },
+  { href: "/build/profile", label: "nav.profile", authOnly: true },
+  { href: "/build/documents", label: "nav.docs", authOnly: true },
+  { href: "/build/portfolio", label: "nav.portfolio", authOnly: true },
+  { href: "/build/messages", label: "nav.messages", authOnly: true },
+  { href: "/build/pipeline", label: "nav.pipeline", authOnly: true },
+  { href: "/build/calendar", label: "nav.calendar", authOnly: true },
+  { href: "/build/pricing", label: "nav.pricing" },
+  { href: "/build/loyalty", label: "nav.loyalty" },
+  { href: "/build/leaderboard", label: "nav.leaderboard" },
+  { href: "/build/success-stories", label: "nav.stories" },
+  { href: "/build/help", label: "nav.help" },
+  { href: "/build/why-aevion", label: "nav.why" },
 ];
 
 const TIER_CHIP: Record<string, { className: string; emoji: string }> = {
@@ -98,6 +99,7 @@ const SHELL_SKIN: Record<ShellTheme, {
 };
 
 export function BuildShell({ children, theme = "dark" }: { children: React.ReactNode; theme?: ShellTheme }) {
+  const tr = useShellT();
   const pathname = usePathname();
   const user = useBuildAuth((s) => s.user);
   const logout = useBuildAuth((s) => s.logout);
@@ -137,7 +139,7 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
           <div className="flex items-center gap-2">
             <button
               type="button"
-              aria-label="Open menu"
+              aria-label={tr("head.openMenu")}
               aria-expanded={drawerOpen}
               onClick={() => setDrawerOpen(true)}
               className={`rounded-md border px-2.5 py-1.5 sm:hidden ${skin.menuBtn}`}
@@ -150,7 +152,7 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
             </button>
             <Link href="/build" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
               <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
-              <span className={`hidden sm:inline ${skin.logoSub}`}>AEVION Construction & Recruiting</span>
+              <span className={`hidden sm:inline ${skin.logoSub}`}>{tr("head.sub")}</span>
             </Link>
           </div>
 
@@ -165,7 +167,7 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
                     active ? skin.navActive : skin.navIdle
                   }`}
                 >
-                  {n.label}
+                  {tr(n.label as ShellKey)}
                 </Link>
               );
             })}
@@ -174,9 +176,9 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
                 type="button"
                 onClick={() => setDrawerOpen(true)}
                 className={`rounded-md px-3 py-1.5 text-sm ${skin.moreBtn}`}
-                aria-label="More menu"
+                aria-label={tr("head.moreMenu")}
               >
-                More…
+                {tr("head.more")}
               </button>
             )}
           </nav>
@@ -193,7 +195,7 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
                     href="/build/admin"
                     className="rounded-md bg-fuchsia-500/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-fuchsia-200 hover:bg-fuchsia-500/30"
                   >
-                    Admin
+                    {tr("head.admin")}
                   </Link>
                 )}
                 <PlanBadge />
@@ -201,14 +203,14 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
                 <NotificationBell />
                 <Link
                   href="/build/settings"
-                  title="Account settings"
+                  title={tr("head.account")}
                   className={`rounded-md border px-2.5 py-1.5 ${skin.gear(pathname === "/build/settings")}`}
                 >
                   ⚙
                 </Link>
               </>
             ) : (
-              <span className="text-slate-500">Not signed in</span>
+              <span className="text-slate-500">{tr("head.notSigned")}</span>
             )}
           </div>
         </div>
@@ -231,15 +233,15 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
       <footer className={`border-t mt-8 ${skin.footer}`}>
         <div className="mx-auto max-w-[1600px] px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px]">
           <div className="flex flex-wrap gap-4">
-            <Link href="/build/help" className={skin.footerLink}>Help</Link>
-            <Link href="/build/stats" className={skin.footerLink}>Platform stats</Link>
-            <Link href="/build/leaderboard" className={skin.footerLink}>Leaderboard</Link>
-            <Link href="/build/success-stories" className={skin.footerLink}>Success stories</Link>
-            <Link href="/build/why-aevion" className={skin.footerLink}>Why AEVION</Link>
-            <Link href="/build/pricing" className={skin.footerLink}>Pricing</Link>
-            <Link href="/build/developers" className={skin.footerLink}>Developers</Link>
-            <Link href="/build/changelog" className={skin.footerLink}>Changelog</Link>
-            <Link href="/build/onboarding" className={skin.footerLink}>Get started</Link>
+            <Link href="/build/help" className={skin.footerLink}>{tr("foot.help")}</Link>
+            <Link href="/build/stats" className={skin.footerLink}>{tr("foot.stats")}</Link>
+            <Link href="/build/leaderboard" className={skin.footerLink}>{tr("foot.leaderboard")}</Link>
+            <Link href="/build/success-stories" className={skin.footerLink}>{tr("foot.stories")}</Link>
+            <Link href="/build/why-aevion" className={skin.footerLink}>{tr("foot.why")}</Link>
+            <Link href="/build/pricing" className={skin.footerLink}>{tr("foot.pricing")}</Link>
+            <Link href="/build/developers" className={skin.footerLink}>{tr("foot.dev")}</Link>
+            <Link href="/build/changelog" className={skin.footerLink}>{tr("foot.changelog")}</Link>
+            <Link href="/build/onboarding" className={skin.footerLink}>{tr("foot.start")}</Link>
           </div>
           <span>© 2026 AEVION QBuild</span>
         </div>
@@ -252,16 +254,17 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
 type ShellSkin = (typeof SHELL_SKIN)[ShellTheme];
 
 function MobileBottomNav({ pathname, skin }: { pathname: string; skin: ShellSkin }) {
+  const tr = useShellT();
   const tabs: { href: string; label: string; icon: string }[] = [
-    { href: "/build", label: "Home", icon: "🏠" },
-    { href: "/build/vacancies", label: "Feed", icon: "📋" },
-    { href: "/build/messages", label: "Chats", icon: "💬" },
-    { href: "/build/dashboard", label: "Stats", icon: "📊" },
-    { href: "/build/profile", label: "Me", icon: "👤" },
+    { href: "/build", label: "tab.home", icon: "🏠" },
+    { href: "/build/vacancies", label: "tab.feed", icon: "📋" },
+    { href: "/build/messages", label: "tab.chats", icon: "💬" },
+    { href: "/build/dashboard", label: "tab.stats", icon: "📊" },
+    { href: "/build/profile", label: "tab.me", icon: "👤" },
   ];
   return (
     <nav
-      aria-label="Bottom navigation"
+      aria-label={tr("aria.bottom")}
       className={`fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur sm:hidden ${skin.bottomNav}`}
       // К безопасной зоне телефона добавляем высоту кнопки агента: она
       // закреплена в правом нижнем углу и накрывает последнюю строку.
@@ -285,7 +288,7 @@ function MobileBottomNav({ pathname, skin }: { pathname: string; skin: ShellSkin
                 <span className="text-base leading-none" aria-hidden="true">
                   {t.icon}
                 </span>
-                <span>{t.label}</span>
+                <span>{tr(t.label as ShellKey)}</span>
               </Link>
             </li>
           );
@@ -312,6 +315,7 @@ function NavDrawer({
   onLogout: () => void;
   skin: ShellSkin;
 }) {
+  const tr = useShellT();
   return (
     <>
       <div
@@ -323,7 +327,7 @@ function NavDrawer({
       />
       <aside
         role="dialog" data-dialog-panel
-        aria-label="Navigation menu"
+        aria-label={tr("aria.drawer")}
         aria-modal="true"
         className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r shadow-2xl transition-transform ${skin.drawer} ${
           open ? "translate-x-0" : "-translate-x-full"
@@ -332,12 +336,12 @@ function NavDrawer({
         <div className={`flex items-center justify-between border-b px-4 py-3 ${skin.drawerBar}`}>
           <span className="flex items-center gap-2 text-sm font-semibold">
             <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
-            <span className={skin.logoSub}>Menu</span>
+            <span className={skin.logoSub}>{tr("drawer.menu")}</span>
           </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close menu"
+            aria-label={tr("drawer.close")}
             className={`rounded-md border px-2.5 py-1 text-sm ${skin.drawerBtn}`}
           >
             ×
@@ -355,7 +359,7 @@ function NavDrawer({
                   active ? skin.drawerActive : skin.drawerIdle
                 }`}
               >
-                {n.label}
+                {tr(n.label as ShellKey)}
               </Link>
             );
           })}
@@ -370,7 +374,7 @@ function NavDrawer({
               }}
               className={`w-full rounded-md border px-3 py-2 text-sm transition hover:bg-rose-500/10 hover:text-rose-600 ${skin.drawerBtn}`}
             >
-              Log out
+              {tr("drawer.logout")}
             </button>
           </div>
         )}
@@ -380,6 +384,7 @@ function NavDrawer({
 }
 
 function FloatingCoachLauncher() {
+  const tr = useShellT();
   const [open, setOpen] = useState(false);
 
   // Lazy-load the chat only when the user opens the modal so the
@@ -388,11 +393,11 @@ function FloatingCoachLauncher() {
     <>
       <button
         onClick={() => setOpen(true)}
-        aria-label="Open AI coach"
+        aria-label={tr("coach.open")}
         className="fixed bottom-5 right-5 z-40 inline-flex h-14 items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500 px-5 text-sm font-bold text-emerald-950 shadow-2xl shadow-emerald-500/20 transition hover:bg-emerald-400"
       >
         <span className="text-base">🤖</span>
-        <span>AI coach</span>
+        <span>{tr("coach.label")}</span>
       </button>
       {open && <CoachModal onClose={() => setOpen(false)} />}
     </>
@@ -400,6 +405,7 @@ function FloatingCoachLauncher() {
 }
 
 function CoachModal({ onClose }: { onClose: () => void }) {
+  const tr = useShellT();
   // We need AiCoachChat lazily — but lazy() can't be used here without
   // Suspense boundary. Pull it directly; the import cost only fires
   // when the modal mounts (the launcher button itself imports nothing).
@@ -425,14 +431,14 @@ function CoachModal({ onClose }: { onClose: () => void }) {
       >
         <button
           onClick={onClose}
-          aria-label="Close"
+          aria-label={tr("coach.close")}
           className="absolute -top-3 -right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-900 text-slate-200 hover:bg-slate-800"
         >
           ×
         </button>
         {Chat ? <Chat height={560} /> : (
           <div className="rounded-2xl border border-emerald-500/20 bg-slate-900 p-8 text-center text-sm text-slate-400">
-            Loading coach…
+            {tr("coach.loading")}
           </div>
         )}
       </div>
@@ -441,6 +447,7 @@ function CoachModal({ onClose }: { onClose: () => void }) {
 }
 
 function PlanBadge() {
+  const tr = useShellT();
   const token = useBuildAuth((s) => s.token);
   const [planKey, setPlanKey] = useState<string | null>(null);
 
@@ -476,9 +483,9 @@ function PlanBadge() {
     <Link
       href="/build/pricing"
       className={`hidden items-center rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wider sm:inline-flex ${tone}`}
-      title="Your current plan — click to compare or upgrade"
+      title={tr("plan.title")}
     >
-      {planKey === "PPHIRE" ? "Pay-per-Hire" : planKey}
+      {planKey === "PPHIRE" ? tr("plan.pph") : planKey}
     </Link>
   );
 }
@@ -520,6 +527,7 @@ function TierBadge() {
 }
 
 function NotificationBell() {
+  const tr = useShellT();
   const token = useBuildAuth((s) => s.token);
   const [summary, setSummary] = useState<{
     unreadMessages: number;
@@ -554,7 +562,7 @@ function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label={total > 0 ? `${total} new notifications` : "Notifications"}
+        aria-label={total > 0 ? tr("notif.new", { n: total }) : tr("notif.label")}
         className="relative rounded-md border border-white/10 px-2.5 py-1.5 text-slate-200 hover:bg-white/10"
       >
         <span aria-hidden>🔔</span>
@@ -570,13 +578,13 @@ function NotificationBell() {
           onMouseLeave={() => setOpen(false)}
         >
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notifications</span>
-            <Link href="/build/notifications" onClick={() => setOpen(false)} className="text-[10px] text-emerald-300 hover:underline">See all →</Link>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{tr("notif.label")}</span>
+            <Link href="/build/notifications" onClick={() => setOpen(false)} className="text-[10px] text-emerald-300 hover:underline">{tr("notif.all")}</Link>
           </div>
           {!summary ? (
-            <p className="text-xs text-slate-500">Loading…</p>
+            <p className="text-xs text-slate-500">{tr("loading")}</p>
           ) : total === 0 ? (
-            <p className="text-xs text-slate-500">All caught up.</p>
+            <p className="text-xs text-slate-500">{tr("notif.none")}</p>
           ) : (
             <ul className="space-y-1.5">
               {summary.unreadMessages > 0 && (
@@ -586,7 +594,7 @@ function NotificationBell() {
                     onClick={() => setOpen(false)}
                     className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white/5"
                   >
-                    <span>Unread messages</span>
+                    <span>{tr("notif.unread")}</span>
                     <span className="rounded-full bg-emerald-500/20 px-2 text-xs text-emerald-200">
                       {summary.unreadMessages}
                     </span>
@@ -600,7 +608,7 @@ function NotificationBell() {
                     onClick={() => setOpen(false)}
                     className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white/5"
                   >
-                    <span>Pending applications</span>
+                    <span>{tr("notif.pending")}</span>
                     <span className="rounded-full bg-amber-500/20 px-2 text-xs text-amber-200">
                       {summary.pendingApplications}
                     </span>
@@ -614,7 +622,7 @@ function NotificationBell() {
                     onClick={() => setOpen(false)}
                     className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white/5"
                   >
-                    <span>My application updates</span>
+                    <span>{tr("notif.mine")}</span>
                     <span className="rounded-full bg-sky-500/20 px-2 text-xs text-sky-200">
                       {summary.applicationUpdates}
                     </span>
@@ -630,13 +638,14 @@ function NotificationBell() {
 }
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
+  const tr = useShellT();
   const hydrated = useBuildAuth((s) => s.hydrated);
   const token = useBuildAuth((s) => s.token);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   if (!mounted || !hydrated) {
-    return <p className="py-8 text-sm text-slate-400">Loading…</p>;
+    return <p className="py-8 text-sm text-slate-400">{tr("loading")}</p>;
   }
   if (!token) {
     return <SignInPanel />;
@@ -645,6 +654,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 export function SignInPanel() {
+  const tr = useShellT();
   const setSession = useBuildAuth((s) => s.setSession);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -677,14 +687,14 @@ export function SignInPanel() {
     <div className="mx-auto max-w-md rounded-xl border border-white/10 bg-white/5 p-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">
-          {mode === "login" ? "Sign in" : "Create account"}
+          {mode === "login" ? tr("auth.signIn") : tr("auth.create")}
         </h2>
         <button
           type="button"
           onClick={() => setMode(mode === "login" ? "register" : "login")}
           className="text-xs text-slate-400 underline-offset-2 hover:underline"
         >
-          {mode === "login" ? "Need an account?" : "Have an account?"}
+          {mode === "login" ? tr("auth.need") : tr("auth.have")}
         </button>
       </div>
       <form onSubmit={submit} className="space-y-3 text-sm">
@@ -692,7 +702,7 @@ export function SignInPanel() {
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Full name"
+            placeholder={tr("auth.name")}
             required
             minLength={2}
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
@@ -702,8 +712,8 @@ export function SignInPanel() {
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          aria-label="Email"
-          placeholder="Email"
+          aria-label={tr("auth.email")}
+          placeholder={tr("auth.email")}
           required
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
         />
@@ -711,8 +721,8 @@ export function SignInPanel() {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          aria-label="Password"
-          placeholder="Password (min 6 chars)"
+          aria-label={tr("auth.password")}
+          placeholder={tr("auth.passwordPh")}
           required
           minLength={6}
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
@@ -723,11 +733,11 @@ export function SignInPanel() {
           disabled={busy}
           className="w-full rounded-lg bg-emerald-500 px-4 py-2 font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
         >
-          {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
+          {busy ? "…" : mode === "login" ? tr("auth.signIn") : tr("auth.create")}
         </button>
       </form>
       <p className="mt-3 text-xs text-slate-500">
-        Single AEVION account — works across QBuild, QRight, QSign and other modules.
+        {tr("auth.single")}
       </p>
     </div>
   );

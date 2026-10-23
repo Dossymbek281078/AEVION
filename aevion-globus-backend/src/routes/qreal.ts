@@ -440,7 +440,7 @@ async function aiStoryboard(p: Project, variation: number): Promise<{ shots: Sho
         { role: "user", content: `Бриф (${p.format}, ~${p.targetDurationSec}с, язык диалогов: ${p.language}). Разбей ИМЕННО эту сцену, не выдумывай другую:\n${p.brief}` + (variation > 1 ? `
 Вариация №${variation}: та же сцена и сущности, но ДРУГОЙ монтажный ритм — иной порядок планов, другая крупность и движение камеры.` : "") },
       ],
-      model, 0.3
+      model, 0.3, undefined, undefined, { module: "qreal" }
     );
     const jsonText = r.reply.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(jsonText);

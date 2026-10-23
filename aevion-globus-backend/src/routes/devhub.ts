@@ -2760,7 +2760,7 @@ async function generateCodeWithAI(
          * сервер делал ВТОРОЙ вызов. Размышление съедало бюджет, которого хватало
          * остальным четырём.
          */
-        result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+        result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS, { module: "devhub-gen" });
         // Ответ мог прийти от следующего поставщика (закрытый по лимиту пропущен
         // в callProvider) — учёт и подпись берут того, кто ответил на самом деле.
         const used = result.providerUsed
@@ -2811,7 +2811,7 @@ async function generateCodeWithAI(
         },
       ];
       // Дозапрос тоже просит JSON — и тоже не должен тратить бюджет на размышление.
-      const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS, undefined, undefined, true);
+      const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS, { module: "devhub-gen" }, undefined, true);
       учтиГенерацию(provider.id, provider.defaultModel, cont.usage, moduleTag, userId);
       учтиВЗапуск(cont.usage);
       const contParsed = parseGeneratedFiles(cont.reply, []);
@@ -2851,7 +2851,7 @@ async function generateCodeWithAI(
     });
     try {
       // Самопочинка возвращает те же файлы в том же JSON — флаг обязателен и здесь.
-      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS, undefined, undefined, true);
+      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS, { module: "devhub-gen" }, undefined, true);
       учтиГенерацию(provider.id, provider.defaultModel, result.usage, moduleTag, userId);
       учтиВЗапуск(result.usage);
     } catch {
@@ -2938,7 +2938,7 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
     const result = await callProvider(provider.id, [
       { role: "system", content: промптЗамыслаСЗапретом },
       { role: "user", content: userMsg },
-    ], provider.defaultModel, 0.3, undefined, undefined, undefined, undefined, true);
+    ], provider.defaultModel, 0.3, undefined, undefined, { module: "devhub-gen" }, undefined, true);
       // Учёт расхода. До 31.08.2026 его здесь не было вовсе: /plan зовёт
       // платного поставщика НАПРЯМУЮ, минуя smartComplete, а учёт пишет
       // именно smartComplete. Расход ручки был невидим полностью — и это
@@ -7742,7 +7742,7 @@ async function translateViaLlm(text: string, targetLang: string, sourceLang?: st
   let lastError: unknown = null;
   for (const cand of candidates) {
     try {
-      const result = await callProvider(cand.id, messages, cand.model, 0, undefined, maxTokens);
+      const result = await callProvider(cand.id, messages, cand.model, 0, undefined, maxTokens, { module: "devhub-gen" });
       const out = String(result?.reply ?? "").trim();
       if (out) return { text: out, provider: result.providerUsed ?? cand.id };
       lastError = new Error(`${cand.id} answered with an empty translation`);

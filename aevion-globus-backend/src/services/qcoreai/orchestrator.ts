@@ -1085,7 +1085,7 @@ async function classifyRoute(
         { role: "user", content: `Query:\n${userInput.slice(0, 2000)}\n\nOPEN or FACT?` },
       ],
       clf.model,
-      0
+      0, { module: "qcoreai-classifier" }
     );
     return parseRouteToken(res.reply);
   } catch {

@@ -1369,7 +1369,7 @@ qlearnRouter.post("/me/courses/:courseId/ai-generate-lesson", qlearnAiLimit, asy
         configured[0].id,
         [{ role: "user", content: `Generate a complete lesson about: ${topic.trim()}. Return JSON: {"title": string, "content": string, "summary": string}` }],
         configured[0].defaultModel,
-        0.5,
+        0.5, undefined, undefined, { module: "qlearn" }
       );
       const raw = result.reply.trim();
       const jsonStr = raw.startsWith("{") ? raw : (raw.match(/```(?:json)?\n?([\s\S]+?)```/)?.[1] ?? raw);

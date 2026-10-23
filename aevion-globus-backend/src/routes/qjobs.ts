@@ -449,7 +449,7 @@ qjobsRouter.post("/ai/match", aiMatchLimiter, async (req: Request, res: Response
         provider.id,
         [{ role: "user" as const, content: prompt }],
         provider.defaultModel ?? "gpt-4o-mini",
-        0.2,
+        0.2, undefined, undefined, { module: "qjobs" }
       );
       const raw = result.reply.trim();
       const jsonStr = raw.includes("[") ? raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1) : "[]";

@@ -152,7 +152,7 @@ async function claudeBatch(texts: string[], langName: string): Promise<string[]>
     { role: "user", content: JSON.stringify(texts) },
   ];
   // Haiku is cheap and fully capable for translation; temperature 0 for determinism.
-  const res = await callProvider("anthropic", messages, "claude-haiku-4-5-20251001", 0);
+  const res = await callProvider("anthropic", messages, "claude-haiku-4-5-20251001", 0, undefined, undefined, { module: "i18n" });
   let arr: unknown = null;
   try {
     arr = JSON.parse(res.reply);

@@ -338,7 +338,7 @@ qmediaRouter.post("/ai/generate-lyrics", qmediaAiLimit, async (req, res) => {
     }
     const numLines = typeof lines === "number" ? lines : 8;
     try {
-      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write ${numLines} lines of ${genre || "pop"} song lyrics with a ${mood || "upbeat"} mood about: ${theme || "life"}. Format with [Verse] and [Chorus] labels. Just the lyrics, no explanation.` }], provider.defaultModel, 0.9);
+      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write ${numLines} lines of ${genre || "pop"} song lyrics with a ${mood || "upbeat"} mood about: ${theme || "life"}. Format with [Verse] and [Chorus] labels. Just the lyrics, no explanation.` }], provider.defaultModel, 0.9, undefined, undefined, { module: "qmedia" });
       res.json({ lyrics: result.reply });
     } catch {
       res.json({ lyrics: `[Verse 1]\nIn the ${mood || "bright"} ${genre || "music"} night\nEvery beat feels just right\n${theme || "We dance"} under stars above\n\n[Chorus]\nOh ${theme || "music"}, carry me away\nThrough the ${mood || "beautiful"} day`, mode: "stub" });
@@ -355,7 +355,7 @@ qmediaRouter.post("/ai/generate-title", qmediaAiLimit, async (req, res) => {
     }
     let result;
     try {
-      result = await callProvider(provider.id, [{ role: "user" as const, content: `Suggest 5 creative song titles for a ${genre || "pop"} song with a ${mood || "upbeat"} mood. Return ONLY a JSON array of strings.` }], provider.defaultModel, 0.8);
+      result = await callProvider(provider.id, [{ role: "user" as const, content: `Suggest 5 creative song titles for a ${genre || "pop"} song with a ${mood || "upbeat"} mood. Return ONLY a JSON array of strings.` }], provider.defaultModel, 0.8, undefined, undefined, { module: "qmedia" });
     } catch {
       return res.json({ titles: [`${mood || "Beautiful"} ${genre || "Song"}`, `The ${mood || "Magic"} Beat`, `${genre || "Music"} Dreams`, `${mood || "Pure"} Harmony`, `Sound of Life`], mode: "stub" });
     }
@@ -391,7 +391,7 @@ qmediaRouter.post("/ai/describe-video", qmediaAiLimit, async (req, res) => {
     const provider = getProviders().find(p => p.configured);
     if (!provider) return res.json({ description: `A compelling ${category || "video"} titled "${title || "Untitled"}". Watch as the story unfolds in this captivating piece.`, mode: "stub" });
     try {
-      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write a 2-sentence video description for a ${category || "video"} titled "${title}". Make it engaging and concise.` }], provider.defaultModel, 0.7);
+      const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write a 2-sentence video description for a ${category || "video"} titled "${title}". Make it engaging and concise.` }], provider.defaultModel, 0.7, undefined, undefined, { module: "qmedia" });
       res.json({ description: result.reply.trim() });
     } catch {
       res.json({ description: `A compelling ${category || "video"} titled "${title || "Untitled"}". Watch as the story unfolds in this captivating piece.`, mode: "stub" });

@@ -102,7 +102,7 @@ async function judgeCase(judge: EvalJudge, output: string, input?: string): Prom
           { role: "user", content: userPart },
         ],
         model,
-        0
+        0, undefined, undefined, { module: "qcoreai-eval" }
       );
       const reply = (result.reply || "").trim();
       const verdictMatch = reply.match(/VERDICT\s*:\s*(PASS|FAIL)/i);

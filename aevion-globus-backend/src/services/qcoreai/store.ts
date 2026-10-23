@@ -4698,7 +4698,7 @@ export async function extractMemoriesFromRun(
       providerId,
       [{ role: "user", content: prompt }],
       prov?.defaultModel ?? "",
-      0.3
+      0.3, undefined, undefined, { module: "qcoreai-store" }
     );
     let facts: string[] = [];
     try {

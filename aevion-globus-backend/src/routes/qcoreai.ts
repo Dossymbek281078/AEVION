@@ -536,7 +536,7 @@ qcoreaiRouter.post("/chat", anonChatCeiling, exposeCeilingRemaining, chatLimiter
 
     if (await enforcePremiumModelQuota(req, res, providerId, modelName)) return;
 
-    const result = await callProviderResilient(providerId, messages, modelName, temperature);
+    const result = await callProviderResilient(providerId, messages, modelName, temperature, { module: "qcoreai" });
     // Ответ мог прийти от другого поставщика (закрытый по лимиту пропущен) —
     // учёт и интерфейс получают того, кто ответил на самом деле.
     const usedId = result.providerUsed ?? providerId;
@@ -1732,7 +1732,7 @@ qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
         { role: "user", content: userPrompt },
       ],
       modelName,
-      temperature
+      temperature, undefined, undefined, { module: "qcoreai" }
     );
     const durationMs = Date.now() - startedAt;
 
@@ -5995,7 +5995,7 @@ qcoreaiRouter.get("/notebook/collections/:id/summary", chatLimiter, async (req, 
           role: "user",
           content: `Summarize these notebook snippets in 2-3 sentences. Be concise.\n\n${combinedContent.slice(0, 4000)}`,
         },
-      ], model, 0.5);
+      ], model, 0.5, undefined, undefined, { module: "qcoreai" });
       summary = (result.reply || summary).trim().slice(0, 1000);
     } catch { /* use fallback summary */ }
 
@@ -6375,7 +6375,7 @@ qcoreaiRouter.get("/providers/health", chatLimiter, async (_req, res) => {
       let latencyMs = 0;
       try {
         const r = await Promise.race([
-          callProvider(p.id, [{ role: "user", content: "Say: OK" }], p.defaultModel, 0),
+          callProvider(p.id, [{ role: "user", content: "Say: OK" }], p.defaultModel, 0, undefined, undefined, { module: "qcoreai" }),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
         ]);
         latencyMs = Date.now() - start;

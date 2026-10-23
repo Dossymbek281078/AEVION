@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { useI18nOptional } from "@/lib/i18n";
+import { useQlifeT, type Key } from "../i18n";
 
 const ALL_GOALS = [
   { id: "sleep",     label: "Sleep",       icon: "Moon"  },
@@ -28,6 +29,7 @@ interface PlanItem {
 }
 
 export default function PlanCard() {
+  const { t, typeLabel } = useQlifeT();
   // Язык плана = язык посетителя. До 12.10.2026 план приходил по-английски
   // (и в °F) человеку, читающему страницу по-русски (замер окна Приложения-31.12).
   const lang = useI18nOptional()?.lang ?? "ru";
@@ -48,11 +50,11 @@ export default function PlanCard() {
     setPlan(null);
     const ageNum = parseInt(age, 10);
     if (isNaN(ageNum) || ageNum < 10 || ageNum > 120) {
-      setError("Enter your age (10–120)");
+      setError(t("err.age"));
       return;
     }
     if (goals.length === 0) {
-      setError("Select at least one goal");
+      setError(t("err.goal"));
       return;
     }
     setLoading(true);
@@ -63,10 +65,10 @@ export default function PlanCard() {
         body: JSON.stringify({ age: ageNum, goals, lang }),
       });
       const data = await resp.json();
-      if (!resp.ok || !data.ok) { setError(data.error || "Generation failed"); return; }
+      if (!resp.ok || !data.ok) { setError(data.error || t("err.plan")); return; }
       setPlan(data.plan);
     } catch (err: any) {
-      setError(err?.message || "Network error");
+      setError(err?.message || t("err.network"));
     } finally {
       setLoading(false);
     }
@@ -74,14 +76,14 @@ export default function PlanCard() {
 
   return (
     <div style={styles.card}>
-      <h3 style={styles.title}>AI Longevity Plan</h3>
+      <h3 style={styles.title}>{t("plan.title")}</h3>
       <p style={styles.subtitle}>
         Get a personal healthy-habits plan based on your age and goals. Not medical advice; results not guaranteed.
       </p>
 
       <div style={styles.controls}>
         <div style={styles.ageRow}>
-          <label style={styles.label} htmlFor="qlife-age">Your age</label>
+          <label style={styles.label} htmlFor="qlife-age">{t("plan.age")}</label>
           <input
             id="qlife-age"
             type="number"
@@ -95,7 +97,7 @@ export default function PlanCard() {
         </div>
 
         <div>
-          <label style={styles.label}>Goals</label>
+          <label style={styles.label}>{t("plan.goals")}</label>
           <div style={styles.goalsGrid}>
             {ALL_GOALS.map((g) => {
               const active = goals.includes(g.id);
@@ -111,7 +113,7 @@ export default function PlanCard() {
                     color: active ? GOAL_COLORS[g.id] : "#94a3b8",
                   }}
                 >
-                  {g.label}
+                  {t(`goal.${g.id}` as Key)}
                 </button>
               );
             })}
@@ -126,14 +128,14 @@ export default function PlanCard() {
           disabled={loading}
           style={styles.generateBtn}
         >
-          {loading ? "Generating plan..." : "Generate My Plan"}
+          {loading ? t("plan.generating") : t("plan.submit")}
         </button>
       </div>
 
       {plan && plan.length > 0 && (
         <div style={styles.planSection}>
           <div style={styles.planHeader}>
-            <span style={styles.planHeaderText}>Your Longevity Plan</span>
+            <span style={styles.planHeaderText}>{t("plan.result")}</span>
           </div>
           <div style={styles.planGrid}>
             {plan.map((item, i) => {

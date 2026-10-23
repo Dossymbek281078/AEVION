@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useQlifeT, type Key } from "../i18n";
 
 interface QLifeStats {
   total: number;
@@ -9,17 +10,9 @@ interface QLifeStats {
   mostLoggedType: string | null;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  blood_pressure: "Blood Pressure",
-  weight_kg:      "Weight",
-  sleep_hours:    "Sleep",
-  vo2max:         "VO2 Max",
-  hrv:            "HRV",
-  glucose:        "Glucose",
-  stress_level:   "Stress",
-};
 
 export default function StatsStrip({ refreshKey }: { refreshKey: number }) {
+  const { t, typeLabel } = useQlifeT();
   const [stats, setStats] = useState<QLifeStats | null>(null);
 
   useEffect(() => {
@@ -31,19 +24,19 @@ export default function StatsStrip({ refreshKey }: { refreshKey: number }) {
 
   const items = [
     {
-      label: "Total Logs",
+      label: t("stats.total"),
       value: stats ? String(stats.total) : "—",
       color: "#6ee7b7",
     },
     {
-      label: "Active Users",
+      label: t("stats.users"),
       value: stats ? String(stats.activeUsers) : "—",
       color: "#60a5fa",
     },
     {
-      label: "Most Logged",
+      label: t("stats.most"),
       value: stats?.mostLoggedType
-        ? (TYPE_LABELS[stats.mostLoggedType] ?? stats.mostLoggedType)
+        ? (typeLabel(stats.mostLoggedType))
         : "—",
       color: "#f472b6",
     },

@@ -13,6 +13,7 @@ import WeeklyTrendsChart from "./components/WeeklyTrendsChart";
 import BiomarkerHistory from "./components/BiomarkerHistory";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
+import { useQlifeT, type Key } from "./i18n";
 
 interface BiomarkerRecord {
   id: number;
@@ -24,6 +25,7 @@ interface BiomarkerRecord {
 }
 
 export default function QLifePage() {
+  const { t, typeLabel } = useQlifeT();
   const [biomarkers, setBiomarkers] = useState<BiomarkerRecord[]>([]);
   const [bLoading, setBLoading] = useState(true);
   const [statsKey, setStatsKey] = useState(0);
@@ -61,7 +63,7 @@ export default function QLifePage() {
             <span style={styles.mvpBadge}>MVP</span>
           </Link>
           <nav style={styles.nav}>
-            <Link href="/modules" style={styles.navLink}>Modules</Link>
+            <Link href="/modules" style={styles.navLink}>{t("nav.modules")}</Link>
             <Link href="/qpersona" style={styles.navLink}>QPersona</Link>
             <Link href="/healthai" style={styles.navLink}>HealthAI</Link>
           </nav>
@@ -70,20 +72,19 @@ export default function QLifePage() {
 
       {/* Hero */}
       <section style={styles.hero}>
-        <p style={styles.heroEyebrow}>Longevity · healthy habits</p>
+        <p style={styles.heroEyebrow}>{t("hero.eyebrow")}</p>
         <h1 style={styles.heroTitle}>
-          {"Биомаркеры и привычки — "}
-          <span style={styles.heroGradient}>по данным, а не на глаз</span>
+          {t("hero.h1a")}
+          <span style={styles.heroGradient}>{t("hero.h1b")}</span>
         </h1>
         <p style={styles.heroSub}>
-          Логируй биомаркеры, отслеживай тренды и получай персональный AI-план
-          привычек по данным исследований.
+          {t("hero.sub")}
         </p>
         <HealthDisclaimer />
 
         <div style={styles.chipRow}>
-          {["Blood Pressure", "Sleep", "HRV", "VO2 Max", "Glucose", "Stress"].map((c) => (
-            <span key={c} style={styles.chip}>{c}</span>
+          {["blood_pressure", "sleep_hours", "hrv", "vo2max", "glucose", "stress_level"].map((c) => (
+            <span key={c} style={styles.chip}>{typeLabel(c)}</span>
           ))}
         </div>
       </section>
@@ -126,13 +127,13 @@ export default function QLifePage() {
       {/* Footer links */}
       <section style={styles.section}>
         <div style={styles.footerCard}>
-          <span style={styles.footerTitle}>Explore AEVION</span>
+          <span style={styles.footerTitle}>{t("foot.explore")}</span>
           <div style={styles.footerLinks}>
             {[
-              { href: "/modules",  label: "All Modules" },
+              { href: "/modules",  label: t("foot.all") },
               { href: "/healthai", label: "HealthAI" },
               { href: "/qpersona", label: "QPersona" },
-              { href: "/globus",   label: "Globus Map" },
+              { href: "/globus",   label: t("foot.globus") },
             ].map((l) => (
               <Link key={l.href} href={l.href} style={styles.footerLink}>{l.label}</Link>
             ))}
@@ -145,14 +146,14 @@ export default function QLifePage() {
           moduleId="qlife"
           noun="concept/messages"
           accent="rose"
-          sectionTitle="Longevity concept board"
-          sectionHint="Какие биомаркеры важнее для долголетия? Какие протоколы стоит трекать?"
+          sectionTitle={t("board.title")}
+          sectionHint={t("board.hint")}
           titleField="idea"
           summaryField="rationale"
           fields={[
-            { key: "idea", label: "Идея / биомаркер / протокол", placeholder: "напр.: glucose continuous monitoring", required: true },
-            { key: "rationale", label: "Зачем это важно", type: "textarea", placeholder: "Какой механизм старения это адресует, источник" },
-            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            { key: "idea", label: t("board.idea"), placeholder: t("board.ideaPh"), required: true },
+            { key: "rationale", label: t("board.why"), type: "textarea", placeholder: t("board.whyPh") },
+            { key: "author", label: t("board.author"), placeholder: "anon" },
           ]}
         />
       </section>

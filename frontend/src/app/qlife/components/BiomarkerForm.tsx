@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthHeaders } from "@/lib/auth";
+import { useQlifeT, type Key } from "../i18n";
 
 const BIOMARKER_TYPES = [
   { value: "blood_pressure", label: "Blood Pressure", unit: "mmHg", placeholder: "120/80" },
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function BiomarkerForm({ onLogged }: Props) {
+  const { t, typeLabel } = useQlifeT();
   const [type, setType] = useState(BIOMARKER_TYPES[0].value);
   const [value, setValue] = useState("");
   const [notes, setNotes] = useState("");
@@ -32,7 +34,7 @@ export default function BiomarkerForm({ onLogged }: Props) {
     e.preventDefault();
     setError(null);
     setSuccess(false);
-    if (!value.trim()) { setError("Enter a value"); return; }
+    if (!value.trim()) { setError(t("err.value")); return; }
     setLoading(true);
     try {
       const resp = await fetch(apiUrl("/api/qlife/biomarkers"), {
@@ -46,14 +48,14 @@ export default function BiomarkerForm({ onLogged }: Props) {
         }),
       });
       const data = await resp.json();
-      if (!resp.ok || !data.ok) { setError(data.error || "Failed to log"); return; }
+      if (!resp.ok || !data.ok) { setError(data.error || t("err.log")); return; }
       setValue("");
       setNotes("");
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
       onLogged();
     } catch (err: any) {
-      setError(err?.message || "Network error");
+      setError(err?.message || t("err.network"));
     } finally {
       setLoading(false);
     }
@@ -61,23 +63,23 @@ export default function BiomarkerForm({ onLogged }: Props) {
 
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
-      <h3 style={styles.title}>Quick Log</h3>
+      <h3 style={styles.title}>{t("form.title")}</h3>
 
       <div style={styles.row}>
-        <label htmlFor="qlife-bio-1" style={{ ...styles.label }}>Type</label>
+        <label htmlFor="qlife-bio-1" style={{ ...styles.label }}>{t("form.type")}</label>
         <select id="qlife-bio-1"
           value={type}
           onChange={(e) => setType(e.target.value)}
           style={styles.select}
         >
           {BIOMARKER_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
+            <option key={t.value} value={t.value}>{typeLabel(t.value)}</option>
           ))}
         </select>
       </div>
 
       <div style={styles.row}>
-        <label htmlFor="qlife-bio-2" style={{ ...styles.label }}>Value ({selected.unit})</label>
+        <label htmlFor="qlife-bio-2" style={{ ...styles.label }}>{t("form.value", { unit: selected.unit })}</label>
         <input id="qlife-bio-2"
           type="text"
           value={value}
@@ -88,21 +90,21 @@ export default function BiomarkerForm({ onLogged }: Props) {
       </div>
 
       <div style={styles.row}>
-        <label htmlFor="qlife-bio-3" style={{ ...styles.label }}>Notes (optional)</label>
+        <label htmlFor="qlife-bio-3" style={{ ...styles.label }}>{t("form.notes")}</label>
         <input id="qlife-bio-3"
           type="text"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="After workout, morning..."
+          placeholder={t("form.notesPh")}
           style={styles.input}
         />
       </div>
 
       {error && <p style={styles.error}>{error}</p>}
-      {success && <p style={styles.successMsg}>Logged!</p>}
+      {success && <p style={styles.successMsg}>{t("form.logged")}</p>}
 
       <button type="submit" disabled={loading} style={styles.btn}>
-        {loading ? "Saving..." : "+ Log Biomarker"}
+        {loading ? t("form.saving") : t("form.submit")}
       </button>
     </form>
   );

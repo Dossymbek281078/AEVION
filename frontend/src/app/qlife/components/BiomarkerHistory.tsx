@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQlifeT, type Key } from "../i18n";
 
 interface BiomarkerRecord {
   id: number;
@@ -16,15 +17,6 @@ interface Props {
   loading: boolean;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  blood_pressure: "Blood Pressure",
-  weight_kg:      "Weight",
-  sleep_hours:    "Sleep",
-  vo2max:         "VO2 Max",
-  hrv:            "HRV",
-  glucose:        "Glucose",
-  stress_level:   "Stress",
-};
 
 const TYPE_COLORS: Record<string, string> = {
   blood_pressure: "#f87171",
@@ -56,6 +48,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function BiomarkerHistory({ biomarkers, loading }: Props) {
+  const { t, typeLabel } = useQlifeT();
   const [filter, setFilter] = useState<string>("all");
 
   const types = useMemo(() => {
@@ -71,7 +64,7 @@ export default function BiomarkerHistory({ biomarkers, loading }: Props) {
   return (
     <div style={styles.card}>
       <div style={styles.headerRow}>
-        <h3 style={styles.title}>Log History</h3>
+        <h3 style={styles.title}>{t("hist.title")}</h3>
         <span style={styles.subtitle}>{biomarkers.length} entries</span>
       </div>
 
@@ -85,7 +78,7 @@ export default function BiomarkerHistory({ biomarkers, loading }: Props) {
               ...(filter === "all" ? styles.filterChipActive : {}),
             }}
           >
-            All
+            {t("hist.all")}
           </button>
           {types.map((t) => (
             <button
@@ -99,16 +92,16 @@ export default function BiomarkerHistory({ biomarkers, loading }: Props) {
                   : {}),
               }}
             >
-              {TYPE_LABELS[t] ?? t}
+              {typeLabel(t)}
             </button>
           ))}
         </div>
       )}
 
       {loading ? (
-        <p style={styles.dim}>Loading…</p>
+        <p style={styles.dim}>{t("loading")}</p>
       ) : filtered.length === 0 ? (
-        <p style={styles.dim}>No entries yet.</p>
+        <p style={styles.dim}>{t("hist.empty")}</p>
       ) : (
         <ul style={styles.list}>
           {filtered.slice(0, 50).map((b) => (
@@ -121,7 +114,7 @@ export default function BiomarkerHistory({ biomarkers, loading }: Props) {
               />
               <div style={styles.rowMain}>
                 <div style={styles.rowTop}>
-                  <span style={styles.rowType}>{TYPE_LABELS[b.type] ?? b.type}</span>
+                  <span style={styles.rowType}>{typeLabel(b.type)}</span>
                   <span style={styles.rowValue}>
                     {b.value} <span style={styles.rowUnit}>{b.unit}</span>
                   </span>

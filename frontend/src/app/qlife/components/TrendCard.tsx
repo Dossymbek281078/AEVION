@@ -1,5 +1,7 @@
 "use client";
 
+import { useQlifeT, type Key } from "../i18n";
+
 interface BiomarkerRecord {
   id: number;
   type: string;
@@ -14,15 +16,6 @@ interface Props {
   loading: boolean;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  blood_pressure: "Blood Pressure",
-  weight_kg:      "Weight",
-  sleep_hours:    "Sleep",
-  vo2max:         "VO2 Max",
-  hrv:            "HRV",
-  glucose:        "Glucose",
-  stress_level:   "Stress",
-};
 
 const TYPE_ICONS: Record<string, string> = {
   blood_pressure: "heart",
@@ -51,11 +44,12 @@ function TrendArrow({ trend }: { trend: "up" | "down" | "flat" | null }) {
 }
 
 export default function TrendCard({ biomarkers, loading }: Props) {
+  const { t, typeLabel } = useQlifeT();
   if (loading) {
     return (
       <div style={styles.card}>
-        <h3 style={styles.title}>Recent Trends</h3>
-        <p style={styles.dimText}>Loading...</p>
+        <h3 style={styles.title}>{t("trend.title")}</h3>
+        <p style={styles.dimText}>{t("loading")}</p>
       </div>
     );
   }
@@ -63,8 +57,8 @@ export default function TrendCard({ biomarkers, loading }: Props) {
   if (biomarkers.length === 0) {
     return (
       <div style={styles.card}>
-        <h3 style={styles.title}>Recent Trends</h3>
-        <p style={styles.dimText}>No data yet. Log your first biomarker.</p>
+        <h3 style={styles.title}>{t("trend.title")}</h3>
+        <p style={styles.dimText}>{t("trend.empty")}</p>
       </div>
     );
   }
@@ -78,7 +72,7 @@ export default function TrendCard({ biomarkers, loading }: Props) {
 
   return (
     <div style={styles.card}>
-      <h3 style={styles.title}>Recent Trends</h3>
+      <h3 style={styles.title}>{t("trend.title")}</h3>
       <div style={styles.grid}>
         {Object.entries(byType).map(([type, records]) => {
           const latest = records[0];
@@ -86,7 +80,7 @@ export default function TrendCard({ biomarkers, loading }: Props) {
           return (
             <div key={type} style={styles.typeCard}>
               <div style={styles.typeHeader}>
-                <span style={styles.typeLabel}>{TYPE_LABELS[type] ?? type}</span>
+                <span style={styles.typeLabel}>{typeLabel(type)}</span>
                 <TrendArrow trend={trend} />
               </div>
               <div style={styles.typeValue}>
@@ -104,11 +98,11 @@ export default function TrendCard({ biomarkers, loading }: Props) {
         })}
       </div>
 
-      <h4 style={styles.recentTitle}>Last 7 entries</h4>
+      <h4 style={styles.recentTitle}>{t("trend.last7")}</h4>
       <div style={styles.logList}>
         {biomarkers.slice(0, 7).map((r) => (
           <div key={r.id} style={styles.logItem}>
-            <span style={styles.logType}>{TYPE_LABELS[r.type] ?? r.type}</span>
+            <span style={styles.logType}>{typeLabel(r.type)}</span>
             <span style={styles.logVal}>{r.value} {r.unit}</span>
             <span style={styles.logDate}>
               {new Date(r.measured_at).toLocaleDateString("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthHeaders } from "@/lib/auth";
+import { useQlifeT, type Key } from "../i18n";
 
 type TrendPoint = { type: string; week: string; avg: number; count: number };
 type TrendsResponse = { ok: boolean; trends: Record<string, TrendPoint[]> };
@@ -11,15 +12,6 @@ interface Props {
   refreshKey?: number;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  blood_pressure: "Blood Pressure",
-  weight_kg:      "Weight",
-  sleep_hours:    "Sleep",
-  vo2max:         "VO2 Max",
-  hrv:            "HRV",
-  glucose:        "Glucose",
-  stress_level:   "Stress",
-};
 
 const TYPE_UNITS: Record<string, string> = {
   blood_pressure: "mmHg",
@@ -92,6 +84,7 @@ function Sparkline({ points, color }: { points: TrendPoint[]; color: string }) {
 }
 
 export default function WeeklyTrendsChart({ refreshKey }: Props) {
+  const { t, typeLabel } = useQlifeT();
   const [trends, setTrends] = useState<Record<string, TrendPoint[]>>({});
   const [loading, setLoading] = useState(true);
 
@@ -112,13 +105,13 @@ export default function WeeklyTrendsChart({ refreshKey }: Props) {
   return (
     <div style={styles.card}>
       <div style={styles.headerRow}>
-        <h3 style={styles.title}>Weekly Trends</h3>
-        <span style={styles.subtitle}>8-week rolling averages</span>
+        <h3 style={styles.title}>{t("weekly.title")}</h3>
+        <span style={styles.subtitle}>{t("weekly.sub")}</span>
       </div>
       {loading ? (
-        <p style={styles.dim}>Loading trends…</p>
+        <p style={styles.dim}>{t("weekly.loading")}</p>
       ) : types.length === 0 ? (
-        <p style={styles.dim}>No trend data yet — log at least one biomarker.</p>
+        <p style={styles.dim}>{t("weekly.empty")}</p>
       ) : (
         <div style={styles.grid}>
           {types.map((type) => {
@@ -132,7 +125,7 @@ export default function WeeklyTrendsChart({ refreshKey }: Props) {
               <div key={type} style={styles.typeBlock}>
                 <div style={styles.typeHeader}>
                   <div>
-                    <div style={styles.typeName}>{TYPE_LABELS[type] ?? type}</div>
+                    <div style={styles.typeName}>{typeLabel(type)}</div>
                     <div style={styles.typeMeta}>
                       <span style={{ color, fontWeight: 700 }}>
                         {latest.avg} {TYPE_UNITS[type] ?? ""}

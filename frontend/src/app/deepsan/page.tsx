@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders } from "@/lib/auth";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
@@ -30,7 +31,9 @@ interface ApiOk<T> {
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), {
     ...opts,
-    headers: { "content-type": "application/json", ...opts?.headers },
+    // Токен — чтобы вошедший видел свою доску на любом устройстве; гостю
+    // личность браузера ставит перехватчик (lib/devhubGuest).
+    headers: { "content-type": "application/json", ...getAuthHeaders(), ...opts?.headers },
   });
   const json = (await res.json()) as ApiOk<T> | { success: false; error: string };
   if (!json.success) throw new Error((json as { success: false; error: string }).error ?? "api error");

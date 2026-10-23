@@ -244,14 +244,28 @@ function buildReport(
 // доводчика», 06.09.2026): AutoTranslate переводит текст, но не
 // placeholder/aria — EN-визитёр видел английскую страницу с русской
 // подсказкой в ГЛАВНОМ поле модуля. Рецепт №2, образец GEN_UI.
-const MC_UI: Record<string, { askAria: string; askPh: string; busyAsk: string }> = {
+const MC_UI: Record<string, {
+  askAria: string; askPh: string; busyAsk: string;
+  // 23.10.2026: строка остатка гостя, стена и подпись «3 агента» были русским литералом и на en/kk
+  // показывались по-русски (замер yazyk-devhub.mjs: одна и та же строка не на языке у en и kk).
+  guestLeft: (n: number) => string; guestOut: string; independent: string;
+}> = {
   // busyAsk — класс «busy-ярлык быстрее доводчика» (назначение 07.09,
   // рецепт №2 как у GEN_UI.busy*): ярлык живёт секунды и первым видит
   // en-посетитель главной кнопки модуля. Idle-подпись не трогаем —
   // стабильный текст доводчик кроет.
-  ru: { askAria: "Вопрос совету", askPh: "Например: стоит ли запускать платный тариф до первой продажи?", busyAsk: "Агенты отвечают…" },
-  en: { askAria: "Question for the council", askPh: "For example: should we launch a paid tier before the first sale?", busyAsk: "Agents are answering…" },
-  kk: { askAria: "Кеңеске сұрақ", askPh: "Мысалы: алғашқы сатылымға дейін ақылы тарифті іске қосу керек пе?", busyAsk: "Агенттер жауап беруде…" },
+  ru: { askAria: "Вопрос совету", askPh: "Например: стоит ли запускать платный тариф до первой продажи?", busyAsk: "Агенты отвечают…",
+    guestLeft: (n) => `Бесплатно без входа: осталось ${n} ${n === 1 ? "запрос" : "запроса"}. Дальше — вход по почте.`,
+    guestOut: "Бесплатные запросы на сегодня кончились — войдите по почте, и норма продолжится.",
+    independent: "3 агента · 3 вызова · ответы независимы" },
+  en: { askAria: "Question for the council", askPh: "For example: should we launch a paid tier before the first sale?", busyAsk: "Agents are answering…",
+    guestLeft: (n) => `Free without signing in: ${n} ${n === 1 ? "request" : "requests"} left. Then sign in by email.`,
+    guestOut: "Free requests for today are used up — sign in by email and the allowance continues.",
+    independent: "3 agents · 3 calls · independent answers" },
+  kk: { askAria: "Кеңеске сұрақ", askPh: "Мысалы: алғашқы сатылымға дейін ақылы тарифті іске қосу керек пе?", busyAsk: "Агенттер жауап беруде…",
+    guestLeft: (n) => `Кірусіз тегін: ${n} сұрау қалды. Әрі қарай — пошта арқылы кіру.`,
+    guestOut: "Бүгінгі тегін сұраулар таусылды — пошта арқылы кіріңіз, норма жалғасады.",
+    independent: "3 агент · 3 шақыру · жауаптар тәуелсіз" },
 };
 
 export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
@@ -459,9 +473,9 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         <span style={{ fontSize: 12, color: T.textFaded }}>
           {authed === false
             ? гостьМожет
-              ? `Бесплатно без входа: осталось ${свободно} ${свободно === 1 ? "запрос" : "запроса"}. Дальше — вход по почте.`
-              : "Бесплатные запросы на сегодня кончились — войдите по почте, и норма продолжится."
-            : "3 агента · 3 вызова · ответы независимы"}
+              ? MC.guestLeft(свободно ?? 0)
+              : MC.guestOut
+            : MC.independent}
           </span>
       </div>
       {error && <p style={{ fontSize: 12, color: T.bad, margin: "8px 0 0" }}>{error}</p>}

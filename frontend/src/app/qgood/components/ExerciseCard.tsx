@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { apiUrl } from '@/lib/apiBase';
+import { getAuthHeaders } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 
 interface Exercise {
@@ -67,7 +68,7 @@ export default function ExerciseCard({ exercise, userId = 'anonymous' }: Props) 
     try {
       const res = await fetch(apiUrl(`/api/qgood/exercises/${exercise.id}/complete`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ userId }),
       });
       const data = await res.json().catch(() => ({})) as {

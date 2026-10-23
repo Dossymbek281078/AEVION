@@ -85,6 +85,8 @@ const DOCK = {
     placeholder: "Попросите помощника что-нибудь сделать…",
     input: "Сообщение ИИ-помощнику",
     send: "Отправить",
+    caps: "картинки · голос · музыка · оплата · почта · SMS · перевод",
+    capsCode: "код · картинки · голос · музыка · оплата · почта · SMS · перевод",
   },
   en: {
     open: "Open the AEVION AI assistant",
@@ -100,6 +102,8 @@ const DOCK = {
     placeholder: "Ask the agent to do something…",
     input: "Message to the AI assistant",
     send: "Send",
+    caps: "image · voice · music · pay · email · SMS · translate",
+    capsCode: "code · image · voice · music · pay · email · SMS · translate",
   },
   kk: {
     open: "AEVION ЖИ-көмекшісін ашу",
@@ -115,6 +119,8 @@ const DOCK = {
     placeholder: "Көмекшіден бірдеңе жасауды сұраңыз…",
     input: "ЖИ-көмекшіге хабарлама",
     send: "Жіберу",
+    caps: "суреттер · дауыс · музыка · төлем · пошта · SMS · аударма",
+    capsCode: "код · суреттер · дауыс · музыка · төлем · пошта · SMS · аударма",
   },
 } as const;
 type DockLang = keyof typeof DOCK;
@@ -356,7 +362,7 @@ export function AgentDock() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>{D.title}</div>
           <div style={{ fontSize: 10, color: "#8aa0c6" }}>
-            {projectId ? "code · image · voice · music · pay · email · SMS · translate" : "image · voice · music · pay · email · SMS · translate"}
+            {projectId ? D.capsCode : D.caps}
           </div>
         </div>
         {health && (

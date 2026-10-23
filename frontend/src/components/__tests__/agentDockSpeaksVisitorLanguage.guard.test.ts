@@ -48,3 +48,18 @@ describe("AgentDock: язык посетителя", () => {
     expect(блок("kk")).toContain("ЖИ-көмекші");
   });
 });
+
+describe("подзаголовок инструментов — из словаря", () => {
+  // 23.10.2026, кадр прода 390 при ru: под «Помощник AEVION» стояло
+  // «image · voice · music · pay · email · SMS · translate» — литерал в JSX.
+  it("в разметке нет английского перечня, есть D.caps / D.capsCode", () => {
+    expect(SRC).not.toMatch(/\{projectId \? "code · image/);
+    expect(SRC).toContain("{projectId ? D.capsCode : D.caps}");
+  });
+  it("у каждого языка свой перечень, ru и kk — без английских слов", () => {
+    const caps = [...SRC.matchAll(/^\s{4}caps: "([^"]+)",$/gm)].map((m) => m[1]);
+    expect(caps.length, "знаменатель: caps в трёх языках").toBe(3);
+    const нелатинские = caps.filter((c) => !/\b(image|voice|music|translate)\b/.test(c));
+    expect(нелатинские.length, "ru и kk переведены").toBe(2);
+  });
+});

@@ -414,7 +414,7 @@ export default function PwaInstall() {
   /* ====== Notify-prompt после установки ====== */
   if (installed && showNotifyPrompt) {
     return (
-      <div role="dialog" aria-live="polite" style={notifyCard}>
+      <div role="dialog" data-dialog-panel aria-live="polite" style={notifyCard}>
         <div style={titleRow}>
           <span aria-hidden style={{ fontSize: 18 }}>🔔</span>
           <span style={{ color: '#bfdbfe' }}>Хочешь ежедневное напоминание?</span>

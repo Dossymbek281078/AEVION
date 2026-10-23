@@ -37,3 +37,17 @@ describe("плашка кассы не прячется под кнопкой И
     expect(nudgeBlock()).not.toMatch(/bottom: 18,/);
   });
 });
+
+describe("тост IDE не прячется под кнопкой ИИ-помощника", () => {
+  // Тост (role="status", правый нижний угол) несёт «выкатка живая: <адрес>» и
+  // крестик. При bottom 24 / right 24 кнопка помощника (bottom 16 / right 16,
+  // z 9998) лежала на его углу.
+  test("низ тоста выше верха кнопки помощника", () => {
+    const i = IDE.indexOf('aria-live={type === "error" ? "assertive" : "polite"}');
+    expect(i, "тост IDE не найден").toBeGreaterThan(-1);
+    const m = IDE.slice(i, i + 800).match(/bottom: "calc\((\d+)px \+ var\(--aevion-install-h, 0px\)\)"/);
+    expect(m, "тост не учитывает кнопку помощника и баннер установки").not.toBeNull();
+    const dock = DOCK.match(/className="aev-agent-launcher"[\s\S]*?bottom: "calc\((\d+)px/);
+    expect(Number(m![1])).toBeGreaterThanOrEqual(Number(dock![1]) + DOCK_HEIGHT_PX + 8);
+  });
+});

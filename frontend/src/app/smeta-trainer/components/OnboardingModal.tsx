@@ -119,7 +119,7 @@ export function OnboardingModal() {
       <div
         ref={окноRef}
         tabIndex={-1}
-        role="dialog"
+        role="dialog" data-dialog-panel
         aria-modal="true"
         aria-labelledby="smeta-onboarding-title"
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"

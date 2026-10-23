@@ -87,7 +87,7 @@ export function isDevhubApiUrl(input: unknown): boolean {
   return GUEST_API_PREFIXES.some((p) => url.includes(`${p}/`) || url.endsWith(p));
 }
 
-const GUEST_API_PREFIXES = ["/api/devhub", "/api/deepsan", "/api/qgood"];
+const GUEST_API_PREFIXES = ["/api/devhub", "/api/deepsan", "/api/qgood", "/api/qlife"];
 
 /**
  * Добавляет заголовок, сохраняя те, что уже были. `Headers` принимает все три

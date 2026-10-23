@@ -13,6 +13,8 @@ describe("заголовок гостя уходит туда, где он ну�
     expect(isDevhubApiUrl("/api/qlife/biomarkers?limit=30")).toBe(true);
     // и сессии QCoreAI — 50 чужих гостевых переписок отдавались любому
     expect(isDevhubApiUrl("/api/qcoreai/sessions")).toBe(true);
+    // и трекер зависимостей: псевдоним гостя теперь занят им
+    expect(isDevhubApiUrl("/api/psyapp-deps/users/anna")).toBe(true);
   });
   test("DevHub — по-прежнему да", () => {
     expect(isDevhubApiUrl("/api/devhub/projects")).toBe(true);

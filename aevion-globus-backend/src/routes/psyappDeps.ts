@@ -31,6 +31,7 @@ import { callProvider, getProviders, resolveProvider } from "../services/qcoreai
 import { verifyBearerOptional } from "../lib/authJwt";
 import { safeErrorText } from "../lib/safeError";
 import { нашВнутреннийАдрес } from "../lib/planGate";
+import { requesterId } from "../lib/devhubGuest";
 
 export const psyappDepsRouter = Router();
 
@@ -97,8 +98,23 @@ function aliasValid(alias: string): boolean {
 // A claimed alias (owner_user_id set) may only be read/mutated by its owner
 // (matching JWT sub). Unclaimed aliases (owner null) stay open — preserves the
 // anonymous-pseudonym MVP flow for users who never sign in.
-function ownerBlocks(existing: PsyAppUser | null | undefined, sub: string | null): boolean {
-  return !!(existing && existing.owner_user_id && existing.owner_user_id !== sub);
+function ownerBlocks(existing: PsyAppUser | null | undefined, sub: string | null, guest: string | null = null): boolean {
+  if (!existing || !existing.owner_user_id) return false;
+  // Владелец — вошедший ИЛИ гость этого браузера: псевдоним, занятый гостем,
+  // не должен теряться, когда тот же человек входит в аккаунт.
+  return existing.owner_user_id !== sub && existing.owner_user_id !== guest;
+}
+
+/**
+ * Кто спрашивает. До 24.10.2026 гость псевдоним не «занимал» (владелец null),
+ * и данные о зависимости и срывах читал любой, кто угадал псевдоним
+ * («anna», «my_future_self»). Теперь новый псевдоним гостя занят guest:<id>
+ * из заголовка сайта. Старые незанятые остаются открытыми, как были.
+ */
+function psyIds(req: Request): { sub: string | null; guest: string | null } {
+  const sub = verifyBearerOptional(req)?.sub ?? null;
+  const g = requesterId(req, null);
+  return { sub, guest: g === "anonymous" ? null : g };
 }
 
 function toIsoString(v: unknown): string {
@@ -378,17 +394,17 @@ psyappDepsRouter.post("/users/:alias/start", writeLimit, async (req: Request, re
       });
     }
     const startedAtIso = body.startedAt ? new Date(String(body.startedAt)).toISOString() : null;
-    const sub = verifyBearerOptional(req)?.sub ?? null;
+    const { sub, guest } = psyIds(req);
 
     // Reject if this alias was already claimed by a different signed-in user.
     const existing = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
-    if (ownerBlocks(existing, sub)) {
+    if (ownerBlocks(existing, sub, guest)) {
       return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
     }
 
     const user = isPsyAppDbReady()
-      ? await dbUpsertUser(alias, addiction as Addiction, startedAtIso, sub)
-      : memUpsertUser(alias, addiction as Addiction, startedAtIso, sub);
+      ? await dbUpsertUser(alias, addiction as Addiction, startedAtIso, sub ?? guest)
+      : memUpsertUser(alias, addiction as Addiction, startedAtIso, sub ?? guest);
 
     // Признак хранилища. До 19.08.2026 ответ был одинаков независимо от того,
     // легла запись в Postgres или в память процесса. Ручка /health при этом
@@ -419,10 +435,10 @@ psyappDepsRouter.get("/users/:alias", readLimit, async (req: Request, res: Respo
     if (!aliasValid(alias)) {
       return res.status(400).json({ ok: false, error: "alias invalid" });
     }
-    const sub = verifyBearerOptional(req)?.sub ?? null;
+    const { sub, guest } = psyIds(req);
     const user = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
     if (!user) return res.status(404).json({ ok: false, error: "user_not_found" });
-    if (ownerBlocks(user, sub)) {
+    if (ownerBlocks(user, sub, guest)) {
       return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
     }
     return res.json({ ok: true, user, streak_days: streakDays(user.streak_start_at) });
@@ -442,10 +458,10 @@ psyappDepsRouter.post("/users/:alias/relapse", writeLimit, async (req: Request, 
     const reason = typeof reasonRaw === "string" && reasonRaw.trim().length > 0
       ? reasonRaw.trim().slice(0, 500)
       : null;
-    const sub = verifyBearerOptional(req)?.sub ?? null;
+    const { sub, guest } = psyIds(req);
 
     const existing = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
-    if (ownerBlocks(existing, sub)) {
+    if (ownerBlocks(existing, sub, guest)) {
       return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
     }
 
@@ -492,9 +508,9 @@ psyappDepsRouter.post("/triggers", writeLimit, async (req: Request, res: Respons
     const copedHowRaw = body.copedHow ?? body.coped_how;
     const copedHow = typeof copedHowRaw === "string" ? copedHowRaw.trim().slice(0, 500) : null;
 
-    const sub = verifyBearerOptional(req)?.sub ?? null;
+    const { sub, guest } = psyIds(req);
     const ownerRow = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
-    if (ownerBlocks(ownerRow, sub)) {
+    if (ownerBlocks(ownerRow, sub, guest)) {
       return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
     }
 
@@ -520,9 +536,9 @@ psyappDepsRouter.get("/triggers/:alias", readLimit, async (req: Request, res: Re
     if (!aliasValid(alias)) {
       return res.status(400).json({ ok: false, error: "alias invalid" });
     }
-    const sub = verifyBearerOptional(req)?.sub ?? null;
+    const { sub, guest } = psyIds(req);
     const ownerRow = isPsyAppDbReady() ? await dbGetUser(alias) : memGetUser(alias);
-    if (ownerBlocks(ownerRow, sub)) {
+    if (ownerBlocks(ownerRow, sub, guest)) {
       return res.status(403).json({ ok: false, error: "alias_owned_by_another_user" });
     }
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1), 200);

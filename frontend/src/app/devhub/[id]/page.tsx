@@ -7045,7 +7045,10 @@ if (/Месячная норма исчерпана|Месячный лимит[
           role="status"
           style={{
             position: "fixed", left: "50%", transform: "translateX(-50%)",
-            bottom: 18, zIndex: 60, maxWidth: 560, width: "calc(100% - 32px)",
+            // Над кнопкой ИИ-помощника (AgentDock: bottom 16 + высота ~50, справа):
+            // при bottom 18 она накрывала правый хвост плашки — «Подключить покупку»
+            // и крестик — на 390 и 540 (замер 23.10: перекрытие 39×48 px).
+            bottom: "calc(76px + var(--aevion-install-h, 0px))", zIndex: 60, maxWidth: 560, width: "calc(100% - 32px)",
             background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
             borderRadius: 12, padding: "12px 16px", color: "#fff",
             boxShadow: "0 8px 30px rgba(15, 23, 42, 0.35)",

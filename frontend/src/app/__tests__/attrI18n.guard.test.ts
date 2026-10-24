@@ -54,8 +54,6 @@ const KNOWN: Hit[] = [
   { file: "app/bank/page.tsx", attr: "title", text: "Конституция Bank" },
   { file: "app/cyberchess/AntiCheatPanel.tsx", attr: "aria-label", text: "Закрыть" },
   { file: "app/cyberchess/FideCalibrationPanel.tsx", attr: "aria-label", text: "Закрыть" },
-  { file: "app/cyberchess/matchmaking/page.tsx", attr: "placeholder", text: "Игрок" },
-  { file: "app/cyberchess/replays/page.tsx", attr: "title", text: "Обновить" },
   // Добавлено 28.08.2026 вкладкой шахмат. Раньше здесь стояло английское
   // «FIDE Calibration Panel» — экранный диктор читал его посреди русской
   // страницы. Модуль одноязычный (под AutoTranslate его нет, проверено),

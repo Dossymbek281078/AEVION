@@ -814,11 +814,11 @@ export default function QRightPage() {
           <WaitlistCapture
             source="qright"
             tone="dark"
-            title={launchHasPassed() ? "Написать, когда откроется отметка Verified" : "Написать вам в день запуска"}
+            title={launchHasPassed() ? tq(lang, "Write to me when the Verified mark opens") : tq(lang, "Write to me on launch day")}
             description={
               launchHasPassed()
-                ? "Реестр открыт и бесплатен — защитите работу ниже. Отметку «Verified» (бюро подтверждает личность автора) ещё подключаем: оставьте адрес, напишем одно письмо, когда её можно будет оформить."
-                : `Реестр открыт уже сейчас. Одно письмо на запуск бюро ${PLATFORM_LAUNCH_HUMAN} и условия раннего доступа.`
+                ? tq(lang, "The registry is open and free — protect your work below. The «Verified» mark (the bureau confirms the author's identity) is still being connected: leave your address and we will send one email when it can be ordered.")
+                : tq(lang, "The registry is already open. One email on the bureau launch {date} and early-access terms.").replace("{date}", PLATFORM_LAUNCH_HUMAN)
             }
           />
         </div>
@@ -864,10 +864,10 @@ export default function QRightPage() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 24 }}>
               {[
-                { n: "1", title: "Describe", desc: "Title and details", color: "#0d9488", tip: null },
-                { n: "2", title: "Fingerprint", desc: "Tamper-evident SHA-256", color: "#3b82f6", tip: { name: "SHA-256", text: "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours." } },
-                { n: "3", title: "Co-sign", desc: "AEVION + your browser key", color: "#8b5cf6", tip: { name: "Hybrid signing", text: "AEVION signs with HMAC-SHA256 (server-side) and your browser adds a second Ed25519 signature with a key only you hold. Even total platform compromise cannot forge a certificate in your name." } },
-                { n: "4", title: "Anchor", desc: "Distributed key + Bitcoin", color: "#f59e0b", tip: { name: "Quantum Shield + OTS", text: "The Ed25519 private key is split into 3 Shamir shards across independent locations (any 2 reconstruct; AEVION keeps 2 of the 3 shards). The content hash is also submitted to the OpenTimestamps calendars right away; Bitcoin confirmation follows once the calendar's commitment lands in a block (typically a few hours), and the proof upgrades to a block height you can check yourself — a trust anchor we don't control." } },
+                { n: "1", title: tq(lang, "Describe"), desc: tq(lang, "Title and details"), color: "#0d9488", tip: null },
+                { n: "2", title: tq(lang, "Fingerprint"), desc: tq(lang, "Tamper-evident SHA-256"), color: "#3b82f6", tip: { name: "SHA-256", text: tq(lang, "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours.") } },
+                { n: "3", title: tq(lang, "Co-sign"), desc: tq(lang, "AEVION + your browser key"), color: "#8b5cf6", tip: { name: tq(lang, "Hybrid signing"), text: tq(lang, "AEVION signs with HMAC-SHA256 (server-side) and your browser adds a second Ed25519 signature with a key only you hold. Even total platform compromise cannot forge a certificate in your name.") } },
+                { n: "4", title: tq(lang, "Anchor"), desc: tq(lang, "Distributed key + Bitcoin"), color: "#f59e0b", tip: { name: "Quantum Shield + OTS", text: tq(lang, "The Ed25519 private key is split into 3 Shamir shards across independent locations (any 2 reconstruct; AEVION keeps 2 of the 3 shards). The content hash is also submitted to the OpenTimestamps calendars right away; Bitcoin confirmation follows once the calendar's commitment lands in a block (typically a few hours), and the proof upgrades to a block height you can check yourself — a trust anchor we don't control.") } },
               ].map((s) => (
                 <div key={s.n} style={{ textAlign: "center", padding: "14px 8px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                   <div style={{ width: 32, height: 32, borderRadius: "50%", background: s.color, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, marginBottom: 6 }} aria-label={`Step ${s.n}`}>{s.n}</div>
@@ -1869,15 +1869,12 @@ export default function QRightPage() {
             polycentricity: 45,
             positiveSum: 65,
           }}
-          label="Конституция QRight"
+          label={tq(lang, "QRight Constitution")}
           size="sm"
         />
         <div style={{ flex: 1, minWidth: 240 }}>
           <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.5, marginBottom: 8 }}>
-            QRight как институт IP: верховенство закона над верхом и прозрачность
-            — главные ползунки. Закон фиксирует hash объекта, и его не отменит
-            ни наследник, ни корпорация-захватчик. Это и есть «конституционная»
-            гарантия для авторов.
+            {tq(lang, "QRight as an IP institution: rule of law over power and transparency are the main sliders. The law fixes the object's hash, and neither an heir nor a corporate raider can overturn it. That is the «constitutional» guarantee for authors.")}
           </div>
           <a
             href="/constitution"
@@ -1900,7 +1897,7 @@ export default function QRightPage() {
       <section style={{ maxWidth: 760, margin: "28px auto 40px", padding: "0 16px" }}>
         <AskAi
           module="qright"
-          title="Ask about QRight"
+          title={tq(lang, "Ask about QRight")}
           placeholder={tq(lang, "e.g. How does content hashing prove ownership?")}
         />
       </section>

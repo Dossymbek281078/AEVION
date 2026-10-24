@@ -51,7 +51,9 @@ describe("/qright: русский словарь проведён в разме�
   test("tq: ru переводит, en и незнакомый язык отдают источник, незнакомый ключ — как есть", () => {
     expect(tq("ru", "Protect Your Work")).toBe("Защитите свою работу");
     expect(tq("en", "Protect Your Work")).toBe("Protect Your Work");
-    expect(tq("kk", "Protect Your Work")).toBe("Protect Your Work");
+    // 24.10.2026: kk переведён (было 12 ключей из 153) — незнакомый язык по-прежнему отдаёт источник
+    expect(tq("kk", "Protect Your Work")).not.toBe("Protect Your Work");
+    expect(tq("de", "Protect Your Work")).toBe("Protect Your Work");
     expect(tq(undefined, "Protect Your Work")).toBe("Protect Your Work");
     expect(tq("ru", "no such key")).toBe("no such key");
   });

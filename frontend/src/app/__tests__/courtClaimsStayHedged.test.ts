@@ -61,19 +61,15 @@ function sourceFiles(): string[] {
   return out;
 }
 
-/** Строки с обещанием суда, у которых на той же строке НЕТ оговорки. */
-function unhedged(): string[] {
-  const bad: string[] = [];
-  for (const f of sourceFiles()) {
-    const lines = readFileSync(f, "utf8").split("\n");
-    lines.forEach((line, i) => {
+/** Строка — обещание суда без оговорки на ней самой? (комментарии не в счёт) */
+function lineIsUnhedged(line: string): boolean {
       const t = line.trim();
       // Комментарии пропускаем: там законно цитируется прежний текст —
       // на этом сторож уже краснел у меня сегодня на собственном пояснении.
-      if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return;
+      if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return false;
       const low = line.toLowerCase();
       const hit = VERDICT_WORDS.find((w) => low.includes(w));
-      if (!hit) return;
+      if (!hit) return false;
       // ОТРИЦАНИЕ — не обещание, а наоборот. Строка «flight along it is not
       // admissible» говорит, что полёта НЕ будет; считать её обещанием
       // правового результата — ложная тревога, а к постоянному красному
@@ -84,9 +80,17 @@ function unhedged(): string[] {
       // воздушной зоны, где слово вообще про допустимость ПОЛЁТА.
       const at = low.indexOf(hit);
       const before = low.slice(Math.max(0, at - 24), at);
-      if (before.includes("not ") || before.includes("isn't") || before.includes("не ")) return;
-      if (HEDGES.some((h) => low.includes(h.toLowerCase()))) return;
-      bad.push(`${f.slice(f.indexOf("src"))}:${i + 1}  ${t.slice(0, 90)}`);
+      if (before.includes("not ") || before.includes("isn't") || before.includes("не ")) return false;
+      if (HEDGES.some((h) => low.includes(h.toLowerCase()))) return false;
+      return true;
+}
+
+/** Строки с обещанием суда, у которых на той же строке НЕТ оговорки. */
+function unhedged(): string[] {
+  const bad: string[] = [];
+  for (const f of sourceFiles()) {
+    readFileSync(f, "utf8").split("\n").forEach((line, i) => {
+      if (lineIsUnhedged(line)) bad.push(`${f.slice(f.indexOf("src"))}:${i + 1}  ${line.trim().slice(0, 90)}`);
     });
   }
   return bad;
@@ -96,13 +100,13 @@ describe("обещание суда не стоит без оговорки", ()
   it("контроль прибора: файлы читаются и слова вообще находятся", () => {
     const files = sourceFiles();
     expect(files.length, "не найдено ни одного исходника — обход сломан").toBeGreaterThan(200);
-    // Положительный контроль: законная оговорка в проекте ЕСТЬ и содержит слово.
-    const legal = files.filter((f) => f.endsWith("page.tsx"))
-      .some((f) => {
-        const s = readFileSync(f, "utf8").toLowerCase();
-        return s.includes("admissible") && s.includes("under the legal frameworks");
-      });
-    expect(legal, "не нашёл законную оговорку — значит поиск слова не работает").toBe(true);
+    // Положительный контроль. До 24.10.2026 он опирался на живую оговорку /bureau
+    // («admissible … under the legal frameworks»); её сняли как спорное обещание
+    // суду — и контроль ослеп вместе с ней. Теперь — на строках с известным ответом.
+    expect(lineIsUnhedged('  text: "It serves as admissible evidence in court",'), "прибор не видит обещание").toBe(true);
+    expect(lineIsUnhedged('  text: "admissible evidence under the legal frameworks referenced above",'), "прибор не видит оговорку").toBe(false);
+    expect(lineIsUnhedged('  // прежнее «admissible evidence» снято'), "комментарий — не обещание").toBe(false);
+    expect(files.some((f) => f.endsWith(join("bureau", "page.tsx"))), "обход не видит страницу бюро").toBe(true);
   });
 
   it("ни одного обещания суда без границы на той же строке", () => {

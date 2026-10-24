@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { TRAINING_TEXT } from "../training/trainingText";
 import { CPI_TEXT } from "../cpi/cpiText";
+import { ECONOMY_TEXT } from "../economy/economyText";
 
 /**
  * Экраны CyberChess под /cyberchess/* на /en были русскими (замер 24.10.2026 браузером:
@@ -15,6 +16,7 @@ type Tr = Partial<Record<"en" | "ru" | "kk", string>>;
 const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>; поля: string[] }> = [
   { путь: "training/page.tsx", словарь: TRAINING_TEXT, поля: ["name", "desc", "label", "drillName", "reps"] },
   { путь: "cpi/page.tsx", словарь: CPI_TEXT, поля: ["desc", "title", "note", "basis"] },
+  { путь: "economy/page.tsx", словарь: ECONOMY_TEXT, поля: ["title", "desc", "style", "bio", "label"] },
 ];
 const ИСКЛЮЧЕНИЯ = new Set(["AEVION", "Chess training"]);
 

@@ -7,6 +7,7 @@ import { ECONOMY_TEXT } from "../economy/economyText";
 import { MATCHMAKING_TEXT } from "../matchmaking/matchmakingText";
 import { LEADERBOARD_TEXT } from "../leaderboard/leaderboardText";
 import { HISTORY_TEXT } from "../history/historyText";
+import { REPLAYS_TEXT } from "../replays/replaysText";
 
 /**
  * Экраны CyberChess под /cyberchess/* на /en были русскими (замер 24.10.2026 браузером:
@@ -23,6 +24,8 @@ const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>
   { путь: "matchmaking/page.tsx", словарь: MATCHMAKING_TEXT, поля: ["sub"] },
   { путь: "leaderboard/page.tsx", словарь: LEADERBOARD_TEXT, поля: ["label"], минимум: 4 },
   { путь: "history/page.tsx", словарь: HISTORY_TEXT, поля: ["bullet", "blitz", "rapid", "classical"], минимум: 4 },
+  // у /replays нет списков с текстом — только вызовы
+  { путь: "replays/page.tsx", словарь: REPLAYS_TEXT, поля: ["__нет_полей__"], минимум: 0 },
 ];
 const ИСКЛЮЧЕНИЯ = new Set(["AEVION", "Chess training"]);
 

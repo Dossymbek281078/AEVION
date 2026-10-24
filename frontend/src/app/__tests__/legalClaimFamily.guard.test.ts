@@ -41,7 +41,8 @@ const DISCLAIMERS = [
 
 /** Известные места С ОБЕЩАНИЕМ на 29.08.2026. Список обязан только сокращаться. */
 const BASELINE = [
-  "app/bureau/page.tsx",
+  // 24.10.2026: app/bureau/page.tsx вычеркнут — «admissible evidence of prior art» в оговорке
+  // заменено на «запись, вес которой решает суд или ведомство» (слово Оркестратора).
   "app/terms/page.tsx",
   "data/pitchModel.ts",
 ];

@@ -57,7 +57,7 @@ export function hasOtherEmailField(root: ParentNode, mine: Element | null): bool
  * умолчанию — те, что нужны подвалу; второй реализации не заводим.
  */
 export type WaitlistIfMissingProps = {
-  lang?: "ru" | "en";
+  lang?: "ru" | "en" | "kk";
   title?: string;
   description?: string;
   buttonLabel?: string;
@@ -81,7 +81,14 @@ export function FooterWaitlist(props: WaitlistIfMissingProps = {}) {
    * провайдера (тесты, обособленные оболочки).
    */
   const i18n = useI18nOptional();
-  const язык: "ru" | "en" = props.lang ?? (i18n ? (i18n.lang === "en" ? "en" : "ru") : (языкИзАдреса(pathname) === "en" ? "en" : "ru"));
+  const лангИз = (l: string | null | undefined): "ru" | "en" | "kk" => (l === "en" ? "en" : l === "kk" ? "kk" : "ru");
+  // 24.10.2026: kk — свой текст; раньше всё, что не en, шло по-русски
+  const язык: "ru" | "en" | "kk" = props.lang ?? (i18n ? лангИз(i18n.lang) : лангИз(языкИзАдреса(pathname)));
+  const Т = {
+    ru: { title: "Не готовы сегодня — оставьте адрес", description: "Напишем, когда откроется то, что вы смотрели, и пришлём условия раннего доступа.", button: "Сообщить мне", done: "Готово — адрес записан. Подтверждение уже ушло вам на почту." },
+    en: { title: "Not ready today — leave your address", description: "We will write when what you were looking at opens and send you the early-access terms.", button: "Notify me", done: "Done — your address is saved. A confirmation is already in your inbox." },
+    kk: { title: "Бүгін дайын емессіз бе — мекенжай қалдырыңыз", description: "Сіз қараған нәрсе ашылғанда жазып, ерте қол жеткізу шарттарын жібереміз.", button: "Хабарлау", done: "Дайын — мекенжай жазылды. Растау хаты поштаңызға жіберілді." },
+  }[язык];
   const [показывать, установить] = useState(false);
   const [узел, запомнить] = useState<HTMLDivElement | null>(null);
 
@@ -107,14 +114,14 @@ export function FooterWaitlist(props: WaitlistIfMissingProps = {}) {
         source={(props.source ?? footerWaitlistSource(pathname)).slice(0, 60)}
         tone="light"
         lang={язык}
-        title={props.title ?? (язык === "en" ? "Not ready today — leave your address" : "Не готовы сегодня — оставьте адрес")}
+        title={props.title ?? Т.title}
         description={
           props.description ??
-          (язык === "en" ? "We will write when what you were looking at opens and send you the early-access terms." : "Напишем, когда откроется то, что вы смотрели, и пришлём условия раннего доступа.")
+          Т.description
         }
         promise=""
-        buttonLabel={props.buttonLabel ?? (язык === "en" ? "Notify me" : "Сообщить мне")}
-        doneText={props.doneText ?? (язык === "en" ? "Done — your address is saved. A confirmation is already in your inbox." : "Готово — адрес записан. Подтверждение уже ушло вам на почту.")}
+        buttonLabel={props.buttonLabel ?? Т.button}
+        doneText={props.doneText ?? Т.done}
       />
     </div>
   );

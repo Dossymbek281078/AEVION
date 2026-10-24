@@ -60,7 +60,7 @@ export type WaitlistCaptureProps = {
    */
   onSubscribed?: () => void;
   /** Язык подсказки и сообщений об отказе. По умолчанию русский. */
-  lang?: "ru" | "en";
+  lang?: "ru" | "en" | "kk";
   /**
    * Текст подтверждения после успешной подписки.
    *
@@ -120,6 +120,24 @@ const COPY = {
       "We took your address but could not store it permanently just now — that is on us. Please send it again in a minute so we do not lose you before launch.",
     offline: "Could not reach the server. Check the connection and try again.",
   },
+  // ⚠️ kk — черновой перевод, нужна вычитка носителя
+  kk: {
+    title: "AEVION модульдеріне ерте қол жеткізу",
+    description: "Платформа модульдерді бір-бірлеп шығарады. Мекенжайыңызды қалдырыңыз — сізге жақынының іске қосылған күні жазып, ерте қол жеткізу шарттарын жібереміз.",
+    promise: "Хат модуль іске қосылғанда келеді. Әр хатта бір сілтемемен жазылымнан бас тартуға болады.",
+    buttonLabel: "Ерте қол жеткізу",
+    placeholder: "сіз@пошта.kz",
+    sending: "Жіберілуде…",
+    emailLabel: "Электрондық пошта мекенжайы",
+    typo: "Мекенжайда қате бар сияқты. Тексеріп, қайта жіберіңіз.",
+    done: "Дайын — мекенжай жазылды. Көрсететін нәрсе болғанда жазамыз.",
+    tooMany: "Тым көп әрекет қатарынан. Бір минут күтіп, қайталаңыз.",
+    rejected: "Сервер мекенжайды қабылдамады. Жазылуын тексеріңіз.",
+    ourFault: "Мекенжайды сақтай алмадық — бұл біздің тараптағы қате. Бір минуттан кейін қайталап көріңіз.",
+    notStored:
+      "Мекенжайды қабылдадық, бірақ қазір біржола сақтай алмадық — бұл біздің тарапта. Іске қосылуға дейін жоғалтпау үшін бір минуттан кейін қайта жіберіңіз.",
+    offline: "Серверге қосыла алмадық. Байланысты тексеріп, қайталаңыз.",
+  },
 } as const;
 
 export function WaitlistCapture({
@@ -149,7 +167,8 @@ export function WaitlistCapture({
    * и менять поведение проверок заодно с починкой языка не надо.
    */
   const i18n = useI18nOptional();
-  const язык: "ru" | "en" = lang ?? (i18n?.lang === "en" ? "en" : "ru");
+  // 24.10.2026: kk — свой текст (раньше падал на русский: подвал /kk по-русски на каждой странице)
+  const язык: "ru" | "en" | "kk" = lang ?? (i18n?.lang === "en" ? "en" : i18n?.lang === "kk" ? "kk" : "ru");
   const copy = COPY[язык];
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");

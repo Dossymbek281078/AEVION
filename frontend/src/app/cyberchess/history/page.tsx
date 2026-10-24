@@ -11,6 +11,8 @@
 import { knownUserId } from "../tournaments/playerIdentity";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useCcI18n } from "../i18n";
+import { tt } from "./historyText";
 import { Chess } from "chess.js";
 
 interface Match {
@@ -97,17 +99,18 @@ function uciToSan(uciLine: string | undefined, max = 12): string {
   return out.trim();
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, L: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" }) +
-      " " + d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleDateString(L === "en" ? "en-US" : L === "kk" ? "kk-KZ" : "ru-RU", { day: "2-digit", month: "short" }) +
+      " " + d.toLocaleTimeString(L === "en" ? "en-US" : L === "kk" ? "kk-KZ" : "ru-RU", { hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
   }
 }
 
 export default function CyberChessHistoryPage() {
+  const { locale: L } = useCcI18n();
   const [userId, setUserId] = useState<string>("");
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +140,7 @@ export default function CyberChessHistoryPage() {
       if (!data?.ok) throw new Error("bad response");
       setMatches(Array.isArray(data.matches) ? data.matches : []);
     } catch {
-      setError("Не удалось загрузить историю. Попробуйте позже.");
+      setError(tt(L, "Не удалось загрузить историю. Попробуйте позже."));
       setMatches([]);
     } finally {
       setLoading(false);
@@ -184,31 +187,31 @@ export default function CyberChessHistoryPage() {
       <div className="planet-wrap" style={{ paddingTop: 32, paddingBottom: 48 }}>
         <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <div className="planet-eyebrow" style={{ marginBottom: 6 }}>Онлайн-матчи</div>
-            <h1 className="planet-h1">История матчей</h1>
+            <div className="planet-eyebrow" style={{ marginBottom: 6 }}>{tt(L, "Онлайн-матчи")}</div>
+            <h1 className="planet-h1">{tt(L, "История матчей")}</h1>
             {matches.length > 0 && (
               <p className="planet-muted" style={{ marginTop: 6, fontSize: 13.5 }}>
-                {matches.length} партий · <span style={{ color: "var(--pl-live)" }}>{stats.w}</span> побед ·{" "}
-                <span style={{ color: "var(--pl-danger)" }}>{stats.l}</span> поражений · {stats.d} ничьих
+                {matches.length} {tt(L, "партий")} · <span style={{ color: "var(--pl-live)" }}>{stats.w}</span> {tt(L, "побед")} ·{" "}
+                <span style={{ color: "var(--pl-danger)" }}>{stats.l}</span> {tt(L, "поражений")} · {stats.d} {tt(L, "ничьих")}
               </p>
             )}
           </div>
           <div style={{ display: "flex", flexShrink: 0, gap: 8 }}>
-            <Link href="/cyberchess/leaderboard" className="planet-btn">Таблица лидеров</Link>
-            <Link href="/cyberchess" className="planet-btn">← к шахматам</Link>
+            <Link href="/cyberchess/leaderboard" className="planet-btn">{tt(L, "Таблица лидеров")}</Link>
+            <Link href="/cyberchess" className="planet-btn">{tt(L, "← к шахматам")}</Link>
           </div>
         </div>
 
         {loading ? (
-          <div className="planet-card planet-empty">Загрузка…</div>
+          <div className="planet-card planet-empty">{tt(L, "Загрузка…")}</div>
         ) : error ? (
           <div className="planet-card planet-empty" style={{ color: "var(--pl-danger)" }}>{error}</div>
         ) : matches.length === 0 ? (
           <div className="planet-card planet-empty">
-            Пока нет сыгранных онлайн-матчей.
+            {tt(L, "Пока нет сыгранных онлайн-матчей.")}
             <br />
             <Link href="/cyberchess/matchmaking" style={{ marginTop: 8, display: "inline-block", color: "var(--pl-gold)" }}>
-              Найти соперника →
+              {tt(L, "Найти соперника →")}
             </Link>
           </div>
         ) : (
@@ -223,7 +226,7 @@ export default function CyberChessHistoryPage() {
                   return (
                     <div key={t.speed} className="planet-card" style={{ padding: "12px 16px" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>{SPEED_LABEL[t.speed] || t.speed}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{tt(L, SPEED_LABEL[t.speed] || t.speed)}</span>
                         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                           <span className="planet-num" style={{ fontFamily: "var(--pl-mono)", fontSize: 17, fontWeight: 700 }}>{last}</span>
                           <span
@@ -238,8 +241,8 @@ export default function CyberChessHistoryPage() {
                         <Sparkline pts={t.pts} />
                       </div>
                       <div className="planet-muted" style={{ marginTop: 4, display: "flex", justifyContent: "space-between", fontSize: 10.5 }}>
-                        <span>{t.pts.length} партий</span>
-                        <span>пик {peak}</span>
+                        <span>{t.pts.length} {tt(L, "партий")}</span>
+                        <span>{tt(L, "пик")} {peak}</span>
                       </div>
                     </div>
                   );
@@ -249,7 +252,7 @@ export default function CyberChessHistoryPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {matches.map((m) => {
               const iAmWhite = m.whiteUserId === userId;
-              const oppName = (iAmWhite ? m.blackName : m.whiteName) || "Соперник";
+              const oppName = (iAmWhite ? m.blackName : m.whiteName) || tt(L, "Соперник");
               const myBefore = iAmWhite ? m.whiteRatingBefore : m.blackRatingBefore;
               const myAfter = iAmWhite ? m.whiteRatingAfter : m.blackRatingAfter;
               const delta =
@@ -258,10 +261,10 @@ export default function CyberChessHistoryPage() {
                 m.result === "draw" ? "draw" : (m.result === "white") === iAmWhite ? "win" : "loss";
               const oc =
                 outcome === "win"
-                  ? { label: "Победа", color: "var(--pl-live)" }
+                  ? { label: tt(L, "Победа"), color: "var(--pl-live)" }
                   : outcome === "loss"
-                    ? { label: "Поражение", color: "var(--pl-danger)" }
-                    : { label: "Ничья", color: "var(--pl-muted)" };
+                    ? { label: tt(L, "Поражение"), color: "var(--pl-danger)" }
+                    : { label: tt(L, "Ничья"), color: "var(--pl-muted)" };
               const sanLine = uciToSan(m.movesSan);
               return (
                 <div key={m.id} className="planet-card" style={{ display: "flex", alignItems: "stretch", gap: 0, overflow: "hidden" }}>
@@ -289,7 +292,7 @@ export default function CyberChessHistoryPage() {
                     <div className="planet-muted" style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
                       <span>{m.timeControl}</span>
                       <span>·</span>
-                      <span>{m.ply} пол-ходов</span>
+                      <span>{m.ply} {tt(L, "пол-ходов")}</span>
                       {m.termination && (
                         <>
                           <span>·</span>
@@ -297,7 +300,7 @@ export default function CyberChessHistoryPage() {
                         </>
                       )}
                       <span>·</span>
-                      <span>{fmtDate(m.createdAt)}</span>
+                      <span>{fmtDate(m.createdAt, L)}</span>
                     </div>
                     {sanLine && (
                       <div className="planet-muted" style={{ marginTop: 4, fontFamily: "var(--pl-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sanLine}>
@@ -309,7 +312,7 @@ export default function CyberChessHistoryPage() {
                     href={`/cyberchess/matchmaking?tc=${encodeURIComponent(m.timeControl)}`}
                     style={{ display: "flex", flexShrink: 0, alignItems: "center", borderLeft: "1px solid var(--pl-line)", padding: "0 14px", fontSize: 11.5, fontWeight: 700, color: "var(--pl-gold)" }}
                   >
-                    Реванш
+                    {tt(L, "Реванш")}
                   </Link>
                 </div>
               );

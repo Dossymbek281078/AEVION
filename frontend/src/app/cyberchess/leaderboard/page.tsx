@@ -15,6 +15,8 @@
 import { knownUserId } from "../tournaments/playerIdentity";
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useCcI18n } from "../i18n";
+import { tt } from "./leaderboardText";
 
 const SPEEDS = [
   { id: "bullet", label: "Пуля" },
@@ -59,6 +61,7 @@ function RankCell({ rank }: { rank: number }) {
 }
 
 export default function CyberChessLeaderboardPage() {
+  const { locale: L } = useCcI18n();
   const [view, setView] = useState<"rating" | "chessy">("rating");
   const [speed, setSpeed] = useState<SpeedId>("blitz");
   const [rows, setRows] = useState<Row[]>([]);
@@ -92,7 +95,7 @@ export default function CyberChessLeaderboardPage() {
       if (!data?.ok) throw new Error("bad response");
       setRows(Array.isArray(data.leaderboard) ? data.leaderboard : []);
     } catch {
-      setError("Не удалось загрузить таблицу лидеров. Попробуйте позже.");
+      setError(tt(L, "Не удалось загрузить таблицу лидеров. Попробуйте позже."));
       setRows([]);
     } finally {
       setLoading(false);
@@ -115,7 +118,7 @@ export default function CyberChessLeaderboardPage() {
       if (!data?.ok) throw new Error("bad response");
       setWalletRows(Array.isArray(data.leaderboard) ? data.leaderboard : []);
     } catch {
-      setWalletError("Не удалось загрузить таблицу лидеров. Попробуйте позже.");
+      setWalletError(tt(L, "Не удалось загрузить таблицу лидеров. Попробуйте позже."));
       setWalletRows([]);
     } finally {
       setWalletLoading(false);
@@ -132,22 +135,22 @@ export default function CyberChessLeaderboardPage() {
         <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <div className="planet-eyebrow" style={{ marginBottom: 6 }}>
-              {view === "rating" ? "Рейтинг · онлайн-матчи" : "Монеты за онлайн-матчи"}
+              {view === "rating" ? tt(L, "Рейтинг · онлайн-матчи") : tt(L, "Монеты за онлайн-матчи")}
             </div>
-            <h1 className="planet-h1">{view === "rating" ? "Таблица лидеров по рейтингу" : "Таблица лидеров по монетам"}</h1>
+            <h1 className="planet-h1">{view === "rating" ? tt(L, "Таблица лидеров по рейтингу") : tt(L, "Таблица лидеров по монетам")}</h1>
             <p className="planet-muted" style={{ marginTop: 6, fontSize: 13.5, maxWidth: "60ch" }}>
               {view === "rating"
-                ? "Топ игроков онлайн-матчей. Рейтинг считается по системе Glicko-2. Неточные рейтинги (сыграно мало партий) помечены «?»."
-                : "Топ игроков по заработанным в реальных матчах Chessy — не подделываемый через devtools."}
+                ? tt(L, "Топ игроков онлайн-матчей. Рейтинг считается по системе Glicko-2. Неточные рейтинги (сыграно мало партий) помечены «?».")
+                : tt(L, "Топ игроков по заработанным в реальных матчах Chessy — не подделываемый через devtools.")}
             </p>
           </div>
-          <Link href="/cyberchess" className="planet-btn">← к шахматам</Link>
+          <Link href="/cyberchess" className="planet-btn">{tt(L, "← к шахматам")}</Link>
         </div>
 
         {/* Rating vs Chessy view toggle */}
         <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button onClick={() => setView("rating")} className={`planet-btn${view === "rating" ? " active" : ""}`}>
-            Рейтинг
+            {tt(L, "Рейтинг")}
           </button>
           <button onClick={() => setView("chessy")} className={`planet-btn${view === "chessy" ? " active" : ""}`}>
             Chessy
@@ -160,22 +163,22 @@ export default function CyberChessLeaderboardPage() {
             <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
               {SPEEDS.map((s) => (
                 <button key={s.id} onClick={() => setSpeed(s.id)} className={`planet-btn${speed === s.id ? " active" : ""}`}>
-                  {s.label}
+                  {tt(L, s.label)}
                 </button>
               ))}
             </div>
 
             <div className="planet-card" style={{ overflow: "hidden" }}>
               {loading ? (
-                <div className="planet-empty">Загрузка…</div>
+                <div className="planet-empty">{tt(L, "Загрузка…")}</div>
               ) : error ? (
                 <div className="planet-empty" style={{ color: "var(--pl-danger)" }}>{error}</div>
               ) : rows.length === 0 ? (
                 <div className="planet-empty">
-                  Пока нет рейтинговых партий в этой скорости.
+                  {tt(L, "Пока нет рейтинговых партий в этой скорости.")}
                   <br />
                   <Link href="/cyberchess/matchmaking" style={{ marginTop: 8, display: "inline-block", color: "var(--pl-gold)" }}>
-                    Сыграть первым →
+                    {tt(L, "Сыграть первым →")}
                   </Link>
                 </div>
               ) : (
@@ -184,11 +187,11 @@ export default function CyberChessLeaderboardPage() {
                     <thead>
                       <tr>
                         <th>#</th>
-                        <th>Игрок</th>
-                        <th style={{ textAlign: "right" }}>Рейтинг</th>
-                        <th style={{ textAlign: "right" }}>Партий</th>
-                        <th style={{ textAlign: "right" }} className="planet-hide-sm">В/П/Н</th>
-                        <th style={{ textAlign: "right" }} className="planet-hide-sm">Пик</th>
+                        <th>{tt(L, "Игрок")}</th>
+                        <th style={{ textAlign: "right" }}>{tt(L, "Рейтинг")}</th>
+                        <th style={{ textAlign: "right" }}>{tt(L, "Партий")}</th>
+                        <th style={{ textAlign: "right" }} className="planet-hide-sm">{tt(L, "В/П/Н")}</th>
+                        <th style={{ textAlign: "right" }} className="planet-hide-sm">{tt(L, "Пик")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -199,12 +202,12 @@ export default function CyberChessLeaderboardPage() {
                           <tr key={row.userId} className={isMe ? "me" : undefined}>
                             <td><RankCell rank={row.rank} /></td>
                             <td style={{ fontWeight: 600 }}>
-                              {row.displayName || "Игрок"}
-                              {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--pl-gold)" }}>(вы)</span>}
+                              {row.displayName || tt(L, "Игрок")}
+                              {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--pl-gold)" }}>{tt(L, "(вы)")}</span>}
                             </td>
                             <td className="planet-num" style={{ textAlign: "right", fontWeight: 700, fontFamily: "var(--pl-mono)" }}>
                               {row.rating}
-                              {provisional && <span className="planet-muted" title="Неточный рейтинг: сыграно мало партий">?</span>}
+                              {provisional && <span className="planet-muted" title={tt(L, "Неточный рейтинг: сыграно мало партий")}>?</span>}
                             </td>
                             <td className="planet-num planet-muted" style={{ textAlign: "right" }}>{row.games}</td>
                             <td className="planet-num planet-muted planet-hide-sm" style={{ textAlign: "right" }}>
@@ -231,18 +234,18 @@ export default function CyberChessLeaderboardPage() {
         {view === "chessy" && (
           <div className="planet-card" style={{ overflow: "hidden" }}>
             <div className="planet-muted" style={{ borderBottom: "1px solid var(--pl-line)", padding: "12px 16px", fontSize: 12 }}>
-              Только с реальных онлайн-матчей (не с задач, уроков и косметики) — серверный кошелёк, честный по конструкции.
+              {tt(L, "Только с реальных онлайн-матчей (не с задач, уроков и косметики) — серверный кошелёк, честный по конструкции.")}
             </div>
             {walletLoading ? (
-              <div className="planet-empty">Загрузка…</div>
+              <div className="planet-empty">{tt(L, "Загрузка…")}</div>
             ) : walletError ? (
               <div className="planet-empty" style={{ color: "var(--pl-danger)" }}>{walletError}</div>
             ) : walletRows.length === 0 ? (
               <div className="planet-empty">
-                Пока никто не заработал Chessy в реальных матчах.
+                {tt(L, "Пока никто не заработал Chessy в реальных матчах.")}
                 <br />
                 <Link href="/cyberchess/matchmaking" style={{ marginTop: 8, display: "inline-block", color: "var(--pl-gold)" }}>
-                  Сыграть первым →
+                  {tt(L, "Сыграть первым →")}
                 </Link>
               </div>
             ) : (
@@ -251,9 +254,9 @@ export default function CyberChessLeaderboardPage() {
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>Игрок</th>
-                      <th style={{ textAlign: "right" }}>Баланс</th>
-                      <th style={{ textAlign: "right" }} className="planet-hide-sm">Заработано всего</th>
+                      <th>{tt(L, "Игрок")}</th>
+                      <th style={{ textAlign: "right" }}>{tt(L, "Баланс")}</th>
+                      <th style={{ textAlign: "right" }} className="planet-hide-sm">{tt(L, "Заработано всего")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -263,8 +266,8 @@ export default function CyberChessLeaderboardPage() {
                         <tr key={row.userId} className={isMe ? "me" : undefined}>
                           <td><RankCell rank={row.rank} /></td>
                           <td style={{ fontWeight: 600 }}>
-                            {row.displayName || "Игрок"}
-                            {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--pl-gold)" }}>(вы)</span>}
+                            {row.displayName || tt(L, "Игрок")}
+                            {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--pl-gold)" }}>{tt(L, "(вы)")}</span>}
                           </td>
                           <td className="planet-num" style={{ textAlign: "right", fontWeight: 700, fontFamily: "var(--pl-mono)", color: "var(--pl-gold)" }}>
                             {row.balance}

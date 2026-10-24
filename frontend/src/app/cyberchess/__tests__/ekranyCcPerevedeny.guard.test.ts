@@ -5,6 +5,8 @@ import { TRAINING_TEXT } from "../training/trainingText";
 import { CPI_TEXT } from "../cpi/cpiText";
 import { ECONOMY_TEXT } from "../economy/economyText";
 import { MATCHMAKING_TEXT } from "../matchmaking/matchmakingText";
+import { LEADERBOARD_TEXT } from "../leaderboard/leaderboardText";
+import { HISTORY_TEXT } from "../history/historyText";
 
 /**
  * Экраны CyberChess под /cyberchess/* на /en были русскими (замер 24.10.2026 браузером:
@@ -14,15 +16,17 @@ import { MATCHMAKING_TEXT } from "../matchmaking/matchmakingText";
  * английский текст без кириллицы. Новая надпись без перевода — красный.
  */
 type Tr = Partial<Record<"en" | "ru" | "kk", string>>;
-const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>; поля: string[] }> = [
+const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>; поля: string[]; минимум?: number }> = [
   { путь: "training/page.tsx", словарь: TRAINING_TEXT, поля: ["name", "desc", "label", "drillName", "reps"] },
   { путь: "cpi/page.tsx", словарь: CPI_TEXT, поля: ["desc", "title", "note", "basis"] },
   { путь: "economy/page.tsx", словарь: ECONOMY_TEXT, поля: ["title", "desc", "style", "bio", "label"] },
   { путь: "matchmaking/page.tsx", словарь: MATCHMAKING_TEXT, поля: ["sub"] },
+  { путь: "leaderboard/page.tsx", словарь: LEADERBOARD_TEXT, поля: ["label"], минимум: 4 },
+  { путь: "history/page.tsx", словарь: HISTORY_TEXT, поля: ["bullet", "blitz", "rapid", "classical"], минимум: 4 },
 ];
 const ИСКЛЮЧЕНИЯ = new Set(["AEVION", "Chess training"]);
 
-describe.each(ЭКРАНЫ)("экран $путь", ({ путь, словарь, поля }) => {
+describe.each(ЭКРАНЫ)("экран $путь", ({ путь, словарь, поля, минимум = 5 }) => {
   const код = readFileSync(join(__dirname, "..", путь), "utf8");
 
   it("каждый вызов и каждое значение данных — с en и kk", () => {
@@ -31,7 +35,7 @@ describe.each(ЭКРАНЫ)("экран $путь", ({ путь, словарь,
       .map((m) => m[1]).filter((v) => !ИСКЛЮЧЕНИЯ.has(v));
     // знаменатель: прибор, не нашедший вызовов, был бы «чист» вслепую
     expect(вызовы.length, "вызовов tt").toBeGreaterThan(15);
-    expect(данные.length, "значений данных").toBeGreaterThanOrEqual(5);
+    expect(данные.length, "значений данных").toBeGreaterThanOrEqual(минимум);
     const все = [...new Set([...вызовы, ...данные])];
     for (const loc of ["en", "kk"] as const) {
       expect(все.filter((k) => !словарь[k]?.[loc]), `без ${loc}`).toEqual([]);

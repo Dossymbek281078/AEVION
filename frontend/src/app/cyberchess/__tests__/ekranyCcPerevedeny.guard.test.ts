@@ -13,6 +13,7 @@ import { DAILY_TEXT } from "../daily/dailyText";
 import { REPERTOIRE_TEXT } from "../repertoire/repertoireText";
 import { TOURNAMENTS_TEXT } from "../tournaments/tournamentsText";
 import { STUDIO_TEXT } from "../studio/studioText";
+import { OPENING_REPERTOIRE_TEXT } from "../openingRepertoireText";
 
 /**
  * Экраны CyberChess под /cyberchess/* на /en были русскими (замер 24.10.2026 браузером:
@@ -38,6 +39,7 @@ const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>
   // подписи фильтров — тернарники внутри tt(L, …): ловятся вызовами, данных-полей нет
   { путь: "tournaments/page.tsx", словарь: TOURNAMENTS_TEXT, поля: ["__нет_полей__"], минимум: 0 },
   { путь: "studio/page.tsx", словарь: STUDIO_TEXT, поля: ["label"], минимум: 15 },
+  { путь: "OpeningRepertoire.tsx", словарь: OPENING_REPERTOIRE_TEXT, поля: ["label"], минимум: 5 },
 ];
 const ИСКЛЮЧЕНИЯ = new Set(["AEVION", "Chess training"]);
 

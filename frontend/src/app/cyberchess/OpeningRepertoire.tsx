@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useCcI18n } from "./i18n";
+import { tt } from "./openingRepertoireText";
 import {
   BookReply,
   ECO_PRESETS,
@@ -71,6 +73,7 @@ export default function OpeningRepertoire({
   currentUciMoves,
   currentSanMoves,
 }: Props) {
+  const { locale: L } = useCcI18n();
   const [branches, setBranches] = useState<RepertoireBranch[]>([]);
   const [tab, setTab] = useState<Tab>("branches");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -158,7 +161,7 @@ export default function OpeningRepertoire({
   };
 
   const deleteBranch = (id: string) => {
-    if (!confirm("Удалить эту ветку?")) return;
+    if (!confirm(tt(L, "Удалить эту ветку?"))) return;
     setBranches((prev) => prev.filter((b) => b.id !== id));
     if (editingId === id) setEditingId(null);
     if (drillId === id) {
@@ -183,7 +186,7 @@ export default function OpeningRepertoire({
     moves: string[],
     color: RepertoireColor
   ) => {
-    const b = newBranchFromEco(eco, name, moves, color, "Добавлено из текущей партии");
+    const b = newBranchFromEco(eco, name, moves, color, tt(L, "Добавлено из текущей партии"));
     setBranches((prev) => [...prev, b]);
   };
 
@@ -294,6 +297,7 @@ export default function OpeningRepertoire({
 
 // ===== Header =====
 function Header({ onClose, fullPage }: { onClose: () => void; fullPage: boolean }) {
+  const { locale: L } = useCcI18n();
   return (
     <div
       style={{
@@ -320,10 +324,10 @@ function Header({ onClose, fullPage }: { onClose: () => void; fullPage: boolean 
             margin: 0,
           }}
         >
-          Дебютный репертуар
+          {tt(L, "Дебютный репертуар")}
         </h1>
         <div style={{ fontSize: 13, color: COLORS.textDim, marginTop: 4 }}>
-          Сохраняй свои ветки, тренируй по памяти, изучай реальную статистику Lichess.
+          {tt(L, "Сохраняй свои ветки, тренируй по памяти, изучай реальную статистику Lichess.")}
         </div>
       </div>
       {!fullPage && (
@@ -339,7 +343,7 @@ function Header({ onClose, fullPage }: { onClose: () => void; fullPage: boolean 
             fontSize: 14,
           }}
         >
-          Закрыть ✕
+          {tt(L, "Закрыть ✕")}
         </button>
       )}
     </div>
@@ -358,6 +362,7 @@ function AutoDetectBar({
   currentSanMoves?: string[];
   onAdd: (eco: string, name: string, moves: string[], color: RepertoireColor) => void;
 }) {
+  const { locale: L } = useCcI18n();
   const [detecting, setDetecting] = useState(false);
   const [info, setInfo] = useState<EcoInfo | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -374,12 +379,12 @@ function AutoDetectBar({
         res = await detectECO(currentFen);
       }
       if (!res || !res.eco) {
-        setErr("Не удалось определить дебют (нет данных или офлайн).");
+        setErr(tt(L, "Не удалось определить дебют (нет данных или офлайн)."));
       } else {
         setInfo(res);
       }
     } catch {
-      setErr("Ошибка сети.");
+      setErr(tt(L, "Ошибка сети."));
     } finally {
       setDetecting(false);
     }
@@ -407,7 +412,7 @@ function AutoDetectBar({
       }}
     >
       <div style={{ fontSize: 13, color: COLORS.text, flex: "1 1 auto" }}>
-        <strong style={{ color: COLORS.green }}>↗ Из текущей партии:</strong>{" "}
+        <strong style={{ color: COLORS.green }}>{tt(L, "↗ Из текущей партии:")}</strong>{" "}
         {info ? (
           <span>
             <span
@@ -426,7 +431,7 @@ function AutoDetectBar({
           </span>
         ) : (
           <span style={{ color: COLORS.textDim }}>
-            определить дебют и добавить как ветку
+            {tt(L, "определить дебют и добавить как ветку")}
           </span>
         )}
       </div>
@@ -445,7 +450,7 @@ function AutoDetectBar({
             fontSize: 13,
           }}
         >
-          {detecting ? "Определяем…" : "🔍 Определить ECO"}
+          {detecting ? tt(L, "Определяем…") : tt(L, "🔍 Определить ECO")}
         </button>
       )}
       {info && (
@@ -463,7 +468,7 @@ function AutoDetectBar({
               fontSize: 12,
             }}
           >
-            + Как белые
+            {tt(L, "+ Как белые")}
           </button>
           <button
             onClick={() => handleAdd("black")}
@@ -478,7 +483,7 @@ function AutoDetectBar({
               fontSize: 12,
             }}
           >
-            + Как чёрные
+            {tt(L, "+ Как чёрные")}
           </button>
           <button
             onClick={() => setInfo(null)}
@@ -505,6 +510,7 @@ function AutoDetectBar({
 
 // ===== Tabs =====
 function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  const { locale: L } = useCcI18n();
   const tabs: { key: Tab; label: string }[] = [
     { key: "branches", label: "Мои ветки" },
     { key: "drill", label: "Тренировка" },
@@ -542,7 +548,7 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
             transition: "all 0.15s",
           }}
         >
-          {t.label}
+          {tt(L, t.label)}
         </button>
       ))}
     </div>
@@ -562,6 +568,7 @@ function BranchesTab(props: {
   updateBranch: (id: string, patch: Partial<RepertoireBranch>) => void;
   startDrill: (id: string) => void;
 }) {
+  const { locale: L } = useCcI18n();
   const {
     branches,
     editingId,
@@ -579,7 +586,7 @@ function BranchesTab(props: {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <div style={{ fontSize: 14, color: COLORS.textDim }}>
-          Всего веток: <strong style={{ color: COLORS.accentBright }}>{branches.length}</strong>
+          {tt(L, "Всего веток:")} <strong style={{ color: COLORS.accentBright }}>{branches.length}</strong>
         </div>
         <button
           onClick={() => setAddOpen(!addOpen)}
@@ -594,7 +601,7 @@ function BranchesTab(props: {
             fontSize: 13,
           }}
         >
-          {addOpen ? "✕ Отмена" : "+ Добавить ветку"}
+          {addOpen ? tt(L, "✕ Отмена") : tt(L, "+ Добавить ветку")}
         </button>
       </div>
 
@@ -603,7 +610,7 @@ function BranchesTab(props: {
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {branches.length === 0 && (
           <div style={{ textAlign: "center", padding: 40, color: COLORS.textDim }}>
-            Пока пусто. Добавь первую ветку.
+            {tt(L, "Пока пусто. Добавь первую ветку.")}
           </div>
         )}
         {branches.map((b, idx) => (
@@ -630,6 +637,7 @@ function AddBranchPanel({
 }: {
   onAdd: (preset: EcoPreset, customName?: string) => void;
 }) {
+  const { locale: L } = useCcI18n();
   const [selectedEco, setSelectedEco] = useState<string>(ECO_PRESETS[0].eco);
   const [customName, setCustomName] = useState("");
   const [color, setColor] = useState<RepertoireColor>(ECO_PRESETS[0].color);
@@ -647,11 +655,11 @@ function AddBranchPanel({
       }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: COLORS.accentBright }}>
-        Выбери дебют из готовых
+        {tt(L, "Выбери дебют из готовых")}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>
-          <label htmlFor="rep-eco" style={labelStyle}>ECO / Дебют</label>
+          <label htmlFor="rep-eco" style={labelStyle}>{tt(L, "ECO / Дебют")}</label>
           <select id="rep-eco"
             value={selectedEco}
             onChange={(e) => {
@@ -669,24 +677,24 @@ function AddBranchPanel({
           </select>
         </div>
         <div>
-          <label style={labelStyle}>Цвет</label>
+          <label style={labelStyle}>{tt(L, "Цвет")}</label>
           <div style={{ display: "flex", gap: 6 }}>
             <button
               onClick={() => setColor("white")}
               style={colorToggleStyle(color === "white", "white")}
             >
-              ♔ Белые
+              {tt(L, "♔ Белые")}
             </button>
             <button
               onClick={() => setColor("black")}
               style={colorToggleStyle(color === "black", "black")}
             >
-              ♚ Чёрные
+              {tt(L, "♚ Чёрные")}
             </button>
           </div>
         </div>
       </div>
-      <label htmlFor="rep-title" style={labelStyle}>Своё название (опционально)</label>
+      <label htmlFor="rep-title" style={labelStyle}>{tt(L, "Своё название (опционально)")}</label>
       <input id="rep-title"
         value={customName}
         onChange={(e) => setCustomName(e.target.value)}
@@ -694,7 +702,7 @@ function AddBranchPanel({
         style={inputStyle}
       />
       <div style={{ fontSize: 12, color: COLORS.textDim, marginTop: 10 }}>
-        Ходы: <code style={{ color: COLORS.accentBright }}>{preset.moves.join(" ")}</code>
+        {tt(L, "Ходы:")} <code style={{ color: COLORS.accentBright }}>{preset.moves.join(" ")}</code>
       </div>
       <button
         onClick={() => onAdd({ ...preset, color }, customName || undefined)}
@@ -710,7 +718,7 @@ function AddBranchPanel({
           fontSize: 14,
         }}
       >
-        Добавить
+        {tt(L, "Добавить")}
       </button>
     </div>
   );
@@ -727,6 +735,7 @@ function BranchCard(props: {
   onUpdate: (patch: Partial<RepertoireBranch>) => void;
   onDrill: () => void;
 }) {
+  const { locale: L } = useCcI18n();
   const {
     branch,
     isFirst,
@@ -782,7 +791,7 @@ function BranchCard(props: {
               {branch.eco}
             </span>
             {isEditing ? (
-              <input aria-label="Название ветки"
+              <input aria-label={tt(L, "Название ветки")}
                 value={branch.name}
                 onChange={(e) => onUpdate({ name: e.target.value })}
                 style={{ ...inputStyle, fontSize: 15, fontWeight: 600, padding: "4px 8px" }}
@@ -814,15 +823,15 @@ function BranchCard(props: {
           </div>
           <div style={{ marginTop: 10, display: "flex", gap: 14, fontSize: 12 }}>
             <span style={{ color: COLORS.textDim }}>
-              Попыток: <strong style={{ color: COLORS.text }}>{branch.attempts}</strong>
+              {tt(L, "Попыток:")} <strong style={{ color: COLORS.text }}>{branch.attempts}</strong>
             </span>
             <span style={{ color: COLORS.textDim }}>
-              Успех:{" "}
+              {tt(L, "Успех:")}{" "}
               {branch.attempts === 0 ? (
                 /* Ноль попыток — это «неизвестно», а не «плохо». Раньше здесь
                    стояло красное «0%»: человеку сообщали о провале в том, чего
                    он ещё не пробовал. */
-                <strong style={{ color: COLORS.textDim }}>— ещё не тренировали</strong>
+                <strong style={{ color: COLORS.textDim }}>{tt(L, "— ещё не тренировали")}</strong>
               ) : (
                 <strong style={{ color: rate >= 70 ? COLORS.green : rate >= 40 ? COLORS.yellow : COLORS.red }}>
                   {rate}%
@@ -832,7 +841,7 @@ function BranchCard(props: {
           </div>
           {isEditing && (
             <div style={{ marginTop: 12 }}>
-              <label htmlFor="rep-notes" style={labelStyle}>Заметки</label>
+              <label htmlFor="rep-notes" style={labelStyle}>{tt(L, "Заметки")}</label>
               <textarea id="rep-notes"
                 value={branch.notes || ""}
                 onChange={(e) => onUpdate({ notes: e.target.value })}
@@ -858,10 +867,10 @@ function BranchCard(props: {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: 16 }}>
           <button onClick={onDrill} style={primaryBtn}>
-            ▶ Тренировать
+            {tt(L, "▶ Тренировать")}
           </button>
           <button onClick={onEditToggle} style={ghostBtn}>
-            {isEditing ? "✓ Готово" : "✎ Изменить"}
+            {isEditing ? tt(L, "✓ Готово") : tt(L, "✎ Изменить")}
           </button>
           <div style={{ display: "flex", gap: 4 }}>
             <button
@@ -881,7 +890,7 @@ function BranchCard(props: {
           </div>
           {isEditing && (
             <button onClick={onDelete} style={dangerBtn}>
-              🗑 Удалить
+              {tt(L, "🗑 Удалить")}
             </button>
           )}
         </div>
@@ -904,6 +913,7 @@ function DrillTab(props: {
   startDrill: (id: string) => void;
   resetDrill: () => void;
 }) {
+  const { locale: L } = useCcI18n();
   const {
     branches,
     drillBranch,
@@ -921,7 +931,7 @@ function DrillTab(props: {
     return (
       <div>
         <div style={{ fontSize: 14, color: COLORS.textDim, marginBottom: 14 }}>
-          Выбери ветку для тренировки:
+          {tt(L, "Выбери ветку для тренировки:")}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {branches.map((b) => (
@@ -944,7 +954,7 @@ function DrillTab(props: {
               <div>
                 <div style={{ fontWeight: 600 }}>{b.name}</div>
                 <div style={{ fontSize: 12, color: COLORS.textDim, marginTop: 3 }}>
-                  {b.eco} — {b.moves.length} ходов
+                  {b.eco} — {b.moves.length} {tt(L, "ходов")}
                 </div>
               </div>
               <span style={{ color: COLORS.accent, fontSize: 18 }}>▶</span>
@@ -968,11 +978,11 @@ function DrillTab(props: {
             {drillBranch.name}
           </div>
           <div style={{ fontSize: 12, color: COLORS.textDim, marginTop: 4 }}>
-            {drillBranch.eco} — {drillBranch.color === "white" ? "За белых" : "За чёрных"}
+            {drillBranch.eco} — {drillBranch.color === "white" ? tt(L, "За белых") : tt(L, "За чёрных")}
           </div>
         </div>
         <button onClick={resetDrill} style={ghostBtn}>
-          ← Выбрать другую
+          {tt(L, "← Выбрать другую")}
         </button>
       </div>
 
@@ -1012,7 +1022,7 @@ function DrillTab(props: {
       >
         {movesPlayed.length === 0 && (
           <span style={{ color: COLORS.textDim, fontStyle: "italic" }}>
-            Начни с первого хода...
+            {tt(L, "Начни с первого хода...")}
           </span>
         )}
         {movesPlayed.map((m, i) => (
@@ -1049,19 +1059,19 @@ function DrillTab(props: {
           }}
         >
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
-            {drillErrors === 0 ? "Идеально!" : "Завершено"}
+            {drillErrors === 0 ? tt(L, "Идеально!") : tt(L, "Завершено")}
           </div>
           <div style={{ color: COLORS.textDim, fontSize: 13 }}>
-            Ошибок в этом прогоне: <strong>{drillErrors}</strong>
+            {tt(L, "Ошибок в этом прогоне:")} <strong>{drillErrors}</strong>
           </div>
           <button onClick={resetDrill} style={{ ...primaryBtn, marginTop: 14 }}>
-            Новый прогон
+            {tt(L, "Новый прогон")}
           </button>
         </div>
       ) : (
         <div>
           <label style={labelStyle}>
-            {isWhiteToMove ? "Ход белых" : "Ход чёрных"} (введи в SAN: e4, Nf3, O-O…)
+            {isWhiteToMove ? tt(L, "Ход белых") : tt(L, "Ход чёрных")} {tt(L, "(введи в SAN: e4, Nf3, O-O…)")}
           </label>
           <div style={{ display: "flex", gap: 8 }}>
             <input
@@ -1071,24 +1081,24 @@ function DrillTab(props: {
                 if (e.key === "Enter") submitDrillMove();
               }}
               autoFocus
-              placeholder="ход..."
+              placeholder={tt(L, "ход...")}
               style={{ ...inputStyle, flex: 1, fontSize: 16, fontFamily: "monospace" }}
             />
             <button onClick={submitDrillMove} style={primaryBtn}>
-              Проверить
+              {tt(L, "Проверить")}
             </button>
           </div>
           {drillStatus === "good" && (
             <div style={{ marginTop: 10, color: COLORS.green, fontSize: 13 }}>
-              Верно! Дальше →
+              {tt(L, "Верно! Дальше →")}
             </div>
           )}
           {drillStatus === "bad" && (
             <div style={{ marginTop: 10, color: COLORS.red, fontSize: 13 }}>
-              Не тот ход. Попробуй ещё раз. Подсказка появится после 3 ошибок.
+              {tt(L, "Не тот ход. Попробуй ещё раз. Подсказка появится после 3 ошибок.")}
               {drillErrors >= 3 && (
                 <div style={{ marginTop: 6, color: COLORS.yellow }}>
-                  💡 Правильный ход: <strong>{drillBranch.moves[drillStep]}</strong>
+                  {tt(L, "💡 Правильный ход:")} <strong>{drillBranch.moves[drillStep]}</strong>
                 </div>
               )}
             </div>
@@ -1101,6 +1111,7 @@ function DrillTab(props: {
 
 // ===== Stats Tab (REAL LICHESS DATA) =====
 function StatsTab({ branches }: { branches: RepertoireBranch[] }) {
+  const { locale: L } = useCcI18n();
   const totals = useMemo(() => {
     const attempts = branches.reduce((s, b) => s + b.attempts, 0);
     const successes = branches.reduce((s, b) => s + b.successes, 0);
@@ -1118,17 +1129,16 @@ function StatsTab({ branches }: { branches: RepertoireBranch[] }) {
           marginBottom: 24,
         }}
       >
-        <StatCard label="Всего веток" value={branches.length} />
-        <StatCard label="Попыток" value={totals.attempts} />
-        <StatCard label="Общий успех" value={totals.attempts === 0 ? "—" : `${totals.rate}%`} accent />
+        <StatCard label={tt(L, "Всего веток")} value={branches.length} />
+        <StatCard label={tt(L, "Попыток")} value={totals.attempts} />
+        <StatCard label={tt(L, "Общий успех")} value={totals.attempts === 0 ? "—" : `${totals.rate}%`} accent />
       </div>
 
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: COLORS.accentBright }}>
-        Книжная статистика
+        {tt(L, "Книжная статистика")}
       </div>
       <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 14 }}>
-        Данные о ходах — из открытой базы партий Lichess. Мы держим их у себя
-        и обновляем по расписанию из настроек ниже.
+        {tt(L, "Данные о ходах — из открытой базы партий Lichess. Мы держим их у себя и обновляем по расписанию из настроек ниже.")}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1174,6 +1184,7 @@ function StatCard({
 }
 
 function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
+  const { locale: L } = useCcI18n();
   const [replies, setReplies] = useState<BookReply[] | null>(null);
   const [totals, setTotals] = useState<PositionTotals | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1252,14 +1263,14 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
               fontWeight: 600,
             }}
           >
-            {source === "lichess" ? "ДАННЫЕ LICHESS" : "ОБРАЗЕЦ, НЕ РЕАЛЬНАЯ СТАТИСТИКА"}
+            {source === "lichess" ? tt(L, "ДАННЫЕ LICHESS") : tt(L, "ОБРАЗЕЦ, НЕ РЕАЛЬНАЯ СТАТИСТИКА")}
           </span>
         </div>
         <div style={{ display: "flex", gap: 3 }}>
           {streak.map((s, i) => (
             <div
               key={i}
-              title={s ? "успех" : "пропуск"}
+              title={s ? tt(L, "успех") : tt(L, "пропуск")}
               style={{
                 width: 14,
                 height: 14,
@@ -1284,7 +1295,7 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
             borderRadius: 6,
           }}
         >
-          Из <strong>{shortNum(totals.total)}</strong> партий:{" "}
+          {tt(L, "Из")} <strong>{shortNum(totals.total)}</strong> {tt(L, "партий:")}{" "}
           <strong style={{ color: COLORS.white }}>
             White {Math.round((totals.white / totals.total) * 100)}%
           </strong>{" "}
@@ -1295,7 +1306,7 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
           </strong>
           {avgRating && (
             <span style={{ marginLeft: 8, color: COLORS.textDim }}>
-              · средний рейтинг ~{avgRating}
+              {tt(L, "· средний рейтинг ~")}{avgRating}
             </span>
           )}
         </div>
@@ -1310,13 +1321,12 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
           data-testid="book-stats-sample"
           style={{ fontSize: 12, color: COLORS.yellow, marginBottom: 8 }}
         >
-          Цифры оценочные: статистика партий не загрузилась. Проценты и число партий
-          здесь рассчитаны примерно, а не взяты из базы.
+          {tt(L, "Цифры оценочные: статистика партий не загрузилась. Проценты и число партий здесь рассчитаны примерно, а не взяты из базы.")}
         </div>
       )}
 
       <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 8 }}>
-        {loading ? "Загружаем статистику…" : "Топ ответов противника:"}
+        {loading ? tt(L, "Загружаем статистику…") : tt(L, "Топ ответов противника:")}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1333,7 +1343,7 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
               {s.move}
             </span>
             <span style={{ width: 70, fontSize: 11, color: COLORS.textDim }}>
-              {shortNum(s.games)} игр
+              {shortNum(s.games)} {tt(L, "игр")}
             </span>
             <div
               style={{
@@ -1408,6 +1418,7 @@ function shortNum(n: number): string {
 
 // ===== GM Games Tab =====
 function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
+  const { locale: L } = useCcI18n();
   const [selectedId, setSelectedId] = useState<string>(branches[0]?.id || "");
   const [games, setGames] = useState<GMGame[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1429,7 +1440,7 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
       setGames(g);
       if (g.length === 0)
         setErr(
-          "GM-партии недоступны без UCI-ходов из реальной партии. Открой ветку из текущей позиции на доске для полного списка."
+          tt(L, "GM-партии недоступны без UCI-ходов из реальной партии. Открой ветку из текущей позиции на доске для полного списка.")
         );
       setLoading(false);
     })();
@@ -1442,7 +1453,7 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
   if (branches.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: 40, color: COLORS.textDim }}>
-        Нет веток. Сначала добавь хотя бы одну.
+        {tt(L, "Нет веток. Сначала добавь хотя бы одну.")}
       </div>
     );
   }
@@ -1450,10 +1461,10 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
   return (
     <div>
       <div style={{ fontSize: 14, color: COLORS.textDim, marginBottom: 14 }}>
-        Партии мастеров (Lichess Masters DB — рейтинг ≥ 2200 OTB):
+        {tt(L, "Партии мастеров (Lichess Masters DB — рейтинг ≥ 2200 OTB):")}
       </div>
 
-      <select aria-label="Выбрать ветку"
+      <select aria-label={tt(L, "Выбрать ветку")}
         value={selectedId}
         onChange={(e) => setSelectedId(e.target.value)}
         style={{ ...inputStyle, marginBottom: 16 }}
@@ -1466,7 +1477,7 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
       </select>
 
       {loading && (
-        <div style={{ color: COLORS.textDim, padding: 14 }}>Загружаем партии…</div>
+        <div style={{ color: COLORS.textDim, padding: 14 }}>{tt(L, "Загружаем партии…")}</div>
       )}
       {err && (
         <div
@@ -1528,7 +1539,7 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
                 <div style={{ fontSize: 11, color: COLORS.textDim, marginTop: 4 }}>
                   {g.year || "—"}
                   {g.event ? ` · ${g.event}` : ""}
-                  {g.url ? " · откроется на Lichess ↗" : ""}
+                  {g.url ? " " + tt(L, "· откроется на Lichess ↗") : ""}
                 </div>
               </div>
               <div
@@ -1552,7 +1563,7 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
         ))}
         {!loading && games.length === 0 && !err && (
           <div style={{ color: COLORS.textDim, padding: 14, textAlign: "center" }}>
-            Партии не найдены.
+            {tt(L, "Партии не найдены.")}
           </div>
         )}
       </div>
@@ -1562,6 +1573,7 @@ function GMGamesTab({ branches }: { branches: RepertoireBranch[] }) {
 
 // ===== Settings Tab =====
 function SettingsTab() {
+  const { locale: L } = useCcI18n();
   const [ttl, setTtl] = useState<TtlKey>("day");
   const [savedFlash, setSavedFlash] = useState(false);
 
@@ -1577,20 +1589,18 @@ function SettingsTab() {
   };
 
   const ttlLabel: Record<TtlKey, string> = {
-    hour: "1 час",
-    day: "1 день",
-    week: "1 неделя",
+    hour: tt(L, "1 час"),
+    day: tt(L, "1 день"),
+    week: tt(L, "1 неделя"),
   };
 
   return (
     <div>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: COLORS.accentBright }}>
-        Как часто обновлять данные Lichess
+        {tt(L, "Как часто обновлять данные Lichess")}
       </div>
       <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 16 }}>
-        Lichess отвечает не чаще шестидесяти раз в минуту, поэтому мы держим
-        данные у себя и переспрашиваем реже. Если нужны свежие цифры прямо
-        сейчас — обновите вручную.
+        {tt(L, "Lichess отвечает не чаще шестидесяти раз в минуту, поэтому мы держим данные у себя и переспрашиваем реже. Если нужны свежие цифры прямо сейчас — обновите вручную.")}
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -1612,7 +1622,7 @@ function SettingsTab() {
           >
             {ttlLabel[k]}
             <div style={{ fontSize: 10, opacity: 0.7, marginTop: 3 }}>
-              {Math.round(TTL_PRESETS[k] / 60000)} мин
+              {Math.round(TTL_PRESETS[k] / 60000)} {tt(L, "мин")}
             </div>
           </button>
         ))}
@@ -1620,7 +1630,7 @@ function SettingsTab() {
 
       {savedFlash && (
         <div style={{ fontSize: 12, color: COLORS.green, marginBottom: 12 }}>
-          ✓ Сохранено
+          {tt(L, "✓ Сохранено")}
         </div>
       )}
 
@@ -1641,7 +1651,7 @@ function SettingsTab() {
           fontSize: 13,
         }}
       >
-        Обновить данные сейчас
+        {tt(L, "Обновить данные сейчас")}
       </button>
     </div>
   );

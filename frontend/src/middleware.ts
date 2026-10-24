@@ -106,7 +106,12 @@ export function английскийРедирект(pathname: string | null | u
  */
 const СВОИ_СТРАНИЦЫ_ЯЗЫКА: Record<string, (путь: string) => boolean> = {
   ru: (п) => п.startsWith("/ru/verify/"),
-  kk: (п) => п === "/kk/cyberchess" || п.startsWith("/kk/cyberchess/"),
+  // Только то, что лежит в src/app/kk. ЗАМЕР 24.10.2026 (curl по проду 7b16f03ce):
+  // правило «всё под /kk/cyberchess/» оставляло без переадресации 12 вложенных
+  // экранов шахмат (/kk/cyberchess/daily, /training, /tournaments…) — своих
+  // страниц под /kk у них нет, и казахский пользователь получал 404.
+  // Сверку правила с файлами держит ruKkPrefixRedirect.test.ts.
+  kk: (п) => п === "/kk/cyberchess",
 };
 
 export function языковойРедирект(

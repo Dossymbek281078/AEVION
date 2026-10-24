@@ -111,8 +111,12 @@ const ALLOWED: Array<{ fragment: string; reason: string }> = [
 
   // ── AEVION IP Bureau: своя лестница сертификатов, не тарифы платформы ────
   {
-    fragment: 'price: "From $89 / cert"',
-    reason: "Bureau Notarized — цена СЕРТИФИКАТА с нотариусом, к тарифам платформы отношения не имеет",
+    fragment: 'price: tb("From $89 / cert")',
+    reason: "Bureau Notarized — цена СЕРТИФИКАТА с нотариусом, к тарифам платформы отношения не имеет (24.10.2026 — строка через словарь tb)",
+  },
+  {
+    fragment: '"From $89 / cert": { ru: "От $89 за сертификат"',
+    reason: "та же цена сертификата бюро — перевод ru/kk в bureau/bureauText.ts",
   },
 
   // ── Продающая модель: исторических фраз о репрайсе 13.08 больше нет ──────

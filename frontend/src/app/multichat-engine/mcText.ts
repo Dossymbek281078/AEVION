@@ -1,0 +1,109 @@
+/**
+ * Перевод страницы Мультичата: ключ — строка-исходник как в коде (часть на
+ * русском — консилиум, часть на английском — карточки режимов), значения —
+ * недостающие языки.
+ *
+ * До 24.10.2026 страница была смесью в обе стороны: на /en весь блок
+ * «Консилиум» по-русски (10 из 80 строк), на ru и kk — английские карточки
+ * режимов («Classic chat experience…», «Live streaming», «Saveable presets»).
+ * tm(lang, src): есть перевод на этот язык — он, нет — исходник.
+ * ⚠️ kk — черновой перевод, нужна вычитка носителя.
+ */
+type Tr = Partial<Record<"en" | "ru" | "kk", string>>;
+
+export const MC_TEXT: Record<string, Tr> = {
+  // ── консилиум (исходник — русский) ──
+  "Консилиум": { en: "Council", kk: "Кеңес" },
+  "Опишите задачу — три агента с разными ролями ответят независимо. Мы не сводим их в один причёсанный ответ: сначала показываем,": { en: "Describe the task — three agents with different roles answer independently. We don't merge them into one polished answer: first we show", kk: "Тапсырманы сипаттаңыз — әртүрлі рөлдегі үш агент тәуелсіз жауап береді. Біз оларды бір әдемі жауапқа біріктірмейміз: алдымен көрсетеміз —" },
+  "где они разошлись": { en: "where they disagree", kk: "олар қай жерде келіспеді" },
+  ", потому что именно там ответу нельзя верить на слово.": { en: ", because that is exactly where an answer can't be taken on trust.", kk: ", өйткені дәл сол жерде жауапқа сөзбен сенуге болмайды." },
+  "Показать на примере": { en: "Show an example", kk: "Мысалмен көрсету" },
+  "Это пример: ответы трёх агентов заданы заранее, а разногласия ниже посчитаны на сервере тем же алгоритмом, что и для настоящего запроса. Свой вопрос — после входа.": { en: "This is an example: the three agents' answers are preset, and the disagreements below are computed on the server by the same algorithm as for a real request. Your own question — after signing in.", kk: "Бұл мысал: үш агенттің жауаптары алдын ала берілген, ал төмендегі келіспеушіліктер нақты сұраудағыдай алгоритммен серверде есептелген. Өз сұрағыңыз — кіргеннен кейін." },
+  "Прямое противоречие": { en: "Direct contradiction", kk: "Тікелей қайшылық" },
+  "Расхождения в числах": { en: "Number mismatches", kk: "Сандардағы алшақтық" },
+  "Особняком:": { en: "Stands apart:", kk: "Бөлек тұр:" },
+  "Осторожность и отказы:": { en: "Caution and refusals:", kk: "Сақтық пен бас тарту:" },
+  "Что проверить": { en: "What to check", kk: "Не тексеру керек" },
+  "Порядок — по проверяемости: сверху то, что закрывается за минуту.": { en: "Ordered by how checkable it is: on top — what you can settle in a minute.", kk: "Тексерілу ретімен: жоғарыда — бір минутта анықталатыны." },
+  "Скачать чек": { en: "Download receipt", kk: "Чекті жүктеу" },
+  "проверить чек": { en: "verify receipt", kk: "чекті тексеру" },
+  "Скачать отчёт": { en: "Download report", kk: "Есепті жүктеу" },
+  "Markdown: вопрос, разногласия, что проверить, ответы и хеш чека": { en: "Markdown: question, disagreements, what to check, answers and receipt hash", kk: "Markdown: сұрақ, келіспеушіліктер, не тексеру керек, жауаптар және чек хеші" },
+  "Бесплатные запросы на сегодня закончились. Войдите под почтой оплаты или откройте тариф — кнопки ниже.": { en: "Free requests for today are used up. Sign in with your payment email or open a plan — buttons below.", kk: "Бүгінгі тегін сұраулар таусылды. Төлем поштасымен кіріңіз немесе тарифті ашыңыз — батырмалар төменде." },
+  "не удалось создать беседу": { en: "could not create the conversation", kk: "әңгіме құру мүмкін болмады" },
+  "запрос не прошёл": { en: "the request did not go through", kk: "сұрау өтпеді" },
+  "пример не загрузился": { en: "the example did not load", kk: "мысал жүктелмеді" },
+  "Агенты сошлись": { en: "Agents agree", kk: "Агенттер келісті" },
+  "Агенты разошлись": { en: "Agents disagree", kk: "Агенттер келіспеді" },
+  "Сравнивать не с чем": { en: "Nothing to compare", kk: "Салыстыратын ештеңе жоқ" },
+  "Спросить консилиум": { en: "Ask the council", kk: "Кеңестен сұрау" },
+  "не ответил": { en: "did not answer", kk: "жауап бермеді" },
+  // ── состояние поставщиков ──
+  "◉ Ключи поставщиков": { en: "◉ Provider keys", kk: "◉ Провайдер кілттері" },
+  "↻ Refresh": { ru: "↻ Обновить", kk: "↻ Жаңарту" },
+  "Refresh provider health": { ru: "Обновить состояние поставщиков", kk: "Провайдерлер күйін жаңарту" },
+  "Живой пинг поставщиков — на платном тарифе. Разбор разногласий ниже работает без входа.": { en: "Live provider ping is on a paid plan. The disagreement analysis below works without signing in.", kk: "Провайдерлерді тірі тексеру — ақылы тарифте. Төмендегі келіспеушілік талдауы кірусіз жұмыс істейді." },
+  "Pinging providers…": { ru: "Опрашиваем поставщиков…", kk: "Провайдерлер тексерілуде…" },
+  "No providers reported.": { ru: "Поставщики не ответили.", kk: "Провайдерлер жауап бермеді." },
+  "ключ настроен": { en: "key set", kk: "кілт орнатылған" },
+  "ключа нет": { en: "no key", kk: "кілт жоқ" },
+  "Здесь видно, у каких поставщиков задан ключ. Доступность самих поставщиков не проверяется — это стоило бы платного запроса к каждому на каждую загрузку страницы.": { en: "This shows which providers have a key set. The providers' own availability is not checked — that would cost a paid request to each of them on every page load.", kk: "Мұнда қай провайдерлерде кілт орнатылғаны көрінеді. Провайдерлердің өз қолжетімділігі тексерілмейді — бұл әр бет жүктелген сайын әрқайсысына ақылы сұрау болар еді." },
+  // ── сценарии ──
+  "✦ Mission presets": { ru: "✦ Готовые сценарии", kk: "✦ Дайын сценарийлер" },
+  "One click → preconfigured agent bundle on a curated system prompt.": { ru: "Один клик → набор агентов, настроенный на выверенном системном промпте.", kk: "Бір басу → таңдалған жүйелік промптта бапталған агенттер жиыны." },
+  "Готовые сценарии панелей — на платном тарифе. Пример разбора ниже открыт без входа.": { en: "Ready-made panel scenarios are on a paid plan. The example analysis below is open without signing in.", kk: "Дайын панель сценарийлері — ақылы тарифте. Төмендегі талдау мысалы кірусіз ашық." },
+  "Loading missions…": { ru: "Загружаем сценарии…", kk: "Сценарийлер жүктелуде…" },
+  "Hide system prompt": { ru: "Скрыть системный промпт", kk: "Жүйелік промптты жасыру" },
+  "Show system prompt": { ru: "Показать системный промпт", kk: "Жүйелік промптты көрсету" },
+  "▲ Prompt": { ru: "▲ Промпт", kk: "▲ Промпт" },
+  "▼ Prompt": { ru: "▼ Промпт", kk: "▼ Промпт" },
+  "Взять в консилиум →": { en: "Use in the council →", kk: "Кеңеске алу →" },
+  // ── карточки режимов ──
+  "One provider · one model · fastest path": { ru: "Один поставщик · одна модель · самый быстрый путь", kk: "Бір провайдер · бір модель · ең жылдам жол" },
+  "Classic chat experience. Pick Claude, GPT, Gemini, DeepSeek or Grok, ask a question, get an answer. Best for quick lookups and informal conversation.": { ru: "Классический чат. Выберите Claude, GPT, Gemini, DeepSeek или Grok, задайте вопрос — получите ответ. Лучше всего для быстрых справок и свободной беседы.", kk: "Классикалық чат. Claude, GPT, Gemini, DeepSeek немесе Grok таңдап, сұрақ қойыңыз — жауап алыңыз. Жылдам анықтама мен еркін әңгімеге ең қолайлы." },
+  "Open single chat →": { ru: "Открыть одиночный чат →", kk: "Жеке чатты ашу →" },
+  "New": { ru: "Новое", kk: "Жаңа" },
+  "Multi-agent": { ru: "Мультиагент", kk: "Мультиагент" },
+  "Analyst → Writer → Critic · inspectable": { ru: "Аналитик → Автор → Критик · видно каждый шаг", kk: "Талдаушы → Автор → Сыншы · әр қадам көрінеді" },
+  "Three specialized agents coordinate on every answer. Pick": { ru: "Три специализированных агента согласуют каждый ответ. Выберите", kk: "Үш мамандандырылған агент әр жауапты келіседі. Таңдаңыз:" },
+  "Sequential": { ru: "Последовательно", kk: "Кезекпен" },
+  "for a classic reflection loop,": { ru: "— классический цикл проверки,", kk: "— классикалық тексеру циклі," },
+  "Parallel": { ru: "Параллельно", kk: "Параллель" },
+  "for two writers on different models merged by a Judge, or": { ru: "— два автора на разных моделях, их сводит Судья, или", kk: "— әртүрлі модельдегі екі автор, оларды Төреші біріктіреді, немесе" },
+  "Debate": { ru: "Дебаты", kk: "Дебат" },
+  "where a Pro and a Con advocate argue and a Moderator synthesizes a balanced recommendation.": { ru: "— сторонник и противник спорят, а Модератор сводит взвешенную рекомендацию.", kk: "— жақтаушы мен қарсылас дауласады, ал Модератор теңгерімді ұсыным жасайды." },
+  "Open multi-agent →": { ru: "Открыть мультиагент →", kk: "Мультиагентті ашу →" },
+  "3 strategies": { ru: "3 стратегии", kk: "3 стратегия" },
+  "Live streaming": { ru: "Ответ в реальном времени", kk: "Нақты уақыттағы жауап" },
+  "Live cost + tokens": { ru: "Стоимость и токены вживую", kk: "Құны мен токендер тірі" },
+  "Mixed models per role": { ru: "Своя модель на каждую роль", kk: "Әр рөлге өз моделі" },
+  "Saveable presets": { ru: "Сохраняемые наборы", kk: "Сақталатын жиындар" },
+  "Edit & resend": { ru: "Правка и повторная отправка", kk: "Түзету және қайта жіберу" },
+  "Webhook on done": { ru: "Вебхук по завершении", kk: "Аяқталғанда вебхук" },
+  "Public share + OG preview": { ru: "Публичная ссылка + превью OG", kk: "Жария сілтеме + OG алдын ала көрінісі" },
+  "Export JSON + CSV": { ru: "Экспорт JSON + CSV", kk: "JSON + CSV экспорты" },
+  "↩ Thread continuation": { ru: "↩ Продолжение ветки", kk: "↩ Тарамақты жалғастыру" },
+  "📋 Templates": { ru: "📋 Шаблоны", kk: "📋 Үлгілер" },
+  "⚡ Batch runs": { ru: "⚡ Пакетные прогоны", kk: "⚡ Топтық іске қосулар" },
+  "📊 Analytics": { ru: "📊 Аналитика", kk: "📊 Аналитика" },
+  "🧪 Eval harness": { ru: "🧪 Стенд оценки", kk: "🧪 Бағалау стенді" },
+  "📝 Prompts library": { ru: "📝 Библиотека промптов", kk: "📝 Промпттар кітапханасы" },
+  "🕐 Scheduled batches": { ru: "🕐 Пакеты по расписанию", kk: "🕐 Кесте бойынша топтар" },
+  "📓 Notebook": { ru: "📓 Блокнот", kk: "📓 Дәптер" },
+  "◈ AI Providers": { ru: "◈ ИИ-провайдеры", kk: "◈ ЖИ провайдерлері" },
+  "📖 API Docs": { ru: "📖 Документация API", kk: "📖 API құжаттамасы" },
+  "🎮 Playground": { ru: "🎮 Песочница", kk: "🎮 Құмсалғыш" },
+  "⭐ Top Rated": { ru: "⭐ Лучшие по оценкам", kk: "⭐ Ең жоғары бағаланған" },
+  "⚙️ Pipeline Builder": { ru: "⚙️ Конструктор конвейеров", kk: "⚙️ Конвейер құрастырғыш" },
+  "✨ Optimizer": { ru: "✨ Оптимизатор", kk: "✨ Оңтайландырғыш" },
+  // ── лист ожидания ──
+  "Платить сегодня рано? Оставьте адрес": { en: "Too early to pay today? Leave your address", kk: "Бүгін төлеуге ерте ме? Мекенжайыңызды қалдырыңыз" },
+  "Напишем, когда у AEVION откроются новые модули и возможности.": { en: "We'll write when AEVION opens new modules and features.", kk: "AEVION-да жаңа модульдер мен мүмкіндіктер ашылғанда жазамыз." },
+  "Сообщить мне": { en: "Notify me", kk: "Хабарлау" },
+};
+
+/** Строка на языке страницы: есть перевод — он, нет — исходник. */
+export function tm(lang: string | undefined, src: string): string {
+  const e = MC_TEXT[src];
+  return (lang && e?.[lang as "en" | "ru" | "kk"]) || src;
+}

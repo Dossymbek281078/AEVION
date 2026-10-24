@@ -22,6 +22,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useI18nOptional } from "@/lib/i18n";
+import { tm } from "./mcText";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
@@ -354,8 +355,8 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         // 402 модульной стены приходит сюда кодом upgrade_required — человеку нужен текст, а
         // кнопки входа и тарифа уже даёт стена (PaywallModal). Замер 13.10.2026: на экране
         // печаталось голое «upgrade_required».
-        if (conv?.error === "upgrade_required") throw new Error("Бесплатные запросы на сегодня закончились. Войдите под почтой оплаты или откройте тариф — кнопки ниже.");
-        throw new Error(conv?.error || "не удалось создать беседу");
+        if (conv?.error === "upgrade_required") throw new Error(tm(mcLang, "Бесплатные запросы на сегодня закончились. Войдите под почтой оплаты или откройте тариф — кнопки ниже."));
+        throw new Error(conv?.error || tm(mcLang, "не удалось создать беседу"));
       }
 
       const r = await fetch(apiUrl(`/api/multichat/conversations/${conv.id}/dispatch`), {
@@ -374,7 +375,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       setDissent(d.dissent || null);
       setReceipt(d.receipt || null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "запрос не прошёл");
+      setError(e instanceof Error ? e.message : tm(mcLang, "запрос не прошёл"));
     } finally {
       setBusy(false);
       setПересчёт((n) => n + 1);
@@ -410,7 +411,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       setReceipt(null); // чека у примера нет: ответы не наши, платить и подписывать нечего
       setIsExample(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "пример не загрузился");
+      setError(e instanceof Error ? e.message : tm(mcLang, "пример не загрузился"));
     } finally {
       setBusy(false);
     }
@@ -418,18 +419,16 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
 
   const verdictLabel =
     dissent?.verdict === "consensus"
-      ? "Агенты сошлись"
+      ? tm(mcLang, "Агенты сошлись")
       : dissent?.verdict === "split"
-        ? "Агенты разошлись"
-        : "Сравнивать не с чем";
+        ? tm(mcLang, "Агенты разошлись")
+        : tm(mcLang, "Сравнивать не с чем");
 
   return (
     <section style={{ marginTop: 32, paddingTop: 28, borderTop: `1px solid ${T.surfaceSoft}` }}>
-      <h2 style={{ fontSize: 24, color: T.text, margin: "0 0 6px", fontWeight: 600 }}>Консилиум</h2>
+      <h2 style={{ fontSize: 24, color: T.text, margin: "0 0 6px", fontWeight: 600 }}>{tm(mcLang, "Консилиум")}</h2>
       <p style={{ fontSize: 15, color: T.textMute, lineHeight: 1.6, maxWidth: 720, margin: "0 0 18px" }}>
-        Опишите задачу — три агента с разными ролями ответят независимо. Мы не сводим их в один
-        причёсанный ответ: сначала показываем, <span style={{ color: T.accent }}>где они разошлись</span>, потому
-        что именно там ответу нельзя верить на слово.
+        {tm(mcLang, "Опишите задачу — три агента с разными ролями ответят независимо. Мы не сводим их в один причёсанный ответ: сначала показываем,")} <span style={{ color: T.accent }}>{tm(mcLang, "где они разошлись")}</span>{tm(mcLang, ", потому что именно там ответу нельзя верить на слово.")}
       </p>
 
       <textarea
@@ -457,7 +456,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             fontSize: 14, fontWeight: 600, cursor: disabled ? "default" : "pointer",
           }}
         >
-          {busy ? MC.busyAsk : "Спросить консилиум"}
+          {busy ? MC.busyAsk : tm(mcLang, "Спросить консилиум")}
         </button>
         <button
           onClick={runExample}
@@ -468,7 +467,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             fontSize: 14, cursor: busy ? "default" : "pointer",
           }}
         >
-          Показать на примере
+          {tm(mcLang, "Показать на примере")}
         </button>
         <span style={{ fontSize: 12, color: T.textFaded }}>
           {authed === false
@@ -484,9 +483,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           показать нарисованный результат. */}
       {isExample && (
         <p style={{ fontSize: 12, color: T.warn, margin: "12px 0 0", lineHeight: 1.6, maxWidth: 720 }}>
-          Это пример: ответы трёх агентов заданы заранее, а разногласия ниже посчитаны
-          на сервере тем же алгоритмом, что и для настоящего запроса. Свой вопрос —
-          после входа.
+          {tm(mcLang, "Это пример: ответы трёх агентов заданы заранее, а разногласия ниже посчитаны на сервере тем же алгоритмом, что и для настоящего запроса. Свой вопрос — после входа.")}
         </p>
       )}
 
@@ -512,7 +509,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.contradictions && dissent.contradictions.length > 0 && (
             <>
               <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, margin: "14px 0 6px" }}>
-                Прямое противоречие
+                {tm(mcLang, "Прямое противоречие")}
               </p>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 14 }}>
                 {dissent.contradictions.slice(0, 5).map((c, i) => (
@@ -530,7 +527,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.numericConflicts.length > 0 && (
             <>
               <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, margin: "14px 0 6px" }}>
-                Расхождения в числах
+                {tm(mcLang, "Расхождения в числах")}
               </p>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 14 }}>
                 {dissent.numericConflicts.slice(0, 5).map((c, i) => (
@@ -547,7 +544,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
 
           {dissent.outlier && (
             <p style={{ fontSize: 14, color: T.textDim, margin: "14px 0 0" }}>
-              <span style={{ color: T.textFaded }}>Особняком: </span>
+              <span style={{ color: T.textFaded }}>{tm(mcLang, "Особняком:")} </span>
               <span style={{ color: T.warn }}>{имяАгента(dissent.outlier.agentId)}</span>
               <span style={{ fontSize: 12, color: T.textFaded }}>
                 {" "}— его ответ дальше всех от остальных. Это не «неправ», это «прочитать первым».
@@ -557,8 +554,8 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
 
           {dissent.hedges.length > 0 && (
             <p style={{ fontSize: 14, color: T.textDim, margin: "8px 0 0" }}>
-              <span style={{ color: T.textFaded }}>Осторожность и отказы: </span>
-              {dissent.hedges.map((h) => `${имяАгента(h.agentId)} (${h.kind === "failed" ? "не ответил" : h.note})`).join(", ")}
+              <span style={{ color: T.textFaded }}>{tm(mcLang, "Осторожность и отказы:")} </span>
+              {dissent.hedges.map((h) => `${имяАгента(h.agentId)} (${h.kind === "failed" ? tm(mcLang, "не ответил") : h.note})`).join(", ")}
             </p>
           )}
 
@@ -568,7 +565,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.checks && dissent.checks.length > 0 && (
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${T.lineSoft}` }}>
               <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, margin: "0 0 8px" }}>
-                Что проверить
+                {tm(mcLang, "Что проверить")}
               </p>
               <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 7 }}>
                 {dissent.checks.map((c, i) => (
@@ -578,7 +575,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                 ))}
               </ol>
               <p style={{ fontSize: 11, color: T.textFaded, margin: "10px 0 0" }}>
-                Порядок — по проверяемости: сверху то, что закрывается за минуту.
+                {tm(mcLang, "Порядок — по проверяемости: сверху то, что закрывается за минуту.")}
               </p>
             </div>
           )}
@@ -603,10 +600,10 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             }
             style={{ background: "transparent", border: `1px solid ${T.lineSoft}`, borderRadius: 8, padding: "4px 10px", color: T.textDim, fontSize: 12, cursor: "pointer" }}
           >
-            Скачать чек
+            {tm(mcLang, "Скачать чек")}
           </button>
           <a href="/multichat-engine/verify" style={{ color: T.textMute, fontSize: 12, textDecoration: "underline" }}>
-            проверить чек
+            {tm(mcLang, "проверить чек")}
           </a>
         </div>
       )}
@@ -625,10 +622,10 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             }
             style={{ background: "transparent", border: `1px solid ${T.lineSoft}`, borderRadius: 8, padding: "6px 12px", color: T.textDim, fontSize: 13, cursor: "pointer" }}
           >
-            Скачать отчёт
+            {tm(mcLang, "Скачать отчёт")}
           </button>
           <span style={{ fontSize: 12, color: T.textFaded, marginLeft: 10 }}>
-            Markdown: вопрос, разногласия, что проверить, ответы и хеш чека
+            {tm(mcLang, "Markdown: вопрос, разногласия, что проверить, ответы и хеш чека")}
           </span>
         </div>
       )}

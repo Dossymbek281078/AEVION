@@ -2414,6 +2414,13 @@ export default function CyberChessPage(){
   const[showHelp,sShowHelp]=useState(false);
   const[showSections,sShowSections]=useState(false); // навигационный хаб «Все разделы»
   const[showSettings,sShowSettings]=useState(false);
+  // Тексты окна «Настройки» на трёх языках — отдельный чанк, грузится при первом открытии
+  // (24.10.2026: в i18n.ts они раздували модули первого экрана на 18 КБ).
+  const[setText,sSetText]=useState<Record<string,Record<string,string>>|null>(null);
+  useEffect(()=>{if(!showSettings||setText)return;
+    import("./settingsText").then(m=>sSetText(m.SETTINGS_TEXT)).catch(e=>{console.error("[CyberChess] тексты настроек не загрузились",e);sShowSettings(false);showToast(cc.t("attr.settings")+": "+(cc.locale==="en"?"failed to load, try again":cc.locale==="kk"?"жүктелмеді, қайталаңыз":"не загрузились, попробуйте ещё раз"),"error")});
+  },[showSettings,setText]);
+  const st=(k:string)=>setText?.[cc.locale]?.[k]??setText?.ru?.[k]??k;
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
   // «⚙ Ещё» — overflow-меню шапки. Свернули микро-зоны Инструменты/Навигация (настройки,
   // музыка, фулскрин, раскладка, язык, экосистема) в одно меню, чтобы в шапке остались
@@ -16276,7 +16283,7 @@ ${question.trim()}`;
     </Modal>
 
     {/* ═══ Settings — единая панель управления ═══ */}
-    <Modal open={showSettings} onClose={()=>sShowSettings(false)} size="md"
+    <Modal open={showSettings&&!!setText} onClose={()=>sShowSettings(false)} size="md"
       title={cc.t("attr.settings_2")}>
       {(()=>{
         const Row=({label,desc,checked,onChange,disabled}:{label:string;desc:string;checked:boolean;onChange:()=>void;disabled?:boolean})=>(
@@ -16293,19 +16300,19 @@ ${question.trim()}`;
         );
         return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
           <div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🌗 Внешний вид</div>
-            <Row label="Тёмная тема" desc="Тёмный фон, светлый текст. Темы доски и набор фигур не меняются." checked={themeMode==="dark"} onChange={()=>{sThemeMode(m=>m==="dark"?"light":"dark");showToast(themeMode==="dark"?"Светлая тема":"Тёмная тема","info")}}/>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>{st("sec_look")}</div>
+            <Row label={st("dark")} desc={st("dark_d")} checked={themeMode==="dark"} onChange={()=>{sThemeMode(m=>m==="dark"?"light":"dark");showToast(themeMode==="dark"?st("light"):st("dark"),"info")}}/>
             {/* Скорость ответа ИИ — комфорт для премувов. Больше пауза = спокойнее ставить
                 и видеть премувы (в т.ч. длинные цепочки). Прямой ответ на фидбек про премувы. */}
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
-              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>⏱ Пауза ИИ перед ходом</div>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>{st("pace")}</div>
               <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>
-                Насколько ИИ «думает» перед ответом. Больше пауза — удобнее ставить и видеть премувы (можно выстроить цепочку). Не влияет на силу игры.
+                {st("pace_d")}
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {[{ms:0,l:"Мгновенно"},{ms:800,l:"Быстро"},{ms:1500,l:"Спокойно"},{ms:3000,l:"Медленно · 3с"},{ms:5000,l:"Макс · 5с"}].map(o=>{
+                {[{ms:0,l:st("pace_0")},{ms:800,l:st("pace_1")},{ms:1500,l:st("pace_2")},{ms:3000,l:st("pace_3")},{ms:5000,l:st("pace_4")}].map(o=>{
                   const sel=aiPaceMs===o.ms;
-                  return <button key={o.ms} onClick={()=>{sAiPaceMs(o.ms);showToast(`Пауза ИИ: ${o.l}`,"info")}}
+                  return <button key={o.ms} onClick={()=>{sAiPaceMs(o.ms);showToast(`${st("pace_toast")}: ${o.l}`,"info")}}
                     style={{padding:"7px 13px",borderRadius:RADIUS.full,cursor:"pointer",fontSize:12.5,fontWeight:800,whiteSpace:"nowrap",
                       border:`1.5px solid ${sel?CC.brand:CC.border}`,background:sel?CC.brandSoft:CC.surface1,color:sel?CC.brand:CC.textDim}}>{o.l}</button>;
                 })}
@@ -16313,15 +16320,15 @@ ${question.trim()}`;
             </div>
             {/* Фоновое изображение */}
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
-              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>🖼 Фон приложения</div>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>{st("bg")}</div>
               <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>
-                Сейчас: <b style={{color:CC.text}}>{BG_PRESETS.find(p=>p.id===bgPreset)?.emoji||"📷"} {bgPreset.startsWith("data:")||bgPreset.startsWith("blob:")?"Свой фон":(BG_PRESETS.find(p=>p.id===bgPreset)?.name||"Без фона")}</b>
+                {st("now")} <b style={{color:CC.text}}>{BG_PRESETS.find(p=>p.id===bgPreset)?.emoji||"📷"} {bgPreset.startsWith("data:")||bgPreset.startsWith("blob:")?st("bg_own"):(BG_PRESETS.find(p=>p.id===bgPreset)?.name||st("bg_none"))}</b>
               </div>
               {/* Группы пресетов */}
               {[
-                {label:"Без фона / Абстрактные",ids:["none","midnight","aurora","forest","ocean","sunset","chess-marble"]},
-                {label:"🏳 Флаги стран",ids:["flag-kz","flag-ru","flag-us","flag-de","flag-fr","flag-gb"]},
-                {label:"♟ Шахматные клубы",ids:["club-wood","club-luxury","club-modern"]},
+                {label:st("bg_g1"),ids:["none","midnight","aurora","forest","ocean","sunset","chess-marble"]},
+                {label:st("bg_g2"),ids:["flag-kz","flag-ru","flag-us","flag-de","flag-fr","flag-gb"]},
+                {label:st("bg_g3"),ids:["club-wood","club-luxury","club-modern"]},
               ].map(group=><div key={group.label} style={{marginBottom:SPACE[2]}}>
                 <div style={{fontSize:9,fontWeight:900,color:CC.textMute,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:4}}>{group.label}</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
@@ -16346,77 +16353,77 @@ ${question.trim()}`;
               </div>)}
               {/* Загрузить свой */}
               <div style={{marginTop:SPACE[2]}}>
-                <div style={{fontSize:9,fontWeight:900,color:CC.textMute,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:4}}>Свой фон</div>
+                <div style={{fontSize:9,fontWeight:900,color:CC.textMute,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:4}}>{st("bg_own")}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                   <label style={{padding:"6px 12px",borderRadius:RADIUS.full,border:`1px dashed ${CC.border}`,background:CC.surface2,color:CC.textDim,cursor:"pointer",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:5}}>
-                    📁 Загрузить с компьютера
+                    {st("bg_upload")}
                     <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
                       const f=e.target.files?.[0];if(!f)return;
                       const reader=new FileReader();
                       reader.onload=()=>{
                         const url=reader.result as string;
                         sBgPreset(url);
-                        try{localStorage.setItem("cc_bg_preset_v1",url)}catch{showToast("Фото слишком большое для сохранения","error")}
-                        showToast("📁 Фон загружен","success");
+                        try{localStorage.setItem("cc_bg_preset_v1",url)}catch{showToast(st("bg_big"),"error")}
+                        showToast(st("bg_loaded"),"success");
                       };
                       reader.readAsDataURL(f);
                       e.target.value="";
                     }}/>
                   </label>
-                  {(bgPreset.startsWith("data:")||bgPreset.startsWith("blob:"))&&<button onClick={()=>{sBgPreset("none");showToast("Фон убран","info")}} style={{padding:"6px 10px",borderRadius:RADIUS.full,border:`1px solid ${CC.danger}`,background:"transparent",color:CC.danger,cursor:"pointer",fontSize:11,fontWeight:700}}>✕ Убрать</button>}
+                  {(bgPreset.startsWith("data:")||bgPreset.startsWith("blob:"))&&<button onClick={()=>{sBgPreset("none");showToast(st("bg_removed"),"info")}} style={{padding:"6px 10px",borderRadius:RADIUS.full,border:`1px solid ${CC.danger}`,background:"transparent",color:CC.danger,cursor:"pointer",fontSize:11,fontWeight:700}}>{st("bg_remove")}</button>}
                 </div>
-                <div style={{fontSize:10,color:CC.textMute,marginTop:4}}>JPG/PNG/WebP · фон применяется только в CyberChess</div>
+                <div style={{fontSize:10,color:CC.textMute,marginTop:4}}>JPG/PNG/WebP · {st("bg_note")}</div>
               </div>
             </div>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>☁ Аккаунт и синхронизация</div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>{st("sec_acc")}</div>
             {ccAuth.user ? (
               <div style={{display:"flex",flexDirection:"column",gap:8,padding:"4px 0"}}>
-                <div style={{fontSize:12,color:CC.textDim}}>Вошёл как <b style={{color:CC.text}}>{ccAuth.user.email||ccAuth.user.name}</b>. Рейтинг, история и Chessy сохраняются в аккаунт.</div>
+                <div style={{fontSize:12,color:CC.textDim}}>{st("acc_as")} <b style={{color:CC.text}}>{ccAuth.user.email||ccAuth.user.name}</b>. {st("acc_note")}</div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button onClick={async()=>{const ok=await ccCloudPush();showToast(ok?"☁ Сохранено в облако":"Не удалось сохранить","info")}} style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:12,fontWeight:800,cursor:"pointer"}}>☁ Сохранить в облако</button>
+                  <button onClick={async()=>{const ok=await ccCloudPush();showToast(ok?st("cloud_ok"):st("cloud_fail"),"info")}} style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:12,fontWeight:800,cursor:"pointer"}}>{st("cloud_save")}</button>
                   <button onClick={async()=>{
                     const got=await ccCloudFetch();
-                    if(!got||!got.state||Object.keys(got.state).length===0){showToast("В облаке пока нет сохранённого прогресса","info");return}
-                    if(!window.confirm("Восстановить прогресс из облака? Текущие локальные данные CyberChess будут заменены облачными (необратимо)."))return;
+                    if(!got||!got.state||Object.keys(got.state).length===0){showToast(st("cloud_empty"),"info");return}
+                    if(!window.confirm(st("cloud_confirm")))return;
                     ccCloudApply(got.state,got.clientTs||Date.now());
-                    showToast("⬇ Восстановлено — обновляю…","success");
+                    showToast(st("cloud_restored"),"success");
                     setTimeout(()=>{try{window.location.reload()}catch{}},700);
-                  }} style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.info}`,background:CC.infoSoft,color:CC.info,fontSize:12,fontWeight:800,cursor:"pointer"}}>⬇ Восстановить из облака</button>
-                  <a href="/account" style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,fontSize:12,fontWeight:800,textDecoration:"none"}}>Аккаунт →</a>
+                  }} style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.info}`,background:CC.infoSoft,color:CC.info,fontSize:12,fontWeight:800,cursor:"pointer"}}>{st("cloud_restore")}</button>
+                  <a href="/account" style={{padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,fontSize:12,fontWeight:800,textDecoration:"none"}}>{st("acc_link")}</a>
                 </div>
-                <div style={{fontSize:10,color:CC.textMute}}>Авто-бэкап каждые 90с и при сворачивании вкладки. «Восстановить» подтянет прогресс с другого устройства (last-writer-wins).</div>
+                <div style={{fontSize:10,color:CC.textMute}}>{st("acc_backup")}</div>
               </div>
             ) : (
               <div style={{display:"flex",flexDirection:"column",gap:8,padding:"4px 0"}}>
-                <div style={{fontSize:12,color:CC.textDim}}>Войди в аккаунт AEVION — рейтинг, история и Chessy будут синхронизироваться между устройствами.</div>
-                <a href="/auth?next=/cyberchess" style={{alignSelf:"flex-start",padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:12,fontWeight:800,textDecoration:"none"}}>👤 Войти</a>
+                <div style={{fontSize:12,color:CC.textDim}}>{st("acc_signin_d")}</div>
+                <a href="/auth?next=/cyberchess" style={{alignSelf:"flex-start",padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:12,fontWeight:800,textDecoration:"none"}}>{st("acc_signin")}</a>
               </div>
             )}
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🔊 Звук</div>
-            <Row label="Звук в игре" desc="Мастер-переключатель всех звуков. M — быстро включить и выключить." checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Mute","info")}}/>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>{st("sec_sound")}</div>
+            <Row label={st("snd")} desc={st("snd_d")} checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?st("snd_on"):st("snd_off"),"info")}}/>
             {!muted&&<div style={{paddingLeft:16,display:"flex",flexDirection:"column",gap:2}}>
-              <Row label="↳ Звуки ходов" desc="Ход, взятие, рокировка, шах, премув." checked={sndMoves} onChange={()=>{const nv=!sndMoves;sSndMoves(nv);try{localStorage.setItem(SK_MOVES,nv?"1":"0")}catch{}}}/>
-              <Row label="↳ Финальный сигнал" desc="Звук при мате, просрочке, сдаче." checked={sndClock} onChange={()=>{const nv=!sndClock;sSndClock(nv);try{localStorage.setItem(SK_CLOCK,nv?"1":"0")}catch{}}}/>
-              <Row label="↳ События интерфейса" desc="Уведомления, награды, короткие звуки." checked={sndUi} onChange={()=>{const nv=!sndUi;sSndUi(nv);try{localStorage.setItem(SK_UI,nv?"1":"0")}catch{}}}/>
+              <Row label={st("snd_moves")} desc={st("snd_moves_d")} checked={sndMoves} onChange={()=>{const nv=!sndMoves;sSndMoves(nv);try{localStorage.setItem(SK_MOVES,nv?"1":"0")}catch{}}}/>
+              <Row label={st("snd_end")} desc={st("snd_end_d")} checked={sndClock} onChange={()=>{const nv=!sndClock;sSndClock(nv);try{localStorage.setItem(SK_CLOCK,nv?"1":"0")}catch{}}}/>
+              <Row label={st("snd_ui")} desc={st("snd_ui_d")} checked={sndUi} onChange={()=>{const nv=!sndUi;sSndUi(nv);try{localStorage.setItem(SK_UI,nv?"1":"0")}catch{}}}/>
             </div>}
-            <Row label="Голос-коуч (гроссмейстерский разбор)" desc="ИИ вслух объясняет ходы на уровне гроссмейстера. Включается в анализе и обучении, в партии — по желанию. В задачах не звучит." checked={liveCommentary} onChange={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?"Голос-коуч включён — разбор в анализе/обучении":"Голос-коуч выключен","info")}}/>
-            <Row label="Голос на Master Games" desc="Чтение разбора и заметок к ходам в библиотеке мастеров." checked={masterVoice} onChange={()=>{
+            <Row label={st("voice")} desc={st("voice_d")} checked={liveCommentary} onChange={()=>{const nv=!liveCommentary;sLiveCommentary(nv);showToast(nv?st("voice_on"):st("voice_off"),"info")}}/>
+            <Row label={st("mvoice")} desc={st("mvoice_d")} checked={masterVoice} onChange={()=>{
               if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();
               sMasterVoice(v=>!v);
             }}/>
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
-              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Звуки фигур — {CHESS_SOUND_PRESETS.filter(p=>p.category!=="silent").length} пресетов + молчание</div>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>{st("snd_presets_a")} — {CHESS_SOUND_PRESETS.filter(p=>p.category!=="silent").length} {st("snd_presets_b")}</div>
               <div style={{fontSize:12,color:CC.textDim,lineHeight:1.4,marginBottom:SPACE[2]}}>
-                Сейчас: <b style={{color:CC.text}}>{CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.emoji} {CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.name}</b>
+                {st("now")} <b style={{color:CC.text}}>{CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.emoji} {CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.name}</b>
               </div>
               {(["classic","exotic","silent"] as const).map(cat=>{
                 const items=CHESS_SOUND_PRESETS.filter(p=>p.category===cat);
                 if(items.length===0)return null;
-                const catLabel=cat==="classic"?"Классические":cat==="exotic"?"Нетиповые":"Тишина";
+                const catLabel=cat==="classic"?st("cat_classic"):cat==="exotic"?st("cat_exotic"):st("cat_silent");
                 return <div key={cat} style={{marginBottom:SPACE[2]}}>
                   <div style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:4}}>{catLabel}</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
@@ -16440,23 +16447,23 @@ ${question.trim()}`;
                   </div>
                 </div>;
               })}
-              <div style={{fontSize:11,color:CC.textMute,marginTop:4}}>Нажми на готовый вариант — ход сразу показывается на доске.</div>
+              <div style={{fontSize:11,color:CC.textMute,marginTop:4}}>{st("snd_hint")}</div>
             </div>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎮 Игра</div>
-            <Row label="Сразу ферзь при превращении" desc="Пешка на 8-й сразу становится ферзём — без лишнего окна. Удобно в пуле и блице. Выключи, если нужно превращать в коня, ладью или слона." checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
-            <Row label="Подсказка дебюта (стрелка)" desc="Фиолетовая пунктирная стрелка показывает книжный ход в дебюте (первые 8 ходов, на твоём ходу). Помогает изучать теорию." checked={showBookArrow} onChange={()=>sShowBookArrow(v=>!v)}/>
-            <Row label="Карта угроз" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
-            <Row label="Streamer Mode" desc="Скрывает рейтинг и историю — для стримов и публичных демо." checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>{st("sec_game")}</div>
+            <Row label={st("queen")} desc={st("queen_d")} checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
+            <Row label={st("book")} desc={st("book_d")} checked={showBookArrow} onChange={()=>sShowBookArrow(v=>!v)}/>
+            <Row label={st("threat")} desc={st("threat_d")} checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
+            <Row label={st("streamer")} desc={st("streamer_d")} checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
-              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Глубина анализа Stockfish (F2-3)</div>
-              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>Для CPI и трёх лучших показателей. Не влияет на силу противника. <b style={{color:CC.text}}>Сейчас: depth={sfDepth}</b></div>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>{st("depth")}</div>
+              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>{st("depth_d")} <b style={{color:CC.text}}>{st("now")} depth={sfDepth}</b></div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {[{d:14,lbl:"⚡ 14 (быстро)"},{d:18,lbl:"🎯 18 (баланс)"},{d:22,lbl:"📈 22 (точнее)"},{d:25,lbl:"🔬 25 (макс)"},{d:30,lbl:"🧠 30 (максимум)"}].map(opt=>{
+                {[{d:14,lbl:st("d14")},{d:18,lbl:st("d18")},{d:22,lbl:st("d22")},{d:25,lbl:st("d25")},{d:30,lbl:st("d30")}].map(opt=>{
                   const selected=sfDepth===opt.d;
                   return <button key={opt.d}
-                    onClick={()=>{sSfDepth(opt.d);showToast(`Stockfish, глубина ${opt.d}`,"info")}}
+                    onClick={()=>{sSfDepth(opt.d);showToast(`${st("depth_toast")} ${opt.d}`,"info")}}
                     style={{
                       padding:"5px 10px",borderRadius:RADIUS.full,
                       border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
@@ -16469,23 +16476,23 @@ ${question.trim()}`;
                   </button>;
                 })}
               </div>
-              <div style={{fontSize:10,color:CC.textMute,marginTop:4}}>Чем выше — тем точнее CPI, но дольше ожидание (depth 25+ может занимать 1-2 сек на ход).</div>
+              <div style={{fontSize:10,color:CC.textMute,marginTop:4}}>{st("depth_note")}</div>
             </div>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>📚 Анализ</div>
-            <Row label="Обзор дебютов" desc="Автозагрузка статистики мастеров для текущей позиции в разделе «Анализ»." checked={showOpeningExp} onChange={()=>sShowOpeningExp(v=>!v)}/>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>{st("sec_analysis")}</div>
+            <Row label={st("openexp")} desc={st("openexp_d")} checked={showOpeningExp} onChange={()=>sShowOpeningExp(v=>!v)}/>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎨 Тема доски</div>
-            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>Сейчас: <b style={{color:CC.text}}>{bT.name} {bT.icon}</b></div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>{st("sec_theme")}</div>
+            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>{st("now")} <b style={{color:CC.text}}>{bT.name} {bT.icon}</b></div>
             <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
               {BOARD_THEMES.map((th,i)=>{
                 const locked=!!th.premium&&!chessy.owned[th.premium!];
                 const selected=boardTheme===i;
                 return <button key={i}
                   className="cc-focus-ring"
-                  onClick={()=>{if(locked){showToast("Премиум — доступно в магазине","info");sShowSettings(false);sShowShop(true);return}sBoardTheme(i)}}
+                  onClick={()=>{if(locked){showToast(st("premium"),"info");sShowSettings(false);sShowShop(true);return}sBoardTheme(i)}}
                   style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",
                     borderRadius:RADIUS.full,
                     border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
@@ -16502,24 +16509,24 @@ ${question.trim()}`;
                 </button>;
               })}
             </div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>🖼 Декор доски</div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>{st("sec_art")}</div>
             <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[2]}}>
               {BOARD_ART_OPTIONS.map(opt=>{
                 const selected=boardArt===opt.v;
-                return <button key={opt.v} className="cc-focus-ring" onClick={()=>{sBoardArt(opt.v);showToast(`Арт: ${opt.label}`,"info")}}
+                return <button key={opt.v} className="cc-focus-ring" onClick={()=>{sBoardArt(opt.v);showToast(`${st("art_toast")}: ${opt.label}`,"info")}}
                   title={opt.hint}
                   style={{padding:"5px 12px",borderRadius:RADIUS.full,border:selected?`2px solid ${CC.accent}`:`1px solid ${CC.border}`,background:selected?CC.accentSoft:CC.surface1,cursor:"pointer",fontSize:12,fontWeight:selected?800:600,color:selected?CC.accent:CC.textDim,transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
                   {opt.label}
                 </button>;
               })}
             </div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>♟ Набор фигур</div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>{st("sec_pieces")}</div>
             <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[2]}}>
               {PIECE_SETS.map(ps=>{
                 const selected=activePieceSet===ps.id;
                 return <button key={ps.id}
                   className="cc-focus-ring"
-                  onClick={()=>{setActivePieceSet(ps.id);showToast(`Набор: ${ps.name}`,"info")}}
+                  onClick={()=>{setActivePieceSet(ps.id);showToast(`${st("pieces_toast")}: ${ps.name}`,"info")}}
                   title={ps.hint}
                   style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
                     borderRadius:RADIUS.full,
@@ -16535,23 +16542,23 @@ ${question.trim()}`;
                 </button>;
               })}
             </div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>⚡ Очередь премувов</div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>{st("sec_pm")}</div>
             <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,color:CC.textDim,fontWeight:600}}>
-              <span>Лимит: <b style={{color:CC.text}}>{pmLim}</b></span>
+              <span>{st("pm_limit")} <b style={{color:CC.text}}>{pmLim}</b></span>
               <input type="range" aria-label={cc.t("attr.premove_limit")} min={1} max={50} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
             </label>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:900,color:CC.danger,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>⚠ Сброс данных</div>
-            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.5}}>Удалить локальные данные: партии, рейтинг, Chessy, достижения, прогресс мастер-партий. Это действие необратимо.</div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.danger,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>{st("sec_reset")}</div>
+            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.5}}>{st("reset_d")}</div>
             <Btn size="sm" variant="danger" onClick={()=>{
-              if(!confirm("Точно сбросить ВСЁ? Партии, рейтинг, Chessy и прогресс будут удалены."))return;
+              if(!confirm(st("reset_confirm")))return;
               try{
                 const keys=["aevion_chess_games_v1","aevion_chess_rating_v2","aevion_chess_stats_v2","aevion_chessy_v1","aevion_chessy_log_v1","aevion_chess_master_progress_v1","aevion_chess_coord_lb_v1","aevion_chess_personality_v1","aevion_chess_daily_v1","aevion_variant_stats_v1","aevion_chess_clones_v1","aevion_chess_rival_v1","aevion_chess_tournament_v1","aevion_chess_trophies_v1"];
                 for(const k of keys)try{localStorage.removeItem(k)}catch{}
-                showToast("Локальные данные сброшены — обнови страницу","success");
-              }catch{showToast("Не удалось сбросить","error")}
-            }}>🗑 Сбросить локальные данные</Btn>
+                showToast(st("reset_done"),"success");
+              }catch{showToast(st("reset_fail"),"error")}
+            }}>{st("reset_btn")}</Btn>
           </div>
         </div>;
       })()}

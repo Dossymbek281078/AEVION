@@ -317,6 +317,20 @@ fi
 # (поле meta.cliMessage). Связка «что на проде»:
 #   /health.deploymentId -> deployment list -> cliMessage -> sha=...
 # Читается одной командой: node C:/Users/user/aevion-prod-commit.mjs
+# 🔴 23.10.2026: ПРИВЯЗКА ЗАЛИВАЕТ НЕ ТО ДЕРЕВО. Запись в ~/.railway/config.json хранит projectPath —
+# каталог, который `railway up` отправляет на сборку. Копия записи для нового worktree унесла projectPath
+# старого каталога: две выкатки за день (14:24, 21:20) ушли из aevion-keyrot вместо текущего дерева, образ
+# получил репозиторную заглушку build-info (commit=unknown), а на проде 7 часов был не тот коммит при зелёных
+# приёмках по признакам, общим для обоих. Поэтому перед загрузкой сверяем путь записи с каталогом выкатки.
+LINK_PATH="$(node -e 'const fs=require("fs");const os=require("os");let o={};try{o=JSON.parse(fs.readFileSync(os.homedir()+"/.railway/config.json","utf8"))}catch{};const cwd=process.argv[1].replace(/\\/g,"/").toLowerCase();const k=Object.keys(o.projects||{}).find(k=>k.replace(/\\/g,"/").toLowerCase()===cwd);console.log(k?String(o.projects[k].projectPath||"").replace(/\\/g,"/"):"")' "$(cygpath -m "$REPO_ROOT" 2>/dev/null || pwd -W 2>/dev/null || pwd)")"
+HERE_PATH="$(cygpath -m "$REPO_ROOT" 2>/dev/null || pwd -W 2>/dev/null || pwd)"
+if [ -n "$LINK_PATH" ] && [ "$(printf %s "$LINK_PATH" | tr '[:upper:]' '[:lower:]')" != "$(printf %s "$HERE_PATH" | tr '[:upper:]' '[:lower:]')" ]; then
+  echo "ОСТАНОВКА: привязка Railway этого каталога указывает projectPath=$LINK_PATH, а выкатка идёт из $HERE_PATH." >&2
+  echo "  railway up отправил бы ЧУЖОЕ дерево (23.10.2026 так уехали две выкатки). Исправьте projectPath записи" >&2
+  echo "  в ~/.railway/config.json на этот каталог (или перепривяжите каталог) и повторите." >&2
+  exit 2
+fi
+echo "привязка Railway: projectPath=$LINK_PATH, каталог выкатки=$HERE_PATH — совпадают"
 set +e
 env -u RAILWAY_TOKEN railway up -c -m "$MSG [sha=$SHA branch=$BRANCH]"
 UP_CODE=$?

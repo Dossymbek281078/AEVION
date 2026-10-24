@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18nOptional } from "@/lib/i18n";
 
 /**
  * Плашка зрелости модуля — из КАТАЛОГА, а не из текста страницы.
@@ -22,23 +23,32 @@ import { apiUrl } from "@/lib/apiBase";
  *    поведение, что у страницы до появления компонента, — хуже не становится.
  */
 
-const ТЕКСТ: Record<string, { слово: string; пояснение: string }> = {
-  beta: {
-    слово: "Бета",
-    пояснение: "модуль открыт и работает, идёт доводка — о найденном пишите нам",
+type Язык = "ru" | "en" | "kk";
+// 24.10.2026: плашка стоит на 17 страницах и на /en, /kk говорила по-русски.
+// ⚠️ kk — черновой перевод, нужна вычитка носителя
+const ТЕКСТ: Record<Язык, Record<string, { слово: string; пояснение: string }>> = {
+  ru: {
+    beta: { слово: "Бета", пояснение: "модуль открыт и работает, идёт доводка — о найденном пишите нам" },
+    on_request: { слово: "По запросу", пояснение: "модуль включается после разговора — напишите нам" },
+    soon: { слово: "Скоро", пояснение: "это анонс: модуль ещё не открыт" },
   },
-  on_request: {
-    слово: "По запросу",
-    пояснение: "модуль включается после разговора — напишите нам",
+  en: {
+    beta: { слово: "Beta", пояснение: "the module is open and working, still being polished — tell us what you find" },
+    on_request: { слово: "On request", пояснение: "the module is enabled after a conversation — write to us" },
+    soon: { слово: "Soon", пояснение: "this is an announcement: the module is not open yet" },
   },
-  soon: {
-    слово: "Скоро",
-    пояснение: "это анонс: модуль ещё не открыт",
+  kk: {
+    beta: { слово: "Бета", пояснение: "модуль ашық және жұмыс істейді, әлі жетілдірілуде — тапқаныңызды бізге жазыңыз" },
+    on_request: { слово: "Сұраныс бойынша", пояснение: "модуль сөйлескеннен кейін қосылады — бізге жазыңыз" },
+    soon: { слово: "Жақында", пояснение: "бұл хабарландыру: модуль әлі ашылмаған" },
   },
 };
+const ПОДПИСЬ: Record<Язык, string> = { ru: "Статус модуля", en: "Module status", kk: "Модуль мәртебесі" };
 
 export function ModuleMaturity({ id }: { id: string }) {
   const [статус, setСтатус] = useState<string | null>(null);
+  const i18n = useI18nOptional();
+  const язык: Язык = i18n?.lang === "en" ? "en" : i18n?.lang === "kk" ? "kk" : "ru";
 
   useEffect(() => {
     let отменено = false;
@@ -48,7 +58,7 @@ export function ModuleMaturity({ id }: { id: string }) {
         if (отменено || !j) return;
         const m = (j.modules ?? []).find((x: { id?: string }) => x?.id === id);
         const a = typeof m?.availability === "string" ? m.availability : null;
-        if (a && a !== "live" && ТЕКСТ[a]) setСтатус(a);
+        if (a && a !== "live" && ТЕКСТ.ru[a]) setСтатус(a);
       })
       .catch(() => {
         /* каталог не ответил — молчим, см. шапку */
@@ -59,11 +69,11 @@ export function ModuleMaturity({ id }: { id: string }) {
   }, [id]);
 
   if (!статус) return null;
-  const t = ТЕКСТ[статус];
+  const t = ТЕКСТ[язык][статус];
   return (
     <div
       role="note"
-      aria-label={`Статус модуля: ${t.слово}`}
+      aria-label={`${ПОДПИСЬ[язык]}: ${t.слово}`}
       style={{
         display: "flex",
         alignItems: "baseline",

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PRICING_TERMS, keepChannel, productById, fromPerMonthOf } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { track } from "@/lib/track";
+import { useI18nOptional } from "@/lib/i18n";
 
 // Кнопка апселла на страницах модулей. Legacy-имя PaddleUpgradeButton
 // реэкспортится из ./PaddleUpgradeButton для старых импортов (~11 модулей).
@@ -16,6 +17,15 @@ import { track } from "@/lib/track";
 
 /** Подписка на всю планету — карточка каталога, из неё и цена, и адрес. */
 const PLANET_ID = "aevion-planet";
+
+// 24.10.2026: баннер на /en и /kk говорил по-русски. Название — своё на языке:
+// в каталоге title только русский. Цена по-прежнему из каталога.
+// ⚠️ kk — черновой перевод, нужна вычитка носителя
+const COPY = {
+  ru: { choose: "Выбрать срок", opening: "Открываем цены...", title: "Подписка AEVION", from: "от", perMonth: "/мес", terms: "Все модули включены · срок от 1 до 12 месяцев · списание ежемесячно" },
+  en: { choose: "Choose a term", opening: "Opening prices...", title: "AEVION subscription", from: "from", perMonth: "/mo", terms: "All modules included · term from 1 to 12 months · billed monthly" },
+  kk: { choose: "Мерзімді таңдау", opening: "Бағалар ашылуда...", title: "AEVION жазылымы", from: "", perMonth: "/ай бастап", terms: "Барлық модуль кіреді · мерзімі 1-ден 12 айға дейін · ай сайын төленеді" },
+} as const;
 
 interface Props {
   /**
@@ -40,6 +50,8 @@ export function UpgradeButton({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const planet = productById(PLANET_ID);
+  const i18n = useI18nOptional();
+  const c = COPY[i18n?.lang === "en" ? "en" : i18n?.lang === "kk" ? "kk" : "ru"];
 
   function handleClick() {
     setLoading(true);
@@ -57,8 +69,8 @@ export function UpgradeButton({
     window.location.href = keepChannel(planet?.href ?? PRICING_TERMS, channelNow());
   }
 
-  const defaultLabel = "Выбрать срок";
-  const text = loading ? "Открываем цены..." : (label ?? defaultLabel);
+  const defaultLabel = c.choose;
+  const text = loading ? c.opening : (label ?? defaultLabel);
 
   if (variant === "banner") {
     return (
@@ -86,10 +98,10 @@ export function UpgradeButton({
                 списывала. «от» — это месяц на самом длинном сроке (12 месяцев). */}
             {planet ? (
               <div className="text-sm font-semibold text-white">
-                {planet.title} — от ${fromPerMonthOf(planet)}/мес
+                {c.title} — {c.from} ${fromPerMonthOf(planet)}{c.perMonth}
               </div>
             ) : null}
-            <div className="text-xs text-gray-400 mt-0.5">Все модули включены · срок от 1 до 12 месяцев · списание ежемесячно</div>
+            <div className="text-xs text-gray-400 mt-0.5">{c.terms}</div>
           </div>
           <button
             onClick={handleClick}

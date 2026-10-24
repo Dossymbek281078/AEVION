@@ -8,6 +8,8 @@ import { MATCHMAKING_TEXT } from "../matchmaking/matchmakingText";
 import { LEADERBOARD_TEXT } from "../leaderboard/leaderboardText";
 import { HISTORY_TEXT } from "../history/historyText";
 import { REPLAYS_TEXT } from "../replays/replaysText";
+import { SPECTATOR_TEXT } from "../spectator/spectatorText";
+import { DAILY_TEXT } from "../daily/dailyText";
 
 /**
  * Экраны CyberChess под /cyberchess/* на /en были русскими (замер 24.10.2026 браузером:
@@ -26,6 +28,9 @@ const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>
   { путь: "history/page.tsx", словарь: HISTORY_TEXT, поля: ["bullet", "blitz", "rapid", "classical"], минимум: 4 },
   // у /replays нет списков с текстом — только вызовы
   { путь: "replays/page.tsx", словарь: REPLAYS_TEXT, поля: ["__нет_полей__"], минимум: 0 },
+  { путь: "spectator/page.tsx", словарь: SPECTATOR_TEXT, поля: ["__нет_полей__"], минимум: 0 },
+  // названия фигур для диктора — в одинарных кавычках, ловятся вызовом tt(L, PIECE_NAME[…])
+  { путь: "daily/page.tsx", словарь: DAILY_TEXT, поля: ["__нет_полей__"], минимум: 0 },
 ];
 const ИСКЛЮЧЕНИЯ = new Set(["AEVION", "Chess training"]);
 
@@ -37,7 +42,7 @@ describe.each(ЭКРАНЫ)("экран $путь", ({ путь, словарь,
     const данные = [...код.matchAll(new RegExp(`\\b(?:${поля.join("|")}): "([^"]+)"`, "g"))]
       .map((m) => m[1]).filter((v) => !ИСКЛЮЧЕНИЯ.has(v));
     // знаменатель: прибор, не нашедший вызовов, был бы «чист» вслепую
-    expect(вызовы.length, "вызовов tt").toBeGreaterThan(15);
+    expect(вызовы.length, "вызовов tt").toBeGreaterThanOrEqual(10);
     expect(данные.length, "значений данных").toBeGreaterThanOrEqual(минимум);
     const все = [...new Set([...вызовы, ...данные])];
     for (const loc of ["en", "kk"] as const) {

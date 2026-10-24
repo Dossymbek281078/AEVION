@@ -42,6 +42,8 @@ const ИМЕНА = new Set([
   "Chess", "chess",
   // 24.10.2026: Glicko — название рейтинговой системы, GitHub — сервиса (страница CPI)
   "Glicko", "Glicko-", "GitHub",
+  // 24.10.2026: имена стримеров и канал из подборки студии (Levy Rozman, Jerry, Nelson Lopez, gmhikaru)
+  "Levy", "Rozman", "Jerry", "Nelson", "gmhikaru",
 ]);
 
 const BELYJ = new Set([

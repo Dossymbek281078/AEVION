@@ -8,6 +8,8 @@ import { awardInStorage } from "../chessyLedger";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ccPlural } from "../ccPlural";
+import { useCcI18n } from "../i18n";
+import { tt } from "./trainingText";
 
 const C = {
   bg: "#0f172a",
@@ -89,6 +91,7 @@ function todayKey() {
 }
 
 export default function TrainingHubPage() {
+  const { locale: L } = useCcI18n();
   const [cpiState, setCpiState] = useState<CPIState | null>(null);
   const [reminders, setReminders] = useState<Array<{ entryId: string; milestone: 1 | 3 | 7 }>>([]);
   const [dailyClaimed, setDailyClaimed] = useState(false);
@@ -138,7 +141,7 @@ export default function TrainingHubPage() {
     // то есть бонус пропадал навсегда. Теперь сначала деньги, потом отметка.
     const баланс = awardInStorage(25, "Ежедневный бонус · центр обучения");
     if (баланс === null) {
-      setClaimError("Не удалось зачислить бонус — попробуйте ещё раз.");
+      setClaimError(tt(L, "Не удалось зачислить бонус — попробуйте ещё раз."));
       return;
     }
     try { localStorage.setItem("aevion_cyberchess_training_daily_claimed_v1", todayKey()) } catch {}
@@ -152,8 +155,8 @@ export default function TrainingHubPage() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "@id": "https://aevion.app/cyberchess/training",
-        name: "Тренировки CyberChess — ежедневный план",
-        description: "Личный план на день: слабая сторона игры, вариант дня, темы для повторения и награда за выполнение.",
+        name: tt(L, "Тренировки CyberChess — ежедневный план"),
+        description: tt(L, "Личный план на день: слабая сторона игры, вариант дня, темы для повторения и награда за выполнение."),
         isPartOf: { "@type": "WebSite", url: "https://aevion.app", name: "AEVION" },
         about: { "@type": "Thing", name: "Chess training" },
       }) }} />
@@ -170,17 +173,16 @@ export default function TrainingHubPage() {
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
           <Link href="/cyberchess" style={{ color: C.dim, textDecoration: "none" }}>CyberChess</Link>
-          {" / "}<span style={{ color: C.text }}>Тренировки</span>
+          {" / "}<span style={{ color: C.text }}>{tt(L, "Тренировки")}</span>
         </div>
 
         {/* Hero */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 8px", lineHeight: 1.15 }}>
-            Тренировки
+            {tt(L, "Тренировки")}
           </h1>
           <p style={{ fontSize: 14, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 640 }}>
-            Твой личный план на день: слабая сторона по CPI, темы, которые пора повторить
-            с коучем, и вариант дня.
+            {tt(L, "Твой личный план на день: слабая сторона по CPI, темы, которые пора повторить с коучем, и вариант дня.")}
           </p>
         </div>
 
@@ -195,37 +197,37 @@ export default function TrainingHubPage() {
             padding: "16px 18px",
           }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: C.purple, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
-              💪 Твоя слабая зона
+              {tt(L, "💪 Твоя слабая зона")}
             </div>
             {weakFactor ? (
               <>
                 <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 22 }}>{drill.emoji}</span>
-                  <span>{drill.name}</span>
+                  <span>{tt(L, drill.name)}</span>
                 </div>
                 <div style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-                  Тренируй: <strong style={{ color: C.text }}>{drill.drillName}</strong>{" "}
-                  <span style={{ color: C.cyan }}>({drill.reps})</span>
+                  {tt(L, "Тренируй:")} <strong style={{ color: C.text }}>{tt(L, drill.drillName)}</strong>{" "}
+                  <span style={{ color: C.cyan }}>({tt(L, drill.reps)})</span>
                 </div>
                 <Link href={drill.href} style={{
                   display: "inline-block",
                   background: C.purple, color: "#fff", padding: "8px 14px", borderRadius: 8,
                   fontSize: 12, fontWeight: 800, textDecoration: "none",
                 }}>
-                  Начать тренировку →
+                  {tt(L, "Начать тренировку →")}
                 </Link>
               </>
             ) : (
               <>
                 <div style={{ fontSize: 13, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
-                  Сыграй 3 партии или больше — тренер определит твою слабую зону.
+                  {tt(L, "Сыграй 3 партии или больше — тренер определит твою слабую зону.")}
                 </div>
                 <Link href="/cyberchess" style={{
                   display: "inline-block",
                   background: C.purple, color: "#fff", padding: "8px 14px", borderRadius: 8,
                   fontSize: 12, fontWeight: 800, textDecoration: "none",
                 }}>
-                  Сыграть партию →
+                  {tt(L, "Сыграть партию →")}
                 </Link>
               </>
             )}
@@ -240,21 +242,21 @@ export default function TrainingHubPage() {
             padding: "16px 18px",
           }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: C.orange, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
-              🎲 Вариант дня
+              {tt(L, "🎲 Вариант дня")}
             </div>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 22 }}>{dailyVariant.emoji}</span>
-              <span>{dailyVariant.name}</span>
+              <span>{tt(L, dailyVariant.name)}</span>
             </div>
             <div style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-              {dailyVariant.desc}. Победа = <strong style={{ color: C.gold }}>+50 Chessy</strong> сверху
+              {tt(L, dailyVariant.desc)}. {tt(L, "Победа =")} <strong style={{ color: C.gold }}>+50 Chessy</strong> {tt(L, "сверху")}
             </div>
             <Link href={`/cyberchess?variant=${dailyVariant.id}`} style={{
               display: "inline-block",
               background: C.orange, color: "#fff", padding: "8px 14px", borderRadius: 8,
               fontSize: 12, fontWeight: 800, textDecoration: "none",
             }}>
-              Играть {dailyVariant.name} →
+              {tt(L, "Играть")} {tt(L, dailyVariant.name)} →
             </Link>
           </div>
 
@@ -267,15 +269,15 @@ export default function TrainingHubPage() {
             padding: "16px 18px",
           }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: C.green, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
-              🎓 Повторение с тренером
+              {tt(L, "🎓 Повторение с тренером")}
             </div>
             {reminders.length > 0 ? (
               <>
                 <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-                  {reminders.length} {ccPlural(reminders.length, "тема", "темы", "тем")} ждут повторения
+                  {L === "en" ? `${reminders.length} ${reminders.length === 1 ? "topic is" : "topics are"} due for review` : L === "kk" ? `${reminders.length} тақырып қайталауды күтуде` : <>{reminders.length} {ccPlural(reminders.length, "тема", "темы", "тем")} ждут повторения</>}
                 </div>
                 <div style={{ fontSize: 12, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
-                  С интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Повтори чтобы закрепить.
+                  {tt(L, "С интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Повтори чтобы закрепить.")}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
                   {[1, 3, 7].map((ms) => {
@@ -294,20 +296,20 @@ export default function TrainingHubPage() {
                   background: C.green, color: "#fff", padding: "8px 14px", borderRadius: 8,
                   fontSize: 12, fontWeight: 800, textDecoration: "none",
                 }}>
-                  Открыть базу знаний →
+                  {tt(L, "Открыть базу знаний →")}
                 </Link>
               </>
             ) : (
               <>
                 <div style={{ fontSize: 13, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
-                  Нет тем для повторения сегодня. Открой «Знания коуча», чтобы изучить новые.
+                  {tt(L, "Нет тем для повторения сегодня. Открой «Знания коуча», чтобы изучить новые.")}
                 </div>
                 <Link href="/cyberchess?tab=coach&modal=knowledge" style={{
                   display: "inline-block",
                   background: C.green, color: "#fff", padding: "8px 14px", borderRadius: 8,
                   fontSize: 12, fontWeight: 800, textDecoration: "none",
                 }}>
-                  Открыть знания →
+                  {tt(L, "Открыть знания →")}
                 </Link>
               </>
             )}
@@ -322,13 +324,13 @@ export default function TrainingHubPage() {
             padding: "16px 18px",
           }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: C.gold, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
-              🪙 Ежедневный Chessy
+              {tt(L, "🪙 Ежедневный Chessy")}
             </div>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-              {dailyClaimed ? "Сегодня уже получено ✓" : "Забрать ежедневный бонус"}
+              {dailyClaimed ? tt(L, "Сегодня уже получено ✓") : tt(L, "Забрать ежедневный бонус")}
             </div>
             <div style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-              <strong style={{ color: C.gold }}>+25 Chessy</strong> за визит в центр обучения. Используй в «Экономике» для аукциона или аренды тренера.
+              <strong style={{ color: C.gold }}>+25 Chessy</strong> {tt(L, "за визит в центр обучения. Используй в «Экономике» для аукциона или аренды тренера.")}
             </div>
             <button
               onClick={claimDaily}
@@ -342,7 +344,7 @@ export default function TrainingHubPage() {
                 cursor: dailyClaimed ? "default" : "pointer",
               }}
             >
-              {dailyClaimed ? "✓ Получено" : "Забрать +25 Chessy"}
+              {dailyClaimed ? tt(L, "✓ Получено") : tt(L, "Забрать +25 Chessy")}
             </button>
             {/* Отказ обязан быть виден: молчаливый пропуск неотличим от успеха. */}
             {claimError && (
@@ -368,16 +370,16 @@ export default function TrainingHubPage() {
             gap: 12,
           }}>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 800, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6 }}>Текущий CPI</div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6 }}>{tt(L, "Текущий CPI")}</div>
               <div style={{ fontSize: 24, fontWeight: 900, color: C.purple, fontFamily: "ui-monospace, monospace" }}>{cpiState.cpi}</div>
             </div>
             <div style={{ fontSize: 12, color: C.dim }}>
-              Партий сыграно: <strong style={{ color: C.text }}>{cpiState.history.length}</strong>
+              {tt(L, "Партий сыграно:")} <strong style={{ color: C.text }}>{cpiState.history.length}</strong>
             </div>
             <Link href="/cyberchess/cpi/dashboard" style={{
               fontSize: 12, color: C.purple, textDecoration: "none", fontWeight: 700,
             }}>
-              📊 Открыть сводку →
+              {tt(L, "📊 Открыть сводку →")}
             </Link>
           </div>
         )}
@@ -385,7 +387,7 @@ export default function TrainingHubPage() {
         {/* Resources strip */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: C.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
-            Ресурсы
+            {tt(L, "Ресурсы")}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 10 }}>
             {[
@@ -404,15 +406,15 @@ export default function TrainingHubPage() {
                 display: "block",
               }}>
                 <div style={{ fontSize: 22, marginBottom: 4 }}>{r.emoji}</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 2 }}>{r.label}</div>
-                <div style={{ fontSize: 11, color: C.dim, lineHeight: 1.4 }}>{r.desc}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 2 }}>{tt(L, r.label)}</div>
+                <div style={{ fontSize: 11, color: C.dim, lineHeight: 1.4 }}>{tt(L, r.desc)}</div>
               </Link>
             ))}
           </div>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>
-          Обновляется каждый день · данные CPI хранятся в вашем браузере
+          {tt(L, "Обновляется каждый день · данные CPI хранятся в вашем браузере")}
         </div>
       </article>
     </main>

@@ -8149,9 +8149,9 @@ export default function CyberChessPage(){
                 background:"rgba(37,99,235,0.08)",
                 cursor:"pointer",fontSize:11,fontWeight:800,color:CC.brand,
               }}>
-                <span>☀</span><span>Задача дня</span>
+                <span>☀</span><span>{cc.t("start.daily.title")}</span>
               </button>
-              {allDone&&<span style={{marginLeft:"auto",fontSize:11,fontWeight:900,color:"#15803d"}}>+30 Chessy завтра!</span>}
+              {allDone&&<span style={{marginLeft:"auto",fontSize:11,fontWeight:900,color:"#15803d"}}>{cc.t("goals.tomorrowBonus")}</span>}
             </div>;
           })()}
 
@@ -8321,7 +8321,7 @@ export default function CyberChessPage(){
                   onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.99)"}}
                   onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)"}}
                   aria-label={cc.t("attr.start_a_new_game")}>
-                  <Icon.Play width={24} height={24}/> ИГРАТЬ
+                  <Icon.Play width={24} height={24}/> {cc.t("nav.play").toUpperCase()}
                 </button>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:SPACE[2]}}>
                 <Btn size="lg" variant="secondary" onClick={()=>{
@@ -8392,7 +8392,7 @@ export default function CyberChessPage(){
             border:`1px solid ${CC.border}`,background:(vwPx<769||строкаПрилипла)?"#eef7f2":"rgba(5,150,105,0.06)",
             paddingLeft:28,color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{pzCountLabel}</span>
+                  ◆ {cc.t("start.solvePuzzle")} <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{pzCountLabel}</span>
                 </button>
                 <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(fPz.length)ldPz(rushStartIdx())}}
                   className="cc-focus-ring"

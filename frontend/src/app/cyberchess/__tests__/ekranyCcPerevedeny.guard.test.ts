@@ -9,6 +9,7 @@ import { LEADERBOARD_TEXT } from "../leaderboard/leaderboardText";
 import { HISTORY_TEXT } from "../history/historyText";
 import { REPLAYS_TEXT } from "../replays/replaysText";
 import { SPECTATOR_TEXT } from "../spectator/spectatorText";
+import { DAILY_TEXT } from "../daily/dailyText";
 
 /**
  * Экраны CyberChess под /cyberchess/* на /en были русскими (замер 24.10.2026 браузером:
@@ -28,6 +29,8 @@ const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>
   // у /replays нет списков с текстом — только вызовы
   { путь: "replays/page.tsx", словарь: REPLAYS_TEXT, поля: ["__нет_полей__"], минимум: 0 },
   { путь: "spectator/page.tsx", словарь: SPECTATOR_TEXT, поля: ["__нет_полей__"], минимум: 0 },
+  // названия фигур для диктора — в одинарных кавычках, ловятся вызовом tt(L, PIECE_NAME[…])
+  { путь: "daily/page.tsx", словарь: DAILY_TEXT, поля: ["__нет_полей__"], минимум: 0 },
 ];
 const ИСКЛЮЧЕНИЯ = new Set(["AEVION", "Chess training"]);
 

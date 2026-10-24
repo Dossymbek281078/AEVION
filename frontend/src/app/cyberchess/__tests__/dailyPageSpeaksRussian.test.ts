@@ -73,7 +73,8 @@ describe("отказ сервера доходит до человека", () =>
     for (const m of kod.matchAll(/setMessage\(([^;]*)/g)) {
       // Подстановки вырезаем: ${curStreak} — имя переменной, а не текст на
       // экране. Без этого сторож краснел на верной строке.
-      const tekst = m[1].replace(/\$\{[^}]*}/g, "");
+      // 24.10.2026: подстановки словаря — .replace("{s}", String(curStreak)) — тоже имена, не текст
+      const tekst = m[1].replace(/\$\{[^}]*}/g, "").replace(/\.replace\("\{\w\}", String\([^)]*\)\)/g, "");
       expect(tekst, "английское Streak в сообщении человеку").not.toContain("Streak");
     }
   });

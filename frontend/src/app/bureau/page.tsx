@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ценаVerifiedДляВитрины } from "./verifiedPrice";
 import { verifiedCta, verifiedContactLabel } from "./verifiedCta";
 import { useI18nOptional } from "@/lib/i18n";
+import { useBureauText } from "./bureauText";
 import { MyCertificates } from "./MyCertificates";
 import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
@@ -202,6 +203,8 @@ function BureauPageInner() {
   const buI18n = useI18nOptional();
   const buLang = buI18n?.lang ?? "en";
   const buT = buI18n?.t ?? ((k: string) => k);
+  // 24.10.2026: перевод остальной страницы (не только первого экрана) — bureauText.ts
+  const tb = useBureauText(buLang);
   const BU = BU_BUSY[buLang] ?? BU_BUSY.en;
   // 128 (13.10.2026): главный CTA бюро — на языке страницы, не литералом (на ru-RU стоял «Protect Your Work» при русском h1).
   const ctaProtect = ({ ru: "🛡️ Защитить работу", kk: "🛡️ Жұмысты қорғау" } as Record<string, string>)[buLang] ?? "🛡️ Protect Your Work";
@@ -339,7 +342,7 @@ function BureauPageInner() {
       setKindFilter("all");
       setVerifiedOnly(false);
     } catch {
-      showToast("Could not hash file", "error");
+      showToast(tb("Could not hash file"), "error");
     } finally {
       setFileChecking(false);
     }
@@ -359,7 +362,7 @@ function BureauPageInner() {
     if (!email || waitlistDone) return;
     setWaitlistBusy(true);
     // This used to write the address to localStorage, wait 600ms and say
-    // "You're on the waitlist!" — the only copy lived in the visitor's own
+    // tb("You're on the waitlist!") — the only copy lived in the visitor's own
     // browser and no list existed. It posts to the backend now, and a failure
     // says so instead of congratulating the person.
     try {
@@ -377,9 +380,9 @@ function BureauPageInner() {
       // itself now lives on the server.
       try { localStorage.setItem(WAITLIST_KEY, email); } catch {}
       setWaitlistDone(true);
-      showToast("You're on the waitlist!", "success");
+      showToast(tb("You're on the waitlist!"), "success");
     } catch {
-      showToast("Network error — the waitlist did not receive your address", "error");
+      showToast(tb("Network error — the waitlist did not receive your address"), "error");
     } finally {
       setWaitlistBusy(false);
     }
@@ -406,7 +409,7 @@ function BureauPageInner() {
       const dr = await fetch(apiUrl("/api/bureau/dashboard"), { headers: authHeaders() });
       if (dr.ok) setDashboard((await dr.json()) as DashboardData);
     } catch {
-      showToast("Network error", "error");
+      showToast(tb("Network error"), "error");
     } finally {
       setClaimingEdgeId(null);
     }
@@ -527,7 +530,7 @@ function BureauPageInner() {
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
       () => showToast(`${label} copied!`, "success"),
-      () => showToast("Copy failed", "error")
+      () => showToast(tb("Copy failed"), "error")
     );
   };
 
@@ -591,15 +594,15 @@ function BureauPageInner() {
                 {ctaProtect}
               </Link>
               <Link href="#registry" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15.5 }}>
-                🔎 Search prior art
+                {tb("🔎 Search prior art")}
               </Link>
               <Link href="/quantum-shield" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15.5 }}>
-                Quantum Shield Dashboard
+                {tb("Quantum Shield Dashboard")}
               </Link>
             </div>
             {/* 128б: абзац — ПОД рядом кнопок: на 390×844 ru CTA был на 724 px (порог первого экрана 700). */}
             <p style={{ margin: "16px 0 0", fontSize: 16, opacity: 0.8, lineHeight: 1.6, maxWidth: 640 }}>
-              A cryptographic proof-of-authorship bureau. Register, sign, and certify your intellectual property with standards-based cryptography (SHA-256, Ed25519, Bitcoin-anchored timestamps) — backed by international copyright law.
+              {tb("A cryptographic proof-of-authorship bureau. Register, sign, and certify your intellectual property with standards-based cryptography (SHA-256, Ed25519, Bitcoin-anchored timestamps) — backed by international copyright law.")}
             </p>
           </div>
         </div>
@@ -622,7 +625,7 @@ function BureauPageInner() {
         {authed && (dashboardFailed || myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
           <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(99,102,241,0.25)", background: "linear-gradient(135deg, rgba(99,102,241,0.04), rgba(79,70,229,0.04))", padding: "18px 22px" }}>
             <div style={{ fontSize: 15.5, fontWeight: 900, color: "#312e81", marginBottom: 8 }}>
-              My Bureau identity
+              {tb("My Bureau identity")}
             </div>
             {dashboardFailed ? (
               <div style={{ fontSize: 15, color: "#7f1d1d", lineHeight: 1.6 }}>
@@ -639,28 +642,28 @@ function BureauPageInner() {
                     ⭐ {myIdentity.verifiedName || "Verified"}
                   </div>
                   <div style={{ fontSize: 15, color: "#475569", marginTop: 4 }}>
-                    Identity verified by AEVION Bureau
+                    {tb("Identity verified by AEVION Bureau")}
                     {myIdentity.verifiedAt && (
                       <> · {new Date(myIdentity.verifiedAt).toLocaleDateString()}</>
                     )}
                     {myIdentity.certCount > 0 && (
-                      <> · attesting <b>{myIdentity.certCount}</b> certificate{myIdentity.certCount === 1 ? "" : "s"}</>
+                      <> {tb("· attesting")} <b>{myIdentity.certCount}</b> certificate{myIdentity.certCount === 1 ? "" : "s"}</>
                     )}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
-                    Protect another work
+                    {tb("Protect another work")}
                   </Link>
                 </div>
               </div>
             ) : inFlightUpgrade ? (
               <div>
                 <div style={{ fontSize: 15, color: "#312e81", lineHeight: 1.6 }}>
-                  You have an upgrade in progress — KYC <b>{inFlightUpgrade.kycStatus}</b>, payment <b>{inFlightUpgrade.paymentStatus}</b>. Continue from where you left off:
+                  {tb("You have an upgrade in progress — KYC")} <b>{inFlightUpgrade.kycStatus}</b>{tb(", payment")} <b>{inFlightUpgrade.paymentStatus}</b>{tb(". Continue from where you left off:")}
                 </div>
                 <div style={{ marginTop: 8, fontSize: 15, color: "#64748b" }}>
-                  Pick the certificate you started upgrading from the registry below — the <em>Upgrade to Verified</em> button there resumes the same flow.
+                  {tb("Pick the certificate you started upgrading from the registry below — the")} <em>{tb("Upgrade to Verified")}</em> {tb("button there resumes the same flow.")}
                 </div>
               </div>
             ) : (
@@ -671,7 +674,7 @@ function BureauPageInner() {
                   {buLang === "ru" ? (
                     <>Анонимные сертификаты полностью защищены криптографически. Любой из ваших можно повысить до <b>Verified</b> ({ценаVerifiedДляВитрины(kycMode, buLang, dashboard?.pricing?.verifiedTierCents)}) — бюро запишет заявленное вами имя рядом с сертификатом вместе с проверкой личности, которую выполняет её поставщик.</>
                   ) : (
-                    <>Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({ценаVerifiedДляВитрины(kycMode, buLang, dashboard?.pricing?.verifiedTierCents)}) and the bureau will record your declared name alongside the certificate, with the identity check its provider performs.</>
+                    <>{tb("Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to")} <b>Verified</b> ({ценаVerifiedДляВитрины(kycMode, buLang, dashboard?.pricing?.verifiedTierCents)}) {tb("and the bureau will record your declared name alongside the certificate, with the identity check its provider performs.")}</>
                   )}
                 </div>
               </div>
@@ -684,13 +687,11 @@ function BureauPageInner() {
           <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(217,119,6,0.25)", background: "linear-gradient(135deg, rgba(245,158,11,0.04), rgba(217,119,6,0.06))", padding: "18px 22px" }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
               <div style={{ fontSize: 15.5, fontWeight: 900, color: "#92400e" }}>
-                🔗 Trust Graph — your earned tiers
+                {tb("🔗 Trust Graph — your earned tiers")}
               </div>
               {dashboard.aecSummary && (
                 <div style={{ fontSize: 15, color: "#78350f" }}>
-                  Total earned <b>{dashboard.aecSummary.totalPlanned}</b> AEC ·
-                  claimed <b>{dashboard.aecSummary.totalClaimed}</b> ·
-                  unclaimed <b style={{ color: dashboard.aecSummary.unclaimed > 0 ? "#b45309" : "#78350f" }}>{dashboard.aecSummary.unclaimed}</b>
+                  {tb("Total earned")} <b>{dashboard.aecSummary.totalPlanned}</b> {tb("AEC · claimed")} <b>{dashboard.aecSummary.totalClaimed}</b> {tb("· unclaimed")} <b style={{ color: dashboard.aecSummary.unclaimed > 0 ? "#b45309" : "#78350f" }}>{dashboard.aecSummary.unclaimed}</b>
                 </div>
               )}
             </div>
@@ -709,7 +710,7 @@ function BureauPageInner() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <span style={{ fontSize: 15.5, fontWeight: 900, color: "#0f172a" }}>{e.aecRewardPlanned ?? 0} AEC</span>
                       {claimed ? (
-                        <span style={{ fontSize: 15, fontWeight: 700, color: "#16a34a" }}>✓ claimed</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "#16a34a" }}>{tb("✓ claimed")}</span>
                       ) : claimable ? (
                         <button
                           type="button"
@@ -717,10 +718,10 @@ function BureauPageInner() {
                           onClick={() => claimAec(e.id)}
                           style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: isClaiming ? "#a8a29e" : "linear-gradient(135deg, #d97706, #ea580c)", color: "#fff", fontWeight: 800, fontSize: 15, cursor: isClaiming ? "default" : "pointer" }}
                         >
-                          {isClaiming ? BU.claiming : "Claim AEC"}
+                          {isClaiming ? BU.claiming : tb("Claim AEC")}
                         </button>
                       ) : (
-                        <span style={{ fontSize: 15, color: "#a8a29e" }}>no reward</span>
+                        <span style={{ fontSize: 15, color: "#a8a29e" }}>{tb("no reward")}</span>
                       )}
                     </div>
                   </div>
@@ -733,10 +734,10 @@ function BureauPageInner() {
         {/* ── Stats ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 28 }}>
           {[
-            { value: stats.total, label: "Certificates Issued", color: "#0d9488" },
-            { value: stats.totalVerifications, label: "Total Verifications", color: "#3b82f6" },
-            { value: LEGAL_FRAMEWORKS.length, label: "Legal Frameworks", color: "#8b5cf6" },
-            { value: "3-Layer", label: "Cryptographic Protection", color: "#f59e0b" },
+            { value: stats.total, label: tb("Certificates Issued"), color: "#0d9488" },
+            { value: stats.totalVerifications, label: tb("Total Verifications"), color: "#3b82f6" },
+            { value: LEGAL_FRAMEWORKS.length, label: tb("Legal Frameworks"), color: "#8b5cf6" },
+            { value: "3-Layer", label: tb("Cryptographic Protection"), color: "#f59e0b" },
           ].map((s) => (
             <div key={s.label} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", textAlign: "center" }}>
               <div style={{ fontSize: 24, fontWeight: 900, color: s.color }}>{s.value}</div>
@@ -747,13 +748,13 @@ function BureauPageInner() {
 
         {/* ── How It Works ── */}
         <div style={{ marginBottom: 28 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 14 }}>How AEVION IP Bureau Works</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 14 }}>{tb("How AEVION IP Bureau Works")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
             {[
-              { n: "1", title: "Register", desc: "Describe your work — we create a SHA-256 content hash", icon: "📋", color: "#0d9488" },
-              { n: "2", title: "Sign", desc: "HMAC-SHA256 cryptographic signature proves integrity", icon: "🔏", color: "#3b82f6" },
-              { n: "3", title: "Shield", desc: "Ed25519 + Shamir's Secret Sharing for quantum-grade protection", icon: "🛡️", color: "#8b5cf6" },
-              { n: "4", title: "Certify", desc: "IP Certificate with legal basis — publicly verifiable", icon: "📜", color: "#f59e0b" },
+              { n: "1", title: tb("Register"), desc: tb("Describe your work — we create a SHA-256 content hash"), icon: "📋", color: "#0d9488" },
+              { n: "2", title: tb("Sign"), desc: tb("HMAC-SHA256 cryptographic signature proves integrity"), icon: "🔏", color: "#3b82f6" },
+              { n: "3", title: tb("Shield"), desc: tb("Ed25519 + Shamir's Secret Sharing for quantum-grade protection"), icon: "🛡️", color: "#8b5cf6" },
+              { n: "4", title: tb("Certify"), desc: tb("IP Certificate with legal basis — publicly verifiable"), icon: "📜", color: "#f59e0b" },
             ].map((s) => (
               <div key={s.n} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -769,19 +770,19 @@ function BureauPageInner() {
 
         {/* ── Service Tiers ── */}
         <div style={{ marginBottom: 28 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Service Tiers</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>{tb("Service Tiers")}</div>
           <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
-            Anonymous certificates are free and cryptographically complete. Higher tiers add identity attestation and (soon) notary co-signing — useful when an IP claim needs strong author identification in court.
+            {tb("Anonymous certificates are free and cryptographically complete. Higher tiers add identity attestation and (soon) notary co-signing — useful when an IP claim needs strong author identification in court.")}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
             {[
               {
-                name: "Free / Anonymous",
+                name: tb("Free / Anonymous"),
                 price: "$0",
-                blurb: "Full Qright stack: SHA-256 hash, HMAC, Ed25519, Shamir 2-of-3, OpenTimestamps Bitcoin anchor, browser-held author co-signature, offline verification bundle.",
-                badge: "✓ active",
+                blurb: tb("Full Qright stack: SHA-256 hash, HMAC, Ed25519, Shamir 2-of-3, OpenTimestamps Bitcoin anchor, browser-held author co-signature, offline verification bundle."),
+                badge: tb("✓ active"),
                 badgeColor: "#059669",
-                cta: { label: "Protect work", href: "/qright" },
+                cta: { label: tb("Protect work"), href: "/qright" },
               },
               {
                 name: "Verified",
@@ -812,30 +813,30 @@ function BureauPageInner() {
                 // же предикат отвечает на два разных вопроса.
                 blurb:
                   kycMode === "stub"
-                    ? "Identity check is in demo mode right now: the flow runs end to end, but no document is actually verified yet. Ask us before buying this tier."
+                    ? tb("Identity check is in demo mode right now: the flow runs end to end, but no document is actually verified yet. Ask us before buying this tier.")
                     : kycMode === "live"
-                      ? "Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint."
-                      : "Identity verification is arranged on request — ask us to confirm it is available before buying this tier. Bureau records the declared name alongside the certificate.",
+                      ? tb("Identity check performed by our KYC provider. Bureau records the declared name alongside the certificate together with the provider's verification fingerprint.")
+                      : tb("Identity verification is arranged on request — ask us to confirm it is available before buying this tier. Bureau records the declared name alongside the certificate."),
                 // Значок — из живого состояния бюро, три исхода вместо двух.
                 // «available now» говорится только когда поставщик действительно
                 // настроен; заглушка называется заглушкой ДО покупки, а своя
                 // неосведомлённость даёт нейтральное «by request».
                 badge:
                   kycMode === "stub"
-                    ? "▲ demo mode"
+                    ? tb("▲ demo mode")
                     : kycMode === "live"
-                      ? "▲ available now"
-                      : "▲ by request",
+                      ? tb("▲ available now")
+                      : tb("▲ by request"),
                 badgeColor: "#4f46e5",
                 // Кнопка вела на /bureau — на страницу, где человек уже стоит:
                 // единственная кнопка платного тарифа не делала ничего видимого.
                 // Ведёт в реестр: обновление начинается с выбора сертификата,
                 // и у каждой карточки там есть своя кнопка «Upgrade to Verified».
-                cta: { label: "Pick a cert to upgrade", href: "#registry" },
+                cta: { label: tb("Pick a cert to upgrade"), href: "#registry" },
               },
               {
                 name: "Notarized",
-                price: "From $89 / cert",
+                price: tb("From $89 / cert"),
                 // Обещание переписано вместе со значком (28.08). Прежний текст утверждал
 // готовый результат — «apostille-ready document admissible in EAEU courts» —
 // у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
@@ -848,8 +849,8 @@ function BureauPageInner() {
                 // (старая сборка прода полей состояния не отдаёт) обещания не даёт.
                 blurb:
                   notarySig === "ed25519"
-                    ? "A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability."
-                    : "A licensed notary co-signs the certificate. Cryptographic co-signing is being finalised — ask us to confirm the current signing mode before buying this tier.",
+                    ? tb("A licensed notary co-signs the certificate with Ed25519. The notary registry is still being assembled — check it for current availability.")
+                    : tb("A licensed notary co-signs the certificate. Cryptographic co-signing is being finalised — ask us to confirm the current signing mode before buying this tier."),
                 // ⚠️ 28.08.2026: значок был «▲ live» при НУЛЕ нотариусов в реестре.
                 //
                 //   GET https://api.aevion.app/api/bureau/notaries -> {"notaries":[]}
@@ -875,10 +876,10 @@ function BureauPageInner() {
                 // если ключа нет и подпись демонстрационная.
                 badge:
                   notaryCount && notaryCount > 0 && notarySig === "ed25519"
-                    ? "▲ live"
-                    : "▲ by request",
+                    ? tb("▲ live")
+                    : tb("▲ by request"),
                 badgeColor: "#7c3aed",
-                cta: { label: "View Notary Registry", href: "/bureau/notaries" },
+                cta: { label: tb("View Notary Registry"), href: "/bureau/notaries" },
               },
             ].map((tier) => (
               <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: tier.name === "Notarized" ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
@@ -895,7 +896,7 @@ function BureauPageInner() {
                 )}
                 {tier.name === "Notarized" && (
                   <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", fontSize: 15, color: "#7c3aed", fontWeight: 700, textAlign: "center" as const }}>
-                    Upgrade your Verified cert — select a notary and submit a request.
+                    {tb("Upgrade your Verified cert — select a notary and submit a request.")}
                   </div>
                 )}
               </div>
@@ -907,15 +908,15 @@ function BureauPageInner() {
         <div id="registry" style={{ marginBottom: 28, scrollMarginTop: 80 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 12, flexWrap: "wrap" as const }}>
             <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>
-              Certificate Registry{" "}
+              {tb("Certificate Registry")}{" "}
               <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16 }}>
                 ({filtersActive ? `${filteredCerts.length} of ${certificates.length}` : certificates.length})
               </span>
             </div>
-            <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>+ New Certificate</Link>
+            <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>{tb("+ New Certificate")}</Link>
           </div>
           <div style={{ fontSize: 15, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
-            Public prior-art lookup — search by title, author, or paste a SHA-256 hash. Or <strong>drop a file below</strong> to check it instantly.
+            {tb("Public prior-art lookup — search by title, author, or paste a SHA-256 hash. Or")} <strong>{tb("drop a file below")}</strong> {tb("to check it instantly.")}
           </div>
 
           {/* Search + filter toolbar (hidden until certs load to avoid layout flash). */}
@@ -940,14 +941,14 @@ function BureauPageInner() {
             <span style={{ fontSize: 20 }}>{fileChecking ? "⏳" : "📂"}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#334155" }}>
-                {fileChecking ? BU.hashing : "Drop a file here to check prior art"}
+                {fileChecking ? BU.hashing : tb("Drop a file here to check prior art")}
               </div>
               <div style={{ fontSize: 15, color: "#94a3b8" }}>
-                {fileChecking ? BU.searching : "Any format — computes SHA-256 in your browser, then searches the registry instantly"}
+                {fileChecking ? BU.searching : tb("Any format — computes SHA-256 in your browser, then searches the registry instantly")}
               </div>
             </div>
             <label style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 15, fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}>
-              Browse
+              {tb("Browse")}
               <input type="file" className="aevion-file-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
             </label>
           </div>
@@ -979,8 +980,8 @@ function BureauPageInner() {
                     type="search"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search title, author, or paste SHA-256 hash…"
-                    aria-label="Search registry"
+                    placeholder={tb("Search title, author, or paste SHA-256 hash…")}
+                    aria-label={tb("Search registry")}
                     style={{
                       width: "100%",
                       padding: "8px 30px 8px 32px",
@@ -999,7 +1000,7 @@ function BureauPageInner() {
                     <button
                       type="button"
                       onClick={() => setQuery("")}
-                      aria-label="Clear search"
+                      aria-label={tb("Clear search")}
                       style={{ position: "absolute" as const, right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "transparent", color: "#94a3b8", fontSize: 16, cursor: "pointer", padding: "2px 6px", lineHeight: 1 }}
                     >
                       ×
@@ -1009,12 +1010,12 @@ function BureauPageInner() {
                 <select
                   value={sort}
                   onChange={(e) => setSort(e.target.value as SortMode)}
-                  aria-label="Sort registry"
+                  aria-label={tb("Sort registry")}
                   style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 15, fontWeight: 700, color: "#334155", background: "#fff", cursor: "pointer" }}
                 >
-                  <option value="newest">Newest first</option>
-                  <option value="oldest">Oldest first</option>
-                  <option value="verified">Most verified</option>
+                  <option value="newest">{tb("Newest first")}</option>
+                  <option value="oldest">{tb("Oldest first")}</option>
+                  <option value="verified">{tb("Most verified")}</option>
                 </select>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: `1px solid ${verifiedOnly ? "rgba(16,185,129,0.45)" : "rgba(15,23,42,0.15)"}`, background: verifiedOnly ? "rgba(16,185,129,0.08)" : "#fff", fontSize: 15, fontWeight: 700, color: verifiedOnly ? "#065f46" : "#334155", cursor: "pointer", userSelect: "none" as const }}>
                   <input
@@ -1023,7 +1024,7 @@ function BureauPageInner() {
                     onChange={(e) => setVerifiedOnly(e.target.checked)}
                     style={{ margin: 0, cursor: "pointer" }}
                   />
-                  ⭐ Verified only
+                  {tb("⭐ Verified only")}
                 </label>
                 {filtersActive && (
                   <button
@@ -1031,7 +1032,7 @@ function BureauPageInner() {
                     onClick={() => { setQuery(""); setKindFilter("all"); setSort("newest"); setVerifiedOnly(false); }}
                     style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 15, fontWeight: 700, color: "#475569", cursor: "pointer" }}
                   >
-                    Reset
+                    {tb("Reset")}
                   </button>
                 )}
               </div>
@@ -1060,7 +1061,7 @@ function BureauPageInner() {
                         gap: 4,
                       }}
                     >
-                      {k === "all" ? "All" : <>{KIND_ICONS[k]} {KIND_LABELS[k]?.split(" / ")[0] || k}</>}
+                      {k === "all" ? tb("All") : <>{KIND_ICONS[k]} {tb(KIND_LABELS[k] ?? k).split(" / ")[0] || k}</>}
                       <span style={{ fontSize: 13, opacity: 0.7 }}>({count})</span>
                     </button>
                   );
@@ -1070,7 +1071,7 @@ function BureauPageInner() {
           )}
 
           {loading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading certificates...</div>
+            <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>{tb("Loading certificates...")}</div>
           ) : certsFailed ? (
             <div style={{ textAlign: "center", padding: "48px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>Не удалось загрузить сертификаты</div>
@@ -1079,24 +1080,24 @@ function BureauPageInner() {
           ) : certificates.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>No certificates yet</div>
-              <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>{tb("No certificates yet")}</div>
+              <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 16 }}>{tb("Protect your first work to see it here")}</div>
               <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16 }}>{ctaProtect}</Link>
             </div>
           ) : filteredCerts.length === 0 ? (
             <div style={{ textAlign: "center", padding: "32px 20px", borderRadius: 16, border: "1px dashed rgba(15,23,42,0.12)", background: "#fff" }}>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🔎</div>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 4 }}>
-                {hashLooksLikeSha256 ? "No prior art for this hash" : "Nothing matches your filters"}
+                {hashLooksLikeSha256 ? tb("No prior art for this hash") : tb("Nothing matches your filters")}
               </div>
               <div style={{ fontSize: 15, color: "#64748b", marginBottom: 14, lineHeight: 1.55 }}>
                 {hashLooksLikeSha256
-                  ? "Your content is unique in the AEVION registry — safe to register as new IP."
-                  : "Try a different search term or reset filters."}
+                  ? tb("Your content is unique in the AEVION registry — safe to register as new IP.")
+                  : tb("Try a different search term or reset filters.")}
               </div>
               {hashLooksLikeSha256 ? (
                 <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
-                  🛡️ Register this work
+                  {tb("🛡️ Register this work")}
                 </Link>
               ) : (
                 <button
@@ -1104,7 +1105,7 @@ function BureauPageInner() {
                   onClick={() => { setQuery(""); setKindFilter("all"); setSort("newest"); setVerifiedOnly(false); }}
                   style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 15, fontWeight: 700, color: "#334155", cursor: "pointer" }}
                 >
-                  Reset filters
+                  {tb("Reset filters")}
                 </button>
               )}
             </div>
@@ -1116,7 +1117,7 @@ function BureauPageInner() {
                     <div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
                         <span style={{ fontSize: 16 }}>{KIND_ICONS[cert.kind] || "📦"}</span>
-                        <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 13, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{KIND_LABELS[cert.kind] || cert.kind}</span>
+                        <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 13, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{tb(KIND_LABELS[cert.kind] || cert.kind)}</span>
                         <span style={{ fontSize: 15, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
                       </div>
                       <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{cert.title}</div>
@@ -1125,10 +1126,10 @@ function BureauPageInner() {
                     <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
                       {cert.verificationLevel === "verified" ? (
                         <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(13,148,136,0.15))", color: "#065f46", whiteSpace: "nowrap" as const, border: "1px solid rgba(16,185,129,0.3)" }}>
-                          ✓ VERIFIED AUTHOR
+                          {tb("✓ VERIFIED AUTHOR")}
                         </span>
                       ) : (
-                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 13, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
+                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 13, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>{tb("✓ CERTIFIED")}</span>
                       )}
                       {(() => {
                         // Состояние якоря в биткойне — главный козырь продукта,
@@ -1152,10 +1153,10 @@ function BureauPageInner() {
                   <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
                     <div style={{ padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>SHA-256 Content Hash</div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>{tb("SHA-256 Content Hash")}</div>
                         <div style={{ fontSize: 15, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{cert.contentHash}</div>
                       </div>
-                      <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
+                      <button onClick={() => copy(cert.contentHash, tb("Hash"))} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>{tb("Copy")}</button>
                     </div>
                     {cert.fileHash && (
                       <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(13,148,136,0.03)", border: "1px solid rgba(13,148,136,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -1163,13 +1164,13 @@ function BureauPageInner() {
                           <div style={{ fontSize: 9, fontWeight: 700, color: "#0d9488", textTransform: "uppercase" as const }}>📎 File Hash (SHA-256)</div>
                           <div style={{ fontSize: 15, fontFamily: "monospace", color: "#0d9488", wordBreak: "break-all" as const }}>{cert.fileHash}</div>
                         </div>
-                        <button onClick={() => copy(cert.fileHash!, "File Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.2)", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#0d9488", flexShrink: 0 }}>Copy</button>
+                        <button onClick={() => copy(cert.fileHash!, tb("File Hash"))} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.2)", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#0d9488", flexShrink: 0 }}>{tb("Copy")}</button>
                       </div>
                     )}
                   </div>
 
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <Link href={`/verify/${cert.id}`} style={{ padding: "7px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4 }}>✓ Verify</Link>
+                    <Link href={`/verify/${cert.id}`} style={{ padding: "7px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4 }}>{tb("✓ Verify")}</Link>
                     <a
                       href={apiUrl(`/api/pipeline/certificate/${cert.id}/pdf`)}
                       target="_blank"
@@ -1195,18 +1196,18 @@ function BureauPageInner() {
                         data-verified-cta="upgrade"
                         style={{ padding: "7px 14px", borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4 }}
                       >
-                        ⭐ Upgrade to Verified
+                        {tb("⭐ Upgrade to Verified")}
                       </Link>
                     )}
-                    <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", color: "#475569" }}>Copy Link</button>
-                    <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", color: "#475569" }}>Copy ID</button>
+                    <button onClick={() => copy(cert.verifyUrl, tb("Verify URL"))} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", color: "#475569" }}>{tb("Copy Link")}</button>
+                    <button onClick={() => copy(cert.id, tb("Certificate ID"))} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", color: "#475569" }}>{tb("Copy ID")}</button>
                     {cert.shieldId && (
                       <Link
                         href={`/quantum-shield/${cert.shieldId}`}
                         title={`Quantum Shield ${cert.shieldId}`}
                         style={{ padding: "7px 14px", borderRadius: 8, background: "rgba(13,148,136,0.1)", color: "#0d9488", textDecoration: "none", fontWeight: 800, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid rgba(13,148,136,0.25)" }}
                       >
-                        🛡️ Shield
+                        {tb("🛡️ Shield")}
                       </Link>
                     )}
                   </div>
@@ -1218,19 +1219,19 @@ function BureauPageInner() {
 
         {/* ── Legal Framework ── */}
         <div style={{ marginBottom: 28 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Legal Framework</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>{tb("Legal Framework")}</div>
           <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
-            AEVION IP Bureau builds on established international copyright and digital signature law. Our certificates are cryptographic proof that a work existed at a recorded time — how much weight that carries depends on the forum and on the frameworks listed below.
+            {tb("AEVION IP Bureau builds on established international copyright and digital signature law. Our certificates are cryptographic proof that a work existed at a recorded time — how much weight that carries depends on the forum and on the frameworks listed below.")}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             {LEGAL_FRAMEWORKS.map((l) => (
               <div key={l.name} style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
-                  <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{l.name}</div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{tb(l.name)}</div>
                 </div>
-                <div style={{ fontSize: 15, color: "#64748b", lineHeight: 1.5, marginBottom: 6 }}>{l.desc}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: l.color }}>{l.scope}</div>
+                <div style={{ fontSize: 15, color: "#64748b", lineHeight: 1.5, marginBottom: 6 }}>{tb(l.desc)}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: l.color }}>{tb(l.scope)}</div>
               </div>
             ))}
           </div>
@@ -1238,7 +1239,7 @@ function BureauPageInner() {
 
         {/* ── Disclaimer ── */}
         <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", marginBottom: 28 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>Legal Disclaimer</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>{tb("Legal Disclaimer")}</div>
           <div style={{ fontSize: 15, color: "#78716c", lineHeight: 1.6 }}>
             Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time. They do not constitute a patent, trademark, or government-issued copyright registration. They serve as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.
           </div>
@@ -1246,9 +1247,9 @@ function BureauPageInner() {
 
         {/* ── Technology Stack ── */}
         <div style={{ padding: "16px 18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)", marginBottom: 40 }}>
-          <div style={{ fontWeight: 800, fontSize: 15.5, color: "#0f172a", marginBottom: 10 }}>Technology Stack</div>
+          <div style={{ fontWeight: 800, fontSize: 15.5, color: "#0f172a", marginBottom: 10 }}>{tb("Technology Stack")}</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {["SHA-256 (NIST FIPS 180-4)", "HMAC-SHA256", "Ed25519 (RFC 8032)", "Shamir's Secret Sharing", "Threshold 2-of-3", "PostgreSQL", "Public Verification API"].map((t) => (
+            {["SHA-256 (NIST FIPS 180-4)", "HMAC-SHA256", "Ed25519 (RFC 8032)", tb("Shamir's Secret Sharing"), tb("Threshold 2-of-3"), "PostgreSQL", tb("Public Verification API")].map((t) => (
               <span key={t} style={{ padding: "5px 12px", borderRadius: 8, fontSize: 15, fontWeight: 600, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.08)", color: "#334155" }}>{t}</span>
             ))}
           </div>

@@ -2421,6 +2421,8 @@ export default function CyberChessPage(){
     import("./settingsText").then(m=>sSetText(m.SETTINGS_TEXT)).catch(e=>{console.error("[CyberChess] тексты настроек не загрузились",e);sShowSettings(false);showToast(cc.t("attr.settings")+": "+(cc.locale==="en"?"failed to load, try again":cc.locale==="kk"?"жүктелмеді, қайталаңыз":"не загрузились, попробуйте ещё раз"),"error")});
   },[showSettings,setText]);
   const st=(k:string)=>setText?.[cc.locale]?.[k]??setText?.ru?.[k]??k;
+  // Названия вариантов (фоны, темы, звуки, декор): en/kk из settingsText, ru — само поле данных
+  const pn=(k:string,ru:string)=>cc.locale==="ru"?ru:(setText?.[cc.locale]?.[k]??ru);
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
   // «⚙ Ещё» — overflow-меню шапки. Свернули микро-зоны Инструменты/Навигация (настройки,
   // музыка, фулскрин, раскладка, язык, экосистема) в одно меню, чтобы в шапке остались
@@ -16322,7 +16324,7 @@ ${question.trim()}`;
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
               <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>{st("bg")}</div>
               <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>
-                {st("now")} <b style={{color:CC.text}}>{BG_PRESETS.find(p=>p.id===bgPreset)?.emoji||"📷"} {bgPreset.startsWith("data:")||bgPreset.startsWith("blob:")?st("bg_own"):(BG_PRESETS.find(p=>p.id===bgPreset)?.name||st("bg_none"))}</b>
+                {st("now")} <b style={{color:CC.text}}>{BG_PRESETS.find(p=>p.id===bgPreset)?.emoji||"📷"} {bgPreset.startsWith("data:")||bgPreset.startsWith("blob:")?st("bg_own"):((q=>q?pn("bg."+q.id,q.name):st("bg_none"))(BG_PRESETS.find(p=>p.id===bgPreset)))}</b>
               </div>
               {/* Группы пресетов */}
               {[
@@ -16335,8 +16337,8 @@ ${question.trim()}`;
                   {BG_PRESETS.filter(p=>group.ids.includes(p.id)).map(p=>{
                     const sel=bgPreset===p.id;
                     return <button key={p.id}
-                      onClick={()=>{sBgPreset(p.id);showToast(`${p.emoji} ${p.name}`,"info")}}
-                      title={p.desc}
+                      onClick={()=>{sBgPreset(p.id);showToast(`${p.emoji} ${pn("bg."+p.id,p.name)}`,"info")}}
+                      title={pn("bgd."+p.id,p.desc)}
                       style={{
                         padding:"5px 9px",borderRadius:RADIUS.full,
                         border:sel?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
@@ -16346,7 +16348,7 @@ ${question.trim()}`;
                         display:"flex",alignItems:"center",gap:4,
                         transition:`all 150ms`,
                       }}>
-                      <span>{p.emoji}</span><span style={{fontSize:10}}>{p.name}</span>
+                      <span>{p.emoji}</span><span style={{fontSize:10}}>{pn("bg."+p.id,p.name)}</span>
                     </button>;
                   })}
                 </div>
@@ -16418,7 +16420,7 @@ ${question.trim()}`;
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
               <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>{st("snd_presets_a")} — {CHESS_SOUND_PRESETS.filter(p=>p.category!=="silent").length} {st("snd_presets_b")}</div>
               <div style={{fontSize:12,color:CC.textDim,lineHeight:1.4,marginBottom:SPACE[2]}}>
-                {st("now")} <b style={{color:CC.text}}>{CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.emoji} {CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.name}</b>
+                {st("now")} <b style={{color:CC.text}}>{CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.emoji} {(q=>q?pn("sn."+q.id,q.name):"")(CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId))}</b>
               </div>
               {(["classic","exotic","silent"] as const).map(cat=>{
                 const items=CHESS_SOUND_PRESETS.filter(p=>p.category===cat);
@@ -16430,8 +16432,8 @@ ${question.trim()}`;
                     {items.map(p=>{
                       const selected=soundPresetId===p.id;
                       return <button key={p.id}
-                        onClick={()=>{sSoundPresetId(p.id);playChessSound(p.id,"move");showToast(`${p.emoji} ${p.name}`,"info")}}
-                        title={p.desc}
+                        onClick={()=>{sSoundPresetId(p.id);playChessSound(p.id,"move");showToast(`${p.emoji} ${pn("sn."+p.id,p.name)}`,"info")}}
+                        title={pn("snd."+p.id,p.desc)}
                         style={{
                           padding:"4px 8px",borderRadius:RADIUS.full,
                           border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
@@ -16441,7 +16443,7 @@ ${question.trim()}`;
                           transition:`all ${MOTION.fast} ${MOTION.ease}`,
                           whiteSpace:"nowrap" as const,
                         }}>
-                        {p.emoji} {p.name}
+                        {p.emoji} {pn("sn."+p.id,p.name)}
                       </button>;
                     })}
                   </div>
@@ -16485,7 +16487,7 @@ ${question.trim()}`;
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>{st("sec_theme")}</div>
-            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>{st("now")} <b style={{color:CC.text}}>{bT.name} {bT.icon}</b></div>
+            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>{st("now")} <b style={{color:CC.text}}>{pn("th."+bT.name,bT.name)} {bT.icon}</b></div>
             <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
               {BOARD_THEMES.map((th,i)=>{
                 const locked=!!th.premium&&!chessy.owned[th.premium!];
@@ -16504,7 +16506,7 @@ ${question.trim()}`;
                     <div style={{width:11,height:16,background:th.light}}/>
                     <div style={{width:11,height:16,background:th.dark}}/>
                   </div>
-                  <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{th.name}</span>
+                  <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{pn("th."+th.name,th.name)}</span>
                   {locked&&<span style={{fontSize:10,color:"#b45309"}}>🔒</span>}
                 </button>;
               })}
@@ -16513,10 +16515,10 @@ ${question.trim()}`;
             <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[2]}}>
               {BOARD_ART_OPTIONS.map(opt=>{
                 const selected=boardArt===opt.v;
-                return <button key={opt.v} className="cc-focus-ring" onClick={()=>{sBoardArt(opt.v);showToast(`${st("art_toast")}: ${opt.label}`,"info")}}
-                  title={opt.hint}
+                return <button key={opt.v} className="cc-focus-ring" onClick={()=>{sBoardArt(opt.v);showToast(`${st("art_toast")}: ${pn("art."+opt.v,opt.label)}`,"info")}}
+                  title={pn("arth."+opt.v,opt.hint)}
                   style={{padding:"5px 12px",borderRadius:RADIUS.full,border:selected?`2px solid ${CC.accent}`:`1px solid ${CC.border}`,background:selected?CC.accentSoft:CC.surface1,cursor:"pointer",fontSize:12,fontWeight:selected?800:600,color:selected?CC.accent:CC.textDim,transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
-                  {opt.label}
+                  {pn("art."+opt.v,opt.label)}
                 </button>;
               })}
             </div>
@@ -16527,7 +16529,7 @@ ${question.trim()}`;
                 return <button key={ps.id}
                   className="cc-focus-ring"
                   onClick={()=>{setActivePieceSet(ps.id);showToast(`${st("pieces_toast")}: ${ps.name}`,"info")}}
-                  title={ps.hint}
+                  title={pn("pch."+ps.id,ps.hint)}
                   style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
                     borderRadius:RADIUS.full,
                     border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,

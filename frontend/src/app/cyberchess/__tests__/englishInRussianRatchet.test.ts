@@ -38,6 +38,8 @@ const ИМЕНА = new Set([
   "Klimt", "FIDE", "QShield", "QSign", "QCoreAI", "Chessy", "Rush", "Survival", "Ghost",
   "Neon", "Obsidian", "Sakura", "Wood", "Rose", "Dark", "Reel", "WhatIf", "Masters", "masters",
   "Twin", "Fishing", "Puzzle", "Play", "Command", "Emoji", "Expert", "Master",
+  // 24.10.2026: Chess.com — название сайта, как Lichess (набор звуков «Chess.com стиль» и его kk)
+  "Chess", "chess",
 ]);
 
 const BELYJ = new Set([

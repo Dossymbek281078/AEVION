@@ -6,6 +6,8 @@
 
 import Link from "next/link";
 import { repoPath } from "@/lib/repoUrl";
+import { useCcI18n } from "../i18n";
+import { tt } from "./cpiText";
 
 const C = {
   bg: "#0f172a",
@@ -32,16 +34,16 @@ type Factor = {
 };
 
 const FACTORS: Factor[] = [
-  { code: "E",  emoji: "🎯", name: "Eval-loss",     desc: "Средний centipawn-loss за партию (точность)", weight: 30, formula: "max(0, 1 − CPL/200)", source: "Stockfish 18" },
+  { code: "E",  emoji: "🎯", name: "Eval-loss",     desc: "Средняя потеря оценки за партию в сотых пешки (точность)", weight: 30, formula: "max(0, 1 − CPL/200)", source: "Stockfish 18" },
   { code: "T",  emoji: "⏱",  name: "Time-mgmt",     desc: "Равномерность затрат времени на ход",          weight: 5,  formula: "1 − stddev/avg",       source: "Clock state" },
-  { code: "O",  emoji: "📖", name: "Opening book",  desc: "% ходов в TOP-10 базы до 10-го хода",          weight: 10, formula: "hits / first_10",     source: "openingExplorer.ts" },
-  { code: "B1", emoji: "①",  name: "Best line",     desc: "% ходов = #1 engine choice",                    weight: 20, formula: "best / total",         source: "Stockfish multiPV=3" },
+  { code: "O",  emoji: "📖", name: "Opening book",  desc: "% ходов из первой десятки базы до 10-го хода",          weight: 10, formula: "hits / first_10",     source: "openingExplorer.ts" },
+  { code: "B1", emoji: "①",  name: "Best line",     desc: "% ходов = первый выбор движка",                    weight: 20, formula: "best / total",         source: "Stockfish multiPV=3" },
   { code: "B2", emoji: "②",  name: "Second line",   desc: "% ходов = #2 (частичный кредит)",              weight: 5,  formula: "second / total",       source: "Stockfish multiPV=3" },
   { code: "B3", emoji: "③",  name: "Third line",    desc: "% ходов = #3 (слабый кредит)",                 weight: 2,  formula: "third / total",        source: "Stockfish multiPV=3" },
   { code: "M1", emoji: "💀", name: "Mate-in-1",     desc: "% найденных матов в 1 ход",                    weight: 8,  formula: "found / available",   source: "Stockfish" },
   { code: "M2", emoji: "💀💀", name: "Mate-in-2",   desc: "% найденных матов в 2 хода",                   weight: 15, formula: "found / available",   source: "Stockfish" },
   { code: "M3", emoji: "💀💀💀", name: "Mate-in-3", desc: "% найденных матов в 3 хода",                   weight: 20, formula: "found / available",   source: "Stockfish" },
-  { code: "H",  emoji: "💥", name: "Hangs",         desc: "Зевки фигур (−300+ cp swing)",                 weight: -25,formula: "−count",               source: "eval diff" },
+  { code: "H",  emoji: "💥", name: "Hangs",         desc: "Зевки фигур (оценка падает на 300+ сотых пешки)",                 weight: -25,formula: "−count",               source: "eval diff" },
   { code: "Br", emoji: "💎", name: "Brilliancies",  desc: "Жертвы и неочевидные сильные ходы",            weight: 30, formula: "+count",               source: "brilliancy.ts" },
 ];
 
@@ -74,12 +76,13 @@ const EXAMPLES = [
 
 const RIVALS = [
   { name: "FIDE Elo",         basis: "Только результат + Elo соперника",      score: "—" },
-  { name: "Lichess Glicko-2", basis: "Результат + RD (rating deviation)",     score: "—" },
+  { name: "Lichess Glicko-2", basis: "Результат + RD (отклонение рейтинга)",     score: "—" },
   { name: "chess.com Glicko", basis: "Результат + волатильность",             score: "—" },
   { name: "AEVION CPI",       basis: "11 факторов качества + R-бонус",        score: "✓ — наш" },
 ];
 
 export default function CPIPreviewPage() {
+  const { locale: L } = useCcI18n();
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
@@ -112,27 +115,27 @@ export default function CPIPreviewPage() {
         {/* Hero */}
         <div style={{ marginBottom: 32 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
-            v0.1 · ЧЕРНОВИК · 2026-05-12
+            {tt(L, "v0.1 · ЧЕРНОВИК · 2026-05-12")}
           </div>
           <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 12px", lineHeight: 1.15 }}>
             AEVION CPI <span style={{ color: C.purple }}>Chess Performance Index</span>
           </h1>
           <p style={{ fontSize: 15, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 680 }}>
-            Новая система рейтинга для CyberChess. Принципиально отличается от FIDE Elo, Lichess Glicko-2 и chess.com Glicko:{" "}
-            <strong style={{ color: C.text }}>даёт баллы за каждую партию независимо от результата</strong>, на основе составной оценки качества игры.
+            {tt(L, "Новая система рейтинга для CyberChess. Принципиально отличается от FIDE Elo, Lichess Glicko-2 и chess.com Glicko:")}{" "}
+            <strong style={{ color: C.text }}>{tt(L, "даёт баллы за каждую партию независимо от результата")}</strong>{tt(L, ", на основе составной оценки качества игры.")}
           </p>
         </div>
 
         {/* Why */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Зачем нужна новая система</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>{tt(L, "Зачем нужна новая система")}</h2>
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 20px" }}>
             <div style={{ fontSize: 14, color: C.dim, lineHeight: 1.7 }}>
-              Все три топа (FIDE/Lichess/chess.com) считают рейтинг <em>только по результату партии</em>. Это:
+              {tt(L, "Все три топа (FIDE/Lichess/chess.com) считают рейтинг")} <em>{tt(L, "только по результату партии")}</em>{tt(L, ". Это:")}
               <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
-                <li>грубо — один блестящий ход в проигранной партии = 0 баллов</li>
-                <li>демотивирует тренировку — упорная игра без победы = минус</li>
-                <li>скрывает реальный прогресс — можно расти качественно, но падать в рейтинге</li>
+                <li>{tt(L, "грубо — один блестящий ход в проигранной партии = 0 баллов")}</li>
+                <li>{tt(L, "демотивирует тренировку — упорная игра без победы = минус")}</li>
+                <li>{tt(L, "скрывает реальный прогресс — можно расти качественно, но падать в рейтинге")}</li>
               </ul>
             </div>
           </div>
@@ -140,23 +143,23 @@ export default function CPIPreviewPage() {
 
         {/* Rivals table */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Сравнение с конкурентами</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>{tt(L, "Сравнение с конкурентами")}</h2>
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
             <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "rgba(167,139,250,0.08)" }}>
-                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.5 }}>Система</th>
-                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.5 }}>Что измеряет</th>
-                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.5 }}>Скилл-чувствительность</th>
+                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.5 }}>{tt(L, "Система")}</th>
+                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.5 }}>{tt(L, "Что измеряет")}</th>
+                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.5 }}>{tt(L, "Скилл-чувствительность")}</th>
                 </tr>
               </thead>
               <tbody>
                 {RIVALS.map((r, i) => (
                   <tr key={r.name} style={{ borderTop: i === 0 ? "none" : `1px solid ${C.border}`, background: r.name === "AEVION CPI" ? "rgba(167,139,250,0.05)" : "transparent" }}>
                     <td style={{ padding: "10px 14px", fontWeight: r.name === "AEVION CPI" ? 800 : 600, color: r.name === "AEVION CPI" ? C.purple : C.text }}>{r.name}</td>
-                    <td style={{ padding: "10px 14px", color: C.dim }}>{r.basis}</td>
-                    <td style={{ padding: "10px 14px", color: r.name === "AEVION CPI" ? C.green : C.faint, fontWeight: r.name === "AEVION CPI" ? 800 : 400 }}>{r.score}</td>
+                    <td style={{ padding: "10px 14px", color: C.dim }}>{tt(L, r.basis)}</td>
+                    <td style={{ padding: "10px 14px", color: r.name === "AEVION CPI" ? C.green : C.faint, fontWeight: r.name === "AEVION CPI" ? 800 : 400 }}>{tt(L, r.score)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -167,7 +170,7 @@ export default function CPIPreviewPage() {
 
         {/* Formula */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Формула ΔCPI</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>{tt(L, "Формула ΔCPI")}</h2>
           <pre style={{
             background: "#020617",
             border: `1px solid ${C.border}`,
@@ -194,13 +197,13 @@ export default function CPIPreviewPage() {
 
 CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
           <p style={{ fontSize: 13, color: C.faint, margin: 0, lineHeight: 1.6 }}>
-            Веса предварительные. Финальные будут подобраны после симуляции на 100+ исторических партиях разного уровня.
+            {tt(L, "Веса предварительные. Финальные будут подобраны после симуляции на 100+ исторических партиях разного уровня.")}
           </p>
         </section>
 
         {/* Factors */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>11 факторов</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>{tt(L, "11 факторов")}</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 10 }}>
             {FACTORS.map((f) => (
               <div key={f.code} style={{
@@ -220,7 +223,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
                     {f.weight > 0 ? "+" : ""}{f.weight}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.5, marginBottom: 8 }}>{f.desc}</div>
+                <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.5, marginBottom: 8 }}>{tt(L, f.desc)}</div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.faint }}>
                   <code style={{ fontFamily: "ui-monospace, monospace", color: C.cyan }}>{f.formula}</code>
                   <span>{f.source}</span>
@@ -232,7 +235,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
 
         {/* Examples */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Примеры — CPI vs Elo</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>{tt(L, "Примеры — CPI vs Elo")}</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {EXAMPLES.map((ex, i) => (
               <div key={i} style={{
@@ -245,7 +248,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ fontSize: 24 }}>{ex.icon}</span>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{ex.title}</span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{tt(L, ex.title)}</span>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 10, color: C.faint, textTransform: "uppercase", letterSpacing: 0.5 }}>ΔCPI</div>
@@ -266,7 +269,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
                     }}>{k}: {String(v)}</code>
                   ))}
                 </div>
-                <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.5, fontStyle: "italic" }}>{ex.note}</div>
+                <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.5, fontStyle: "italic" }}>{tt(L, ex.note)}</div>
               </div>
             ))}
           </div>
@@ -274,28 +277,28 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
 
         {/* Roadmap */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>План развития</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>{tt(L, "План развития")}</h2>
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px" }}>
             <ol style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: C.dim, lineHeight: 1.8 }}>
-              <li><strong style={{ color: C.green }}>F1</strong> — spec doc + preview page <em style={{ color: C.faint }}>(этот экран — текущая фаза ✓)</em></li>
-              <li><strong style={{ color: C.text }}>F2</strong> — Stockfish multiPV integration в game loop</li>
-              <li><strong style={{ color: C.text }}>F3</strong> — <code style={{ color: C.cyan }}>cpi.ts</code> функция <code>computeGameCPI()</code> + unit tests</li>
-              <li><strong style={{ color: C.text }}>F4</strong> — <code style={{ color: C.cyan }}>/cyberchess/cpi/dashboard</code> с SVG-графиками</li>
-              <li><strong style={{ color: C.text }}>F5</strong> — Подбор от тренера по CPI — автоподборка упражнений по слабому фактору</li>
+              <li><strong style={{ color: C.green }}>F1</strong> — spec doc + preview page <em style={{ color: C.faint }}>{tt(L, "(этот экран — текущая фаза ✓)")}</em></li>
+              <li><strong style={{ color: C.text }}>F2</strong> {tt(L, "— Stockfish с тремя лучшими линиями в игровом цикле")}</li>
+              <li><strong style={{ color: C.text }}>F3</strong> — <code style={{ color: C.cyan }}>cpi.ts</code> {tt(L, "функция")} <code>computeGameCPI()</code> + unit tests</li>
+              <li><strong style={{ color: C.text }}>F4</strong> — <code style={{ color: C.cyan }}>/cyberchess/cpi/dashboard</code> {tt(L, "с SVG-графиками")}</li>
+              <li><strong style={{ color: C.text }}>F5</strong> {tt(L, "— Подбор от тренера по CPI — автоподборка упражнений по слабому фактору")}</li>
             </ol>
           </div>
         </section>
 
         {/* Open questions */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Открытые вопросы</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>{tt(L, "Открытые вопросы")}</h2>
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px" }}>
             <ul style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: C.dim, lineHeight: 1.7 }}>
-              <li><strong style={{ color: C.text }}>Веса факторов</strong> — симуляция на 100+ партий разного уровня</li>
-              <li><strong style={{ color: C.text }}>Сопоставление CPI и FIDE</strong> — показывать ли &laquo;эквивалент по FIDE&raquo;?</li>
-              <li><strong style={{ color: C.text }}>Античит</strong> — сильный игрок может симулировать ошибки. Считать только в режимах против ИИ?</li>
-              <li><strong style={{ color: C.text }}>Затухание</strong> — должен ли CPI &laquo;затухать&raquo; если не играешь?</li>
-              <li><strong style={{ color: C.text }}>Стеклянный потолок</strong> — потолок 4000 — может ли быть мало для топов?</li>
+              <li><strong style={{ color: C.text }}>{tt(L, "Веса факторов")}</strong> {tt(L, "— симуляция на 100+ партий разного уровня")}</li>
+              <li><strong style={{ color: C.text }}>{tt(L, "Сопоставление CPI и FIDE")}</strong> {tt(L, "— показывать ли «эквивалент по FIDE»?")}</li>
+              <li><strong style={{ color: C.text }}>{tt(L, "Античит")}</strong> {tt(L, "— сильный игрок может симулировать ошибки. Считать только в режимах против ИИ?")}</li>
+              <li><strong style={{ color: C.text }}>{tt(L, "Затухание")}</strong> {tt(L, "— должен ли CPI «затухать», если не играешь?")}</li>
+              <li><strong style={{ color: C.text }}>{tt(L, "Стеклянный потолок")}</strong> {tt(L, "— потолок 4000 — может ли быть мало для топов?")}</li>
             </ul>
           </div>
         </section>
@@ -304,11 +307,11 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
         <div style={{ marginTop: 24, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
           <Link href="/cyberchess" style={{ color: C.purple, textDecoration: "none" }}>← CyberChess</Link>
           <span style={{ color: C.faint }}>·</span>
-          <a href={repoPath("blob/main/CYBERCHESS_CPI_SPEC.md")} style={{ color: C.purple, textDecoration: "none" }}>📄 Full spec on GitHub</a>
+          <a href={repoPath("blob/main/CYBERCHESS_CPI_SPEC.md")} style={{ color: C.purple, textDecoration: "none" }}>{tt(L, "📄 Полная спецификация на GitHub")}</a>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>
-          Версия 0.1 · 2026-05-12 · subject to revision
+          {tt(L, "Версия 0.1 · 2026-05-12 · может меняться")}
         </div>
       </article>
     </main>

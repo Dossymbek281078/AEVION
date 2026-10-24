@@ -40,6 +40,8 @@ const ИМЕНА = new Set([
   "Twin", "Fishing", "Puzzle", "Play", "Command", "Emoji", "Expert", "Master",
   // 24.10.2026: Chess.com — название сайта, как Lichess (набор звуков «Chess.com стиль» и его kk)
   "Chess", "chess",
+  // 24.10.2026: Glicko — название рейтинговой системы, GitHub — сервиса (страница CPI)
+  "Glicko", "Glicko-", "GitHub",
 ]);
 
 const BELYJ = new Set([

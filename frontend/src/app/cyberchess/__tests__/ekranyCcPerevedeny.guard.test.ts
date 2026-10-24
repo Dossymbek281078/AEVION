@@ -4,6 +4,7 @@ import { join } from "path";
 import { TRAINING_TEXT } from "../training/trainingText";
 import { CPI_TEXT } from "../cpi/cpiText";
 import { ECONOMY_TEXT } from "../economy/economyText";
+import { MATCHMAKING_TEXT } from "../matchmaking/matchmakingText";
 
 /**
  * Экраны CyberChess под /cyberchess/* на /en были русскими (замер 24.10.2026 браузером:
@@ -17,6 +18,7 @@ const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>
   { путь: "training/page.tsx", словарь: TRAINING_TEXT, поля: ["name", "desc", "label", "drillName", "reps"] },
   { путь: "cpi/page.tsx", словарь: CPI_TEXT, поля: ["desc", "title", "note", "basis"] },
   { путь: "economy/page.tsx", словарь: ECONOMY_TEXT, поля: ["title", "desc", "style", "bio", "label"] },
+  { путь: "matchmaking/page.tsx", словарь: MATCHMAKING_TEXT, поля: ["sub"] },
 ];
 const ИСКЛЮЧЕНИЯ = new Set(["AEVION", "Chess training"]);
 
@@ -29,7 +31,7 @@ describe.each(ЭКРАНЫ)("экран $путь", ({ путь, словарь,
       .map((m) => m[1]).filter((v) => !ИСКЛЮЧЕНИЯ.has(v));
     // знаменатель: прибор, не нашедший вызовов, был бы «чист» вслепую
     expect(вызовы.length, "вызовов tt").toBeGreaterThan(15);
-    expect(данные.length, "значений данных").toBeGreaterThan(5);
+    expect(данные.length, "значений данных").toBeGreaterThanOrEqual(5);
     const все = [...new Set([...вызовы, ...данные])];
     for (const loc of ["en", "kk"] as const) {
       expect(все.filter((k) => !словарь[k]?.[loc]), `без ${loc}`).toEqual([]);

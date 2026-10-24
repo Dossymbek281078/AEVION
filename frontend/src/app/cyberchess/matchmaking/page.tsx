@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCcI18n } from "../i18n";
+import { tt } from "./matchmakingText";
 import { loadEstimateFromStorage } from "../ratingCalibration";
 import { tournamentUserId } from "../tournaments/playerIdentity";
 import { svyazPoteryana } from "./svyaz";
@@ -88,7 +89,7 @@ function formatDuration(ms: number): string {
 }
 
 export default function CyberChessMatchmakingPage() {
-  const { t } = useCcI18n();
+  const { t, locale: L } = useCcI18n();
   const router = useRouter();
   const [timeControl, setTimeControl] = useState<TimeControl>("180+0");
   const [rating, setRating] = useState<number>(1500);
@@ -285,7 +286,7 @@ export default function CyberChessMatchmakingPage() {
         es.addEventListener("timeout", () => {
           setState({
             phase: "error",
-            message: "Время ожидания истекло. Попробуй ещё раз — возможно, нет соперников с похожим рейтингом.",
+            message: tt(L, "Время ожидания истекло. Попробуй ещё раз — возможно, нет соперников с похожим рейтингом."),
           });
           cleanup();
         });
@@ -333,8 +334,8 @@ export default function CyberChessMatchmakingPage() {
           phase: "error",
           message:
             data?.error === "rate_limited"
-              ? "Слишком много попыток. Подожди минуту."
-              : "Не удалось встать в очередь. Попробуй ещё раз через минуту.",
+              ? tt(L, "Слишком много попыток. Подожди минуту.")
+              : tt(L, "Не удалось встать в очередь. Попробуй ещё раз через минуту."),
         });
         return;
       }
@@ -350,7 +351,7 @@ export default function CyberChessMatchmakingPage() {
     } catch (e) {
       setState({
         phase: "error",
-        message: `Сеть недоступна: ${(e as Error).message}`,
+        message: `${tt(L, "Сеть недоступна:")} ${(e as Error).message}`,
       });
     }
   }, [rating, displayName, timeControl, handleMatched, startWaiting]);
@@ -385,28 +386,28 @@ export default function CyberChessMatchmakingPage() {
             className="planet-muted"
             style={{ alignSelf: "flex-start", fontSize: 13, background: "none", border: "none", cursor: "pointer", padding: 0 }}
           >
-            ← Назад в CyberChess
+            {tt(L, "← Назад в CyberChess")}
           </button>
-          <h1 className="planet-h1">Поиск соперника</h1>
+          <h1 className="planet-h1">{tt(L, "Поиск соперника")}</h1>
           <p className="planet-muted" style={{ fontSize: 14.5 }}>
-            Подберём живого игрока с похожим рейтингом ({rating - 150}–{rating + 150}) и тем же контролем времени.
+            {tt(L, "Подберём живого игрока с похожим рейтингом")} ({rating - 150}–{rating + 150}) {tt(L, "и тем же контролем времени.")}
           </p>
           <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingTop: 4 }}>
-            <a href="/cyberchess/leaderboard" className="planet-btn">Таблица лидеров</a>
-            <a href="/cyberchess/history" className="planet-btn">История матчей</a>
+            <a href="/cyberchess/leaderboard" className="planet-btn">{tt(L, "Таблица лидеров")}</a>
+            <a href="/cyberchess/history" className="planet-btn">{tt(L, "История матчей")}</a>
           </nav>
         </header>
 
         {/* Settings card */}
         <section className="planet-card" style={{ padding: 24 }}>
-          <h2 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700 }}>Параметры партии</h2>
+          <h2 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700 }}>{tt(L, "Параметры партии")}</h2>
 
           {/* Display name */}
           <div style={{ marginBottom: 20 }}>
             {/* htmlFor + id связывают подпись с полем. Без этого диктор читает
                 «поле ввода» и не называет, чего от человека хотят: подпись рядом
                 видна глазами, но программно с полем не связана. */}
-            <label htmlFor="mm-nick" className="planet-eyebrow" style={{ display: "block", marginBottom: 6, fontSize: 11 }}>Ник</label>
+            <label htmlFor="mm-nick" className="planet-eyebrow" style={{ display: "block", marginBottom: 6, fontSize: 11 }}>{tt(L, "Ник")}</label>
             <input
               id="mm-nick"
               type="text"
@@ -415,13 +416,13 @@ export default function CyberChessMatchmakingPage() {
               disabled={state.phase === "waiting" || state.phase === "joining"}
               className="planet-input"
               style={{ maxWidth: 320 }}
-              placeholder="Игрок"
+              placeholder={tt(L, "Игрок")}
             />
           </div>
 
           {/* Time control */}
           <div style={{ marginBottom: 20 }}>
-            <label className="planet-eyebrow" style={{ display: "block", marginBottom: 8, fontSize: 11 }}>Контроль времени</label>
+            <label className="planet-eyebrow" style={{ display: "block", marginBottom: 8, fontSize: 11 }}>{tt(L, "Контроль времени")}</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8 }} className="planet-tc-grid">
               {TIME_CONTROLS.map((tc) => {
                 const active = timeControl === tc.value;
@@ -434,7 +435,7 @@ export default function CyberChessMatchmakingPage() {
                     className={`planet-tile${active ? " active" : ""}`}
                   >
                     <div style={{ fontSize: 15, fontWeight: 700 }}>{tc.label}</div>
-                    <div className="planet-muted" style={{ fontSize: 11.5 }}>{tc.sub}</div>
+                    <div className="planet-muted" style={{ fontSize: 11.5 }}>{tt(L, tc.sub)}</div>
                   </button>
                 );
               })}
@@ -444,22 +445,22 @@ export default function CyberChessMatchmakingPage() {
           {/* Rating slider */}
           <div style={{ marginBottom: 8 }}>
             <div style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <label htmlFor="mm-rating" className="planet-eyebrow" style={{ fontSize: 11 }}>Твой рейтинг</label>
+              <label htmlFor="mm-rating" className="planet-eyebrow" style={{ fontSize: 11 }}>{tt(L, "Твой рейтинг")}</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {serverRating && (
                   <span
-                    title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · неточный (мало партий)" : ""}`}
+                    title={`${tt(L, "Рейтинг")} ${speedOf(timeControl)} · ${serverRating.games} ${tt(L, "партий")}${serverRating.provisional ? " " + tt(L, "· неточный (мало партий)") : ""}`}
                     className="planet-badge cyan"
                   >
                     {speedOf(timeControl)} {serverRating.rating}
-                    {serverRating.provisional ? "?" : ""} · {serverRating.games} партий
+                    {serverRating.provisional ? "?" : ""} · {serverRating.games} {tt(L, "партий")}
                   </span>
                 )}
                 {fideEstimate !== null && (
                   <span className="planet-badge live">FIDE ~{fideEstimate}</span>
                 )}
                 <span style={{ fontSize: 13.5, fontWeight: 600 }}>
-                  {rating} <span className="planet-muted">(диапазон {rating - 150}–{rating + 150})</span>
+                  {rating} <span className="planet-muted">({tt(L, "диапазон")} {rating - 150}–{rating + 150})</span>
                 </span>
               </div>
             </div>
@@ -483,7 +484,7 @@ export default function CyberChessMatchmakingPage() {
             </div>
             {fideEstimate !== null && (
               <p className="planet-muted" style={{ marginTop: 6, fontSize: 11.5 }}>
-                Рейтинг автоматически определён по твоим партиям (FIDE ~{fideEstimate}). Можно скорректировать вручную.
+                {tt(L, "Рейтинг автоматически определён по твоим партиям")} (FIDE ~{fideEstimate}). {tt(L, "Можно скорректировать вручную.")}
               </p>
             )}
           </div>
@@ -502,7 +503,7 @@ export default function CyberChessMatchmakingPage() {
                 {t("match.search")}
               </button>
               <p className="planet-muted" style={{ textAlign: "center", fontSize: 13.5 }}>
-                Кликни — встанешь в живую очередь. Найдём пару за 5–60 секунд.
+                {tt(L, "Кликни — встанешь в живую очередь. Найдём пару за 5–60 секунд.")}
               </p>
             </div>
           )}
@@ -510,7 +511,7 @@ export default function CyberChessMatchmakingPage() {
           {state.phase === "joining" && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "32px 0" }}>
               <div className="planet-spin" />
-              <p style={{ fontSize: 14 }}>Встаём в очередь…</p>
+              <p style={{ fontSize: 14 }}>{tt(L, "Встаём в очередь…")}</p>
             </div>
           )}
 
@@ -520,14 +521,14 @@ export default function CyberChessMatchmakingPage() {
                 <div className="planet-pulse" />
                 <p style={{ fontSize: 17, fontWeight: 700 }}>{t("match.searching")}</p>
                 <p className="planet-muted" style={{ fontSize: 13 }}>
-                  Прошло: {formatDuration(state.elapsedMs)} · Ожидание ≈ {formatDuration(state.estimatedWaitMs)}
+                  {tt(L, "Прошло:")} {formatDuration(state.elapsedMs)} · {tt(L, "Ожидание ≈")} {formatDuration(state.estimatedWaitMs)}
                 </p>
                 {netSvyazi && (
                   <p
                     role="status"
                     style={{ fontSize: 13, color: "var(--pl-danger)", textAlign: "center", margin: 0 }}
                   >
-                    Сервер не отвечает — поиск продолжается, но очередь сейчас не обновляется.
+                    {tt(L, "Сервер не отвечает — поиск продолжается, но очередь сейчас не обновляется.")}
                   </p>
                 )}
               </div>
@@ -549,7 +550,7 @@ export default function CyberChessMatchmakingPage() {
                 </div>
                 <div style={{ marginTop: 12 }}>
                   <div className="planet-muted" style={{ marginBottom: 4, display: "flex", justifyContent: "space-between", fontSize: 11 }}>
-                    <span>Прогресс ожидания</span>
+                    <span>{tt(L, "Прогресс ожидания")}</span>
                     <span>{waitingProgressPct}%</span>
                   </div>
                   <div className="planet-bar">
@@ -570,26 +571,26 @@ export default function CyberChessMatchmakingPage() {
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontSize: 22, fontWeight: 700 }}>{state.opponent.displayName}</div>
                 <div className="planet-muted" style={{ fontSize: 13 }}>
-                  Рейтинг {state.opponent.ratingInternal} · ты играешь {state.color === "white" ? "белыми" : "чёрными"}
+                  {tt(L, "Рейтинг")} {state.opponent.ratingInternal} · {tt(L, "ты играешь")} {state.color === "white" ? tt(L, "белыми") : tt(L, "чёрными")}
                 </div>
               </div>
-              <p className="planet-muted" style={{ fontSize: 13 }}>Переходим к доске…</p>
+              <p className="planet-muted" style={{ fontSize: 13 }}>{tt(L, "Переходим к доске…")}</p>
             </div>
           )}
 
           {state.phase === "error" && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "20px 0" }}>
-              <div className="planet-badge danger">Ошибка</div>
+              <div className="planet-badge danger">{tt(L, "Ошибка")}</div>
               <p style={{ maxWidth: 400, textAlign: "center", fontSize: 13.5 }}>{state.message}</p>
               <button type="button" onClick={() => setState({ phase: "idle" })} className="planet-btn">
-                Попробовать снова
+                {tt(L, "Попробовать снова")}
               </button>
               {/* Выход к движку. 30 августа игроков в очереди почти не будет, и
                   «попробуй ещё раз» ведёт в ту же пустоту: человек, пришедший
                   играть, уходит ни с чем. Партия против движка доступна сразу и
                   работает — проверено на проде. */}
               <a href="/cyberchess" className="planet-muted" style={{ fontSize: 12.5, textDecoration: "underline" }}>
-                Соперника нет? Сыграть с движком прямо сейчас →
+                {tt(L, "Соперника нет? Сыграть с движком прямо сейчас →")}
               </a>
             </div>
           )}
@@ -602,8 +603,7 @@ export default function CyberChessMatchmakingPage() {
             Найдено 27.08.2026 чтением того, что реально написано на экране:
             вёрстка цела, ошибок нет, тесты зелёные — заметно только глазом. */}
         <footer className="planet-muted" style={{ textAlign: "center", fontSize: 11.5 }}>
-          Очередь не сохраняется: если перезагрузить страницу, поиск начнётся заново.
-          Через 5 минут без действий мы выведем вас из очереди.
+          {tt(L, "Очередь не сохраняется: если перезагрузить страницу, поиск начнётся заново. Через 5 минут без действий мы выведем вас из очереди.")}
         </footer>
       </div>
     </main>

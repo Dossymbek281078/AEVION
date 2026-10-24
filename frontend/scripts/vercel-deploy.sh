@@ -403,6 +403,46 @@ if [ ! -x "$FRONT_DIR/node_modules/.bin/tsc" ]; then
 fi
 ( cd "$FRONT_DIR" && ./node_modules/.bin/tsc --noEmit )
 
+# ── Сборщик — единственный ловец своего класса ошибок ────────────────────────
+# 24.10.2026 00:32: сайт bf5b867a0 упал на Vercel через 2 мин сборки — Turbopack:
+# «The "use client" directive must be placed before other expressions» (директива
+# после import в двух файлах deepsan). Ночной tsc дал 0, полный vitest — без
+# регрессий: место директивы проверяет только next build. Прод остался на старом
+# коде, бэк волны не катился, повтор — через 40 минут и слово оркестратора.
+# Поэтому перед загрузкой гоняем сборку здесь (3–5 ГБ, ~6 мин). Пропуск — только
+# явно, с причиной вслух: SKIP_NEXT_BUILD=1 (например, слот тяжёлых занят чужим
+# прогоном — тогда это решение, а не забывчивость).
+if [ "${SKIP_NEXT_BUILD:-0}" = "1" ]; then
+  echo "ВНИМАНИЕ: локальный next build ПРОПУЩЕН по SKIP_NEXT_BUILD=1 — ошибки сборщика (место «use client» и т.п.) поймает только Vercel." >&2
+else
+  if ! powershell -NoProfile -File C:/Users/user/aevion-commit-check.ps1 >/dev/null 2>&1; then
+    echo "ОСТАНОВКА: памяти под локальный next build нет (aevion-commit-check ≠ 0). Погасите dev-серверы или SKIP_NEXT_BUILD=1 с причиной." >&2
+    exit 1
+  fi
+  # Слот тяжёлых прогонов — отдельной командой, без конвейера: отказ claim (код 1 = чужой прогон идёт)
+  # останавливает, а не теряется в «| tail» (уроки 21.10 и 24.10).
+  NB_CLAIM="$(node C:/Users/user/aevion-heavy.mjs --claim --who deploy-site --minutes 15 2>&1)" || {
+    echo "ОСТАНОВКА: слот тяжёлых прогонов занят — локальный next build не стартует: $NB_CLAIM" >&2; exit 1; }
+  NB_CLAIM_ID="$(printf '%s' "$NB_CLAIM" | sed -n 's/.*(id \([0-9]*\)).*/\1/p')"
+  echo "локальный next build с подставленной отметкой (~6 мин)…"
+  NB_LOG="$(mktemp)"
+  if ( cd "$FRONT_DIR" && rm -rf .next && MSYS_NO_PATHCONV=1 ./node_modules/.bin/next build ) >"$NB_LOG" 2>&1; then
+    echo "next build зелёный: $(grep -cE '^\s*[├└┌]|^\s*[ƒ○●]' "$NB_LOG") строк маршрутов"
+  else
+    echo "ОСТАНОВКА: локальный next build упал — Vercel упал бы так же. Последние строки:" >&2
+    grep -nE "Error|error|failed|use client|Module not found" "$NB_LOG" | head -12 >&2
+    rm -f "$NB_LOG"; ( cd "$FRONT_DIR" && rm -rf .next )
+    node C:/Users/user/aevion-heavy.mjs --release --who deploy-site ${NB_CLAIM_ID:+--id "$NB_CLAIM_ID"} >/dev/null 2>&1 || true
+    exit 1
+  fi
+  rm -f "$NB_LOG"
+  node C:/Users/user/aevion-heavy.mjs --release --who deploy-site ${NB_CLAIM_ID:+--id "$NB_CLAIM_ID"} >/dev/null 2>&1 || true
+  # Сборку убираем: .next в .gitignore и в загрузку не едет, но 3–5 ГБ на диске
+  # и типы .next/dev роняли tsc соседней обёртки (20.10).
+  ( cd "$FRONT_DIR" && rm -rf .next && rm -f public/version.json )
+fi
+
+
 # Прод перечитываем ПРЯМО ПЕРЕД публикацией. Между проверкой выше и этим
 # местом проходят минуты (проверка типов), а сборка идёт ещё 25-35 - за это
 # время соседнее окно успевает выкатить своё. 21.08.2026 так и вышло:

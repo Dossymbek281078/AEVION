@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Btn, Card, Badge, Modal, Tooltip, Icon, Spinner, SectionHeader } from "../ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "../theme";
+import { useCcI18n } from "../i18n";
+import { tt } from "./studioText";
 
 /* ══════════════════════════════════════════════════════════════════════
    AEVION CyberChess — STUDIO MODE v2
@@ -69,7 +71,7 @@ const TWITCH_PRESETS: StreamerPreset[] = [
   { name: "FIDE TV",        platform: "twitch", channel: "fide_chess",     desc: "🌍 Official FIDE broadcasts" },
   { name: "Anna Cramling",  platform: "twitch", channel: "annacramling",   desc: "WIM · разборы и подкасты" },
   { name: "GM Igor Smirnov",platform: "twitch", channel: "igorchess1",     desc: "Уроки на русском/eng" },
-  { name: "Magnus Carlsen", platform: "twitch", channel: "magnuscarlsen",  desc: "🇳🇴 World Champion (бывший)" },
+  { name: "Magnus Carlsen", platform: "twitch", channel: "magnuscarlsen",  desc: "🇳🇴 Бывший чемпион мира" },
   { name: "ChessBrah",      platform: "twitch", channel: "chessbrah",      desc: "GM Aman + community" },
   { name: "Hess",           platform: "twitch", channel: "robertkhess",    desc: "GM Robert Hess" },
   { name: "Daniel King",    platform: "twitch", channel: "powerplaychess", desc: "GM Daniel King · PowerPlay" },
@@ -154,9 +156,9 @@ const AREA = ["a", "b", "c", "d"] as const;
 
 /* ─── Source labels & helpers ─── */
 
-function srcLabel(s: Source): string {
+function srcLabel(s: Source, L: string): string {
   if (s.title) return s.title;
-  if (s.kind === "empty") return "Пусто";
+  if (s.kind === "empty") return tt(L, "Пусто");
   if (s.kind === "chess-internal") return "♞ CyberChess";
   if (s.kind === "twitch") return `Twitch · ${s.channel || "?"}`;
   if (s.kind === "twitch-chat") return `💬 Chat · ${s.channel || "?"}`;
@@ -193,6 +195,7 @@ function externalUrl(s: Source): string | null {
 /* ─── Pane content (iframe wrappers) ─── */
 
 function PaneContent({ src, parentDomain }: { src: Source; parentDomain: string }) {
+  const { locale: L } = useCcI18n();
   const iframeStyle: React.CSSProperties = {
     width: "100%", height: "100%", border: "none", display: "block", background: "#000",
   };
@@ -248,7 +251,7 @@ function PaneContent({ src, parentDomain }: { src: Source; parentDomain: string 
   if (src.kind === "url" && src.url) {
     return <iframe src={src.url} style={iframeStyle} allowFullScreen title={src.url} />;
   }
-  return <div style={{ padding: SPACE[4], color: CC.textDim }}>Источник не настроен</div>;
+  return <div style={{ padding: SPACE[4], color: CC.textDim }}>{tt(L, "Источник не настроен")}</div>;
 }
 
 /* ─── Source picker modal ─── */
@@ -281,6 +284,7 @@ function extractYouTubeChannelId(url?: string): string | null {
 function SourcePicker({ open, onClose, onPick }: {
   open: boolean; onClose: () => void; onPick: (s: Source) => void;
 }) {
+  const { locale: L } = useCcI18n();
   const [tab, setTab] = useState<"live" | "twitch-presets" | "youtube-presets" | "twitch" | "youtube" | "lichess" | "url">("live");
   const [liveStreamers, sLiveStreamers] = useState<LiveStreamer[]>([]);
   const [loadingLive, sLoadingLive] = useState(false);
@@ -310,7 +314,7 @@ function SourcePicker({ open, onClose, onPick }: {
         for (const l of lines) { try { parsed.push(JSON.parse(l)); } catch {} }
         sBroadcasts(parsed);
       })
-      .catch(e => sBcError(e.message || "Не удалось загрузить турниры"))
+      .catch(e => sBcError(e.message || tt(L, "Не удалось загрузить турниры")))
       .finally(() => sLoadingBC(false));
   }, [open, tab, broadcasts.length]);
 
@@ -324,7 +328,7 @@ function SourcePicker({ open, onClose, onPick }: {
     fetch("https://lichess.org/api/streamer/live")
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((arr: LiveStreamer[]) => { sLiveStreamers(Array.isArray(arr) ? arr : []); sLiveLastFetch(Date.now()); })
-      .catch(e => sLiveError(e?.message || "Не удалось загрузить список стримеров"))
+      .catch(e => sLiveError(e?.message || tt(L, "Не удалось загрузить список стримеров")))
       .finally(() => sLoadingLive(false));
   }, [open, tab, liveLastFetch, liveStreamers.length]);
 
@@ -346,7 +350,7 @@ function SourcePicker({ open, onClose, onPick }: {
   );
 
   return (
-    <Modal open={open} onClose={onClose} title="Выбери источник для панели" size="lg">
+    <Modal open={open} onClose={onClose} title={tt(L, "Выбери источник для панели")} size="lg">
       {/* tab strip */}
       <div style={{ display: "flex", gap: 4, marginBottom: SPACE[4], flexWrap: "wrap" }}>
         {tabs.map(t => (
@@ -358,7 +362,7 @@ function SourcePicker({ open, onClose, onPick }: {
               color: tab === t.v ? CC.brand : CC.text, cursor: "pointer",
               display: "inline-flex", alignItems: "center", gap: 5,
             }}>
-            <span>{t.icon}</span> {t.label}
+            <span>{t.icon}</span> {tt(L, t.label)}
           </button>
         ))}
       </div>
@@ -367,24 +371,24 @@ function SourcePicker({ open, onClose, onPick }: {
       {tab === "live" && (
         <div>
           <div style={{ display: "flex", gap: SPACE[2], marginBottom: SPACE[2], alignItems: "center" }}>
-            <input aria-label="Поиск"
+            <input aria-label={tt(L, "Поиск")}
               value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="🔍 По имени, языку или званию (GM/IM)…"
+              placeholder={tt(L, "🔍 По имени, языку или званию (GM/IM)…")}
               style={{ flex: 1, padding: "8px 12px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 13 }}
             />
             <button onClick={() => sLiveLastFetch(0)} className="cc-focus-ring"
               style={{ padding: "7px 11px", borderRadius: RADIUS.md, border: `1px solid ${CC.border}`, background: CC.surface1, cursor: "pointer", fontSize: 11, fontWeight: 800 }}
-              title="Обновить список">↻</button>
+              title={tt(L, "Обновить список")}>↻</button>
           </div>
           <div style={{ fontSize: 11, color: CC.textDim, marginBottom: SPACE[2] }}>
-            Шахматисты, которые СЕЙЧАС в прямом эфире (источник — Lichess streamer/live API). Автообновление каждые 60 сек.
+            {tt(L, "Шахматисты, которые СЕЙЧАС в прямом эфире (источник — открытый список стримеров Lichess). Автообновление каждые 60 сек.")}
             {liveLastFetch > 0 && <span style={{ marginLeft: 6, color: CC.brand }}>· {liveStreamers.length} live</span>}
           </div>
-          {loadingLive && <div style={{ display: "flex", alignItems: "center", gap: 8, color: CC.textDim, fontSize: 12 }}><Spinner size={14} /> Опрашиваю Lichess…</div>}
+          {loadingLive && <div style={{ display: "flex", alignItems: "center", gap: 8, color: CC.textDim, fontSize: 12 }}><Spinner size={14} /> {tt(L, "Опрашиваю Lichess…")}</div>}
           {liveError && <div style={{ color: CC.danger, fontSize: 12, padding: SPACE[2] }}>{liveError}</div>}
           {!loadingLive && liveStreamers.length === 0 && !liveError && (
             <div style={{ textAlign: "center", padding: SPACE[4], color: CC.textDim, fontSize: 13 }}>
-              Никого не нашлось — попробуй обновить или зайди позже
+              {tt(L, "Никого не нашлось — попробуй обновить или зайди позже")}
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: SPACE[2] }}>
@@ -418,7 +422,7 @@ function SourcePicker({ open, onClose, onPick }: {
                       <span style={{ fontSize: 9, fontWeight: 700, color: CC.textDim, padding: "1px 4px", borderRadius: 3, background: CC.surface3 }}>{lang}</span>
                     </div>
                     <div style={{ fontSize: 11, color: CC.textDim, lineHeight: 1.4, minHeight: 28, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any }}>
-                      {s.stream?.status || s.streamer?.headline || "Без описания"}
+                      {s.stream?.status || s.streamer?.headline || tt(L, "Без описания")}
                     </div>
                     <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
                       {tw && platform === "twitch" && (
@@ -428,7 +432,7 @@ function SourcePicker({ open, onClose, onPick }: {
                             📺 Twitch
                           </button>
                           <button onClick={() => { onPick({ kind: "twitch-chat", channel: tw, title: `💬 ${s.name}` }); onClose(); }}
-                            title="Только чат"
+                            title={tt(L, "Только чат")}
                             style={{ padding: "5px 8px", borderRadius: 5, background: "#18181b", color: "#a78bfa", fontSize: 11, fontWeight: 800, cursor: "pointer", border: "1px solid #2a2d34" }}>
                             💬
                           </button>
@@ -448,7 +452,7 @@ function SourcePicker({ open, onClose, onPick }: {
                         </button>
                       )}
                       <a href={`https://lichess.org/@/${s.id}`} target="_blank" rel="noopener"
-                        title="Профиль на Lichess"
+                        title={tt(L, "Профиль на Lichess")}
                         style={{ padding: "5px 7px", borderRadius: 5, background: CC.surface3, color: CC.textDim, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
                         ♟
                       </a>
@@ -464,19 +468,19 @@ function SourcePicker({ open, onClose, onPick }: {
       {(tab === "twitch-presets" || tab === "youtube-presets") && (
         <div>
           <div style={{ display: "flex", gap: SPACE[2], marginBottom: SPACE[3], alignItems: "center" }}>
-            <input aria-label="Поиск"
+            <input aria-label={tt(L, "Поиск")}
               value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="🔍 Поиск по имени или описанию…"
+              placeholder={tt(L, "🔍 Поиск по имени или описанию…")}
               style={{ flex: 1, padding: "8px 12px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 13 }}
             />
             <a href={tab === "twitch-presets" ? "https://www.twitch.tv/directory/category/chess" : "https://www.youtube.com/results?search_query=chess+live"}
               target="_blank" rel="noopener"
               style={{ fontSize: 11, color: CC.accent, textDecoration: "none", fontWeight: 700, padding: "4px 8px" }}>
-              {tab === "twitch-presets" ? "Все эфиры на Twitch ↗" : "Поиск на YouTube ↗"}
+              {tab === "twitch-presets" ? tt(L, "Все эфиры на Twitch ↗") : tt(L, "Поиск на YouTube ↗")}
             </a>
           </div>
           <div style={{ fontSize: 11, color: CC.textDim, marginBottom: SPACE[2] }}>
-            {filtered.length} {tab === "twitch-presets" ? "Twitch" : "YouTube"} канал{filtered.length === 1 ? "" : filtered.length < 5 ? "а" : "ов"}. Клик добавит в панель.
+            {filtered.length} {tab === "twitch-presets" ? "Twitch" : "YouTube"} {tt(L, filtered.length === 1 ? "канал" : filtered.length < 5 ? "канала" : "каналов")}. {tt(L, "Клик добавит в панель.")}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: SPACE[2] }}>
             {filtered.map(p => (
@@ -490,7 +494,7 @@ function SourcePicker({ open, onClose, onPick }: {
                 onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = CC.brand; (e.currentTarget as HTMLDivElement).style.background = CC.brandSoft; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = CC.border; (e.currentTarget as HTMLDivElement).style.background = CC.surface1; }}>
                 <div style={{ fontSize: 14, fontWeight: 900, color: CC.text }}>{p.name}</div>
-                <div style={{ fontSize: 11, color: CC.textDim, lineHeight: 1.35 }}>{p.desc}</div>
+                <div style={{ fontSize: 11, color: CC.textDim, lineHeight: 1.35 }}>{tt(L, p.desc)}</div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: p.platform === "twitch" ? "#9146ff" : "#ff0000" }}>
                   {p.platform === "twitch" ? "🟣 Twitch" : "▶ YouTube"} · {p.channel}
                 </div>
@@ -501,14 +505,14 @@ function SourcePicker({ open, onClose, onPick }: {
                     onClose();
                   }} className="cc-focus-ring"
                     style={{ flex: 1, padding: "5px 8px", border: "none", borderRadius: 5, background: CC.brand, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>
-                    📺 Видео
+                    {tt(L, "📺 Видео")}
                   </button>
                   {p.platform === "twitch" && (
                     <button onClick={() => { onPick({ kind: "twitch-chat", channel: p.channel, title: `💬 ${p.name}` }); onClose(); }}
                       className="cc-focus-ring"
-                      title="Добавить только чат канала (без видео — экономит трафик и место)"
+                      title={tt(L, "Добавить только чат канала (без видео — экономит трафик и место)")}
                       style={{ padding: "5px 9px", borderRadius: 5, background: "#18181b", color: "#a78bfa", fontSize: 11, fontWeight: 800, cursor: "pointer", border: "1px solid #2a2d34" }}>
-                      💬 Чат
+                      {tt(L, "💬 Чат")}
                     </button>
                   )}
                 </div>
@@ -516,7 +520,7 @@ function SourcePicker({ open, onClose, onPick }: {
             ))}
             {filtered.length === 0 && (
               <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: SPACE[4], color: CC.textDim, fontSize: 13 }}>
-                Ничего не найдено по запросу "{search}"
+                {tt(L, "Ничего не найдено по запросу")} "{search}"
               </div>
             )}
           </div>
@@ -527,11 +531,11 @@ function SourcePicker({ open, onClose, onPick }: {
       {tab === "twitch" && (
         <div style={{ display: "flex", flexDirection: "column", gap: SPACE[3] }}>
           <div style={{ fontSize: 12, color: CC.textDim }}>
-            Имя канала или URL Twitch. Например: <code style={{ background: CC.surface3, padding: "1px 5px", borderRadius: 3 }}>gmhikaru</code> или <code style={{ background: CC.surface3, padding: "1px 5px", borderRadius: 3 }}>https://twitch.tv/gmhikaru</code>
+            {tt(L, "Имя канала или URL Twitch. Например:")} <code style={{ background: CC.surface3, padding: "1px 5px", borderRadius: 3 }}>gmhikaru</code> {tt(L, "или")} <code style={{ background: CC.surface3, padding: "1px 5px", borderRadius: 3 }}>https://twitch.tv/gmhikaru</code>
           </div>
-          <input aria-label="Канал на Twitch"
+          <input aria-label={tt(L, "Канал на Twitch")}
             value={twitchInput} onChange={e => sTwitchInput(e.target.value)}
-            placeholder="gmhikaru или https://twitch.tv/..."
+            placeholder={tt(L, "gmhikaru или https://twitch.tv/...")}
             style={{ padding: "10px 14px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 14 }}
           />
           <div style={{ display: "flex", gap: SPACE[2] }}>
@@ -543,7 +547,7 @@ function SourcePicker({ open, onClose, onPick }: {
               if (!ch) return;
               onPick({ kind: "twitch", channel: ch });
               onClose();
-            }}>📺 Видео</Btn>
+            }}>{tt(L, "📺 Видео")}</Btn>
             <Btn variant="secondary" disabled={!twitchInput.trim()} onClick={() => {
               let ch = twitchInput.trim();
               const m = ch.match(/twitch\.tv\/([^/?#]+)/i);
@@ -552,7 +556,7 @@ function SourcePicker({ open, onClose, onPick }: {
               if (!ch) return;
               onPick({ kind: "twitch-chat", channel: ch, title: `💬 ${ch}` });
               onClose();
-            }}>💬 Только чат</Btn>
+            }}>{tt(L, "💬 Только чат")}</Btn>
           </div>
         </div>
       )}
@@ -561,12 +565,12 @@ function SourcePicker({ open, onClose, onPick }: {
       {tab === "youtube" && (
         <div style={{ display: "flex", flexDirection: "column", gap: SPACE[4] }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>📡 Прямой эфир канала</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>{tt(L, "📡 Прямой эфир канала")}</div>
             <div style={{ fontSize: 11, color: CC.textDim, marginBottom: SPACE[2] }}>
-              Channel ID (например, <code>UCQHX6ViZmPsWiYSFAyS0a3Q</code>) — найдёшь в URL канала на youtube.com
+              {tt(L, "ID канала (например,")} <code>UCQHX6ViZmPsWiYSFAyS0a3Q</code>) {tt(L, "— найдёшь в адресе канала на YouTube")}
             </div>
             <div style={{ display: "flex", gap: SPACE[2] }}>
-              <input aria-label="Канал на YouTube" value={ytChannelInput} onChange={e => sYtChannelInput(e.target.value)}
+              <input aria-label={tt(L, "Канал на YouTube")} value={ytChannelInput} onChange={e => sYtChannelInput(e.target.value)}
                 placeholder="UCQHX6ViZmPsWiYSFAyS0a3Q"
                 style={{ flex: 1, padding: "10px 14px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 14 }} />
               <Btn variant="primary" disabled={!ytChannelInput.trim()} onClick={() => {
@@ -576,10 +580,10 @@ function SourcePicker({ open, onClose, onPick }: {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>🎥 Видео по ID или URL</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>{tt(L, "🎥 Видео по ID или URL")}</div>
             <div style={{ display: "flex", gap: SPACE[2] }}>
               <input value={ytVideoInput} onChange={e => sYtVideoInput(e.target.value)}
-                placeholder="dQw4w9WgXcQ или https://youtube.com/watch?v=..."
+                placeholder={tt(L, "ID видео или ссылка на YouTube")}
                 style={{ flex: 1, padding: "10px 14px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 14 }} />
               <Btn variant="primary" disabled={!ytVideoInput.trim()} onClick={() => {
                 let id = ytVideoInput.trim();
@@ -588,7 +592,7 @@ function SourcePicker({ open, onClose, onPick }: {
                 if (m1) id = m1[1]; else if (m2) id = m2[1];
                 onPick({ kind: "youtube-video", videoId: id });
                 onClose();
-              }}>Видео</Btn>
+              }}>{tt(L, "Видео")}</Btn>
             </div>
           </div>
         </div>
@@ -599,15 +603,15 @@ function SourcePicker({ open, onClose, onPick }: {
         <div style={{ display: "flex", flexDirection: "column", gap: SPACE[4] }}>
           <div style={{ display: "flex", gap: SPACE[2], flexWrap: "wrap" }}>
             <Btn variant="accent" onClick={() => { onPick({ kind: "lichess-tv", title: "Lichess TV" }); onClose(); }}>
-              📺 Lichess TV (live top игры)
+              {tt(L, "📺 Lichess TV (лучшие партии в прямом эфире)")}
             </Btn>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>🎮 Конкретная партия (8-знач. ID)</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>{tt(L, "🎮 Конкретная партия (8-знач. ID)")}</div>
             <div style={{ display: "flex", gap: SPACE[2] }}>
               <input value={liGame} onChange={e => sLiGame(e.target.value)}
-                placeholder="abcdefgh или https://lichess.org/abcdefgh"
+                placeholder={tt(L, "ID из 8 символов или ссылка на партию Lichess")}
                 style={{ flex: 1, padding: "10px 14px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 14 }} />
               <Btn variant="primary" disabled={!liGame.trim()} onClick={() => {
                 let id = liGame.trim();
@@ -616,15 +620,15 @@ function SourcePicker({ open, onClose, onPick }: {
                 id = id.slice(0, 8);
                 onPick({ kind: "lichess-game", gameId: id });
                 onClose();
-              }}>Открыть</Btn>
+              }}>{tt(L, "Открыть")}</Btn>
             </div>
           </div>
 
           <div>
             <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>
-              🏆 Live турниры (Lichess Broadcasts API)
+              {tt(L, "🏆 Турниры в прямом эфире (трансляции Lichess)")}
             </div>
-            {loadingBC && <div style={{ display: "flex", alignItems: "center", gap: 8, color: CC.textDim, fontSize: 12 }}><Spinner size={14} /> Загружаю список…</div>}
+            {loadingBC && <div style={{ display: "flex", alignItems: "center", gap: 8, color: CC.textDim, fontSize: 12 }}><Spinner size={14} /> {tt(L, "Загружаю список…")}</div>}
             {bcError && <div style={{ color: CC.danger, fontSize: 12 }}>{bcError}</div>}
             {!loadingBC && broadcasts.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: SPACE[1], maxHeight: 280, overflowY: "auto", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, padding: SPACE[2] }}>
@@ -637,14 +641,14 @@ function SourcePicker({ open, onClose, onPick }: {
                       <span style={{ fontSize: 14 }}>{ongoing ? "🔴" : "⚫"}</span>
                       <span style={{ flex: 1, fontWeight: 700 }}>{bc.tour.name}</span>
                       {ongoing && <Badge tone="brand" size="xs">LIVE</Badge>}
-                      <span style={{ color: CC.textDim, fontSize: 10 }}>↗ открыть</span>
+                      <span style={{ color: CC.textDim, fontSize: 10 }}>{tt(L, "↗ открыть")}</span>
                     </a>
                   );
                 })}
               </div>
             )}
             <div style={{ fontSize: 10, color: CC.textDim, marginTop: SPACE[1] }}>
-              Lichess блокирует прямую вставку turnir-страницы. Открой в новой вкладке, скопируй ID партии — вставь его выше.
+              {tt(L, "Lichess не даёт встроить страницу турнира. Открой её в новой вкладке, скопируй ID партии и вставь его выше.")}
             </div>
           </div>
         </div>
@@ -654,15 +658,15 @@ function SourcePicker({ open, onClose, onPick }: {
       {tab === "url" && (
         <div style={{ display: "flex", flexDirection: "column", gap: SPACE[3] }}>
           <div style={{ fontSize: 12, color: CC.textDim }}>
-            Любой embed-friendly URL. Многие сайты блокируют iframing — если белый экран, источник не разрешает встраивание.
+            {tt(L, "Любой адрес, который разрешает встраивание. Многие сайты это запрещают — если экран белый, источник не разрешает встраивание.")}
           </div>
-          <input aria-label="Адрес источника" value={urlInput} onChange={e => sUrlInput(e.target.value)}
+          <input aria-label={tt(L, "Адрес источника")} value={urlInput} onChange={e => sUrlInput(e.target.value)}
             placeholder="https://..."
             style={{ padding: "10px 14px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 14 }} />
           <Btn variant="primary" disabled={!urlInput.trim()} onClick={() => {
             onPick({ kind: "url", url: urlInput.trim() });
             onClose();
-          }}>Добавить URL</Btn>
+          }}>{tt(L, "Добавить URL")}</Btn>
         </div>
       )}
     </Modal>
@@ -676,6 +680,7 @@ function Pane({ src, area, onChangeSource, onMute, onClose, onMaximize, onPicker
   onChangeSource: () => void; onMute: () => void; onClose: () => void; onMaximize: () => void; onPickerOpen: () => void;
   isMax: boolean; parentDomain: string; controlsVisible: boolean; isOnlyChessApp: boolean;
 }) {
+  const { locale: L } = useCcI18n();
   const isEmpty = src.kind === "empty";
   const ext = externalUrl(src);
   return (
@@ -699,10 +704,10 @@ function Pane({ src, area, onChangeSource, onMute, onClose, onMaximize, onPicker
       }}>
         <span style={{ fontSize: 13, marginRight: 4 }}>{srcIcon(src.kind)}</span>
         <span style={{ fontSize: 12, fontWeight: 800, color: "#fff", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {srcLabel(src)}
+          {srcLabel(src, L)}
         </span>
         {!isEmpty && (src.kind === "twitch" || src.kind === "youtube-channel" || src.kind === "youtube-video") && (
-          <Tooltip label={src.muted ? "Включить звук" : "Mute"}>
+          <Tooltip label={src.muted ? tt(L, "Включить звук") : tt(L, "Mute")}>
             <button onClick={onMute} className="cc-focus-ring"
               style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "3px 7px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
               {src.muted ? "🔇" : "🔊"}
@@ -710,7 +715,7 @@ function Pane({ src, area, onChangeSource, onMute, onClose, onMaximize, onPicker
           </Tooltip>
         )}
         {!isEmpty && ext && (
-          <Tooltip label={src.kind === "chess-internal" ? "Открыть полноценный CyberChess (со Stockfish и движком)" : "Открыть в новой вкладке"}>
+          <Tooltip label={src.kind === "chess-internal" ? tt(L, "Открыть полноценный CyberChess (со Stockfish и движком)") : tt(L, "Открыть в новой вкладке")}>
             <a href={ext} target="_blank" rel="noopener" className="cc-focus-ring"
               style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "3px 7px", fontSize: 11, cursor: "pointer", fontWeight: 700, textDecoration: "none" }}>
               ↗
@@ -718,21 +723,21 @@ function Pane({ src, area, onChangeSource, onMute, onClose, onMaximize, onPicker
           </Tooltip>
         )}
         {!isEmpty && (
-          <Tooltip label="Сменить источник">
+          <Tooltip label={tt(L, "Сменить источник")}>
             <button onClick={onChangeSource} className="cc-focus-ring"
               style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "3px 7px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
               ⇄
             </button>
           </Tooltip>
         )}
-        <Tooltip label={isMax ? "Свернуть" : "На весь экран"}>
+        <Tooltip label={isMax ? tt(L, "Свернуть") : tt(L, "На весь экран")}>
           <button onClick={onMaximize} className="cc-focus-ring"
             style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "3px 7px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
             {isMax ? "🗗" : "⛶"}
           </button>
         </Tooltip>
         {!isOnlyChessApp && (
-          <Tooltip label="Очистить панель">
+          <Tooltip label={tt(L, "Очистить панель")}>
             <button onClick={onClose} className="cc-focus-ring"
               style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "3px 7px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
               ✕
@@ -740,9 +745,9 @@ function Pane({ src, area, onChangeSource, onMute, onClose, onMaximize, onPicker
           </Tooltip>
         )}
         {isOnlyChessApp && (
-          <Tooltip label="Это единственная панель CyberChess — нельзя убрать">
+          <Tooltip label={tt(L, "Это единственная панель CyberChess — нельзя убрать")}>
             <span style={{ background: "rgba(124,58,237,0.3)", color: "#a78bfa", borderRadius: 4, padding: "3px 7px", fontSize: 10, fontWeight: 800, letterSpacing: 0.4 }}>
-              🔒 Закрепить
+              {tt(L, "🔒 Закрепить")}
             </span>
           </Tooltip>
         )}
@@ -766,8 +771,8 @@ function Pane({ src, area, onChangeSource, onMute, onClose, onMaximize, onPicker
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 28, fontWeight: 900,
             }}>+</div>
-            <div style={{ fontSize: 14, fontWeight: 800 }}>Добавить источник</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>Twitch / YouTube / Lichess / своя игра</div>
+            <div style={{ fontSize: 14, fontWeight: 800 }}>{tt(L, "Добавить источник")}</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>{tt(L, "Twitch / YouTube / Lichess / своя игра")}</div>
           </button>
         ) : (
           <PaneContent src={src} parentDomain={parentDomain} />
@@ -882,6 +887,7 @@ function loadPip(): PipState {
 function PipChess({ pip, onChange, onClose }: {
   pip: PipState; onChange: (p: PipState) => void; onClose: () => void;
 }) {
+  const { locale: L } = useCcI18n();
   // Clamp to viewport so the PiP is never thrown off-screen on resize
   const [vp, setVp] = useState({ w: 1280, h: 720 });
   useEffect(() => {
@@ -932,19 +938,19 @@ function PipChess({ pip, onChange, onClose }: {
           display: "flex", alignItems: "center", gap: 6, cursor: "move",
           borderBottom: "1px solid #2a2d34", userSelect: "none",
         }}>
-        <span>♞ Мини-доска CyberChess</span>
+        <span>{tt(L, "♞ Мини-доска CyberChess")}</span>
         <span style={{ flex: 1 }} />
         <a href="/cyberchess" target="_blank" rel="noopener"
-          title="Открыть полный CyberChess (Stockfish, ИИ-коуч)"
+          title={tt(L, "Открыть полный CyberChess (Stockfish, ИИ-коуч)")}
           style={{ color: "#a78bfa", textDecoration: "none", padding: "1px 6px", borderRadius: 4, background: "rgba(124,58,237,0.18)", fontSize: 10, fontWeight: 800 }}>↗</a>
-        <button aria-label="Закрыть" onClick={onClose}
+        <button aria-label={tt(L, "Закрыть")} onClick={onClose}
           style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontWeight: 800 }}>✕</button>
       </div>
       <iframe src="/cyberchess?embed=1" title="PiP CyberChess"
         style={{ flex: 1, border: "none", background: CC.bg }}
         allow="clipboard-write; microphone" />
       <div onMouseDown={onResizeStart}
-        title="Растянуть"
+        title={tt(L, "Растянуть")}
         style={{
           position: "absolute", right: 0, bottom: 0, width: 18, height: 18,
           cursor: "nwse-resize",
@@ -958,6 +964,7 @@ function PipChess({ pip, onChange, onClose }: {
 /* ─── Main StudioPage ─── */
 
 export default function StudioPage() {
+  const { locale: L } = useCcI18n();
   const [state, setStateRaw] = useState<StudioState>(() => loadState());
   const [pickerForIdx, setPickerForIdx] = useState<number | null>(null);
   const [maxIdx, setMaxIdx] = useState<number | null>(null);
@@ -987,13 +994,13 @@ export default function StudioPage() {
         const firstEmptyIdx = visible.findIndex(p => p.kind === "empty");
         if (firstEmptyIdx >= 0) {
           panes[firstEmptyIdx] = { kind: "chess-internal" };
-          setWarningMsg("Восстановлена панель CyberChess — приложение должно быть всегда видно");
+          setWarningMsg(tt(L, "Восстановлена панель CyberChess — приложение должно быть всегда видно"));
           setTimeout(() => setWarningMsg(null), 3500);
           return { ...next, panes };
         } else {
           // No empty slot — replace the last visible pane
           panes[n - 1] = { kind: "chess-internal" };
-          setWarningMsg("Панель CyberChess вернулась — она обязательна");
+          setWarningMsg(tt(L, "Панель CyberChess вернулась — она обязательна"));
           setTimeout(() => setWarningMsg(null), 3500);
           return { ...next, panes };
         }
@@ -1114,7 +1121,7 @@ export default function StudioPage() {
           border: "1px solid #7c3aed", color: "#a78bfa", fontSize: 11, fontWeight: 900, letterSpacing: 0.5,
           margin: 0,
         }}>
-          🎬 Студия
+          {tt(L, "🎬 Студия")}
         </h1>
 
         <div style={{ flex: 1 }} />
@@ -1124,7 +1131,7 @@ export default function StudioPage() {
           {layoutBtns.map(b => {
             const active = state.layout === b.v;
             return (
-              <Tooltip key={b.v} label={b.label}>
+              <Tooltip key={b.v} label={tt(L, b.label)}>
                 <button onClick={() => setLayout(b.v)} className="cc-focus-ring"
                   style={{
                     width: 34, height: 28, padding: 4, border: "none", cursor: "pointer",
@@ -1147,42 +1154,42 @@ export default function StudioPage() {
             но переполнял сам ряд. */}
         <div style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
           {PRESET_LAYOUTS.map(p => (
-            <Tooltip key={p.id} label={p.label}>
+            <Tooltip key={p.id} label={tt(L, p.label)}>
               <button onClick={() => applyPreset(p.id)} className="cc-focus-ring"
                 style={{
                   padding: "5px 10px", borderRadius: RADIUS.md, border: "1px solid #2a2d34",
                   background: "#1f2229", color: "#e5e7eb", fontSize: 11, fontWeight: 700, cursor: "pointer",
                   display: "inline-flex", alignItems: "center", gap: 4,
                 }}>
-                <span>{p.icon}</span> {p.label}
+                <span>{p.icon}</span> {tt(L, p.label)}
               </button>
             </Tooltip>
           ))}
         </div>
 
         {/* Mute / unmute all */}
-        <Tooltip label="Выключить звук у всех трансляций">
+        <Tooltip label={tt(L, "Выключить звук у всех трансляций")}>
           <button onClick={() => muteAll(true)} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: "1px solid #2a2d34", background: "#1f2229", color: "#e5e7eb", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            🔇 без звука
+            {tt(L, "🔇 без звука")}
           </button>
         </Tooltip>
-        <Tooltip label="Включить звук у всех трансляций">
+        <Tooltip label={tt(L, "Включить звук у всех трансляций")}>
           <button onClick={() => muteAll(false)} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: "1px solid #2a2d34", background: "#1f2229", color: "#e5e7eb", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            🔊 со звуком
+            {tt(L, "🔊 со звуком")}
           </button>
         </Tooltip>
-        <Tooltip label={pip.open ? "Скрыть мини-доску" : "Показать плавающую мини-шахматную доску — играй пока смотришь стрим"}>
+        <Tooltip label={pip.open ? tt(L, "Скрыть мини-доску") : tt(L, "Показать плавающую мини-шахматную доску — играй пока смотришь стрим")}>
           <button onClick={() => setPip(p => ({ ...p, open: !p.open }))} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: `1px solid ${pip.open ? "#7c3aed" : "#2a2d34"}`, background: pip.open ? "#3b1d6a" : "#1f2229", color: pip.open ? "#a78bfa" : "#e5e7eb", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>
-            ♞ Мини-доска
+            {tt(L, "♞ Мини-доска")}
           </button>
         </Tooltip>
-        <Tooltip label={topBarPinned ? "Скрыть верхнюю панель — появится при наведении на верх экрана" : "Закрепить верхнюю панель"}>
+        <Tooltip label={topBarPinned ? tt(L, "Скрыть верхнюю панель — появится при наведении на верх экрана") : tt(L, "Закрепить верхнюю панель")}>
           <button onClick={() => setTopBarPinned(!topBarPinned)} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: `1px solid ${topBarPinned ? "#2a2d34" : "#7c3aed"}`, background: topBarPinned ? "#1f2229" : "#3b1d6a", color: topBarPinned ? "#e5e7eb" : "#a78bfa", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>
-            {topBarPinned ? "📍 закр." : "📌 откр."}
+            {topBarPinned ? tt(L, "📍 закр.") : tt(L, "📌 откр.")}
           </button>
         </Tooltip>
       </div>
@@ -1196,7 +1203,7 @@ export default function StudioPage() {
             background: "linear-gradient(180deg, rgba(124,58,237,0.4), transparent)",
             zIndex: 24, cursor: "ns-resize",
           }}
-          aria-label="Показать верхнюю панель"
+          aria-label={tt(L, "Показать верхнюю панель")}
         />
       )}
 

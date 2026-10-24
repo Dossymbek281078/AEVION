@@ -30,7 +30,11 @@ const МЕСЯЦЫ = [
   "декабря",
 ];
 
-export function человеческаяДата(s: string): string {
+// 24.10.2026: на /en и /kk месяцы шли по-русски (⚠️ kk — черновой перевод, нужна вычитка носителя).
+const МЕСЯЦЫ_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const МЕСЯЦЫ_KK = ["қаңтар", "ақпан", "наурыз", "сәуір", "мамыр", "маусым", "шілде", "тамыз", "қыркүйек", "қазан", "қараша", "желтоқсан"];
+
+export function человеческаяДата(s: string, язык: string = "ru"): string {
   if (!s) return "";
   // "2026-05-18 19:00" → "2026-05-18T19:00": без T такую строку разбирают
   // по-разному разные браузеры.
@@ -40,5 +44,7 @@ export function человеческаяДата(s: string): string {
   if (isNaN(d.getTime())) return s;
   const чч = String(d.getHours()).padStart(2, "0");
   const мм = String(d.getMinutes()).padStart(2, "0");
-  return d.getDate() + " " + МЕСЯЦЫ[d.getMonth()] + ", " + чч + ":" + мм;
+  if (язык === "en") return МЕСЯЦЫ_EN[d.getMonth()] + " " + d.getDate() + ", " + чч + ":" + мм;
+  const месяцы = язык === "kk" ? МЕСЯЦЫ_KK : МЕСЯЦЫ;
+  return d.getDate() + " " + месяцы[d.getMonth()] + ", " + чч + ":" + мм;
 }

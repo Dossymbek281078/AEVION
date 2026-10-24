@@ -42,6 +42,8 @@ const ИМЕНА = new Set([
   "Chess", "chess",
   // 24.10.2026: Glicko — название рейтинговой системы, GitHub — сервиса (страница CPI)
   "Glicko", "Glicko-", "GitHub",
+  // 24.10.2026: имена стримеров и канал из подборки студии (Levy Rozman, Jerry, Nelson Lopez, gmhikaru)
+  "Levy", "Rozman", "Jerry", "Nelson", "gmhikaru",
 ]);
 
 const BELYJ = new Set([
@@ -56,6 +58,8 @@ const BELYJ = new Set([
   "Pro", "Free",
   // Технические, но неизбежные в строках.
   "QR", "SVG", "PNG", "URL", "API",
+  // 24.10.2026: формат файла, как PNG/SVG (экспорт/импорт репертуара)
+  "JSON",
   // 23.10.2026: названия клавиш — не английский текст, а надпись на клавише;
   // ник-пример — имя. Перенос атрибутов в словарь удвоил их (ru + kk).
   "Ctrl", "Enter", "Esc", "DrNykterstein",

@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { denPoMestnomu } from "../denPoMestnomu";
-import { themeRu } from './themes';
+import { themeRu, themeEn } from './themes';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
 import { zadachaDlyaEkrana } from "../puzzleNormalize";
@@ -771,7 +771,7 @@ export default function DailyPuzzlePage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>{tt(L, "Тема")}</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{L === 'en' ? puzzle.theme : themeRu(puzzle.theme)}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{L === 'en' ? themeEn(puzzle.theme) : themeRu(puzzle.theme)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 12, color: '#9aa0b4' }}>{tt(L, "Время")}</div>

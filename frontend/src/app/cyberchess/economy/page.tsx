@@ -7,6 +7,8 @@
 import { canSpend, spend as ledgerSpend, type LedgerState } from "../chessyLedger";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useCcI18n } from "../i18n";
+import { tt } from "./economyText";
 
 const C = {
   bg: "#0f172a",
@@ -179,18 +181,20 @@ function writeJson(key: string, val: unknown) {
   window.localStorage.setItem(key, JSON.stringify(val));
 }
 
-function formatRemaining(ms: number): string {
-  if (ms <= 0) return "истекло";
+function formatRemaining(ms: number, L: string): string {
+  if (ms <= 0) return tt(L, "истекло");
+  const [dU, hU, mU] = L === "en" ? ["d", "h", "m"] : L === "kk" ? ["к", "сағ", "мин"] : ["д", "ч", "м"];
   const totalSec = Math.floor(ms / 1000);
   const d = Math.floor(totalSec / 86400);
   const h = Math.floor((totalSec % 86400) / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
-  if (d > 0) return `${d}д ${h}ч`;
-  if (h > 0) return `${h}ч ${m}м`;
-  return `${m}м`;
+  if (d > 0) return `${d}${dU} ${h}${hU}`;
+  if (h > 0) return `${h}${hU} ${m}${mU}`;
+  return `${m}${mU}`;
 }
 
 export default function EconomyHubPage() {
+  const { locale: L } = useCcI18n();
   const [mounted, setMounted] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [bids, setBids] = useState<Bids>({});
@@ -230,11 +234,11 @@ export default function EconomyHubPage() {
   function spend(cost: number, label: string): boolean {
     const wallet = readWallet();
     if (!wallet) {
-      setToast("Сначала заработай Chessy в CyberChess");
+      setToast(tt(L, "Сначала заработай Chessy в CyberChess"));
       return false;
     }
     if (!canSpend(wallet, cost)) {
-      setToast("Не хватает Chessy");
+      setToast(tt(L, "Не хватает Chessy"));
       return false;
     }
     // Читаем прямо перед записью: баланс в состоянии страницы мог устареть.
@@ -242,7 +246,7 @@ export default function EconomyHubPage() {
     try {
       window.localStorage.setItem(LS_WALLET, JSON.stringify(next));
     } catch {
-      setToast("Не удалось сохранить — браузер не принимает запись");
+      setToast(tt(L, "Не удалось сохранить — браузер не принимает запись"));
       return false;
     }
     setBalance(next.balance);
@@ -253,14 +257,14 @@ export default function EconomyHubPage() {
   function placeBid(a: Auction) {
     const current = bids[a.id] ?? a.startPrice;
     const next = current + 50;
-    if (!spend(50, "Ставка")) return;
+    if (!spend(50, tt(L, "Ставка"))) return;
     const updated = { ...bids, [a.id]: next };
     setBids(updated);
     writeJson(LS_BIDS, updated);
   }
 
   function rentCoach(coach: Coach, rate: typeof COACH_RATES[number]) {
-    if (!spend(rate.cost, `Аренда ${coach.name}`)) return;
+    if (!spend(rate.cost, `${tt(L, "Аренда")} ${coach.name}`)) return;
     const base = coachRented && coachRented.coachId === coach.id && coachRented.expiresAt > now ? coachRented.expiresAt : now;
     const next: CoachRented = { coachId: coach.id, expiresAt: base + rate.ms };
     setCoachRented(next);
@@ -268,7 +272,7 @@ export default function EconomyHubPage() {
   }
 
   function subscribeStreamer(s: Streamer) {
-    if (!spend(STREAMER_COST, `Подписка ${s.nick}`)) return;
+    if (!spend(STREAMER_COST, `${tt(L, "Подписка")} ${s.nick}`)) return;
     const baseExp = streamSubs[s.id] && streamSubs[s.id] > now ? streamSubs[s.id] : now;
     const next = { ...streamSubs, [s.id]: baseExp + STREAMER_MS };
     setStreamSubs(next);
@@ -288,7 +292,7 @@ export default function EconomyHubPage() {
         "@type": "WebPage",
         "@id": "https://aevion.app/cyberchess/economy",
         name: "AEVION CyberChess — Chessy Economy Hub",
-        description: "Аукцион уроков + аренда виртуальных тренеров + подписка на топ-стримеров. Платформа Chessy-валюты.",
+        description: tt(L, "Аукцион уроков + аренда виртуальных тренеров + подписка на топ-стримеров. Платформа Chessy-валюты."),
         isPartOf: { "@type": "WebSite", url: "https://aevion.app", name: "AEVION" },
         about: { "@type": "Thing", name: "Chess economy + virtual currency" },
       }) }} />
@@ -305,20 +309,20 @@ export default function EconomyHubPage() {
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
           <Link href="/cyberchess" style={{ color: C.dim, textDecoration: "none" }}>← CyberChess</Link>
-          {" / "}<span style={{ color: C.text }}>Экономика</span>
+          {" / "}<span style={{ color: C.text }}>{tt(L, "Экономика")}</span>
         </div>
 
         {/* Hero */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 32 }}>
           <div style={{ flex: "1 1 460px", minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
-              ЭКОНОМИКА CHESSY
+              {tt(L, "ЭКОНОМИКА CHESSY")}
             </div>
             <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 12px", lineHeight: 1.15 }}>
-              Экономика <span style={{ color: C.gold }}>Chessy</span>
+              {tt(L, "Экономика")} <span style={{ color: C.gold }}>Chessy</span>
             </h1>
             <p style={{ fontSize: 15, color: C.dim, lineHeight: 1.65, margin: 0, maxWidth: 620 }}>
-              Аукцион уроков, аренда виртуальных тренеров и подписка на стримеров. Платформа активных взаимодействий за Chessy (AEV).
+              {tt(L, "Аукцион уроков, аренда виртуальных тренеров и подписка на стримеров. Платформа активных взаимодействий за Chessy (AEV).")}
             </p>
 
           {/* Страница обязана сказать о себе. 19.08.2026: проверено — здесь НЕТ
@@ -348,10 +352,7 @@ export default function EconomyHubPage() {
               maxWidth: 620,
             }}
           >
-            <b>Это витрина замысла, а не работающая биржа.</b> Ставки, аренда и
-            подписки сохраняются только в этом браузере: другие игроки их не
-            видят, а баланс здесь — местная копия, настоящие Chessy он не
-            списывает.
+            <b>{tt(L, "Это витрина замысла, а не работающая биржа.")}</b> {tt(L, "Ставки, аренда и подписки сохраняются только в этом браузере: другие игроки их не видят, а баланс здесь — местная копия, настоящие Chessy он не списывает.")}
           </div>
           </div>
 
@@ -363,9 +364,9 @@ export default function EconomyHubPage() {
             padding: "14px 18px",
             minWidth: 180,
           }}>
-            <div style={{ fontSize: 10, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Баланс</div>
+            <div style={{ fontSize: 10, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>{tt(L, "Баланс")}</div>
             <div style={{ fontSize: 26, fontWeight: 900, color: C.gold, fontFamily: "ui-monospace, monospace", lineHeight: 1.1 }}>
-              {mounted ? (balance == null ? "—" : balance.toLocaleString("ru-RU")) : "…"}
+              {mounted ? (balance == null ? "—" : balance.toLocaleString(L === "en" ? "en-US" : "ru-RU")) : "…"}
             </div>
             <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>🪙 AEV (Chessy)</div>
           </div>
@@ -387,11 +388,11 @@ export default function EconomyHubPage() {
           }}>
             <div style={{ fontSize: 13, color: C.text }}>
               <span style={{ fontSize: 18, marginRight: 8 }}>{activeCoach.emoji}</span>
-              Активная аренда: <strong>{activeCoach.name}</strong>
-              <span style={{ color: C.dim, marginLeft: 8 }}>· разговор с тренером без ограничений</span>
+              {tt(L, "Активная аренда:")} <strong>{activeCoach.name}</strong>
+              <span style={{ color: C.dim, marginLeft: 8 }}>{tt(L, "· разговор с тренером без ограничений")}</span>
             </div>
             <code style={{ fontSize: 12, color: C.green, fontFamily: "ui-monospace, monospace" }}>
-              осталось {formatRemaining(coachRented.expiresAt - now)}
+              {tt(L, "осталось")} {formatRemaining(coachRented.expiresAt - now, L)}
             </code>
           </div>
         )}
@@ -399,9 +400,9 @@ export default function EconomyHubPage() {
         {/* SECTION 1: Auction */}
         <section style={{ marginBottom: 40 }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 10 }}>
-            <span>🪙</span> Аукцион уроков
+            <span>🪙</span> {tt(L, "Аукцион уроков")}
             <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6 }}>
-              · разобранные партии и анализ за Chessy
+              {tt(L, "· разобранные партии и анализ за Chessy")}
             </span>
           </h2>
           {/* Оговорка стоит ЗДЕСЬ, а не внизу страницы. Внизу она была — строкой
@@ -417,9 +418,7 @@ export default function EconomyHubPage() {
               fontSize: 13, lineHeight: 1.5, color: C.text,
             }}
           >
-            <b>Лоты ниже — образец оформления.</b> Имена продавцов, цены и число
-            ставок выдуманы, настоящих аукционов пока нет. Ставка сохранится
-            только в этом браузере и ничего не купит.
+            <b>{tt(L, "Лоты ниже — образец оформления.")}</b> {tt(L, "Имена продавцов, цены и число ставок выдуманы, настоящих аукционов пока нет. Ставка сохранится только в этом браузере и ничего не купит.")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {MOCK_AUCTIONS.map((a) => {
@@ -441,7 +440,7 @@ export default function EconomyHubPage() {
                       background: C.gold, color: "#000",
                       fontSize: 10, fontWeight: 900, letterSpacing: 0.5,
                       padding: "2px 8px", borderRadius: 4, textTransform: "uppercase",
-                    }}>★ Избранное</div>
+                    }}>{tt(L, "★ Избранное")}</div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
                     <div style={{ flex: "1 1 320px", minWidth: 0 }}>
@@ -449,19 +448,19 @@ export default function EconomyHubPage() {
                         <span style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{a.player}</span>
                         <code style={{ fontSize: 11, color: C.cyan, fontFamily: "ui-monospace, monospace" }}>ELO {a.elo}</code>
                       </div>
-                      <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 4 }}>{a.title}</div>
-                      <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.5 }}>{a.desc}</div>
+                      <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 4 }}>{tt(L, a.title)}</div>
+                      <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.5 }}>{tt(L, a.desc)}</div>
                     </div>
                     <div style={{ textAlign: "right", minWidth: 160 }}>
-                      <div style={{ fontSize: 10, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6 }}>Текущая цена</div>
+                      <div style={{ fontSize: 10, color: C.faint, textTransform: "uppercase", letterSpacing: 0.6 }}>{tt(L, "Текущая цена")}</div>
                       <div style={{ fontSize: 22, fontWeight: 900, color: C.gold, fontFamily: "ui-monospace, monospace", lineHeight: 1.1 }}>
                         {currentPrice} AEV
                       </div>
-                      <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>🔥 {totalBids} {totalBids === 1 ? "ставка" : "ставок"}</div>
+                      <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>🔥 {totalBids} {totalBids === 1 ? tt(L, "ставка") : tt(L, "ставок")}</div>
                       <button
                         onClick={() => placeBid(a)}
                         disabled={!mounted || !canBid}
-                        title={!canBid ? "Не хватает Chessy" : ""}
+                        title={!canBid ? tt(L, "Не хватает Chessy") : ""}
                         style={{
                           marginTop: 8,
                           background: canBid ? C.purple : "#475569",
@@ -475,7 +474,7 @@ export default function EconomyHubPage() {
                           width: "100%",
                         }}
                       >
-                        Сделать ставку (+50 AEV)
+                        {tt(L, "Сделать ставку (+50 AEV)")}
                       </button>
                     </div>
                   </div>
@@ -488,9 +487,9 @@ export default function EconomyHubPage() {
         {/* SECTION 2: Coach rental */}
         <section style={{ marginBottom: 40 }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 10 }}>
-            <span>🎓</span> Аренда тренера
+            <span>🎓</span> {tt(L, "Аренда тренера")}
             <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6 }}>
-              · соперники уровня гроссмейстера и мастера в разговоре с тренером
+              {tt(L, "· соперники уровня гроссмейстера и мастера в разговоре с тренером")}
             </span>
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 12 }}>
@@ -508,13 +507,13 @@ export default function EconomyHubPage() {
                     <span style={{ fontSize: 26 }}>{coach.emoji}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{coach.name}</div>
-                      <div style={{ fontSize: 11, color: C.cyan, fontFamily: "ui-monospace, monospace" }}>{coach.style} · ELO {coach.elo}</div>
+                      <div style={{ fontSize: 11, color: C.cyan, fontFamily: "ui-monospace, monospace" }}>{tt(L, coach.style)} · ELO {coach.elo}</div>
                     </div>
                     {isActive && (
-                      <span style={{ fontSize: 9, fontWeight: 900, color: "#0f172a", background: C.green, padding: "2px 6px", borderRadius: 4 }}>АКТИВЕН</span>
+                      <span style={{ fontSize: 9, fontWeight: 900, color: "#0f172a", background: C.green, padding: "2px 6px", borderRadius: 4 }}>{tt(L, "АКТИВЕН")}</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.5, marginBottom: 10, minHeight: 36 }}>{coach.bio}</div>
+                  <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.5, marginBottom: 10, minHeight: 36 }}>{tt(L, coach.bio)}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {COACH_RATES.map((rate) => {
                       const enough = (balance ?? 0) >= rate.cost;
@@ -523,7 +522,7 @@ export default function EconomyHubPage() {
                           key={rate.code}
                           onClick={() => rentCoach(coach, rate)}
                           disabled={!mounted || !enough}
-                          title={!enough ? "Не хватает Chessy" : ""}
+                          title={!enough ? tt(L, "Не хватает Chessy") : ""}
                           style={{
                             background: enough ? "rgba(34,211,238,0.10)" : "#1e293b",
                             border: `1px solid ${enough ? C.cyan : C.border}`,
@@ -538,7 +537,7 @@ export default function EconomyHubPage() {
                             alignItems: "center",
                           }}
                         >
-                          <span>Арендовать ({rate.label})</span>
+                          <span>{tt(L, "Арендовать")} ({tt(L, rate.label)})</span>
                           <code style={{ fontFamily: "ui-monospace, monospace", color: C.gold }}>{rate.cost} AEV</code>
                         </button>
                       );
@@ -553,9 +552,9 @@ export default function EconomyHubPage() {
         {/* SECTION 3: Streamers */}
         <section style={{ marginBottom: 40 }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 10 }}>
-            <span>📺</span> Подписка на стримеров
+            <span>📺</span> {tt(L, "Подписка на стримеров")}
             <span style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6 }}>
-              · 200 AEV в месяц · уведомления и личные сообщения
+              {tt(L, "· 200 AEV в месяц · уведомления и личные сообщения")}
             </span>
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 12 }}>
@@ -575,21 +574,21 @@ export default function EconomyHubPage() {
                     <span style={{ fontSize: 30 }}>{s.emoji}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{s.nick}</div>
-                      <div style={{ fontSize: 11, color: C.dim }}>{s.desc}</div>
+                      <div style={{ fontSize: 11, color: C.dim }}>{tt(L, s.desc)}</div>
                     </div>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: C.faint, marginBottom: 10 }}>
-                    <span><span style={{ color: C.red }}>●</span> LIVE · {s.viewers.toLocaleString("ru-RU")} зрителей</span>
+                    <span><span style={{ color: C.red }}>●</span> LIVE · {s.viewers.toLocaleString(L === "en" ? "en-US" : "ru-RU")} {tt(L, "зрителей")}</span>
                     {subscribed && (
                       <code style={{ color: C.purple, fontFamily: "ui-monospace, monospace" }}>
-                        {formatRemaining(expiresAt - now)}
+                        {formatRemaining(expiresAt - now, L)}
                       </code>
                     )}
                   </div>
                   <button
                     onClick={() => subscribeStreamer(s)}
                     disabled={!mounted || !enough}
-                    title={!enough ? "Не хватает Chessy" : ""}
+                    title={!enough ? tt(L, "Не хватает Chessy") : ""}
                     style={{
                       width: "100%",
                       background: subscribed ? "rgba(167,139,250,0.15)" : (enough ? C.purple : "#475569"),
@@ -602,7 +601,7 @@ export default function EconomyHubPage() {
                       cursor: enough ? "pointer" : "not-allowed",
                     }}
                   >
-                    {subscribed ? "Продлить +1 мес" : "Подписаться 200 AEV/мес"}
+                    {subscribed ? tt(L, "Продлить +1 мес") : tt(L, "Подписаться 200 AEV/мес")}
                   </button>
                 </div>
               );
@@ -612,19 +611,19 @@ export default function EconomyHubPage() {
 
         {/* Footer note */}
         <div style={{ marginTop: 32, padding: "12px 16px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, color: C.faint, lineHeight: 1.6 }}>
-          Это витрина замысла: все действия сохраняются только в вашем браузере и никому не видны. Настоящие торги, проверка партий и оповещения о трансляциях — следующий шаг.
+          {tt(L, "Это витрина замысла: все действия сохраняются только в вашем браузере и никому не видны. Настоящие торги, проверка партий и оповещения о трансляциях — следующий шаг.")}
         </div>
 
         <div style={{ marginTop: 24, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
           <Link href="/cyberchess" style={{ color: C.purple, textDecoration: "none" }}>← CyberChess</Link>
           <span style={{ color: C.faint }}>·</span>
-          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>📊 Рейтинг CPI</Link>
+          <Link href="/cyberchess/cpi" style={{ color: C.purple, textDecoration: "none" }}>{tt(L, "📊 Рейтинг CPI")}</Link>
           <span style={{ color: C.faint }}>·</span>
-          <Link href="/bank" style={{ color: C.purple, textDecoration: "none" }}>🏦 AEVION Bank — тарифы Pro/Ultimate</Link>
+          <Link href="/bank" style={{ color: C.purple, textDecoration: "none" }}>{tt(L, "🏦 AEVION Bank — тарифы Pro/Ultimate")}</Link>
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>
-          Экономика Chessy · версия 0.1
+          {tt(L, "Экономика Chessy · версия 0.1")}
         </div>
       </article>
 

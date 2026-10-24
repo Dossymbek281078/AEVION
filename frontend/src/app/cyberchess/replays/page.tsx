@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useCcI18n } from "../i18n";
+import { tt } from "./replaysText";
 
 // ----- Types -----
 
@@ -52,25 +53,25 @@ function fmtDuration(ms: number): string {
   return `${h}h ${(m % 60).toString().padStart(2, "0")}m`;
 }
 
-function fmtRelative(ts: number): string {
+function fmtRelative(ts: number, L: string): string {
   if (!Number.isFinite(ts)) return "—";
   const diff = Math.max(0, Date.now() - ts);
   const s = Math.floor(diff / 1000);
-  if (s < 30) return "только что";
-  if (s < 60) return `${s} сек назад`;
+  if (s < 30) return tt(L, "только что");
+  if (s < 60) return `${s} ${tt(L, "сек назад")}`;
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} мин назад`;
+  if (m < 60) return `${m} ${tt(L, "мин назад")}`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} ч назад`;
+  if (h < 24) return `${h} ${tt(L, "ч назад")}`;
   const d = Math.floor(h / 24);
-  return `${d} дн назад`;
+  return `${d} ${tt(L, "дн назад")}`;
 }
 
-function resultLabel(r: string): string {
+function resultLabel(r: string, L: string): string {
   const cls = classifyResult(r);
-  if (cls === "win") return "Победа";
-  if (cls === "loss") return "Поражение";
-  if (cls === "draw") return "Ничья";
+  if (cls === "win") return tt(L, "Победа");
+  if (cls === "loss") return tt(L, "Поражение");
+  if (cls === "draw") return tt(L, "Ничья");
   return r || "—";
 }
 
@@ -99,7 +100,7 @@ async function fetchReplays(limit = 50): Promise<ReplayItem[]> {
 // ----- Page -----
 
 export default function ReplayHubPage() {
-  const { t } = useCcI18n();
+  const { t, locale: L } = useCcI18n();
   const [items, setItems] = useState<ReplayItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -120,7 +121,7 @@ export default function ReplayHubPage() {
         // Технический текст не теряем — он уходит в консоль, где и нужен.
         if (!alive) return;
         console.warn("[replays] не удалось загрузить список:", e);
-        setError("Не удалось загрузить партии. Попробуйте обновить страницу.");
+        setError(tt(L, "Не удалось загрузить партии. Попробуйте обновить страницу."));
       });
     return () => {
       alive = false;
@@ -172,13 +173,12 @@ export default function ReplayHubPage() {
             <div className="planet-eyebrow">CyberChess</div>
             <h1 className="planet-h1" style={{ marginTop: 4 }}>{t("replay.hub.title")}</h1>
             <p className="planet-muted" style={{ marginTop: 8, maxWidth: "60ch", fontSize: 13.5 }}>
-              Завершённые партии, доступные для пересмотра с покадровой
-              навигацией и графиком оценки. Хранится до 50 последних трансляций.
+              {tt(L, "Завершённые партии, доступные для пересмотра с покадровой навигацией и графиком оценки. Хранится до 50 последних трансляций.")}
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Link href="/cyberchess/spectator" className="planet-btn">Идут сейчас</Link>
-            <Link href="/cyberchess" className="planet-btn">На главную</Link>
+            <Link href="/cyberchess/spectator" className="planet-btn">{tt(L, "Идут сейчас")}</Link>
+            <Link href="/cyberchess" className="planet-btn">{tt(L, "На главную")}</Link>
           </div>
         </header>
 
@@ -213,19 +213,19 @@ export default function ReplayHubPage() {
               «Обновить» вместе шире экрана, и страница уезжала вбок на 20
               пикселей. На 375 ряд помещается, поэтому дефекта не видно. */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <label htmlFor="rp-sort" className="planet-muted" style={{ fontSize: 11.5 }}>Сортировка:</label>
+            <label htmlFor="rp-sort" className="planet-muted" style={{ fontSize: 11.5 }}>{tt(L, "Сортировка:")}</label>
             <select id="rp-sort"
               value={sort}
               onChange={(e) => setSort(e.target.value as Sort)}
               className="planet-input"
               style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
             >
-              <option value="latest">Сначала новые</option>
-              <option value="longest">Самые длинные</option>
-              <option value="shortest">Самые короткие</option>
+              <option value="latest">{tt(L, "Сначала новые")}</option>
+              <option value="longest">{tt(L, "Самые длинные")}</option>
+              <option value="shortest">{tt(L, "Самые короткие")}</option>
             </select>
-            <button onClick={() => setRefreshTick((x) => x + 1)} className="planet-btn" title="Обновить">
-              Обновить
+            <button onClick={() => setRefreshTick((x) => x + 1)} className="planet-btn" title={tt(L, "Обновить")}>
+              {tt(L, "Обновить")}
             </button>
           </div>
         </section>
@@ -233,8 +233,7 @@ export default function ReplayHubPage() {
         {/* List */}
         {error && (
           <div className="planet-card" style={{ padding: 16, fontSize: 13.5, color: "var(--pl-danger)" }}>
-            Не удалось загрузить архив трансляций. Проверьте связь и обновите
-            страницу — записи никуда не делись.
+            {tt(L, "Не удалось загрузить архив трансляций. Проверьте связь и обновите страницу — записи никуда не делись.")}
           </div>
         )}
 
@@ -249,8 +248,8 @@ export default function ReplayHubPage() {
         {!error && items !== null && filtered.length === 0 && (
           <div className="planet-card planet-empty">
             {items.length === 0
-              ? "Пока нет завершённых трансляций. Заверши партию — она появится здесь автоматически."
-              : "Под текущий фильтр ничего не подходит."}
+              ? tt(L, "Пока нет завершённых трансляций. Заверши партию — она появится здесь автоматически.")
+              : tt(L, "Под текущий фильтр ничего не подходит.")}
           </div>
         )}
 
@@ -261,20 +260,20 @@ export default function ReplayHubPage() {
                 <div style={{ marginBottom: 10, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 14.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {r.hostName || "Аноним"}
+                      {r.hostName || tt(L, "Аноним")}
                     </div>
-                    <div className="planet-muted" style={{ marginTop: 2, fontSize: 11 }}>{fmtRelative(r.endedAt)}</div>
+                    <div className="planet-muted" style={{ marginTop: 2, fontSize: 11 }}>{fmtRelative(r.endedAt, L)}</div>
                   </div>
-                  <span className={resultBadgeClass(r.result)} style={{ flexShrink: 0 }}>{resultLabel(r.result)}</span>
+                  <span className={resultBadgeClass(r.result)} style={{ flexShrink: 0 }}>{resultLabel(r.result, L)}</span>
                 </div>
 
                 <div style={{ marginBottom: 14, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, fontSize: 11 }}>
                   <div style={{ borderRadius: 8, background: "var(--pl-surface-2)", padding: "6px 8px" }}>
-                    <div className="planet-muted">Длительность</div>
+                    <div className="planet-muted">{tt(L, "Длительность")}</div>
                     <div style={{ marginTop: 2, fontWeight: 600 }}>{fmtDuration(r.duration)}</div>
                   </div>
                   <div style={{ borderRadius: 8, background: "var(--pl-surface-2)", padding: "6px 8px" }}>
-                    <div className="planet-muted">Ходы</div>
+                    <div className="planet-muted">{tt(L, "Ходы")}</div>
                     <div style={{ marginTop: 2, fontWeight: 600 }}>{r.plyCount}</div>
                   </div>
                   <div style={{ borderRadius: 8, background: "var(--pl-surface-2)", padding: "6px 8px" }}>
@@ -286,7 +285,7 @@ export default function ReplayHubPage() {
                 </div>
 
                 <Link href={`/cyberchess/replays/${encodeURIComponent(r.gameId)}`} className="planet-btn active" style={{ marginTop: "auto", justifyContent: "center" }}>
-                  <span aria-hidden>▶</span> Смотреть
+                  <span aria-hidden>▶</span> {tt(L, "Смотреть")}
                 </Link>
               </li>
             ))}

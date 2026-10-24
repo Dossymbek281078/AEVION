@@ -41,6 +41,23 @@ describe("тексты окна настроек", () => {
     expect(плохие).toEqual([]);
   });
 
+  // 24.10.2026: названия вариантов (фоны, звуки, темы, декор) шли по-русски на /en и /kk —
+  // окно показывало 89 русских строк из 175. Новый вариант в данных без перевода — красный.
+  it("у каждого варианта из данных есть en и kk", () => {
+    const чит = (f: string) => readFileSync(join(__dirname, "..", f), "utf8");
+    const ключи = [
+      ...[...чит("chessSounds.ts").matchAll(/id: "([^"]+)", name: "/g)].map((m) => `sn.${m[1]}`),
+      ...[...чит("BoardArt.tsx").matchAll(/\{ v: "([^"]+)",/g)].map((m) => `art.${m[1]}`),
+      ...[...чит("Pieces.tsx").matchAll(/\{ id: "([^"]+)",\s*name:/g)].map((m) => `pch.${m[1]}`),
+      ...[...СТРАНИЦА.slice(СТРАНИЦА.indexOf("const BG_PRESETS"), СТРАНИЦА.indexOf("const BOARD_THEMES")).matchAll(/\{id:"([^"]+)",\s*name:/g)].map((m) => `bg.${m[1]}`),
+    ];
+    // знаменатель: 61 звук + 6 декоров + 4 набора + 16 фонов на 24.10
+    expect(ключи.length, "вариантов найдено").toBeGreaterThan(80);
+    for (const loc of ["en", "kk"] as const) {
+      expect(ключи.filter((k) => !SETTINGS_TEXT[loc][k]), `без перевода ${loc}`).toEqual([]);
+    }
+  });
+
   it("модуль грузится только динамически", () => {
     expect(СТРАНИЦА).toContain('import("./settingsText")');
     expect(СТРАНИЦА).not.toMatch(/^import[^\n]*from "\.\/settingsText"/m);

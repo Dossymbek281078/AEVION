@@ -581,7 +581,7 @@ export default function EconomyHubPage() {
                     <span><span style={{ color: C.red }}>●</span> LIVE · {s.viewers.toLocaleString(L === "en" ? "en-US" : "ru-RU")} {tt(L, "зрителей")}</span>
                     {subscribed && (
                       <code style={{ color: C.purple, fontFamily: "ui-monospace, monospace" }}>
-                        {formatRemaining(expiresAt - now)}
+                        {formatRemaining(expiresAt - now, L)}
                       </code>
                     )}
                   </div>

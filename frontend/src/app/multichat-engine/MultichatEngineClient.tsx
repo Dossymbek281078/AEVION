@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18nOptional } from "@/lib/i18n";
+import { tm } from "./mcText";
 
 // Страница модуля «Мультичат» — рабочая консоль плюс витрина вокруг неё.
 //
@@ -156,7 +157,7 @@ function ProviderHealthStrip() {
             color: T.accent,
           }}
         >
-          ◉ Ключи поставщиков
+          {tm(meLang, "◉ Ключи поставщиков")}
         </span>
         <span style={{ flex: 1 }} />
         {!gated && (
@@ -174,9 +175,9 @@ function ProviderHealthStrip() {
             fontWeight: 800,
             letterSpacing: "0.05em",
           }}
-          aria-label="Refresh provider health"
+          aria-label={tm(meLang, "Refresh provider health")}
         >
-          ↻ Refresh
+          {tm(meLang, "↻ Refresh")}
         </button>
         )}
         <span style={{ fontSize: 10, color: T.textFaded }}>
@@ -186,14 +187,14 @@ function ProviderHealthStrip() {
 
       {gated ? (
         <div style={{ fontSize: 12, color: T.textMute }}>
-          Живой пинг поставщиков — на платном тарифе. Разбор разногласий ниже работает без входа.
+          {tm(meLang, "Живой пинг поставщиков — на платном тарифе. Разбор разногласий ниже работает без входа.")}
         </div>
       ) : err ? (
         <div style={{ fontSize: 12, color: T.bad }}>Health check unavailable: {err}</div>
       ) : !providers ? (
-        <div style={{ fontSize: 12, color: T.textMute }}>Pinging providers…</div>
+        <div style={{ fontSize: 12, color: T.textMute }}>{tm(meLang, "Pinging providers…")}</div>
       ) : providers.length === 0 ? (
-        <div style={{ fontSize: 12, color: T.textMute }}>No providers reported.</div>
+        <div style={{ fontSize: 12, color: T.textMute }}>{tm(meLang, "No providers reported.")}</div>
       ) : (
         <div
           style={{
@@ -220,7 +221,7 @@ function ProviderHealthStrip() {
             // ключа — полезный факт, и он остаётся; выдуманная доступность
             // ушла.
             const dotColor = p.configured ? T.goodBright : T.textFaded;
-            const stateLabel = p.configured ? "ключ настроен" : "ключа нет";
+            const stateLabel = p.configured ? tm(meLang, "ключ настроен") : tm(meLang, "ключа нет");
             return (
               <div
                 key={p.id}
@@ -290,9 +291,7 @@ function ProviderHealthStrip() {
               color: T.textFaded,
             }}
           >
-            Здесь видно, у каких поставщиков задан ключ. Доступность самих
-            поставщиков не проверяется — это стоило бы платного запроса к каждому
-            на каждую загрузку страницы.
+            {tm(meLang, "Здесь видно, у каких поставщиков задан ключ. Доступность самих поставщиков не проверяется — это стоило бы платного запроса к каждому на каждую загрузку страницы.")}
           </p>
         </div>
       )}
@@ -311,6 +310,7 @@ type MissionPreset = {
 };
 
 function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void }) {
+  const tmLang = useI18nOptional()?.lang ?? "ru";
   const [presets, setPresets] = useState<MissionPreset[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -401,7 +401,7 @@ function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void
           fontSize: 12,
         }}
       >
-        {gated ? "Готовые сценарии панелей — на платном тарифе. Пример разбора ниже открыт без входа." : "Loading missions…"}
+        {gated ? tm(tmLang, "Готовые сценарии панелей — на платном тарифе. Пример разбора ниже открыт без входа.") : tm(tmLang, "Loading missions…")}
       </section>
     );
   }
@@ -436,10 +436,10 @@ function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void
             color: T.brand,
           }}
         >
-          ✦ Mission presets
+          {tm(tmLang, "✦ Mission presets")}
         </span>
         <span style={{ fontSize: 11, color: T.textMute }}>
-          One click → preconfigured agent bundle on a curated system prompt.
+          {tm(tmLang, "One click → preconfigured agent bundle on a curated system prompt.")}
         </span>
       </div>
 
@@ -527,7 +527,7 @@ function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void
                     letterSpacing: "0.03em",
                   }}
                 >
-                  Взять в консилиум →
+                  {tm(tmLang, "Взять в консилиум →")}
                 </button>
                 <button
                   type="button"
@@ -545,9 +545,9 @@ function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void
                     fontWeight: 700,
                     fontSize: 11,
                   }}
-                  title={isOpen ? "Hide system prompt" : "Show system prompt"}
+                  title={isOpen ? tm(tmLang, "Hide system prompt") : tm(tmLang, "Show system prompt")}
                 >
-                  {isOpen ? "▲ Prompt" : "▼ Prompt"}
+                  {isOpen ? tm(tmLang, "▲ Prompt") : tm(tmLang, "▼ Prompt")}
                 </button>
               </div>
             </div>
@@ -559,6 +559,7 @@ function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void
 }
 
 export default function MultichatEnginePage() {
+  const tmLang = useI18nOptional()?.lang ?? "ru";
   const origin = getClientApiBase();
   // Выбранное задание живёт на странице, а не в адресной строке: консоль
   // стоит здесь же, уводить человека некуда.
@@ -645,15 +646,14 @@ export default function MultichatEnginePage() {
               </span>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>Single chat</div>
-                <div style={{ fontSize: 11, color: T.textFaded }}>One provider · one model · fastest path</div>
+                <div style={{ fontSize: 11, color: T.textFaded }}>{tm(tmLang, "One provider · one model · fastest path")}</div>
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 13, color: T.inkOnCardMute, lineHeight: 1.55 }}>
-              Classic chat experience. Pick Claude, GPT, Gemini, DeepSeek or Grok, ask a question, get an answer.
-              Best for quick lookups and informal conversation.
+              {tm(tmLang, "Classic chat experience. Pick Claude, GPT, Gemini, DeepSeek or Grok, ask a question, get an answer. Best for quick lookups and informal conversation.")}
             </p>
             <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: T.accentDeeper }}>
-              Open single chat →
+              {tm(tmLang, "Open single chat →")}
             </span>
           </Link>
 
@@ -690,7 +690,7 @@ export default function MultichatEnginePage() {
                 border: `1px solid ${T.violetEdge30}`,
               }}
             >
-              New
+              {tm(tmLang, "New")}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span
@@ -711,29 +711,28 @@ export default function MultichatEnginePage() {
                 MA
               </span>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>Multi-agent</div>
-                <div style={{ fontSize: 11, color: T.textFaded }}>Analyst → Writer → Critic · inspectable</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>{tm(tmLang, "Multi-agent")}</div>
+                <div style={{ fontSize: 11, color: T.textFaded }}>{tm(tmLang, "Analyst → Writer → Critic · inspectable")}</div>
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 13, color: T.inkOnCardMute, lineHeight: 1.55 }}>
-              Three specialized agents coordinate on every answer. Pick <b>Sequential</b> for a classic reflection loop,
-              <b> Parallel</b> for two writers on different models merged by a Judge, or <b>Debate</b> where a Pro and a Con
-              advocate argue and a Moderator synthesizes a balanced recommendation.
+              {tm(tmLang, "Three specialized agents coordinate on every answer. Pick")} <b>{tm(tmLang, "Sequential")}</b> {tm(tmLang, "for a classic reflection loop,")}
+              <b> {tm(tmLang, "Parallel")}</b> {tm(tmLang, "for two writers on different models merged by a Judge, or")} <b>{tm(tmLang, "Debate")}</b> {tm(tmLang, "where a Pro and a Con advocate argue and a Moderator synthesizes a balanced recommendation.")}
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
               {[
-                { t: "3 strategies", c: T.brandDeep },
-                { t: "Live streaming", c: T.skyDeeper },
-                { t: "Live cost + tokens", c: T.goodDeep },
-                { t: "Mixed models per role", c: T.indigo },
-                { t: "Saveable presets", c: T.accentDeep },
-                { t: "Edit & resend", c: T.cyanDeep },
-                { t: "Webhook on done", c: T.skyDeep },
-                { t: "Public share + OG preview", c: T.brandAlt },
-                { t: "Export JSON + CSV", c: T.warnDeep },
-                { t: "↩ Thread continuation", c: T.brandDeeper },
-                { t: "📋 Templates", c: T.indigoBright },
-                { t: "⚡ Batch runs", c: T.indigoDeep },
+                { t: tm(tmLang, "3 strategies"), c: T.brandDeep },
+                { t: tm(tmLang, "Live streaming"), c: T.skyDeeper },
+                { t: tm(tmLang, "Live cost + tokens"), c: T.goodDeep },
+                { t: tm(tmLang, "Mixed models per role"), c: T.indigo },
+                { t: tm(tmLang, "Saveable presets"), c: T.accentDeep },
+                { t: tm(tmLang, "Edit & resend"), c: T.cyanDeep },
+                { t: tm(tmLang, "Webhook on done"), c: T.skyDeep },
+                { t: tm(tmLang, "Public share + OG preview"), c: T.brandAlt },
+                { t: tm(tmLang, "Export JSON + CSV"), c: T.warnDeep },
+                { t: tm(tmLang, "↩ Thread continuation"), c: T.brandDeeper },
+                { t: tm(tmLang, "📋 Templates"), c: T.indigoBright },
+                { t: tm(tmLang, "⚡ Batch runs"), c: T.indigoDeep },
               ].map((b) => (
                 <span
                   key={b.t}
@@ -752,25 +751,25 @@ export default function MultichatEnginePage() {
               ))}
             </div>
             <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: T.brandDeeper }}>
-              Open multi-agent →
+              {tm(tmLang, "Open multi-agent →")}
             </span>
           </Link>
         </div>
 
         <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, color: T.textFaded }}>
           {[
-            { href: "/qcoreai/analytics", label: "📊 Analytics" },
-            { href: "/qcoreai/eval",      label: "🧪 Eval harness" },
-            { href: "/qcoreai/prompts",   label: "📝 Prompts library" },
-            { href: "/qcoreai/batch",     label: "⚡ Batch runs" },
-            { href: "/qcoreai/schedule",  label: "🕐 Scheduled batches" },
-            { href: "/qcoreai/notebook",  label: "📓 Notebook" },
-            { href: "/qcoreai/providers", label: "◈ AI Providers" },
-            { href: "/qcoreai/docs",       label: "📖 API Docs" },
-            { href: "/qcoreai/playground", label: "🎮 Playground" },
-            { href: "/qcoreai/top",        label: "⭐ Top Rated" },
-            { href: "/qcoreai/pipeline",   label: "⚙️ Pipeline Builder" },
-            { href: "/qcoreai/optimize",   label: "✨ Optimizer" },
+            { href: "/qcoreai/analytics", label: tm(tmLang, "📊 Analytics") },
+            { href: "/qcoreai/eval",      label: tm(tmLang, "🧪 Eval harness") },
+            { href: "/qcoreai/prompts",   label: tm(tmLang, "📝 Prompts library") },
+            { href: "/qcoreai/batch",     label: tm(tmLang, "⚡ Batch runs") },
+            { href: "/qcoreai/schedule",  label: tm(tmLang, "🕐 Scheduled batches") },
+            { href: "/qcoreai/notebook",  label: tm(tmLang, "📓 Notebook") },
+            { href: "/qcoreai/providers", label: tm(tmLang, "◈ AI Providers") },
+            { href: "/qcoreai/docs",       label: tm(tmLang, "📖 API Docs") },
+            { href: "/qcoreai/playground", label: tm(tmLang, "🎮 Playground") },
+            { href: "/qcoreai/top",        label: tm(tmLang, "⭐ Top Rated") },
+            { href: "/qcoreai/pipeline",   label: tm(tmLang, "⚙️ Pipeline Builder") },
+            { href: "/qcoreai/optimize",   label: tm(tmLang, "✨ Optimizer") },
           ].map(({ href, label }) => (
             <Link
               key={href}
@@ -843,9 +842,9 @@ export default function MultichatEnginePage() {
         <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
           <WaitlistIfMissing
             source="multichat-page"
-            title="Платить сегодня рано? Оставьте адрес"
-            description="Напишем, когда у AEVION откроются новые модули и возможности."
-            buttonLabel="Сообщить мне"
+            title={tm(tmLang, "Платить сегодня рано? Оставьте адрес")}
+            description={tm(tmLang, "Напишем, когда у AEVION откроются новые модули и возможности.")}
+            buttonLabel={tm(tmLang, "Сообщить мне")}
           />
         </div>
       </ProductPageShell>

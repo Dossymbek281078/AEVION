@@ -35,7 +35,8 @@ describe("гость Мультичата видит остаток и стен�
     expect(строка).toMatch(/[а-я]{5}/);
     expect(строка).not.toMatch(/Error\(conv\?\.error/);
     // и общий throw с кодом стоит ПОСЛЕ человеческого, а не вместо него
-    expect(ИСХОДНИК.indexOf('throw new Error(conv?.error || "не удалось создать беседу")')).toBeGreaterThan(i);
+    // 24.10.2026: текст — через словарь страницы (mcText, tm) на языке посетителя
+    expect(ИСХОДНИК.indexOf('throw new Error(conv?.error || tm(mcLang, "не удалось создать беседу"))')).toBeGreaterThan(i);
   });
 
   it("поле в две строки и ряд кнопки прижат — «Спросить консилиум» в кадре 390×844", () => {

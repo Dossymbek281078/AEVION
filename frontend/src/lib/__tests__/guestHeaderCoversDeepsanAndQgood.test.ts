@@ -9,6 +9,8 @@ describe("заголовок гостя уходит туда, где он ну�
     expect(isDevhubApiUrl("https://api.aevion.app/api/deepsan/tasks?limit=100")).toBe(true);
     expect(isDevhubApiUrl("/api/qgood/mood?limit=7")).toBe(true);
     expect(isDevhubApiUrl("/api/qgood/mood/trends")).toBe(true);
+    // 24.10.2026: и биомаркеры qlife — вес гостя видел следующий гость
+    expect(isDevhubApiUrl("/api/qlife/biomarkers?limit=30")).toBe(true);
   });
   test("DevHub — по-прежнему да", () => {
     expect(isDevhubApiUrl("/api/devhub/projects")).toBe(true);

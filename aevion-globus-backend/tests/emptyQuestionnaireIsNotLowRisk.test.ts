@@ -108,6 +108,15 @@ describe("соседние ручки того же класса", () => {
     expect(res.body.targeted.length).toBeGreaterThan(0);
     expect(res.body.warning).toBeUndefined();
   });
+
+  // 23.10.2026: на экране стояло «4 дефицит(а/ов)».
+  test("qmelanin /plan: число дефицитов склонено по-русски", async () => {
+    const one = await request(app()).post("/api/qmelanin/plan").send({ deficientKeys: ["ferritin"] });
+    expect(one.body.summary).toContain("1 дефицита ");
+    const two = await request(app()).post("/api/qmelanin/plan").send({ deficientKeys: ["ferritin", "b12"] });
+    expect(two.body.summary).toMatch(/\d+ дефицитов /);
+    expect(two.body.summary).not.toContain("(а/ов)");
+  });
 });
 
 describe("тело, которое реально шлёт витрина", () => {

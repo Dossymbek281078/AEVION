@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders } from "@/lib/auth";
 
 type TrendPoint = { type: string; week: string; avg: number; count: number };
 type TrendsResponse = { ok: boolean; trends: Record<string, TrendPoint[]> };
@@ -97,7 +98,7 @@ export default function WeeklyTrendsChart({ refreshKey }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(apiUrl("/api/qlife/biomarkers/trends"), { cache: "no-store" });
+      const r = await fetch(apiUrl("/api/qlife/biomarkers/trends"), { cache: "no-store", headers: getAuthHeaders() });
       const d: TrendsResponse = await r.json();
       if (d.ok) setTrends(d.trends ?? {});
     } catch { /* ignore */ }

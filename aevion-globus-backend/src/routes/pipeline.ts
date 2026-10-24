@@ -336,15 +336,17 @@ async function ensureTables(): Promise<void> {
 
 /* ── Legal basis references ── */
 function getLegalBasis(country?: string | null): Record<string, unknown> {
-  // TODO: Disclaimer text below is pending rewrite — do not edit without the
-  // updated wording from product/legal. Target line: `disclaimer` key in this
-  // object (see `pipeline.ts:getLegalBasis`).
+  // 24.10.2026: формулировка о суде переписана по слову Оркестратора (от имени
+  // основателя): «admissible evidence of prior art» — спорное обещание суду,
+  // противоречило «вес зависит от суда». Текст не входит в подпись (HMAC и
+  // Ed25519 считаются от objectId/title/contentHash/signedAt) — старые
+  // сертификаты хранят свой legalBasis, новые получают этот.
   const basis: Record<string, unknown> = {
     framework: "AEVION Digital IP Bureau",
     version: "1.0",
     type: "Proof of Prior Art / Proof of Existence",
     description:
-      "This certificate constitutes cryptographic proof that the described intellectual property existed at the recorded timestamp, authored by the named party. It serves as evidence of prior art and authorship under international copyright frameworks.",
+      "This certificate constitutes cryptographic proof that the described intellectual property existed at the recorded timestamp, authored by the named party. It can be presented as a timestamped, independently verifiable record in authorship and priority disputes under international copyright frameworks; its weight is decided by the court or office reviewing it.",
     international: [
       {
         name: "Berne Convention for the Protection of Literary and Artistic Works",
@@ -399,7 +401,7 @@ function getLegalBasis(country?: string | null): Record<string, unknown> {
       timestampIntegrity: "Server-side UTC timestamp at moment of registration",
     },
     disclaimer:
-      "This certificate is issued by AEVION Digital IP Bureau as cryptographic proof of existence and authorship at the recorded time. It does not constitute a patent, trademark, or government-issued copyright registration. It serves as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.",
+      "This certificate is issued by AEVION Digital IP Bureau as cryptographic proof of existence and authorship at the recorded time. It does not constitute a patent, trademark, or government-issued copyright registration. It is a timestamped, independently verifiable record that can be presented in intellectual property disputes; how much weight it carries depends on the court or office reviewing it.",
   };
 
   if (country) {
@@ -2404,7 +2406,7 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
       .text(
         "This certificate is issued by AEVION Digital IP Bureau as cryptographic proof of existence and authorship at the recorded time. " +
           "It does not constitute a patent, trademark, or government-issued copyright registration. " +
-          "It serves as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.",
+          "It is a timestamped, independently verifiable record that can be presented in intellectual property disputes; how much weight it carries depends on the court or office reviewing it.",
         50,
         yDisclaimer,
         { width: W, lineGap: 2 },

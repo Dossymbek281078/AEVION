@@ -378,7 +378,7 @@ export const launchedModules: PitchModule[] = [
     killerFeature:
       "Ed25519 + Shamir SSS + 6 international legal frameworks (Berne, WIPO, TRIPS, eIDAS, ESIGN, KZ Digital Sig) → downloadable PDF certificate, verifiable by any third party at /verify/{id}.",
     networkRole:
-      "Bureau is the legally-defensible output of the entire registry+signature pipeline. Sets the floor for what AEVION certificates are worth in court.",
+      "Bureau is the verifiable output of the entire registry+signature pipeline: a timestamped certificate anyone can check. How much weight it carries in a dispute is decided by the court or office.",
     proof: ["Live cert count", "164+ WTO member states in legal scope", "Public verify portal with no-login validation"],
     valueLine: "First-mover advantage: the moat is the integrated Trust Graph and network effects, not the concept — a competitor must rebuild registry, signature, timestamp, compliance and wallet as one system, then earn the graph from zero.",
   },

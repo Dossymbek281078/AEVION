@@ -1241,7 +1241,7 @@ function BureauPageInner() {
         <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", marginBottom: 28 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>{tb("Legal Disclaimer")}</div>
           <div style={{ fontSize: 15, color: "#78716c", lineHeight: 1.6 }}>
-            Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time. They do not constitute a patent, trademark, or government-issued copyright registration. They serve as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.
+            {tb("Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time. They do not constitute a patent, trademark, or government-issued copyright registration. They are timestamped, independently verifiable records that you can present in a dispute over who created the work first — how much weight they carry depends on the court or office that reviews them.")}
           </div>
         </div>
 

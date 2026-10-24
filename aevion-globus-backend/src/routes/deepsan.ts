@@ -240,7 +240,7 @@ deepSanRouter.patch("/tasks/:id", async (req: Request, res: Response) => {
 
       params.push(id, me);
       const result = await pool.query(
-        `UPDATE deepsan_tasks SET ${sets.join(", ")} WHERE id = ${idx} AND owner_id = ${idx + 1} RETURNING *`,
+        `UPDATE deepsan_tasks SET ${sets.join(", ")} WHERE id = $${idx} AND owner_id = $${idx + 1} RETURNING *`,
         params,
       );
       if (!result.rowCount) return fail(res, "task not found", 404);

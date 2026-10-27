@@ -34,7 +34,23 @@ describe("constitution: ошибка ИИ-совета — понятным те
     expect(СОВЕТ).toMatch(/err instanceof ПонятнаяОшибкаИИ \? err\.message : t\("constitution\.ai\.errorFailed"\)/);
   });
 
+  // Тот же класс по всей странице: подпись, PDF, публикация, комментарий выводили `<что> HTTP 4xx: <тело>`.
+  it("подпись, PDF, публикация, комментарий — ни одно не выводит err.message человеку", () => {
+    for (const set of ["setSignError", "setPdfError", "setPublishError", "setError"]) {
+      expect(PAGE, `${set}(err…`).not.toMatch(new RegExp(`${set}\\(err instanceof Error \\? err\\.message`));
+    }
+    for (const k of ["sign", "pdf", "publish", "comment"]) expect(PAGE).toContain(`t("constitution.err.${k}")`);
+  });
+
   for (const [lang, d] of Object.entries({ ru, en, kk } as Record<string, Record<string, string>>)) {
+    it(`${lang}: тексты действий (подпись/PDF/публикация/комментарий) есть и без кода ответа`, () => {
+      for (const k of ["sign", "pdf", "publish", "comment"]) {
+        const s = d[`constitution.err.${k}`];
+        expect(s, `${lang} ${k}`).toBeTruthy();
+        expect(s, `${lang} ${k}`).not.toMatch(/HTTP|\d{3}|_failed/);
+      }
+    });
+
     it(`${lang}: тексты есть, с {used}/{limit}, без «Free tier»/«Upgrade»/$-цены`, () => {
       const норма = d["constitution.ai.errorDailyLimit"];
       const сбой = d["constitution.ai.errorFailed"];

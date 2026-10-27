@@ -688,7 +688,9 @@ export default function ConstitutionPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setSignError(err instanceof Error ? err.message : "sign_failed");
+      // 27.10.2026: человеку — понятный текст; технические подробности (код, тело ответа) — в консоль, не на экран
+      console.warn("[constitution] подпись не удалась", err);
+      setSignError(t("constitution.err.sign"));
     } finally {
       setSigning(false);
     }
@@ -725,7 +727,9 @@ export default function ConstitutionPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setPdfError(err instanceof Error ? err.message : "pdf_failed");
+      // 27.10.2026: человеку — понятный текст; технические подробности (код, тело ответа) — в консоль, не на экран
+      console.warn("[constitution] PDF не собрался", err);
+      setPdfError(t("constitution.err.pdf"));
     } finally {
       setPdfBusy(false);
     }
@@ -788,7 +792,9 @@ export default function ConstitutionPage() {
       const j = (await pubRes.json()) as { artifact?: { id?: string } };
       if (j.artifact?.id) setPublishedId(j.artifact.id);
     } catch (err) {
-      setPublishError(err instanceof Error ? err.message : "publish_failed");
+      // 27.10.2026: человеку — понятный текст; технические подробности (код, тело ответа) — в консоль, не на экран
+      console.warn("[constitution] публикация не удалась", err);
+      setPublishError(t("constitution.err.publish"));
     } finally {
       setPublishing(false);
     }
@@ -2486,7 +2492,9 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
       setText("");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "comment_failed");
+      // 27.10.2026: человеку — понятный текст; технические подробности (код, тело ответа) — в консоль, не на экран
+      console.warn("[constitution] комментарий не отправился", err);
+      setError(t("constitution.err.comment"));
     } finally {
       setBusy(false);
     }

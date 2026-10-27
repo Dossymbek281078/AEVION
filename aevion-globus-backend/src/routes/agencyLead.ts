@@ -154,6 +154,14 @@ agencyLeadRouter.post("/lead", лимитЗаявок, async (req: Request, res:
     capture(e, { where: "agencyLead.receipt" });
   }
 
+  // 27.10.2026 (свип «ответ при отказе базы», 99 ручек): раньше 201 ok даже когда заявка легла
+  // ТОЛЬКО в память и письмо основателю не ушло — витрина агентства поле stored не читает, память
+  // живёт до перезапуска, то есть человек видел «отправлено», а заявки не было нигде. Для этого
+  // сочетания — 503: отправитель увидит отказ и напишет иначе. Остальные случаи как прежде:
+  // в базе — сводка покажет; в памяти, но письмо ушло — заявка у основателя.
+  if (куда === "memory" && process.env.DATABASE_URL && !notified) {
+    return res.status(503).json({ ok: false, error: "lead_not_stored", stored: куда, notified, receipt });
+  }
   return res.status(201).json({ ok: true, stored: куда, notified, receipt });
 });
 

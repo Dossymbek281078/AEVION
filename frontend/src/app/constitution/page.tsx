@@ -1987,6 +1987,9 @@ function pushAiHistory(entry: AiHistoryEntry): AiHistoryEntry[] {
   return trimmed;
 }
 
+/** Ошибка ИИ-совета, текст которой уже переведён и годится человеку; остальное — общим текстом. */
+class ПонятнаяОшибкаИИ extends Error {}
+
 function AiAdvisorModal({
   onClose,
   onApply,
@@ -2032,8 +2035,16 @@ function AiAdvisorModal({
         body: JSON.stringify({ description: description.trim() }),
       });
       if (!r.ok) {
-        const text = await r.text().catch(() => "");
-        throw new Error(`HTTP ${r.status}: ${text.slice(0, 140)}`);
+        // 27.10.2026: сюда раньше уходило `HTTP ${status}: <сырое тело>` — и человек на исчерпанной
+        // суточной норме видел JSON с английским «Free tier… Upgrade → Pro». Код и тело разбираем,
+        // показываем человеческий текст (ПонятнаяОшибкаИИ проходит catch как есть).
+        const j = (await r.json().catch(() => null)) as { error?: string; used?: number; limit?: number } | null;
+        if (r.status === 429 && j?.error === "ai_daily_limit") {
+          throw new ПонятнаяОшибкаИИ(
+            t("constitution.ai.errorDailyLimit", { used: j.used ?? "", limit: j.limit ?? "" }),
+          );
+        }
+        throw new ПонятнаяОшибкаИИ(t("constitution.ai.errorFailed"));
       }
       if (!r.body) throw new Error("no_body");
       const reader = r.body.getReader();
@@ -2068,7 +2079,8 @@ function AiAdvisorModal({
               finalProvider = ev.provider ?? "unknown";
               setProvider(finalProvider);
             } else if (ev.kind === "error") {
-              setError(ev.message ?? "stream_error");
+              // сервер кладёт сюда текст отказа провайдера (constitutionAi.ts) — человеку он ни о чём
+              setError(t("constitution.ai.errorFailed"));
             }
           } catch {
             /* ignore */
@@ -2089,7 +2101,8 @@ function AiAdvisorModal({
         setError(t("constitution.ai.errorNoSliders"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ai_failed");
+      // сеть, «no_body» и прочее техническое — общим понятным текстом
+      setError(err instanceof ПонятнаяОшибкаИИ ? err.message : t("constitution.ai.errorFailed"));
     } finally {
       setBusy(false);
     }

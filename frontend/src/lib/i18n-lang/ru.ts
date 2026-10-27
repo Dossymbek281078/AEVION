@@ -1843,6 +1843,8 @@ const ru: Record<string, string> = {
   "constitution.ai.description": "Опиши страну/общество/гипотетический строй в свободной форме — ИИ подберёт 8 ползунков и объяснит выбор. Streaming через QCoreAI: ответ приходит токенами по мере генерации.",
   "constitution.ai.errorNoSliders": "AI не вернул ползунки — попробуй переформулировать описание.",
   "constitution.ai.errorTooShort": "Опиши хотя бы одним предложением — что за общество?",
+  "constitution.ai.errorDailyLimit": "Бесплатные ИИ-подсказки на сегодня закончились ({used} из {limit}). Новые появятся через сутки; без ограничений — в подписке AEVION.",
+  "constitution.ai.errorFailed": "ИИ сейчас не ответил. Попробуй ещё раз через минуту.",
   "constitution.ai.historyHeading": "Прошлые ИИ-сценарии ({count})",
   "constitution.ai.label": "ИИ:",
   "constitution.ai.modalHeading": "AI-советник по конституции",

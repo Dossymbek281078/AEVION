@@ -1839,6 +1839,8 @@ const kk: Record<string, string> = {
   "constitution.ai.description": "Елді/қоғамды/болжамды құрылысты еркін түрде сипатта — ЖИ 8 ползунокты таңдап, таңдауын түсіндіреді. QCoreAI арқылы стриминг: жауап генерация барысында токен-токенмен келеді.",
   "constitution.ai.errorNoSliders": "ЖИ ползунктарды қайтармады — сипаттаманы қайта тұжырымдап көр.",
   "constitution.ai.errorTooShort": "Кемінде бір сөйлеммен сипатта — бұл қандай қоғам?",
+  "constitution.ai.errorDailyLimit": "Бүгінгі тегін ЖИ кеңестері таусылды ({used} / {limit}). Жаңалары бір тәуліктен кейін; шектеусіз — AEVION жазылымында.",
+  "constitution.ai.errorFailed": "ЖИ қазір жауап бермеді. Бір минуттан кейін қайталап көріңіз.",
   "constitution.ai.historyHeading": "Бұрынғы ЖИ-сценарийлер ({count})",
   "constitution.ai.label": "ЖИ:",
   "constitution.ai.modalHeading": "Конституция бойынша ЖИ-кеңесші",

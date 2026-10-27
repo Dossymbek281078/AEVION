@@ -1843,6 +1843,8 @@ const en: Record<string, string> = {
   "constitution.ai.description": "Describe a country/society/hypothetical regime freely — the AI will pick 8 sliders and explain its choice. Streamed via QCoreAI: the answer arrives token by token as it's generated.",
   "constitution.ai.errorNoSliders": "The AI didn't return any sliders — try rephrasing the description.",
   "constitution.ai.errorTooShort": "Describe it in at least one sentence — what kind of society is this?",
+  "constitution.ai.errorDailyLimit": "You have used today's free AI suggestions ({used} of {limit}). New ones arrive in 24 hours; unlimited with an AEVION subscription.",
+  "constitution.ai.errorFailed": "The AI did not answer just now. Try again in a minute.",
   "constitution.ai.historyHeading": "Past AI scenarios ({count})",
   "constitution.ai.label": "AI:",
   "constitution.ai.modalHeading": "AI advisor on the constitution",

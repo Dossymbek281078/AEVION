@@ -1,47 +1,68 @@
 // @vitest-environment jsdom
 import { describe, test, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /*
  * 🔴 22.10.2026, замер на проде (сайт a26c5584c, Playwright 390×844, isMobile): /smeta-trainer после «Пропустить»
- * в приветственном окне не показывал НИ ОДНОЙ кнопки «Купить»/«Тарифы» — ни сразу, ни после прокрутки вниз,
- * тогда как соседние страницы (psyapp-deps, qskyway, qmedia) показывали чип «Входит в подписку · Купить».
- * Причина: чип в шапке обёрнут в `hidden md:block`. На столе (1463×724) путь Купить → /pricing#planet-buy →
- * «Оформить — $225 в месяц» → касса LS проходил. Правка: на узком экране чип выводится отдельной строкой
- * под шапкой (md:hidden), в шапке — как раньше. Сторож рендерит страницу и проверяет, что чип есть в ОБЕИХ
- * обёртках: одна скрыта на телефоне, другая — на столе; мутация, убирающая мобильную строку, краснеет.
+ * не показывал на телефоне ни одной строки о цене — чип в шапке был обёрнут в `hidden md:block`.
+ * Правка того дня: на узком экране строка выводится отдельно под шапкой (md:hidden), в шапке — как раньше.
+ *
+ * 🔴 27.10.2026 (Приложения-2, решение оркестратора — вариант «б»): у тренажёра НЕТ платной части —
+ * бэкенд его намеренно не закрывает (index.ts: «Deliberately NOT gated here: … smeta-trainer»), в
+ * PAYWALL_MODULES прода его нет. А чип говорил «Входит в подписку AEVION · от $150/мес · Купить» и вёл в
+ * кассу плана, который в тренажёре ничего не открывает. Теперь в обеих обёртках — «Бесплатно · входит в
+ * AEVION» и ссылка на страницу цен. Сторож: обе обёртки на месте, ни ссылки в кассу, ни цены.
  */
 
 vi.mock("../lib/corpus", () => ({ rates: new Array(500).fill(0) }));
 vi.mock("../components/LevelHome", () => ({ LevelHome: () => <div data-testid="level-home" /> }));
 vi.mock("../components/OnboardingModal", () => ({ OnboardingModal: () => <div data-testid="onboarding" /> }));
 vi.mock("../components/ThemeToggle", () => ({ ThemeToggle: () => <button>тема</button> }));
-vi.mock("@/components/ModulePricingChip", () => ({
-  default: ({ moduleId }: { moduleId: string }) => <a href="/pricing#planet-buy" data-testid="pricing-chip" data-module={moduleId}>Купить</a>,
-}));
 
 // eslint-disable-next-line import/first
 import SmetaTrainerPage from "../_client";
 
-describe("smeta-trainer: чип подписки виден и на телефоне", () => {
-  test("🔴 чип отрисован дважды: в шапке (hidden md:block) и строкой под шапкой (md:hidden) — на любой ширине ровно один виден", () => {
+const КЛИЕНТ = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "_client.tsx"), "utf8");
+
+describe("smeta-trainer: честная строка «бесплатно» видна и на телефоне", () => {
+  test("строка отрисована дважды: в шапке (hidden md:block) и под шапкой (md:hidden)", () => {
     render(<SmetaTrainerPage />);
-    const чипы = screen.getAllByTestId("pricing-chip");
-    expect(чипы, "чип должен быть в двух обёртках: для стола и для телефона").toHaveLength(2);
-    for (const чип of чипы) expect(чип.getAttribute("data-module")).toBe("smeta-trainer");
+    const чипы = screen.getAllByTestId("smeta-free-chip");
+    expect(чипы, "строка должна быть в двух обёртках: для стола и для телефона").toHaveLength(2);
     const обёртки = чипы.map((c) => c.parentElement!.className);
     expect(обёртки.some((k) => /\bhidden\b/.test(k) && /\bmd:block\b/.test(k)), `шапка: ${обёртки.join(" | ")}`).toBe(true);
     expect(обёртки.some((k) => /\bmd:hidden\b/.test(k) && !/(^|\s)hidden(\s|$)/.test(k)), `телефон: ${обёртки.join(" | ")}`).toBe(true);
-    // мобильная строка — отдельный узел с меткой, стоит ПОСЛЕ шапки (не внутри неё), чтобы не ломать строку шапки на 390 px
     const моб = screen.getByTestId("smeta-pricing-chip-mobile");
     expect(моб.closest("header"), "мобильная строка не должна быть внутри <header>").toBeNull();
-    expect(моб.querySelector("[data-testid=pricing-chip]")).not.toBeNull();
   });
 
-  test("КОНТРОЛЬ: на столе чип остаётся в шапке", () => {
-    render(<SmetaTrainerPage />);
-    const вШапке = document.querySelector("header [data-testid=pricing-chip]");
-    expect(вШапке).not.toBeNull();
-    expect(вШапке!.parentElement!.className).toMatch(/md:block/);
+  test("🔴 нет ни ссылки в кассу, ни цены, ни «Купить» — тренажёр бесплатен", () => {
+    const { container } = render(<SmetaTrainerPage />);
+    const ссылки = [...container.querySelectorAll("a")].map((a) => a.getAttribute("href") || "");
+    expect(ссылки.filter((h) => /planet-buy|#tiers|lemonsqueezy|checkout/.test(h)), "ссылки в кассу").toEqual([]);
+    const текст = container.textContent || "";
+    expect(текст, "цена на странице бесплатного тренажёра").not.toMatch(/\$\s?\d/);
+    expect(текст).not.toMatch(/Купить|Buy\b|Сатып алу/);
+    expect(текст).toContain("Бесплатно");
+    expect(ссылки, "ссылка на платные приложения — страница цен, не касса").toContain("/pricing");
+  });
+
+  test("КОНТРОЛЬ источника: плашка подписки не вернулась в страницу", () => {
+    expect(КЛИЕНТ).not.toContain("ModulePricingChip");
+    expect(КЛИЕНТ).toContain("<FreeChip />");
+  });
+
+  // Снимать со ВСЕХ поверхностей: каталог /apps писал на карточке тренажёра «In the subscription».
+  test("каталог /apps: карточка тренажёра (id smeta) — «Free», а не «In the subscription»", () => {
+    const каталог = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "page.tsx"), "utf8");
+    const m = каталог.match(/const FREE_APP_IDS = new Set\(\[([^\]]*)\]\)/);
+    expect(m, "FREE_APP_IDS не найден — разбор сломан").toBeTruthy();
+    expect(m![1]).toContain('"qcoreai"'); // контроль разбора: известный бесплатный
+    expect(m![1]).toContain('"smeta"');
+    // id и href одной карточки (между ними icon, name, tagline)
+    expect(каталог).toMatch(/id: "smeta",[\s\S]{0,200}href: "\/smeta-trainer"/);
   });
 });

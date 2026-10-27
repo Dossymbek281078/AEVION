@@ -324,7 +324,10 @@ const PLANET_FROM = planetFromPerMonth();
  * было цены). Всё остальное без товара в каталоге — прежние платные модули:
  * отдельно их больше не продают, они входят в подписку AEVION.
  */
-const FREE_APP_IDS = new Set(["qcoreai", "tiktok-publisher"]);
+// 27.10.2026: smeta (тренажёр) — бесплатный: бэкенд его не закрывает (index.ts «Deliberately NOT gated»),
+// в PAYWALL_MODULES прода его нет; «In the subscription» обещало платное, которого нет. Та же правка на
+// самой странице (smeta-trainer/components/FreeChip.tsx).
+const FREE_APP_IDS = new Set(["qcoreai", "tiktok-publisher", "smeta"]);
 
 export default function AppsPage() {
   // Метка канала для ссылок в кассу. Витрина модулей — клиентская

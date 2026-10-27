@@ -117,9 +117,16 @@ export function ЦеныДляРобота({ приложения, lang = "ru" }
             <a href={`/pricing?app=${encodeURIComponent(app.slug)}#apps`} style={{ color: "#0d9488", textDecoration: "none" }}>
               {moduleTitle(app.slug, lang, app.name)}
             </a>{" "}
-            {en
-              ? ` — from $${fromPricePerMonth(app.baseMonthly).toFixed(2)} to $${app.baseMonthly.toFixed(2)} per month`
-              : ` — от $${fromPricePerMonth(app.baseMonthly).toFixed(2)} до $${app.baseMonthly.toFixed(2)} в месяц`}
+            {/* 27.10.2026: годовое приложение (шахматы) продаётся одной ценой за год — та же ветка
+                yearOnlyUsd, что в разметке товарПриложения. Без неё блок писал «от $12 до $24 в месяц»
+                при кассе $50/год — на /pricing и на экране сразу после оплаты. */}
+            {app.yearOnlyUsd != null
+              ? en
+                ? ` — $${app.yearOnlyUsd.toFixed(2)} per year`
+                : ` — $${app.yearOnlyUsd.toFixed(2)} в год`
+              : en
+                ? ` — from $${fromPricePerMonth(app.baseMonthly).toFixed(2)} to $${app.baseMonthly.toFixed(2)} per month`
+                : ` — от $${fromPricePerMonth(app.baseMonthly).toFixed(2)} до $${app.baseMonthly.toFixed(2)} в месяц`}
           </li>
         ))}
       </ul>

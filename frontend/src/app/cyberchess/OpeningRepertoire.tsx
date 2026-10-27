@@ -861,7 +861,7 @@ function BranchCard(props: {
                 paddingLeft: 8,
               }}
             >
-              {branch.notes}
+              {tt(L, branch.notes)}
             </div>
           )}
         </div>

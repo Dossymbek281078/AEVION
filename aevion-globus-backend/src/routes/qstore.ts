@@ -378,12 +378,18 @@ qstoreRouter.post("/me/products", async (req: Request, res: Response) => {
       );
       res.status(201).json({ product });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      // 27.10.2026 (ProdSuite на 7b16f03ce, сторож noDbFallbackMustNotPretendToSave): раньше
+      // «fall through» уводил в память и отвечал 201 — продавец видел «товар создан», а после
+      // перезапуска товара не было. Отказ базы — честный 503, как у остальных ручек магазина.
+      console.error("[QStore] POST /me/products insert DB error", e);
+      res.status(503).json({ error: "storage_unavailable", warning: WARN });
+      return;
     }
   }
+  // Без базы (локальный запуск): память, и ответ ГОВОРИТ об этом — иначе 201 выглядит как сохранение.
   memProducts.set(newId, product);
-  res.status(201).json({ product });
+  res.status(201).json({ product, warning: WARN });
 });
 
 // PATCH /api/qstore/me/products/:id

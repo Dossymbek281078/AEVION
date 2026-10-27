@@ -3,6 +3,8 @@ import { fromPricePerMonth } from "@/lib/termPricing";
 
 import { разметкаТоваров } from "@/lib/shopJsonLd";
 import { разметкаПриложений, оплачиваемыеПриложения } from "@/lib/appsJsonLd";
+import { getServerLang } from "@/lib/i18n-server";
+import { isEnglish } from "@/lib/pricingLocalize";
 
 export const metadata: Metadata = {
   // Двуязычный заголовок (образец /qventure, /qright, /bureau): metadata у
@@ -53,6 +55,9 @@ export default async function PricingLayout({ children }: { children: React.Reac
   const товары = разметкаТоваров();
   const приложения = await разметкаПриложений();
   const приложения_список = await оплачиваемыеПриложения();
+  // 27.10.2026: язык читателя по куке — блок внизу был по-русски на любом языке,
+  // в том числе в ar-режиме саудовской волны.
+  const lang = await getServerLang();
   return (
     <>
       {товары ? (
@@ -68,7 +73,7 @@ export default async function PricingLayout({ children }: { children: React.Reac
         />
       ) : null}
       {children}
-      <ЦеныДляРобота приложения={приложения_список} />
+      <ЦеныДляРобота приложения={приложения_список} lang={lang} />
     </>
   );
 }
@@ -94,21 +99,26 @@ export default async function PricingLayout({ children }: { children: React.Reac
  * те приложения, которые касса может продать. Цены берутся из каталога тем же
  * помощником, что и везде, и здесь НЕ переписываются числами.
  */
-export function ЦеныДляРобота({ приложения }: { приложения: Awaited<ReturnType<typeof оплачиваемыеПриложения>> }) {
+export function ЦеныДляРобота({ приложения, lang = "ru" }: { приложения: Awaited<ReturnType<typeof оплачиваемыеПриложения>>; lang?: string }) {
   if (!приложения.length) return null;
+  // ru/kk — по-русски (как было); любой другой язык — по-английски, тем же правилом, что
+  // и остальная страница цен (isEnglish). Числа не меняются — они из каталога.
+  const en = isEnglish(lang);
   return (
     <section
-      aria-label="Цены приложений AEVION"
+      aria-label={en ? "AEVION app prices" : "Цены приложений AEVION"}
       style={{ padding: "24px 16px", borderTop: "1px solid rgba(15,23,42,0.08)", fontSize: 13, lineHeight: 1.6 }}
     >
-      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 10px" }}>Приложения и цены</h2>
+      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 10px" }}>{en ? "Apps and prices" : "Приложения и цены"}</h2>
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 4 }}>
         {приложения.map((app) => (
           <li key={app.slug}>
             <a href={`/pricing?app=${encodeURIComponent(app.slug)}#apps`} style={{ color: "#0d9488", textDecoration: "none" }}>
               {app.name}
             </a>{" "}
-            — от ${fromPricePerMonth(app.baseMonthly).toFixed(2)} до ${app.baseMonthly.toFixed(2)} в месяц
+            {en
+              ? ` — from $${fromPricePerMonth(app.baseMonthly).toFixed(2)} to $${app.baseMonthly.toFixed(2)} per month`
+              : ` — от $${fromPricePerMonth(app.baseMonthly).toFixed(2)} до $${app.baseMonthly.toFixed(2)} в месяц`}
           </li>
         ))}
       </ul>

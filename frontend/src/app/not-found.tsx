@@ -74,7 +74,7 @@ export default function NotFound() {
           onSubmit={(e) => { e.preventDefault(); if (typeof window !== "undefined") window.location.href = helpHref; }}
           style={{ display: "flex", gap: 8, marginBottom: 28, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}
         >
-          <label htmlFor="nf-search" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
+          <label htmlFor="nf-search" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", whiteSpace: "nowrap" }}>
             {tx(NF_TEXT, "search", lang)} AEVION
           </label>
           <input

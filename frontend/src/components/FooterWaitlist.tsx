@@ -30,7 +30,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useI18nOptional, языкИзАдреса } from "@/lib/i18n";
-import { WaitlistCapture } from "./WaitlistCapture";
+import { WaitlistCapture, языкФормы } from "./WaitlistCapture";
 
 /** Помечает источник: видно в выгрузке. Схема сервера режет на 60 знаках. */
 export function footerWaitlistSource(pathname: string | null | undefined): string {
@@ -57,7 +57,7 @@ export function hasOtherEmailField(root: ParentNode, mine: Element | null): bool
  * умолчанию — те, что нужны подвалу; второй реализации не заводим.
  */
 export type WaitlistIfMissingProps = {
-  lang?: "ru" | "en" | "kk";
+  lang?: "ru" | "en" | "kk" | "ar";
   title?: string;
   description?: string;
   buttonLabel?: string;
@@ -81,13 +81,16 @@ export function FooterWaitlist(props: WaitlistIfMissingProps = {}) {
    * провайдера (тесты, обособленные оболочки).
    */
   const i18n = useI18nOptional();
-  const лангИз = (l: string | null | undefined): "ru" | "en" | "kk" => (l === "en" ? "en" : l === "kk" ? "kk" : "ru");
-  // 24.10.2026: kk — свой текст; раньше всё, что не en, шло по-русски
-  const язык: "ru" | "en" | "kk" = props.lang ?? (i18n ? лангИз(i18n.lang) : лангИз(языкИзАдреса(pathname)));
+  // 24.10.2026: kk — свой текст; раньше всё, что не en, шло по-русски.
+  // 27.10.2026: ar — свой текст, остальные языки платформы — английский (языкФормы в WaitlistCapture):
+  // в ar-режиме (саудовская волна) подвал /verify был по-русски: «Не готовы сегодня…», «Сообщить мне».
+  const язык = props.lang ?? языкФормы(i18n ? i18n.lang : языкИзАдреса(pathname));
   const Т = {
     ru: { title: "Не готовы сегодня — оставьте адрес", description: "Напишем, когда откроется то, что вы смотрели, и пришлём условия раннего доступа.", button: "Сообщить мне", done: "Готово — адрес записан. Подтверждение уже ушло вам на почту." },
     en: { title: "Not ready today — leave your address", description: "We will write when what you were looking at opens and send you the early-access terms.", button: "Notify me", done: "Done — your address is saved. A confirmation is already in your inbox." },
     kk: { title: "Бүгін дайын емессіз бе — мекенжай қалдырыңыз", description: "Сіз қараған нәрсе ашылғанда жазып, ерте қол жеткізу шарттарын жібереміз.", button: "Хабарлау", done: "Дайын — мекенжай жазылды. Растау хаты поштаңызға жіберілді." },
+    // ⚠️ ar — черновой перевод, нужна вычитка носителя
+    ar: { title: "لست جاهزاً اليوم؟ اترك عنوانك", description: "سنكتب لك عندما يُفتح ما كنت تتصفحه ونرسل شروط الوصول المبكر.", button: "أبلغني", done: "تم — حُفظ عنوانك. وصل تأكيد إلى بريدك." },
   }[язык];
   const [показывать, установить] = useState(false);
   const [узел, запомнить] = useState<HTMLDivElement | null>(null);

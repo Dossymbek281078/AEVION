@@ -384,7 +384,7 @@ export default function HelpPage() {
 
         {/* FAQ search */}
         <div style={{ marginBottom: 16, position: "relative" }}>
-          <label htmlFor="help-search" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
+          <label htmlFor="help-search" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", whiteSpace: "nowrap" }}>
             {t("helpRoot.search.label")}
           </label>
           <input

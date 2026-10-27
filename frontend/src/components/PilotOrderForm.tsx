@@ -63,7 +63,7 @@ export function PilotOrderForm() {
       <label style={{ fontSize: 14, color: "#0f172a", fontWeight: 700 }}>What the data is (one line)
         <input type="text" maxLength={500} value={data} onChange={(e) => setData(e.target.value)} placeholder="e.g. product catalogue, 25k rows, JSON" style={поле} />
       </label>
-      <input type="text" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} aria-hidden="true" style={{ position: "absolute", left: -9999, width: 1, height: 1, opacity: 0 }} />
+      <input type="text" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} aria-hidden="true" style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", whiteSpace: "nowrap" }} />
       <button type="submit" data-pilot-order-submit disabled={s === "sending"} style={{ padding: "12px 20px", fontSize: 16, fontWeight: 800, borderRadius: 10, border: "none", background: s === "done" ? "#065f46" : "#0f766e", color: "#fff", cursor: s === "sending" ? "wait" : "pointer" }}>
         {s === "sending" ? "Sending…" : s === "done" ? "Request received ✓" : `Order the pilot — $${PILOT_USD}`}
       </button>

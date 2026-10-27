@@ -1113,9 +1113,12 @@ function BureauPageInner() {
             <div style={{ display: "grid", gap: 12 }}>
               {filteredCerts.map((cert) => (
                 <div key={cert.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff" }}>
+                  {/* 27.10.2026: на 390 px (ru) карточки растягивали сетку до 395 px и страница ездила
+                      вбок (замер mobile-fit на проде 9a21fceb8: документ 415). Левый блок без minWidth:0
+                      требовал ширину самого длинного слова заголовка + nowrap-плашки справа. */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
-                    <div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                    <div style={{ minWidth: 0, flex: "1 1 auto", overflowWrap: "anywhere" as const }}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4, flexWrap: "wrap" as const }}>
                         <span style={{ fontSize: 16 }}>{KIND_ICONS[cert.kind] || "📦"}</span>
                         <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 13, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{tb(KIND_LABELS[cert.kind] || cert.kind)}</span>
                         <span style={{ fontSize: 15, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
@@ -1123,7 +1126,7 @@ function BureauPageInner() {
                       <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{cert.title}</div>
                       <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
+                    <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                       {cert.verificationLevel === "verified" ? (
                         <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(13,148,136,0.15))", color: "#065f46", whiteSpace: "nowrap" as const, border: "1px solid rgba(16,185,129,0.3)" }}>
                           {tb("✓ VERIFIED AUTHOR")}

@@ -4,6 +4,7 @@ import { useI18n } from "./i18n";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import { STANDALONE_APPS } from "./termPricing";
 import { predlagaemOtdelno } from "./neProdayotsyaOtdelno";
+import { isEnglish } from "./pricingLocalize";
 
 /** Сколько приложений продаётся отдельно. Числом словом («пять») страница
  *  расходилась с витриной: приложений девять, и сумма $480 в другом месте
@@ -1035,10 +1036,20 @@ export function termUnitKey(months: number): string {
   return "pricing.term.month.many";
 }
 
+/**
+ * Словарь страницы цен для языка. 27.10.2026: kk падал на английский, а остальная
+ * страница цен для kk русская (isEnglish: ru и kk — не английский) — на /pricing при kk
+ * кнопки «Выбрать Max» шли по-русски, а купоны «up to −$10 (max 50% of the order)»
+ * по-английски. Запасной для kk — русский, для прочих — английский, как в isEnglish.
+ */
+export function pricingDictFor(lang: string): Record<string, string> {
+  return dict[lang] ?? (isEnglish(lang) ? dict.en : dict.ru) ?? {};
+}
+
 export function usePricingT() {
   const { lang } = useI18n();
   return (key: string, vars?: Record<string, string | number>): string => {
-    const raw = (dict[lang] ?? dict.en ?? {})[key] ?? dict.en?.[key] ?? key;
+    const raw = pricingDictFor(lang)[key] ?? dict.en?.[key] ?? key;
     if (!vars) return raw;
     return Object.keys(vars).reduce(
       (acc, k) => acc.replace(`{${k}}`, String(vars[k])),

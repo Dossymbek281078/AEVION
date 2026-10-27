@@ -182,8 +182,14 @@ export default function DailyPuzzlePage() {
    * заменяет её. Обратный порядок дал бы пустую доску на секунду и белый экран
    * при недоступной сети.
    */
-  const [puzzle, setPuzzle] = useState<Puzzle>(() => кЗадаче(POOL[dayIndex() % POOL.length]));
+  // 27.10.2026: встроенная задача ДНЯ выбирается после монтирования, а не при первом рендере.
+  // Статический HTML страницы собран в день сборки, клиент считал день по местному времени —
+  // разный текст при гидратации (React #418 на /cyberchess/daily, сторож page-errors 27.10 04:04;
+  // замер 14:0x: SSR «Вилка 1200», клиент «Эндшпиль 1167»). Первый рендер одинаков у сервера и
+  // клиента (POOL[0]); день — эффектом; настоящая задача с сервера заменяет обе.
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => кЗадаче(POOL[0]));
   const [fromBank, setFromBank] = useState(false);
+  useEffect(() => { setPuzzle(кЗадаче(POOL[dayIndex() % POOL.length])); }, []);
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
   const [lbState, setLbState] = useState<'loading' | 'ok' | 'failed'>('loading');
 

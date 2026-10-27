@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
 // Один форматтер денег на модуль: локальная копия здесь разошлась с карточкой
 // ("$30.0K" против "$30K") ровно в тот момент, когда формат поменяли в одном месте.
@@ -112,6 +113,25 @@ export async function generateMetadata({
   }
 }
 
-export default function ListingLayout({ children }: { children: ReactNode }) {
+/**
+ * 27.10.2026: честный 404 для несуществующей заявки. Сторож мягких 404 (soft404-2026-10-27.md):
+ * `/startup-exchange/qqq-no-such-987` отвечал 200 — страница клиентская и сама рисует «Заявка не
+ * найдена», но статус уже 200. Нечисловой id и 404 от бэкенда → `notFound()`; бэкенд не ответил —
+ * пропускаем к странице (она покажет свой отказ), чтобы наша сеть не превращала живую заявку в 404.
+ * Запрос тот же и с тем же кэшем, что у превью выше, — лишней нагрузки на бэкенд нет.
+ */
+export const dynamic = "force-dynamic";
+
+export default async function ListingLayout({ children, params }: { children: ReactNode; params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (!/^[1-9][0-9]{0,12}$/.test(id)) notFound();
+  let status = 0;
+  try {
+    const resp = await fetch(apiUrl(`/api/startupx/ideas/${encodeURIComponent(id)}`), { next: { revalidate: 3600 } });
+    status = resp.status;
+  } catch {
+    status = 0;
+  }
+  if (status === 404) notFound();
   return <>{children}</>;
 }

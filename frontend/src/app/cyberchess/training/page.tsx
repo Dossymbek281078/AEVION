@@ -131,7 +131,11 @@ export default function TrainingHubPage() {
     return weakest;
   }, [cpiState]);
 
-  const dailyVariant = useMemo(() => todaysVariant(), []);
+  // 27.10.2026: вариант дня — после монтирования: статический HTML собран в день сборки, у клиента
+  // другой день → разный текст при гидратации (React #418 на /cyberchess/training; замер 14:0x:
+  // SSR «Царь горы», клиент «Атомные»). Первый рендер — VARIANT_POOL[0] у обеих сторон.
+  const [dailyVariant, setDailyVariant] = useState(VARIANT_POOL[0]);
+  useEffect(() => { setDailyVariant(todaysVariant()); }, []);
   const drill = weakFactor ? FACTOR_DRILLS[weakFactor] || FACTOR_DRILLS.E : FACTOR_DRILLS.E;
 
   const claimDaily = () => {

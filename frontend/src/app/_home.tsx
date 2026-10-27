@@ -101,6 +101,8 @@ export default function HomePage() {
   // 21.10.2026: подписи из data/homeTexts — под translate="no" только на своём языке (ru/en/kk);
   // на прочих их по-прежнему доводит живой переводчик.
   const trH = lang === "ru" || lang === "en" || lang === "kk" ? ("no" as const) : undefined;
+  // 27.10.2026: виджету конституции на прочих языках (ar — саудовская волна) — английские подписи,
+  // а не русские: без lang он брал SLIDER_SHORT_LABELS (ru), замер locale ar-SA на проде: «Пол, Закон, Ротация…».
   // 21.10.2026: служебные подписи (Demo pipeline, runtime, OpenAPI) — только вошедшему;
   // гостю они на трёх языках не нужны и живым переводом не переводились.
   const [вошёл, setВошёл] = useState(false);
@@ -1282,7 +1284,7 @@ const DEMO_NOTE =
                     <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                       Constitution отпечаток
                     </div>
-                    <ConstitutionEmbed sliders={cc.sliders} label={`${cc.flag} ${cc.name}`} size="sm" />
+                    <ConstitutionEmbed sliders={cc.sliders} label={`${cc.flag} ${cc.name}`} size="sm" lang={trH ? L : "en"} />
                     <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
                       <a
                         href={`/constitution?country=${cc.code}`}
@@ -1361,7 +1363,7 @@ const DEMO_NOTE =
             sliders={{ floor: 75, ruleOfLaw: 85, rotation: 70, transparency: 80, multiStatus: 75, skinInGame: 70, polycentricity: 65, positiveSum: 80 }}
             label={homeText("constLabel", L)}
             size="md"
-            lang={trH ? L : undefined}
+            lang={trH ? L : "en"}
           />
           <div style={{ flex: 1, minWidth: 280 }}>
             <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>

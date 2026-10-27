@@ -71,7 +71,7 @@ export function SkeletonBlock({ label, minHeight = 160 }: { label: string; minHe
         <Skeleton height={70} rounded={12} />
       </div>
       <Skeleton height={40} rounded={10} />
-      <span style={{ position: "absolute", left: -99999 }}>{label}</span>
+      <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", whiteSpace: "nowrap" }}>{label}</span>
     </div>
   );
 }

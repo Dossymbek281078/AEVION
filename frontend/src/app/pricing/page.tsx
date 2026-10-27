@@ -1,5 +1,6 @@
 "use client";
 
+import { moduleTitle } from "@/data/moduleNames";
 import { channelNow } from "@/lib/channelNow";
 import { ждатьКарточкуПриложения } from "@/lib/scrollToAppCard";
 import { useEffect, useRef, useState, useMemo } from "react";
@@ -2173,7 +2174,8 @@ export default function PricingPage() {
                     }}
                   >
                     <td style={{ padding: "10px 14px", fontWeight: 700 }}>
-                      {m.name}
+                      {/* 27.10.2026: имя модуля на языке читателя (en/kk/ar→en); из API шло русское — на /en и в ar 297 знаков кириллицы */}
+                      {moduleTitle(m.id, lang, m.name)}
                       <div style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>
                         {m.code}
                       </div>

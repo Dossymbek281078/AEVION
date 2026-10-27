@@ -60,7 +60,7 @@ export type WaitlistCaptureProps = {
    */
   onSubscribed?: () => void;
   /** Язык подсказки и сообщений об отказе. По умолчанию русский. */
-  lang?: "ru" | "en" | "kk";
+  lang?: "ru" | "en" | "kk" | "ar";
   /**
    * Текст подтверждения после успешной подписки.
    *
@@ -120,6 +120,24 @@ const COPY = {
       "We took your address but could not store it permanently just now — that is on us. Please send it again in a minute so we do not lose you before launch.",
     offline: "Could not reach the server. Check the connection and try again.",
   },
+  // ⚠️ ar — черновой перевод (27.10.2026, саудовская волна), нужна вычитка носителя
+  ar: {
+    title: "احصل على وصول مبكر إلى وحدات AEVION",
+    description: "تطلق المنصة الوحدات واحدة تلو الأخرى. اترك بريدك وسنكتب لك يوم إطلاق ما يهمك مع شروط الوصول المبكر.",
+    promise: "رسالة واحدة عند إطلاق كل وحدة. إلغاء الاشتراك برابط واحد في كل رسالة.",
+    buttonLabel: "الحصول على وصول مبكر",
+    placeholder: "you@example.com",
+    sending: "جارٍ الإرسال…",
+    emailLabel: "عنوان البريد الإلكتروني",
+    typo: "يبدو أن في العنوان خطأً مطبعياً. تحقق منه وأرسل مرة أخرى.",
+    done: "تم — حُفظ العنوان. سنكتب لك عندما يكون هناك ما نعرضه.",
+    tooMany: "محاولات كثيرة متتالية. انتظر دقيقة ثم حاول مجدداً.",
+    rejected: "لم يقبل الخادم العنوان. تحقق من كتابته.",
+    ourFault: "لم نتمكن من حفظ العنوان — الخطأ من جهتنا. حاول مرة أخرى بعد دقيقة.",
+    notStored:
+      "استلمنا عنوانك لكن تعذّر حفظه بشكل دائم الآن — الخطأ من جهتنا. أرسله مرة أخرى بعد دقيقة حتى لا نفقدك قبل الإطلاق.",
+    offline: "تعذّر الوصول إلى الخادم. تحقق من الاتصال وحاول مجدداً.",
+  },
   // ⚠️ kk — черновой перевод, нужна вычитка носителя
   kk: {
     title: "AEVION модульдеріне ерте қол жеткізу",
@@ -139,6 +157,19 @@ const COPY = {
     offline: "Серверге қосыла алмадық. Байланысты тексеріп, қайталаңыз.",
   },
 } as const;
+
+/**
+ * 27.10.2026: язык формы из языка страницы. Раньше всё, что не en/kk, шло по-русски — и в
+ * ar-режиме (саудовская волна, замер Продаж locale ar-SA) человек видел «Адрес электронной
+ * почты» ровно в поле контакта. Свой текст есть у ru/en/kk/ar; остальные восемь языков
+ * платформы получают английский (он же запасной для словарей, см. lib/i18n-lang/README.md).
+ * Вне провайдера (в тестах) остаётся русский, как и прежде.
+ */
+export function языкФормы(l: string | null | undefined): keyof typeof COPY {
+  if (!l || l === "ru") return "ru";
+  if (l === "en" || l === "kk" || l === "ar") return l;
+  return "en";
+}
 
 export function WaitlistCapture({
   source,
@@ -168,7 +199,7 @@ export function WaitlistCapture({
    */
   const i18n = useI18nOptional();
   // 24.10.2026: kk — свой текст (раньше падал на русский: подвал /kk по-русски на каждой странице)
-  const язык: "ru" | "en" | "kk" = lang ?? (i18n?.lang === "en" ? "en" : i18n?.lang === "kk" ? "kk" : "ru");
+  const язык: keyof typeof COPY = lang ?? языкФормы(i18n?.lang);
   const copy = COPY[язык];
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");

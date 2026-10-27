@@ -76,6 +76,17 @@ const EXAMPLE_HINTS = /(\.md$|\.test\.|__tests__|\.example|\.sample|fixtures?\/)
 // перестают читать.
 const PLACEHOLDER_HINTS = /(dev-only|change-?in-?prod|changeme|placeholder|example|sample|dummy|your-|test-key|fake|0123456789|abcdef0123|fedcba98|76543210|deadbeef|xxxx|\.\.\.)/i;
 
+// 27.10.2026: шаблон «свой секрет» ловил и ИМЯ переменной в кавычках —
+// `["LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_WEBHOOK_SECRET"]` в proofPilot.ts дало
+// 98 «секретов» на 98 ветках (было 6, стало 99, утренняя сводка покраснела).
+// Имя — заглавные буквы, цифры и подчёркивания; у случайного ключа так не бывает.
+// Отсев только когда ВСЕ длинные литералы строки — имена; литерал-значение рядом
+// с именем по-прежнему тревога.
+const ТОЛЬКО_ИМЕНА = (text) => {
+  const lits = text.match(/["'][A-Za-z0-9+/=_-]{24,}["']/g) || [];
+  return lits.length > 0 && lits.every((l) => /^["'][A-Z][A-Z0-9_]*["']$/.test(l));
+};
+
 const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 
 function selfTest() {
@@ -94,6 +105,15 @@ function selfTest() {
     const tree2 = execFileSync("git", ["mktree"], { input: `100644 blob ${blob2}\tconf.txt\n`, encoding: "utf8" }).trim();
     const commit2 = execFileSync("git", ["commit-tree", tree2, "-m", "self-test-2"], { encoding: "utf8" }).trim();
     quiet = grepRef(commit2).length === 0;
+    // 27.10.2026: имя переменной в кавычках — не секрет; значение рядом — секрет.
+    const blob3 = execFileSync("git", ["hash-object", "-w", "--stdin"], { input: 'for (const k of ["LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_WEBHOOK_SECRET"]) {}\n', encoding: "utf8" }).trim();
+    const tree3 = execFileSync("git", ["mktree"], { input: `100644 blob ${blob3}\tnames.ts\n`, encoding: "utf8" }).trim();
+    const commit3 = execFileSync("git", ["commit-tree", tree3, "-m", "self-test-3"], { encoding: "utf8" }).trim();
+    quiet = quiet && grepRef(commit3).length === 0;
+    const blob4 = execFileSync("git", ["hash-object", "-w", "--stdin"], { input: 'const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "4wSqZt9pLm2xVb7nQe1rYu5kHd8gJc3a";\n', encoding: "utf8" }).trim();
+    const tree4 = execFileSync("git", ["mktree"], { input: `100644 blob ${blob4}\tvalue.ts\n`, encoding: "utf8" }).trim();
+    const commit4 = execFileSync("git", ["commit-tree", tree4, "-m", "self-test-4"], { encoding: "utf8" }).trim();
+    ok = ok && grepRef(commit4).some((h) => h.kind === "Свой секрет в коде");
   } catch (e) {
     console.error("самопроверка не выполнилась:", e.message);
     process.exit(2);
@@ -118,6 +138,7 @@ function grepRef(ref) {
       const file = rest.slice(0, rest.indexOf(":"));
       const text = rest.slice(0, 300);
       if (p.placeholders && PLACEHOLDER_HINTS.test(text)) continue;
+      if (p.placeholders && ТОЛЬКО_ИМЕНА(text)) continue;
       out.push({ ref, file, kind: p.name, line: rest.slice(0, 120) });
     }
   }

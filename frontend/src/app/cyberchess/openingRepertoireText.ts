@@ -94,6 +94,12 @@ export const OPENING_REPERTOIRE_TEXT: Record<string, Tr> = {
   "мин": { en: "min", kk: "мин" },
   "✓ Сохранено": { en: "✓ Saved", kk: "✓ Сақталды" },
   "Обновить данные сейчас": { en: "Refresh data now", kk: "Деректерді қазір жаңарту" },
+  // Заметки заготовленных веток (defaultRepertoire в openingRepertoireData.ts). Они сохраняются у игрока
+  // по-русски, поэтому переводятся при выводе; свои заметки игрока в словаре не найдутся и выводятся как есть.
+  "Классическая итальянская партия — надёжное построение за белых.": { en: "The classical Italian Game — a solid setup for White.", kk: "Классикалық итальян ойыны — ақтар үшін сенімді құрылым." },
+  "Надёжная схема за чёрных против 1.e4. Слона на f5 выводите до хода e6.": { en: "A solid setup for Black against 1.e4. Develop the bishop to f5 before playing e6.", kk: "1.e4-ке қарсы қаралар үшін сенімді схема. Пілді e6 жүрісіне дейін f5-ке шығарыңыз." },
+  "Очень острый вариант — нужна конкретная подготовка.": { en: "A very sharp line — it needs concrete preparation.", kk: "Өте өткір нұсқа — нақты дайындық керек." },
+  "Закрытая позиционная игра. Цель — атака меньшинства.": { en: "A closed positional game. The plan is the minority attack.", kk: "Жабық позициялық ойын. Мақсат — азшылық шабуылы." },
 };
 
 export function tt(lang: string | undefined, src: string): string {

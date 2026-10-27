@@ -20,10 +20,12 @@ const СЛУЖЕБНЫЕ = [
   "smoke-1784775240406-x",
   "sm1784775188392",
   "smoke-test-xyz",
+  // 27.10.2026: проба окна Приложения на проде, alias без smoke-
+  "probe-apps-mvgwpivu",
 ];
 
 /** Так выглядят псевдонимы людей: короткие, со смыслом, не из цифр. */
-const ЛЮДИ = ["anna", "dev_marat", "sm", "smart-alex", "sample", "smokey-eyes"];
+const ЛЮДИ = ["anna", "dev_marat", "sm", "smart-alex", "sample", "smokey-eyes", "probert", "probeский"];
 
 describe("витрина QPersona не показывает служебные записи", () => {
   it("узнаёт все служебные псевдонимы с прода", () => {
@@ -54,6 +56,9 @@ describe("витрина QPersona не показывает служебные �
      */
     expect(SMOKE_ALIAS_SQL).toContain("^smoke([-_0-9]|$)");
     expect(SMOKE_ALIAS_SQL).toContain("^sm[0-9]{6,}$");
+    expect(SMOKE_ALIAS_SQL).toContain("^probe([-_0-9]|$)");
+    expect(isSmokeAlias("probe-apps-mvgwpivu")).toBe(true);
+    expect(isSmokeAlias("probert")).toBe(false);
     expect(isSmokeAlias("smoke-anything")).toBe(true);
     expect(isSmokeAlias("sm123456")).toBe(true);
     expect(isSmokeAlias("sm12345")).toBe(false); // пять цифр — не метка времени

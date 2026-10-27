@@ -236,6 +236,40 @@ const COUNTRY_I18N: Record<string, { ru?: string; kk?: string }> = {
   World: { ru: "Мир", kk: "Әлем" },
 };
 
+/** Подписи панели страны (до 27.10 были только английскими на всех языках сайта). */
+function sheetText(locale: "en" | "ru" | "kk") {
+  if (locale === "ru")
+    return {
+      sheet: "Страна",
+      clear: "Сбросить фильтр страны",
+      breakdown: "Разбивка по категориям",
+      nodes: (n: number) => {
+        const d10 = n % 10, d100 = n % 100;
+        const w = d10 === 1 && d100 !== 11 ? "узел" : d10 >= 2 && d10 <= 4 && (d100 < 12 || d100 > 14) ? "узла" : "узлов";
+        return `${n} ${w}`;
+      },
+      share: (p: string) => `${p}% экосистемы`,
+      none: (c: string) => `В стране ${c} пока нет узлов AEVION.`,
+    };
+  if (locale === "kk")
+    return {
+      sheet: "Ел",
+      clear: "Ел сүзгісін тазалау",
+      breakdown: "Санаттар бойынша бөлу",
+      nodes: (n: number) => `${n} түйін`,
+      share: (p: string) => `экожүйенің ${p}%`,
+      none: (c: string) => `${c} елінде әзірге AEVION түйіндері жоқ.`,
+    };
+  return {
+    sheet: "Country sheet",
+    clear: "Clear country filter",
+    breakdown: "Category breakdown",
+    nodes: (n: number) => `${n} ${n === 1 ? "node" : "nodes"}`,
+    share: (p: string) => `${p}% of ecosystem`,
+    none: (c: string) => `No AEVION nodes registered in ${c} yet.`,
+  };
+}
+
 function displayCountry(name: string, locale: "en" | "ru" | "kk"): string {
   if (locale === "en") return name;
   const e = COUNTRY_I18N[name];
@@ -2347,6 +2381,9 @@ export default function Globus3D({
 
       // Если перемещения не было — это клик: focus-режим вместо моментальной навигации.
       if (!didDrag) {
+        // Цель берём по точке нажатия, а не по последнему наведению: у касания наведения нет,
+        // и раньше тап по глобусу на телефоне ничего не выбирал (замер 27.10: панель страны 0/49 касанием).
+        updateHover(ev.clientX, ev.clientY);
         const cur = labelRef.current;
         if (cur) {
           focusMarkerRef.current(cur.marker);
@@ -3666,7 +3703,8 @@ export default function Globus3D({
 
       {!initError && selectedCountry ? (
         <div
-          aria-label={`Country sheet: ${selectedCountry}`}
+          data-country-sheet={selectedCountry}
+          aria-label={`${sheetText(locale).sheet}: ${displayCountry(selectedCountry, locale)}`}
           style={{
             position: "absolute",
             top: isNarrow ? 64 : 232,
@@ -3707,8 +3745,8 @@ export default function Globus3D({
             </div>
             <button
               type="button"
-              title="Clear country filter"
-              aria-label="Clear country filter"
+              title={sheetText(locale).clear}
+              aria-label={sheetText(locale).clear}
               onClick={() => setSelectedCountry(null)}
               style={{
                 background: "transparent",
@@ -3742,8 +3780,7 @@ export default function Globus3D({
             }}
           >
             <span>
-              {selectedCountryMarkers.length}{" "}
-              {selectedCountryMarkers.length === 1 ? "node" : "nodes"}
+              {sheetText(locale).nodes(selectedCountryMarkers.length)}
             </span>
             {selectedCountryMarkers.length > 0 && markers.length > 0 ? (
               <span
@@ -3755,14 +3792,14 @@ export default function Globus3D({
                   textTransform: "none",
                 }}
               >
-                · {((selectedCountryMarkers.length / markers.length) * 100).toFixed(1)}% of ecosystem
+                · {sheetText(locale).share(((selectedCountryMarkers.length / markers.length) * 100).toFixed(1))}
               </span>
             ) : null}
           </div>
 
           {selectedCountryMarkers.length > 0 ? (
             <div
-              aria-label="Category breakdown"
+              aria-label={sheetText(locale).breakdown}
               style={{
                 display: "flex",
                 gap: 2,
@@ -3810,7 +3847,7 @@ export default function Globus3D({
                 lineHeight: 1.45,
               }}
             >
-              No AEVION nodes registered in {displayCountry(selectedCountry, locale)} yet.
+              {sheetText(locale).none(displayCountry(selectedCountry, locale))}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

@@ -189,7 +189,6 @@ export default function DailyPuzzlePage() {
   // клиента (POOL[0]); день — эффектом; настоящая задача с сервера заменяет обе.
   const [puzzle, setPuzzle] = useState<Puzzle>(() => кЗадаче(POOL[0]));
   const [fromBank, setFromBank] = useState(false);
-  useEffect(() => { setPuzzle(кЗадаче(POOL[dayIndex() % POOL.length])); }, []);
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
   const [lbState, setLbState] = useState<'loading' | 'ok' | 'failed'>('loading');
 
@@ -302,6 +301,10 @@ export default function DailyPuzzlePage() {
       alive = false;
     };
   }, []);
+
+  // Задача дня по местному календарю — после монтирования (см. комментарий у useState выше).
+  // Стоит ПОСЛЕ проверки ходов серверной задачи: сторож dailySolutionGuarded считает порядок вызовов.
+  useEffect(() => { setPuzzle(кЗадаче(POOL[dayIndex() % POOL.length])); }, []);
 
   // Смена задачи обязана сбросить ВСЁ состояние решения. Иначе останутся ходы
   // и подсказки от прошлой позиции — тот же класс, что «ответы под чужими

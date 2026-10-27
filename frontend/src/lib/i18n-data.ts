@@ -77,6 +77,7 @@ export const LANG_COOKIE = "aevion_lang_v1";
  * машине не гонялся несколько дней, а CI запускается лишь на четырёх ветках.
  */
 export const LANG_KEY_COUNT: Record<Lang, number> = {
+  // 27.10: ещё +4 — constitution.nav.academy/blog/pricing, pricing.tier.pro.cta (английские подписи на ru/kk).
   // 27.10: ещё +4 — constitution.err.sign/pdf/publish/comment (сырое «HTTP 4xx: тело» на экране).
   // 27.10: +2 в ru/en/kk — constitution.ai.errorDailyLimit / errorFailed: ошибка ИИ-совета
   // показывалась сырым «HTTP 429: {json}».
@@ -189,9 +190,9 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 20.10 (бюро «Мои сертификаты»): +7 — bureau.mine.title/empty/protectFirst/verify/protectedAt, qright.registry.mine/all.
   // 21.10 (оплата вперёд — это подписка): +1 — pricing.home.tier.prepayRenews; «одним платежом» снято (касса LS: billed every N months).
   // 21.10 (бюро «Проверено», ручная проверка): +26 — bureau.kycm.* (страница /bureau/kyc-manual/[id]).
-  ru: 7476,
-  en: 7476,
-  kk: 7476,
+  ru: 7480,
+  en: 7480,
+  kk: 7480,
   de: 134,
   fr: 134,
   es: 134,

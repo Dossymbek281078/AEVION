@@ -884,19 +884,19 @@ export default function ConstitutionPage() {
                 href="/constitution/learn"
                 className="px-4 py-2 rounded border border-emerald-400/60 text-emerald-300 font-semibold hover:bg-emerald-500/10"
               >
-                🎓 Academy
+                🎓 {t("constitution.nav.academy")}
               </Link>
               <Link
                 href="/constitution/blog"
                 className="px-4 py-2 rounded border border-amber-400/60 text-amber-300 font-semibold hover:bg-amber-500/10"
               >
-                📝 Blog
+                📝 {t("constitution.nav.blog")}
               </Link>
               <Link
                 href="/constitution/pricing"
                 className="px-4 py-2 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] font-bold hover:opacity-90"
               >
-                💎 Pricing
+                💎 {t("constitution.nav.pricing")}
               </Link>
             </div>
           )}

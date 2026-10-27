@@ -5,6 +5,7 @@ import { разметкаТоваров } from "@/lib/shopJsonLd";
 import { разметкаПриложений, оплачиваемыеПриложения } from "@/lib/appsJsonLd";
 import { getServerLang } from "@/lib/i18n-server";
 import { isEnglish } from "@/lib/pricingLocalize";
+import { moduleTitle } from "@/data/moduleNames";
 
 export const metadata: Metadata = {
   // Двуязычный заголовок (образец /qventure, /qright, /bureau): metadata у
@@ -114,7 +115,7 @@ export function ЦеныДляРобота({ приложения, lang = "ru" }
         {приложения.map((app) => (
           <li key={app.slug}>
             <a href={`/pricing?app=${encodeURIComponent(app.slug)}#apps`} style={{ color: "#0d9488", textDecoration: "none" }}>
-              {app.name}
+              {moduleTitle(app.slug, lang, app.name)}
             </a>{" "}
             {en
               ? ` — from $${fromPricePerMonth(app.baseMonthly).toFixed(2)} to $${app.baseMonthly.toFixed(2)} per month`

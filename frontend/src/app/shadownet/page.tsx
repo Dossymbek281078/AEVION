@@ -11,9 +11,11 @@ import PrivacyScore from "./components/PrivacyScore";
 import EncryptedPostForm from "./components/EncryptedPostForm";
 import PostReader from "./components/PostReader";
 import StatsStrip from "./components/StatsStrip";
+import { useShadowT } from "./i18n";
 
 export default function ShadowNetPage() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const { t } = useShadowT();
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -22,7 +24,7 @@ export default function ShadowNetPage() {
     applicationCategory: "SecurityApplication",
     operatingSystem: "Web",
     description:
-      "Conceptual privacy simulator — threat models, routing simulator, privacy score, and end-to-end encrypted posts.",
+      "Educational privacy simulator — threat models, route simulation, privacy score and passphrase-encrypted notes.",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     url: "https://aevion.app/shadownet",
   };
@@ -81,7 +83,7 @@ export default function ShadowNetPage() {
               letterSpacing: "0.15em",
             }}
           >
-            simulator
+            {t("page.badge")}
           </span>
           <span style={{ flex: 1 }} />
           <ModulePricingChip moduleId="shadownet" theme="dark" />
@@ -101,7 +103,7 @@ export default function ShadowNetPage() {
             fontFamily: "monospace",
           }}
         >
-          conceptual · educational · in-browser
+          {t("page.eyebrow")}
         </p>
         {/* 144г (18.10.2026): 56 px моноширинным на 390 — заголовок 389..758 (370 px), первое действие за кадром;
             класс aevion-h1-geroj (globals.css) на ≤768 даёт 30 px. */}
@@ -116,8 +118,8 @@ export default function ShadowNetPage() {
             textShadow: "0 0 40px rgba(168,85,247,0.4)",
           }}
         >
-          ShadowNet —{" "}
-          <span style={{ color: "#a855f7" }}>concept privacy simulator</span>
+          {t("page.h1a")}{" "}
+          <span style={{ color: "#a855f7" }}>{t("page.h1b")}</span>
         </h1>
       </section>
 
@@ -130,11 +132,10 @@ export default function ShadowNetPage() {
             fontFamily: "monospace",
           }}
         >
-          1. threat model selector
+          {t("page.s1Title")}
         </h2>
         <p style={{ color: "#a78bfa", fontSize: "13px", margin: "0 0 22px 0" }}>
-          Выбери, от кого хочешь защититься — получишь описание угрозы и
-          конкретные рекомендации.
+          {t("page.s1Hint")}
         </p>
         <ThreatModelSelector />
         <p
@@ -146,10 +147,7 @@ export default function ShadowNetPage() {
             margin: 0,
           }}
         >
-          Не реальный VPN, а образовательный симулятор приватности. Threat-model
-          selector, симулятор маршрутизации через 3-7 хопов, калькулятор privacy
-          score и end-to-end зашифрованные посты — всё с криптографией в браузере,
-          сервер видит только ciphertext.
+          {t("page.about")}
         </p>
       </section>
       {/* 144в (18.10.2026): полоса чисел — после первого действия гостя (выбор модели угроз): на 390×844 первая кнопка
@@ -167,11 +165,10 @@ export default function ShadowNetPage() {
             fontFamily: "monospace",
           }}
         >
-          2. routing simulator
+          {t("page.s2Title")}
         </h2>
         <p style={{ color: "#a78bfa", fontSize: "13px", margin: "0 0 22px 0" }}>
-          Симуляция onion-маршрута: 3-7 хопов через разные страны, расчёт суммарной
-          задержки и anonymity score.
+          {t("page.s2Hint")}
         </p>
         <RoutingSimulator />
       </section>
@@ -185,10 +182,10 @@ export default function ShadowNetPage() {
             fontFamily: "monospace",
           }}
         >
-          3. privacy score calculator
+          {t("page.s3Title")}
         </h2>
         <p style={{ color: "#a78bfa", fontSize: "13px", margin: "0 0 22px 0" }}>
-          Отметь активные защитные слои — получишь итоговый score и weakest link.
+          {t("page.s3Hint")}
         </p>
         <PrivacyScore />
       </section>
@@ -202,11 +199,10 @@ export default function ShadowNetPage() {
             fontFamily: "monospace",
           }}
         >
-          4. end-to-end encrypted posts
+          {t("page.s4Title")}
         </h2>
         <p style={{ color: "#a78bfa", fontSize: "13px", margin: "0 0 22px 0" }}>
-          AES-GCM 256 + PBKDF2 в браузере. Сервер хранит только ciphertext, iv и
-          salt — без пароля прочитать невозможно.
+          {t("page.s4Hint")}
         </p>
         {/* 28.10: data-stack-mobile — на 390 форма и читалка стояли в две колонки по ~150 px (кадр post-ru-390x844) */}
         <div data-stack-mobile=""
@@ -242,7 +238,7 @@ export default function ShadowNetPage() {
               alignSelf: "center",
             }}
           >
-            related:
+            {t("page.related")}
           </span>
           {[
             { href: "/veilnetx", label: "VeilNetX" },
@@ -277,14 +273,14 @@ export default function ShadowNetPage() {
           moduleId="shadownet"
           noun="concept/messages"
           accent="teal"
-          sectionTitle="Privacy network concept board"
-          sectionHint="Какие threat models не покрыты? Какие protocols стоит симулировать?"
+          sectionTitle={t("page.boardTitle")}
+          sectionHint={t("page.boardHint")}
           titleField="idea"
           summaryField="rationale"
           fields={[
-            { key: "idea", label: "Идея / threat / protocol", placeholder: "напр.: квантовая угроза для текущих ciphers", required: true },
-            { key: "rationale", label: "Почему это важно", type: "textarea", placeholder: "Какие attack-vectors это закрывает" },
-            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            { key: "idea", label: t("page.boardIdea"), placeholder: t("page.boardIdeaPh"), required: true },
+            { key: "rationale", label: t("page.boardWhy"), type: "textarea", placeholder: t("page.boardWhyPh") },
+            { key: "author", label: t("page.boardAuthor"), placeholder: "anon" },
           ]}
         />
       </section>

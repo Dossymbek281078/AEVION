@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useShadowT, type Key } from "../i18n";
 
 interface ScoreResult {
   score: number;
@@ -18,13 +19,8 @@ interface Features {
   e2e: boolean;
 }
 
-const FEATURE_LIST: { key: keyof Features; label: string; hint: string }[] = [
-  { key: "tor", label: "Tor routing", hint: "Tor / VeilNetX onion routing" },
-  { key: "vpn", label: "Reputable no-log VPN", hint: "Mullvad, IVPN, ProtonVPN" },
-  { key: "dns", label: "Encrypted DNS", hint: "DoH / DoT, Quad9, 1.1.1.1" },
-  { key: "browser", label: "Hardened browser", hint: "Tor Browser, Firefox strict" },
-  { key: "e2e", label: "End-to-end encryption", hint: "Signal, AES-GCM, age" },
-];
+// Подписи и советы — из словаря по ключу; сервер отдаёт weakest ключом («tor»), прежде он стоял на экране сырым.
+const FEATURE_LIST: (keyof Features)[] = ["tor", "vpn", "dns", "browser", "e2e"];
 
 function scoreColor(score: number): string {
   if (score >= 80) return "#22d3ee";
@@ -44,6 +40,7 @@ export default function PrivacyScore() {
   const [result, setResult] = useState<ScoreResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const { t } = useShadowT();
 
   useEffect(() => {
     let cancelled = false;
@@ -104,9 +101,9 @@ export default function PrivacyScore() {
             fontFamily: "monospace",
           }}
         >
-          active features
+          {t("score.active")}
         </h3>
-        {FEATURE_LIST.map((f) => (
+        {FEATURE_LIST.map((k) => ({ key: k, label: t(`feat.${k}` as Key), hint: t(`feat.${k}Hint` as Key) })).map((f) => (
           <label
             key={f.key}
             style={{
@@ -167,7 +164,7 @@ export default function PrivacyScore() {
             fontFamily: "monospace",
           }}
         >
-          privacy score
+          {t("score.title")}
         </div>
         <div
           style={{
@@ -209,20 +206,20 @@ export default function PrivacyScore() {
                   fontFamily: "monospace",
                 }}
               >
-                weakest link: {result.weakest}
+                {t("score.weakest", { x: FEATURE_LIST.includes(result.weakest as keyof Features) ? t(`feat.${result.weakest}` as Key) : result.weakest })}
               </div>
             )}
-            {result.advice}
+            {result.weakest && !FEATURE_LIST.includes(result.weakest as keyof Features) ? result.advice : t(result.weakest ? (`advice.${result.weakest}` as Key) : "advice.all")}
           </div>
         )}
         {loading && !result && (
           <div style={{ marginTop: "12px", fontSize: "11px", color: "#a78bfa" }}>
-            computing…
+            {t("score.computing")}
           </div>
         )}
         {error && !loading && (
           <div style={{ marginTop: "12px", fontSize: "11px", color: "#ef4444", fontFamily: "monospace" }}>
-            score unavailable — could not reach server
+            {t("score.unavailable")}
           </div>
         )}
       </div>

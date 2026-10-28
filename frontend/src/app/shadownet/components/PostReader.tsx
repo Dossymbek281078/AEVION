@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { decryptPayload } from "./cryptoHelpers";
+import { useShadowT } from "../i18n";
 
 interface Post {
   id: number;
@@ -31,10 +32,11 @@ export default function PostReader({ refreshKey }: Props) {
   const [loading, setLoading] = useState(false);
   const [decrypting, setDecrypting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t, lang } = useShadowT();
 
   async function fetchPosts() {
     if (!alias || !/^[a-zA-Z0-9_-]{2,64}$/.test(alias)) {
-      setError("invalid alias");
+      setError(t("reader.errAlias"));
       return;
     }
     setLoading(true);
@@ -48,10 +50,10 @@ export default function PostReader({ refreshKey }: Props) {
       if (j && j.success) {
         setPosts(j.data);
       } else {
-        setError(j?.error || "fetch failed");
+        setError(t("reader.fetchFail"));
       }
-    } catch (e) {
-      setError(String(e));
+    } catch {
+      setError(t("reader.offline"));
     } finally {
       setLoading(false);
     }
@@ -59,7 +61,7 @@ export default function PostReader({ refreshKey }: Props) {
 
   async function decryptAll() {
     if (!password) {
-      setError("password required");
+      setError(t("reader.errPassword"));
       return;
     }
     setDecrypting(true);
@@ -76,7 +78,7 @@ export default function PostReader({ refreshKey }: Props) {
         next.set(p.id, {
           id: p.id,
           text: null,
-          error: "wrong password or corrupted",
+          error: t("reader.wrongPassword"),
         });
       }
     }
@@ -85,7 +87,7 @@ export default function PostReader({ refreshKey }: Props) {
   }
 
   async function deletePost(id: number) {
-    if (!confirm(`Delete post ${id}?`)) return;
+    if (!confirm(t("reader.confirmDelete", { id }))) return;
     try {
       const r = await fetch(`/api-backend/api/shadownet/posts/${id}`, {
         method: "DELETE",
@@ -101,10 +103,10 @@ export default function PostReader({ refreshKey }: Props) {
           return n;
         });
       } else {
-        setError(j?.error || "delete failed");
+        setError(t("reader.deleteFail"));
       }
-    } catch (e) {
-      setError(String(e));
+    } catch {
+      setError(t("reader.offline"));
     }
   }
 
@@ -140,27 +142,27 @@ export default function PostReader({ refreshKey }: Props) {
       }}
     >
       <h3 style={{ color: "#e9d5ff", fontSize: "16px", margin: "0 0 16px 0", fontFamily: "monospace" }}>
-        read &amp; decrypt
+        {t("reader.title")}
       </h3>
 
       <div data-stack-mobile="" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
         <div>
-          <label style={labelStyle}>alias</label>
-          <input aria-label="Ваш псевдоним"
+          <label style={labelStyle}>{t("reader.alias")}</label>
+          <input aria-label={t("reader.aliasPh")}
             type="text"
             value={alias}
             onChange={(e) => setAlias(e.target.value)}
-            placeholder="your handle"
+            placeholder={t("reader.aliasPh")}
             style={inputStyle}
           />
         </div>
         <div>
-          <label style={labelStyle}>password</label>
-          <input aria-label="Пароль для расшифровки"
+          <label style={labelStyle}>{t("reader.password")}</label>
+          <input aria-label={t("reader.passwordPh")}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="for decryption"
+            placeholder={t("reader.passwordPh")}
             style={inputStyle}
           />
         </div>
@@ -185,7 +187,7 @@ export default function PostReader({ refreshKey }: Props) {
             opacity: loading ? 0.6 : 1,
           }}
         >
-          {loading ? "fetching…" : `fetch posts (${refreshKey ?? 0})`}
+          {loading ? t("reader.fetching") : t("reader.fetch")}
         </button>
         <button
           onClick={decryptAll}
@@ -205,7 +207,7 @@ export default function PostReader({ refreshKey }: Props) {
             opacity: decrypting || posts.length === 0 ? 0.4 : 1,
           }}
         >
-          {decrypting ? "decrypting…" : "decrypt all"}
+          {decrypting ? t("reader.decrypting") : t("reader.decrypt")}
         </button>
       </div>
 
@@ -217,7 +219,7 @@ export default function PostReader({ refreshKey }: Props) {
 
       {posts.length === 0 && !loading && (
         <div style={{ color: "#6b21a8", fontSize: "12px", fontFamily: "monospace" }}>
-          no posts yet for this alias.
+          {t("reader.empty")}
         </div>
       )}
 
@@ -245,7 +247,7 @@ export default function PostReader({ refreshKey }: Props) {
                   letterSpacing: "0.05em",
                 }}
               >
-                <span>id #{p.id} · {p.size_bytes}B · {new Date(p.created_at).toLocaleString()}</span>
+                <span>id #{p.id} · {p.size_bytes}B · {new Date(p.created_at).toLocaleString(({ ru: "ru-RU", en: "en-US", kk: "kk-KZ" } as Record<string, string>)[lang] ?? "en-US")}</span>
                 <button
                   onClick={() => deletePost(p.id)}
                   style={{
@@ -259,7 +261,7 @@ export default function PostReader({ refreshKey }: Props) {
                     letterSpacing: "0.1em",
                   }}
                 >
-                  delete
+                  {t("reader.delete")}
                 </button>
               </div>
               {dec?.text != null ? (

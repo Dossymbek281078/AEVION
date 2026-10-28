@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useShadowT } from "../i18n";
 
 interface RouteNode {
   country: string;
@@ -19,6 +20,7 @@ export default function RoutingSimulator() {
   const [result, setResult] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t, country } = useShadowT();
 
   async function simulate() {
     setLoading(true);
@@ -33,10 +35,10 @@ export default function RoutingSimulator() {
       if (j && j.success) {
         setResult(j.data);
       } else {
-        setError(j?.error || "simulation failed");
+        setError(t("route.fail"));
       }
-    } catch (e) {
-      setError(String(e));
+    } catch {
+      setError(t("form.offline"));
     } finally {
       setLoading(false);
     }
@@ -68,10 +70,10 @@ export default function RoutingSimulator() {
               marginBottom: "8px",
             }}
           >
-            hops: {hops}
+            {t("route.hops", { n: hops })}
           </label>
           <input
-            aria-label="hops"
+            aria-label={t("route.hopsAria")}
             type="range"
             min={3}
             max={7}
@@ -110,7 +112,7 @@ export default function RoutingSimulator() {
             opacity: loading ? 0.6 : 1,
           }}
         >
-          {loading ? "routing…" : "simulate route"}
+          {loading ? t("route.routing") : t("route.simulate")}
         </button>
       </div>
 
@@ -167,10 +169,10 @@ export default function RoutingSimulator() {
                   </circle>
                   <circle cx={x} cy={y} r={6} fill="#a855f7" />
                   <text x={x} y={y - 28} textAnchor="middle" fill="#e9d5ff" fontSize="11" fontFamily="monospace">
-                    {n.country}
+                    {country(n.country)}
                   </text>
                   <text x={x} y={y + 40} textAnchor="middle" fill="#22d3ee" fontSize="10" fontFamily="monospace">
-                    {n.latencyMs}ms
+                    {t("route.ms", { n: n.latencyMs })}
                   </text>
                 </g>
               );
@@ -194,10 +196,10 @@ export default function RoutingSimulator() {
               }}
             >
               <div style={{ fontSize: "10px", color: "#22d3ee", textTransform: "uppercase", letterSpacing: "0.15em" }}>
-                total latency
+                {t("route.totalLatency")}
               </div>
               <div style={{ fontSize: "22px", color: "#a5f3fc", fontWeight: 600 }}>
-                {result.totalLatencyMs}ms
+                {t("route.ms", { n: result.totalLatencyMs })}
               </div>
             </div>
             <div
@@ -209,7 +211,7 @@ export default function RoutingSimulator() {
               }}
             >
               <div style={{ fontSize: "10px", color: "#a855f7", textTransform: "uppercase", letterSpacing: "0.15em" }}>
-                anonymity score
+                {t("route.anonymity")}
               </div>
               <div style={{ fontSize: "22px", color: "#e9d5ff", fontWeight: 600 }}>
                 {result.anonymityScore}/100

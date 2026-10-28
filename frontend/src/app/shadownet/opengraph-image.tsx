@@ -10,10 +10,11 @@ export default async function Image() {
     {
       code: "SHADOW",
       badge: "IDEA",
-      title: "Network without metadata.",
-      accent: "without metadata.",
+      // 28.10: прежде «Network without metadata.» — сервер хранит псевдоним, время и размер заметки, это неправда
+      title: "Encrypted notes. Simulated routes.",
+      accent: "Simulated routes.",
       subtitle: "Threat models · route simulation · anonymity score · encrypted notes",
-      pills: ["🧪 Симулятор", "🗺 Маршрут", "📊 Оценка анонимности", "🔐 AES-GCM в браузере"],
+      pills: ["🧪 Simulator", "🗺 Route", "📊 Anonymity score", "🔐 AES-GCM in the browser"],
     },
     "cyan",
   );

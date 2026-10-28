@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { encryptPlaintext } from "./cryptoHelpers";
+import { useShadowT } from "../i18n";
 
 interface Props {
   onPosted?: () => void;
@@ -11,21 +12,24 @@ export default function EncryptedPostForm({ onPosted }: Props) {
   const [alias, setAlias] = useState("");
   const [plaintext, setPlaintext] = useState("");
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
+  // ok — зелёная плашка; прежде цвет решала приставка «error:» в самом тексте
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const { t } = useShadowT();
+  const ошибка = (text: string) => setStatus({ ok: false, text });
 
   async function submit() {
     setStatus(null);
     if (!alias || !/^[a-zA-Z0-9_-]{2,64}$/.test(alias)) {
-      setStatus("error: alias must be 2-64 chars [A-Za-z0-9_-]");
+      ошибка(t("form.errAlias"));
       return;
     }
     if (!plaintext.trim()) {
-      setStatus("error: plaintext required");
+      ошибка(t("form.errText"));
       return;
     }
     if (password.length < 8) {
-      setStatus("error: password must be ≥ 8 chars");
+      ошибка(t("form.errPassword"));
       return;
     }
 
@@ -39,15 +43,15 @@ export default function EncryptedPostForm({ onPosted }: Props) {
       });
       const j = await r.json();
       if (j && j.success) {
-        setStatus(`encrypted + stored. post id = ${j.data.id}`);
+        setStatus({ ok: true, text: t("form.stored", { id: j.data.id }) });
         setPlaintext("");
         setPassword("");
         onPosted?.();
       } else {
-        setStatus("error: " + (j?.error || "server rejected"));
+        ошибка(t("form.errServer"));
       }
-    } catch (e) {
-      setStatus("error: " + (e instanceof Error ? e.message : String(e)));
+    } catch {
+      ошибка(t("form.offline"));
     } finally {
       setBusy(false);
     }
@@ -92,44 +96,43 @@ export default function EncryptedPostForm({ onPosted }: Props) {
           fontFamily: "monospace",
         }}
       >
-        encrypt &amp; post
+        {t("form.title")}
       </h3>
       <p style={{ color: "#a78bfa", fontSize: "12px", margin: "0 0 16px 0", lineHeight: 1.5 }}>
-        AES-GCM 256 + PBKDF2 (250k iterations). Шифрование в браузере — сервер
-        видит только ciphertext + iv + salt. Пароль никогда не уходит из устройства.
+        {t("form.sub")}
       </p>
 
       <div style={{ marginBottom: "12px" }}>
-        <label style={labelStyle}>alias (your handle)</label>
-        <input aria-label="alias (your handle)"
+        <label style={labelStyle}>{t("form.alias")}</label>
+        <input aria-label={t("form.alias")}
           type="text"
           value={alias}
           onChange={(e) => setAlias(e.target.value)}
-          placeholder="e.g. shadow_walker"
+          placeholder={t("form.aliasPh")}
           style={inputStyle}
           disabled={busy}
         />
       </div>
 
       <div style={{ marginBottom: "12px" }}>
-        <label style={labelStyle}>plaintext</label>
-        <textarea aria-label="plaintext"
+        <label style={labelStyle}>{t("form.text")}</label>
+        <textarea aria-label={t("form.text")}
           value={plaintext}
           onChange={(e) => setPlaintext(e.target.value)}
           rows={5}
-          placeholder="что хочешь зашифровать…"
+          placeholder={t("form.textPh")}
           style={{ ...inputStyle, resize: "vertical", minHeight: "100px" }}
           disabled={busy}
         />
       </div>
 
       <div style={{ marginBottom: "16px" }}>
-        <label style={labelStyle}>password (min 8 chars)</label>
-        <input aria-label="password (min 8 chars)"
+        <label style={labelStyle}>{t("form.password")}</label>
+        <input aria-label={t("form.password")}
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="strong passphrase"
+          placeholder={t("form.passwordPh")}
           style={inputStyle}
           disabled={busy}
         />
@@ -153,25 +156,27 @@ export default function EncryptedPostForm({ onPosted }: Props) {
           opacity: busy ? 0.6 : 1,
         }}
       >
-        {busy ? "encrypting…" : "encrypt + post"}
+        {busy ? t("form.encrypting") : t("form.submit")}
       </button>
 
       {status && (
+        // role="status": экранный чтец объявляет итог публикации
         <div
+          role="status"
           style={{
             marginTop: "14px",
             padding: "10px",
-            background: status.startsWith("error")
+            background: !status.ok
               ? "rgba(239,68,68,0.1)"
               : "rgba(34,211,238,0.08)",
-            border: `1px solid ${status.startsWith("error") ? "rgba(239,68,68,0.4)" : "rgba(34,211,238,0.4)"}`,
+            border: `1px solid ${!status.ok ? "rgba(239,68,68,0.4)" : "rgba(34,211,238,0.4)"}`,
             borderRadius: "6px",
-            color: status.startsWith("error") ? "#fca5a5" : "#a5f3fc",
+            color: !status.ok ? "#fca5a5" : "#a5f3fc",
             fontSize: "12px",
             fontFamily: "monospace",
           }}
         >
-          {status}
+          {status.text}
         </div>
       )}
     </div>

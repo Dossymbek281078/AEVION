@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useShadowT } from "../i18n";
 
 type Stats = {
   totalPosts: number;
@@ -19,6 +20,7 @@ function fmtBytes(n: number): string {
 export default function StatsStrip() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState(false);
+  const { t, threat } = useShadowT();
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +45,7 @@ export default function StatsStrip() {
     return (
       <div style={S.cell}>
         <div style={S.value}>—</div>
-        <div style={S.label}>Stats unavailable</div>
+        <div style={S.label}>{t("stats.unavailable")}</div>
       </div>
     );
   }
@@ -54,10 +56,10 @@ export default function StatsStrip() {
     // Все четыре поля защищены одинаково. Раньше два из четырёх стояли без
     // защиты, а соседние — с `?? 0` и `?.`: разное обращение с однородными
     // полями в одном списке почти всегда недосмотр, и здесь он им и оказался.
-    { label: "Encrypted posts", value: (stats.totalPosts ?? 0).toLocaleString() },
-    { label: "Total size", value: fmtBytes(stats.totalSizeBytes ?? 0) },
-    { label: "Unique aliases", value: (stats.uniqueAliases ?? 0).toLocaleString() },
-    { label: "Top threat model", value: stats.topThreatModel?.id ?? "—" },
+    { label: t("stats.posts"), value: (stats.totalPosts ?? 0).toLocaleString() },
+    { label: t("stats.size"), value: fmtBytes(stats.totalSizeBytes ?? 0) },
+    { label: t("stats.aliases"), value: (stats.uniqueAliases ?? 0).toLocaleString() },
+    { label: t("stats.topModel"), value: stats.topThreatModel?.id ? threat(stats.topThreatModel.id)?.label ?? stats.topThreatModel.id : "—" },
   ];
 
   return (

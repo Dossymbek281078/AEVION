@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useShadowT, type Key } from "../i18n";
 
 interface ThreatModel {
   id: string;
@@ -23,6 +24,7 @@ export default function ThreatModelSelector() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { t, threat } = useShadowT();
 
   useEffect(() => {
     fetch("/api-backend/api/shadownet/threat-models")
@@ -32,19 +34,21 @@ export default function ThreatModelSelector() {
           setModels(j.data);
           if (j.data.length > 0) setSelectedId(j.data[0].id);
         } else {
-          setError("Failed to load threat models");
+          setError("load");
         }
       })
-      .catch((e) => setError(String(e)))
+      .catch(() => setError("offline"))
       .finally(() => setLoading(false));
   }, []);
 
   const selected = models.find((m) => m.id === selectedId);
+  // Тексты модели — из словаря по id; сервер отдаёт смесь языков (неизвестный id — как пришёл).
+  const текст = selected ? threat(selected.id) ?? selected : undefined;
 
   if (loading) {
     return (
       <div style={{ color: "#a855f7", fontFamily: "monospace", padding: "12px" }}>
-        loading threat models…
+        {t("threat.loading")}
       </div>
     );
   }
@@ -52,7 +56,7 @@ export default function ThreatModelSelector() {
   if (error) {
     return (
       <div style={{ color: "#ef4444", fontFamily: "monospace", padding: "12px" }}>
-        error: {error}
+        {t("threat.loadFail")}
       </div>
     );
   }
@@ -87,15 +91,15 @@ export default function ThreatModelSelector() {
               }}
             >
               <div style={{ fontSize: "11px", color, marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                {m.threatLevel}
+                {t(`threat.level.${m.threatLevel}` as Key)}
               </div>
-              <div style={{ fontWeight: 600, fontSize: "13px" }}>{m.label}</div>
+              <div style={{ fontWeight: 600, fontSize: "13px" }}>{threat(m.id)?.label ?? m.label}</div>
             </button>
           );
         })}
       </div>
 
-      {selected && (
+      {selected && текст && (
         <div
           style={{
             background: "rgba(0,0,0,0.6)",
@@ -113,13 +117,13 @@ export default function ThreatModelSelector() {
               letterSpacing: "0.15em",
             }}
           >
-            threat level: {selected.threatLevel}
+            {t("threat.levelLabel", { level: t(`threat.level.${selected.threatLevel}` as Key) })}
           </div>
           <h3 style={{ color: "#e9d5ff", margin: "0 0 10px 0", fontSize: "20px" }}>
-            {selected.label}
+            {текст.label}
           </h3>
           <p style={{ color: "#c4b5fd", fontSize: "14px", lineHeight: 1.6, margin: "0 0 16px 0" }}>
-            {selected.description}
+            {текст.description}
           </p>
 
           <div data-stack-mobile="" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -133,10 +137,10 @@ export default function ThreatModelSelector() {
                   marginBottom: "8px",
                 }}
               >
-                protects from
+                {t("threat.protectsFrom")}
               </div>
               <ul style={{ margin: 0, paddingLeft: "18px", color: "#a5f3fc", fontSize: "13px", lineHeight: 1.7 }}>
-                {selected.protectsFrom.map((p, i) => (
+                {текст.protectsFrom.map((p, i) => (
                   <li key={i}>{p}</li>
                 ))}
               </ul>
@@ -151,10 +155,10 @@ export default function ThreatModelSelector() {
                   marginBottom: "8px",
                 }}
               >
-                recommendations
+                {t("threat.recommendations")}
               </div>
               <ul style={{ margin: 0, paddingLeft: "18px", color: "#e9d5ff", fontSize: "13px", lineHeight: 1.7 }}>
-                {selected.recommendations.map((r, i) => (
+                {текст.recommendations.map((r, i) => (
                   <li key={i}>{r}</li>
                 ))}
               </ul>

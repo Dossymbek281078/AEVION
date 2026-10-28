@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { ошибкаСервера, НЕТ_СВЯЗИ } from "./oshibka";
 
 type TriggerType = "craving" | "stress" | "social" | "emotion";
 
@@ -33,6 +34,7 @@ export default function TriggerLog({ alias }: Props) {
   const [copedHow, setCopedHow] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const [triggers, setTriggers] = useState<TriggerRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,9 +47,13 @@ export default function TriggerLog({ alias }: Props) {
         { cache: "no-store" },
       );
       const d = await r.json();
-      if (d.ok) setTriggers(d.triggers ?? []);
+      if (d.ok) {
+        setTriggers(d.triggers ?? []);
+        setLoadFailed(false);
+      } else setLoadFailed(true);
     } catch {
-      // silent
+      // Прежде молча: сбой загрузки выглядел как «Пока пусто» — будто записей нет.
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -75,7 +81,7 @@ export default function TriggerLog({ alias }: Props) {
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setError(d.error || "Не получилось записать");
+        setError(ошибкаСервера(d.error, "Не получилось записать. Попробуй ещё раз."));
         return;
       }
       setNote("");
@@ -83,8 +89,8 @@ export default function TriggerLog({ alias }: Props) {
       setIntensity(5);
       setTriggerType("craving");
       loadTriggers();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Сеть недоступна");
+    } catch {
+      setError(НЕТ_СВЯЗИ);
     } finally {
       setSubmitting(false);
     }
@@ -174,6 +180,8 @@ export default function TriggerLog({ alias }: Props) {
       <h3 style={styles.subtitle}>Последние 10 записей</h3>
       {loading ? (
         <p style={styles.empty}>Загружаю…</p>
+      ) : loadFailed && triggers.length === 0 ? (
+        <p style={styles.empty}>Не удалось загрузить журнал. Обнови страницу — записи на сервере не пропали.</p>
       ) : triggers.length === 0 ? (
         <p style={styles.empty}>Пока пусто. Первая запись — самая важная.</p>
       ) : (

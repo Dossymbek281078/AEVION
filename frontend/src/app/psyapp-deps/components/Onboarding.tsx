@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { ошибкаСервера, НЕТ_СВЯЗИ } from "./oshibka";
 
 type Addiction = "alcohol" | "smoking" | "other";
 
@@ -43,7 +44,7 @@ export default function Onboarding({ onStarted }: Props) {
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setError(d.error || "Не получилось начать. Попробуй ещё раз.");
+        setError(ошибкаСервера(d.error, "Не получилось начать. Попробуй ещё раз."));
         setLoading(false);
         return;
       }
@@ -58,9 +59,8 @@ export default function Onboarding({ onStarted }: Props) {
       // потерянный счёт бьёт сильнее любой технической ошибки. До этой правки
       // страница поле выбрасывала.
       onStarted(alias, d.storage);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Сеть недоступна";
-      setError(msg);
+    } catch {
+      setError(НЕТ_СВЯЗИ);
       setLoading(false);
     }
   }

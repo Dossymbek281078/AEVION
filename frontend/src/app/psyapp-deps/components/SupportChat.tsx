@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { ошибкаСервера, НЕТ_СВЯЗИ } from "./oshibka";
 
 interface Message {
   role: "user" | "assistant";
@@ -43,10 +44,10 @@ export default function SupportChat({ alias }: Props) {
       const reply = (d.reply as string | undefined) ?? "Сейчас не получается ответить. Сделай один маленький шаг прямо сейчас — выпей воды и подыши.";
       setMessages((m) => [...m, { role: "assistant", content: reply, ts: Date.now() }]);
       if (!r.ok && !d.reply) {
-        setError(d.error || "AI временно недоступен");
+        setError(ошибкаСервера(d.error, "Помощник временно недоступен. Попробуй через минуту."));
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Сеть недоступна");
+    } catch {
+      setError(НЕТ_СВЯЗИ);
       setMessages((m) => [
         ...m,
         {

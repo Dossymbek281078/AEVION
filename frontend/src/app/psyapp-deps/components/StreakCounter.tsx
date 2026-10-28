@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { ошибкаСервера, НЕТ_СВЯЗИ } from "./oshibka";
 
 interface Props {
   alias: string;
@@ -45,15 +46,15 @@ export default function StreakCounter({
       );
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setError(d.error || "Не получилось. Попробуй ещё раз.");
+        setError(ошибкаСервера(d.error, "Не получилось. Попробуй ещё раз."));
         setLoading(false);
         return;
       }
       setConfirmStep(0);
       setReason("");
       onRelapse();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Сеть недоступна");
+    } catch {
+      setError(НЕТ_СВЯЗИ);
     } finally {
       setLoading(false);
     }

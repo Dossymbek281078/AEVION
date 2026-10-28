@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, dirname, relative } from "node:path";
+import { join, dirname, relative, basename } from "node:path";
 
 /*
  * 28.10.2026 (окно «Продукт»). Sentry JAVASCRIPT-NEXTJS-2 на проде 981c23da8: «Page changed from
@@ -15,9 +15,14 @@ import { join, dirname, relative } from "node:path";
  * Мутация 28.10: вернуть generateStaticParams в cases/[id]/layout.tsx → красный (проверено).
  */
 const KOREN = join(process.cwd(), "src", "app");
-const ДИНАМИЧЕСКИЙ_API = /\b(cookies|headers|getServerLang)\s*\(/;
+// Настоящий вызов, не слово в пояснении: `await cookies()`, `await headers()`, `getServerLang()`.
+const ДИНАМИЧЕСКИЙ_API = /\b(await\s+(cookies|headers)|getServerLang)\s*\(/;
 const СТАТИЧЕСКАЯ_СБОРКА = /export\s+(async\s+)?function\s+generateStaticParams\b/;
 const ПРИНУДИТЕЛЬНО_ДИНАМИЧЕСКИЙ = /export\s+const\s+dynamic\s*=\s*["']force-dynamic["']/;
+
+/** Код без строк-комментариев: «headers()» в пояснении — не вызов. */
+const безКомментариев = (s: string) =>
+  s.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
 
 function* файлы(dir: string): Generator<string> {
   for (const имя of readdirSync(dir)) {
@@ -30,7 +35,7 @@ const отн = (p: string) => relative(process.cwd(), p).split("\\").join("/");
 
 describe("статический сегмент под layout, читающим заголовки", () => {
   const динамическиеLayout = [...файлы(KOREN)]
-    .filter((p) => /[\/]layout\.tsx$/.test(p) && ДИНАМИЧЕСКИЙ_API.test(readFileSync(p, "utf8")));
+    .filter((p) => basename(p) === "layout.tsx" && ДИНАМИЧЕСКИЙ_API.test(безКомментариев(readFileSync(p, "utf8"))));
 
   test("контроль прибора: pricing/layout.tsx читает язык по заголовкам и виден сторожу", () => {
     expect(динамическиеLayout.map(отн)).toContain("src/app/pricing/layout.tsx");
@@ -40,7 +45,7 @@ describe("статический сегмент под layout, читающим 
     const нарушения: string[] = [];
     for (const l of динамическиеLayout) {
       for (const p of файлы(dirname(l))) {
-        const s = readFileSync(p, "utf8");
+        const s = безКомментариев(readFileSync(p, "utf8"));
         if (СТАТИЧЕСКАЯ_СБОРКА.test(s) && !ПРИНУДИТЕЛЬНО_ДИНАМИЧЕСКИЙ.test(s)) нарушения.push(`${отн(p)} (под ${отн(l)})`);
       }
     }
@@ -48,7 +53,7 @@ describe("статический сегмент под layout, читающим 
   });
 
   test("кейс цен — динамический маршрут", () => {
-    const s = readFileSync(join(KOREN, "pricing", "cases", "[id]", "layout.tsx"), "utf8");
+    const s = безКомментариев(readFileSync(join(KOREN, "pricing", "cases", "[id]", "layout.tsx"), "utf8"));
     expect(ПРИНУДИТЕЛЬНО_ДИНАМИЧЕСКИЙ.test(s)).toBe(true);
     expect(СТАТИЧЕСКАЯ_СБОРКА.test(s)).toBe(false);
   });

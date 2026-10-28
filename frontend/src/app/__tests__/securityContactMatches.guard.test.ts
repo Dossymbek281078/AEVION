@@ -21,14 +21,14 @@ const ROOT = join(__dirname, "..", "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
 /**
- * Домены без записи MX — письмо на них не доходит.
+ * Домены, письмо на которые считаем недоставленным.
  *
- * 28.10.2026 [Точно nslookup -type=MX aevion.app 8.8.8.8]: у aevion.app есть MX —
- * mx1/mx2.improvmx.com (пересылка на ящик основателя, окно Почты ведёт её с 21.10).
- * Предпосылка сторожа «@aevion.app мёртв» больше не верна, список пуст; остаётся
- * чужой домен ниже. Появится домен без почты — записать его сюда с датой замера.
+ * 28.10.2026 [Точно nslookup]: у aevion.app есть MX (mx1/mx2.improvmx.com) — запись
+ * «нет MX» выше устарела. Но доставка на support@/security@/privacy@/billing@ не
+ * подтверждена (Почта, Gmail API 28.10: писем на эти адреса не было ни одного, пересылка
+ * improvmx видна только до 23.10). До контроля пробными письмами домен остаётся здесь.
  */
-const DOMAINS_WITHOUT_MAIL: string[] = [];
+const DOMAINS_WITHOUT_MAIL = ["@aevion.app"];
 /** Домен чужой компании с тем же названием — туда нельзя вести никого. */
 const FOREIGN_DOMAINS = ["@aevion.io"];
 
@@ -123,10 +123,59 @@ function allSourceFiles(dir: string, acc: string[] = []): string[] {
 
 // Файлы, где адреса на домене без почты ещё остались. Список тает; новые
 // записи сюда добавлять НЕЛЬЗЯ — в этом весь смысл.
-// 28.10.2026: прежние 39 файлов с @aevion.app вычеркнуты — у домена есть MX (см. DOMAINS_WITHOUT_MAIL).
-// Остались упоминания чужого домена aevion.io в юридических текстах (переезд домена описан словами).
+// 28.10.2026: список заморожен на замере (49 файлов). Сторож стоял красным с давних файлов,
+// которых никто не вычёркивал, и его перестали читать; теперь он снова ловит РОСТ. Подтвердят
+// доставку на aevion.app — домен уходит из DOMAINS_WITHOUT_MAIL и список тает сам.
 const PENDING_FILES = new Set([
+  "app/api/payments/v1/_email.ts",
+  "app/apps/page.tsx",
+  "app/build/onboarding/page.tsx",
+  "app/constitution/pricing/page.tsx",
+  "app/constitution/showcase/page.tsx",
+  "app/cyberchess/OshibkaForma.tsx",
+  "app/cyberchess/p/klientSkript.ts",
+  "app/data-deletion/page.tsx",
+  "app/developers/fintech/troubleshooting/page.tsx",
+  "app/developers/page.tsx",
+  "app/devhub/[id]/page.tsx",
+  "app/global-error.tsx",
+  "app/help/page.tsx",
+  "app/investor/page.tsx",
+  "app/layout.tsx",
+  "app/partner/page.tsx",
+  "app/partner/print/page.tsx",
+  "app/pilot/page.tsx",
+  "app/planet/page.tsx",
+  "app/press/page.tsx",
+  "app/pricing/checkout/success/page.tsx",
+  "app/pricing/security/page.tsx",
+  "app/privacy/page.tsx",
+  "app/proof/page.tsx",
+  "app/qcoreai/budget/page.tsx",
+  "app/qstore/QStoreNotify.tsx",
+  "app/qstore/page.tsx",
+  "app/security/layout.tsx",
+  "app/security/page.tsx",
+  "app/studio/page.tsx",
+  "app/support/page.tsx",
   "app/terms/page.tsx",
+  "components/PilotOrderForm.tsx",
+  "components/RazrabotkaPreduprezhdenie.tsx",
+  "components/SiteFooter.tsx",
+  "data/pitchModel.ts",
+  "lib/build/calendar.ts",
+  "lib/i18n-lang/ar.ts",
+  "lib/i18n-lang/de.ts",
+  "lib/i18n-lang/en.ts",
+  "lib/i18n-lang/es.ts",
+  "lib/i18n-lang/fr.ts",
+  "lib/i18n-lang/ja.ts",
+  "lib/i18n-lang/kk.ts",
+  "lib/i18n-lang/pt.ts",
+  "lib/i18n-lang/ru.ts",
+  "lib/i18n-lang/tr.ts",
+  "lib/i18n-lang/zh.ts",
+  "lib/proofPilot.ts",
 ]);
 
 describe("адреса на домене без почты не расползаются", () => {
@@ -135,7 +184,7 @@ describe("адреса на домене без почты не располза
 
   test("контроль прибора: файлы найдены и правило непустое", () => {
     expect(files.length).toBeGreaterThan(100);
-    expect(DOMAINS_WITHOUT_MAIL.length + FOREIGN_DOMAINS.length).toBeGreaterThan(0);
+    expect(DOMAINS_WITHOUT_MAIL.length).toBeGreaterThan(0);
   });
 
   test("новых файлов с такими адресами не появилось", () => {

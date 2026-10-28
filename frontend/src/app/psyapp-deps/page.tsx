@@ -191,7 +191,10 @@ export default function PsyAppDepsPage() {
       </section>
 
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 16px" }}>
-        <PaddleUpgradeButton variant="banner" appId="psyapp-deps" label="Разблокировать PsyApp Pro" />
+        {/* Без своей подписи: «Разблокировать PsyApp Pro» обещала Pro, которого нет — в PsyApp платного
+            нет ничего, касса продаёт подписку Планеты (замер 28.10, put-do-kassy.mjs psyapp-deps).
+            Подпись по умолчанию «Выбрать срок» переводится на en/kk. */}
+        <PaddleUpgradeButton variant="banner" appId="psyapp-deps" />
       </section>
 
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 32px" }}>

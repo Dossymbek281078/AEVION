@@ -19,10 +19,10 @@
  *     пропуска) — но пишет в журнал слепоты, иначе мы не узнаем, что не считаем.
  */
 import type { Request, Response } from "express";
-import { timingSafeEqual } from "node:crypto";
 import { getPool } from "./dbPool";
 import { resolveUserPlan } from "./planGate";
 import { clientIp } from "./rateLimit";
+import { адресОтПроксиСайта } from "./siteProxyAddress";
 
 /** Действия, за которые берём деньги. Пусто = механизм спит целиком. */
 function платныеДействия(): Set<string> {
@@ -97,41 +97,9 @@ function ктоЭто(req: Request): string {
   return "ip:" + (левый || clientIp(req) || "неизвестно");
 }
 
-/**
- * Сколько раз адрес гостя от прокси сайта принят и почему отвергнут — с
- * перезапуска процесса. Без этого «счёт гостя всё ещё общий» не отличить:
- * заголовки до бэкенда не доходят, или секрет не совпал (замер 13.10.2026).
- */
-const счётАдреса = { accepted: 0, keyMismatch: 0, noKey: 0, badAddress: 0 };
-
-export function сводкаАдресаГостя(): { edgeKeyConfigured: boolean } & typeof счётАдреса {
-  return { edgeKeyConfigured: (process.env.AEVION_EDGE_KEY || "").length >= 16, ...счётАдреса };
-}
-
-/** Адрес гостя от прокси сайта — только при совпавшем секрете AEVION_EDGE_KEY. */
-export function адресОтПроксиСайта(req: Pick<Request, "headers">): string | null {
-  const секрет = process.env.AEVION_EDGE_KEY || "";
-  if (секрет.length < 16) return null;
-  const ключ = req.headers["x-aevion-edge-key"];
-  if (typeof ключ !== "string") {
-    счётАдреса.noKey += 1;
-    return null;
-  }
-  const а = Buffer.from(ключ);
-  const б = Buffer.from(секрет);
-  if (а.length !== б.length || !timingSafeEqual(а, б)) {
-    счётАдреса.keyMismatch += 1;
-    return null;
-  }
-  const адрес = req.headers["x-aevion-client-ip"];
-  const чистый = typeof адрес === "string" ? адрес.trim() : "";
-  if (!/^[0-9a-fA-F.:]{3,45}$/.test(чистый)) {
-    счётАдреса.badAddress += 1;
-    return null;
-  }
-  счётАдреса.accepted += 1;
-  return чистый;
-}
+// Адрес гостя от прокси сайта и его счёт — в ./siteProxyAddress (28.10.2026: нужен и
+// ограничителю rateLimit.clientIp, а тот модуль импортируется отсюда — цикл).
+export { сводкаАдресаГостя, адресОтПроксиСайта } from "./siteProxyAddress";
 
 function текущийМесяц(): string {
   const d = new Date();

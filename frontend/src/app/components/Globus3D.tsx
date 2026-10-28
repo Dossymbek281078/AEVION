@@ -2,6 +2,7 @@
 "use client";
 
 import { detectLocale, type GlobeLocale } from "./globusLocale";
+import { bboxCenterLon, lonWidth, wrapAwareLonRange } from "./globusLonRange";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -327,11 +328,16 @@ function buildCountriesIfNeeded() {
 
       const polys: number[][][] = [];
       let west = 180, south = 90, east = -180, north = -90;
+      // Те же долготы в шкале 0..360: у стран через 180° (Россия, Фиджи) там рамка узкая.
+      let west360 = 360, east360 = 0;
 
       const processRing = (ring: number[][]) => {
         for (const [lon, lat] of ring) {
           if (lon < west) west = lon;
           if (lon > east) east = lon;
+          const lon360 = lon < 0 ? lon + 360 : lon;
+          if (lon360 < west360) west360 = lon360;
+          if (lon360 > east360) east360 = lon360;
           if (lat < south) south = lat;
           if (lat > north) north = lat;
         }
@@ -354,6 +360,7 @@ function buildCountriesIfNeeded() {
         continue;
       }
 
+      [west, east] = wrapAwareLonRange(west, east, west360, east360);
       entries.push({
         name,
         bbox: [west, south, east, north],
@@ -3076,14 +3083,9 @@ export default function Globus3D({
     if (!entry) return;
     const [w, s, e, n] = entry.bbox;
     const centerLat = (s + n) / 2;
-    let centerLon = (w + e) / 2;
-    if (w > e) {
-      // bbox wraps через 180° (Russia, Fiji) — берём «среднее» с учётом разрыва.
-      centerLon = ((w + e + 360) / 2) % 360;
-      if (centerLon > 180) centerLon -= 360;
-    }
+    const centerLon = bboxCenterLon(w, e);
     const latRange = Math.abs(n - s);
-    const lonRange = Math.abs(e - w);
+    const lonRange = lonWidth(w, e);
     const spread = Math.max(
       latRange,
       lonRange * Math.cos((centerLat * Math.PI) / 180),

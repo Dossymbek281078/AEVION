@@ -122,7 +122,7 @@ export default function ThreatModelSelector() {
             {selected.description}
           </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <div data-stack-mobile="" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div>
               <div
                 style={{

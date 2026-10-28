@@ -208,7 +208,8 @@ export default function ShadowNetPage() {
           AES-GCM 256 + PBKDF2 в браузере. Сервер хранит только ciphertext, iv и
           salt — без пароля прочитать невозможно.
         </p>
-        <div
+        {/* 28.10: data-stack-mobile — на 390 форма и читалка стояли в две колонки по ~150 px (кадр post-ru-390x844) */}
+        <div data-stack-mobile=""
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",

@@ -85,6 +85,14 @@ const THEME_INDEX = new Map<string, number[]>();
 const ID_INDEX = new Map<string, number>();
 let loadPromise: Promise<void> | null = null;
 
+
+/** Подпись задачи = её решению (см. пояснение в ingest). Одна функция на пул и на точечный запрос по id. */
+function сПодписью(p: Puzzle): Puzzle {
+  const podpis = ispravitPodpisMata({ name: p.name, sol: p.sol, goal: p.goal, mateIn: p.mateIn });
+  if (!podpis.ispravleno) return p;
+  return { ...p, name: podpis.name, ...(podpis.mateIn != null ? { mateIn: podpis.mateIn } : {}) };
+}
+
 function ingest(arr: unknown, source: string): void {
   if (!Array.isArray(arr)) {
     console.warn(`[cyberchess-puzzles] ${source}: unexpected shape — serving empty`);
@@ -100,11 +108,7 @@ function ingest(arr: unknown, source: string): void {
     // Зачем вообще: у Lichess набор тем кончается на mateIn5, любой мат длиннее
     // помечен тем же словом, и наш сев скопировал число и в поле, и в название.
     // Замер 05.10.2026: 6 из 43 задач темы «Мат в 5+» матуют не в 5.
-    .map((p) => {
-      const podpis = ispravitPodpisMata({ name: p.name, sol: p.sol, goal: p.goal, mateIn: p.mateIn });
-      if (!podpis.ispravleno) return p;
-      return { ...p, name: podpis.name, ...(podpis.mateIn != null ? { mateIn: podpis.mateIn } : {}) };
-    });
+    .map(сПодписью);
   POOL_SOURCE = source;
   // По умолчанию источник равен тому, что загрузили: для файла и URL весь банк
   // и есть выборка. DB-ветка ниже перезапишет это настоящим COUNT(*).
@@ -124,6 +128,74 @@ function ingest(arr: unknown, source: string): void {
     if (typeof id === "string" && id.length > 0 && !ID_INDEX.has(id)) ID_INDEX.set(id, i);
   }
   console.log(`[cyberchess-puzzles] loaded ${POOL.length} puzzles, ${THEME_INDEX.size} themes (${source})`);
+}
+
+/**
+ * Строка таблицы ChessPuzzle → задача. Одна функция на две двери: загрузку пула
+ * (LIMIT cap) и точечный запрос по id (ниже, при промахе в пуле). Две копии
+ * разметки разошлись бы молча — поле, не названное в одной из них, терялось бы.
+ */
+function строкаВЗадачу(row: Record<string, unknown>): Puzzle {
+  let sol: string[];
+  const raw = String(row.sol ?? "");
+  try { const a = JSON.parse(raw); sol = Array.isArray(a) ? a.map(String) : raw.split(/\s+/).filter(Boolean); }
+  catch { sol = raw.split(/\s+/).filter(Boolean); }
+  // Подпись НЕ правим здесь: это делает ingest() — одна воронка на
+  // файл, базу и URL. Две копии одного правила разошлись бы.
+  return {
+    // id выбирается и переносится здесь, а не «само собой»: эта ветвь
+    // собирает объект по полям, и всё, что не названо, теряется. До
+    // 07.10.2026 id не был назван — и прод, работающий ИМЕННО из базы
+    // (source: "db ChessPuzzle (500000)"), отдавал задачи без
+    // идентификатора, то есть ссылку на конкретную задачу дать было
+    // нечем. Ветви файла и URL ничего не теряли: там объект копируется
+    // целиком через ...p.
+    id: row.id != null ? String(row.id) : undefined,
+    fen: String(row.fen ?? ""),
+    sol,
+    name: String(row.name ?? "Тактика"),
+    r: Number(row.rating ?? 1200),
+    theme: String(row.theme ?? "Тактика"),
+    phase: row.phase != null ? String(row.phase) : undefined,
+    side: row.side != null ? String(row.side) : undefined,
+    goal: row.goal != null ? String(row.goal) : undefined,
+    mateIn: row.mateIn != null ? Number(row.mateIn) : undefined,
+  } as Puzzle;
+}
+
+/**
+ * 🔴 28.10.2026. Пул = SELECT … LIMIT 500 000 из 502 584 строк БЕЗ ORDER BY: какие
+ * 2 584 задачи останутся за бортом, решает порядок строк в Postgres, и он меняется
+ * между перезапусками. Задача li_4YRGx из описания ролика ezB60KTGlTU (20.10)
+ * после выкатки 24.10 отвечала 404 not_found — ссылка из опубликованного видео
+ * умерла, хотя строка в таблице на месте. Поэтому промах в пуле — ещё не «нет»:
+ * спрашиваем базу по первичному ключу и, если строка есть, подшиваем её в пул.
+ * Возвращает индекс в POOL или undefined (нет строки / нет базы / база упала —
+ * последнее пишем в журнал, ответ 404 несёт dbChecked:false).
+ */
+async function найтиВБазе(id: string): Promise<{ i?: number; dbChecked: boolean }> {
+  if (!process.env.DATABASE_URL) return { dbChecked: false };
+  try {
+    const q = await getPool().query(
+      `SELECT "id","fen","sol","name","rating","theme","phase","side","goal","mateIn" FROM "ChessPuzzle" WHERE "id" = $1 LIMIT 1`,
+      [id],
+    );
+    const row = q.rows?.[0] as Record<string, unknown> | undefined;
+    if (!row) return { dbChecked: true };
+    const p = сПодписью(строкаВЗадачу(row));
+    if (!(typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0)) return { dbChecked: true };
+    POOL.push(p);
+    const i = POOL.length - 1;
+    const key = String(p.theme || "").toLowerCase();
+    const bucket = THEME_INDEX.get(key);
+    if (bucket) bucket.push(i); else THEME_INDEX.set(key, [i]);
+    if (typeof p.id === "string" && p.id.length > 0 && !ID_INDEX.has(p.id)) ID_INDEX.set(p.id, i);
+    console.log(`[cyberchess-puzzles] ${id}: не было в пуле (${POOL.length - 1} из ${POOL_TOTAL}), взята из базы по id`);
+    return { i, dbChecked: true };
+  } catch (e) {
+    console.warn("[cyberchess-puzzles] lookup by id in db failed:", e instanceof Error ? e.message : e);
+    return { dbChecked: false };
+  }
 }
 
 // Load once, cached via a shared promise. Local file (if configured) wins;
@@ -159,33 +231,7 @@ function ensureLoaded(): Promise<void> {
           [cap],
         );
         if (q.rows && q.rows.length > 0) {
-          const mapped = q.rows.map((row: Record<string, unknown>) => {
-            let sol: string[];
-            const raw = String(row.sol ?? "");
-            try { const a = JSON.parse(raw); sol = Array.isArray(a) ? a.map(String) : raw.split(/\s+/).filter(Boolean); }
-            catch { sol = raw.split(/\s+/).filter(Boolean); }
-            // Подпись НЕ правим здесь: это делает ingest() — одна воронка на
-            // файл, базу и URL. Две копии одного правила разошлись бы.
-            return {
-              // id выбирается и переносится здесь, а не «само собой»: эта ветвь
-              // собирает объект по полям, и всё, что не названо, теряется. До
-              // 07.10.2026 id не был назван — и прод, работающий ИМЕННО из базы
-              // (source: "db ChessPuzzle (500000)"), отдавал задачи без
-              // идентификатора, то есть ссылку на конкретную задачу дать было
-              // нечем. Ветви файла и URL ничего не теряли: там объект копируется
-              // целиком через ...p.
-              id: row.id != null ? String(row.id) : undefined,
-              fen: String(row.fen ?? ""),
-              sol,
-              name: String(row.name ?? "Тактика"),
-              r: Number(row.rating ?? 1200),
-              theme: String(row.theme ?? "Тактика"),
-              phase: row.phase != null ? String(row.phase) : undefined,
-              side: row.side != null ? String(row.side) : undefined,
-              goal: row.goal != null ? String(row.goal) : undefined,
-              mateIn: row.mateIn != null ? Number(row.mateIn) : undefined,
-            } as Puzzle;
-          });
+          const mapped = q.rows.map(строкаВЗадачу);
           ingest(mapped, `db ChessPuzzle (${q.rows.length})`);
           // Настоящий размер таблицы — отдельным запросом, ПОСЛЕ ingest():
           // ingest ставит POOL_TOTAL = POOL.length, и здесь мы его уточняем.
@@ -438,11 +484,15 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
       });
       return;
     }
-    const i = ID_INDEX.get(id);
+    let i = ID_INDEX.get(id);
+    let dbChecked = false;
+    if (i === undefined) ({ i, dbChecked } = await найтиВБазе(id));
     if (i === undefined) {
       res.status(404).json({
         ok: false,
         reason: "not_found",
+        // true — в таблице строки нет; false — базы нет или она не ответила (см. журнал).
+        dbChecked,
         poolSize: POOL.length,
         bankTotal: POOL_TOTAL,
         capped: POOL_CAPPED,

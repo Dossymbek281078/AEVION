@@ -1511,6 +1511,16 @@ function readSiteLangCookie(): string | null {
 export function loadLocale(): CcLocale {
   if (typeof window === "undefined") return DEFAULT_LOCALE;
   try {
+    // 0. Явный `?lang=` в адресе — просьба ссылки; провайдер сайта слушается её (lib/i18n.tsx,
+    //    языкИзЗапроса) и ставит html lang, но в куку и localStorage НЕ пишет. Шахматы её не читали:
+    //    замер 28.10.2026 — /cyberchess?lang=en при браузере ru-RU: html.lang=en, а 71 видимая
+    //    строка лобби русская (словарь был, locale оставался ru). Метка письма mail-* — тоже en.
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const fromQuery = siteLangToCc(q.get("lang"));
+      if (fromQuery) return fromQuery;
+      if ((q.get("c") ?? "").trim().toLowerCase().startsWith("mail-")) return "en";
+    } catch {}
     // 1. Свой явный выбор — старше всех: человек выбрал язык именно для шахмат.
     const stored = localStorage.getItem(LOCALE_KEY);
     if (stored === "ru" || stored === "en" || stored === "kk") return stored;
@@ -1572,7 +1582,7 @@ export function useCcI18n() {
     let observer: MutationObserver | null = null;
     if (typeof MutationObserver !== "undefined" && typeof document !== "undefined") {
       observer = new MutationObserver(() => setLocaleState(loadLocale()));
-      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["lang", "data-lang-src"] });
     }
     return () => {
       window.removeEventListener("cc-locale-changed", handler as EventListener);

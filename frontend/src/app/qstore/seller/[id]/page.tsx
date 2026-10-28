@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { useQStoreT, catName, priceText } from "../../i18n";
 
 interface SellerProduct {
   id: string;
@@ -31,11 +32,6 @@ const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
   code: { bg: "#d1fae5", fg: "#065f46" },
   other: { bg: "#f1f5f9", fg: "#475569" },
 };
-
-function priceLabel(price: number): string {
-  if (price === 0) return "Free";
-  return `$${(price / 100).toFixed(2)}`;
-}
 
 function sellerInitial(userId: string): string {
   if (!userId) return "?";
@@ -63,10 +59,13 @@ function StarRating({ value, size = 14 }: { value: number; size?: number }) {
 export default function QStoreSellerProfilePage() {
   const params = useParams();
   const sellerId = String(params?.id ?? "");
+  const { lang, t } = useQStoreT();
 
   const [profile, setProfile] = useState<SellerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // Отказ сервера — не «продавца нет»: отдельное состояние.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     if (!sellerId) return;
@@ -79,9 +78,11 @@ export default function QStoreSellerProfilePage() {
         return;
       }
       if (!res.ok) {
+        setLoadFailed(true);
         setProfile(null);
         return;
       }
+      setLoadFailed(false);
       const data = await res.json();
       // Treat empty product list with no sales as a "ghost" seller — show as not found.
       if (!data || (Array.isArray(data.products) && data.products.length === 0 && (data.totalSales ?? 0) === 0)) {
@@ -96,6 +97,7 @@ export default function QStoreSellerProfilePage() {
         avgRating: Number(data.avgRating ?? 0),
       });
     } catch {
+      setLoadFailed(true);
       setProfile(null);
     } finally {
       setLoading(false);
@@ -170,10 +172,18 @@ export default function QStoreSellerProfilePage() {
         <ProductPageShell>
           <div style={{ maxWidth: 900, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>👤</div>
-            <h1 style={{ fontSize: 24, color: "#0f172a", margin: "0 0 8px" }}>Seller not found</h1>
-            <p style={{ color: "#64748b", marginBottom: 24 }}>
-              This seller doesn&apos;t have any public products yet.
-            </p>
+            {loadFailed && !notFound ? (
+              <p role="alert" style={{ color: "#78350f", marginBottom: 24, fontWeight: 600 }}>
+                {t("seller.loadFail")}
+              </p>
+            ) : (
+              <>
+                <h1 style={{ fontSize: 24, color: "#0f172a", margin: "0 0 8px" }}>{t("seller.notFound")}</h1>
+                <p style={{ color: "#64748b", marginBottom: 24 }}>
+                  {t("seller.notFoundBody")}
+                </p>
+              </>
+            )}
             <Link
               href="/qstore"
               style={{
@@ -187,7 +197,7 @@ export default function QStoreSellerProfilePage() {
                 textDecoration: "none",
               }}
             >
-              Back to QStore
+              {t("item.back")}
             </Link>
           </div>
         </ProductPageShell>
@@ -213,7 +223,7 @@ export default function QStoreSellerProfilePage() {
               ← QStore
             </Link>
             <span style={{ margin: "0 8px" }}>/</span>
-            <span>Seller</span>
+            <span>{t("seller.crumb")}</span>
           </div>
 
           {/* Hero header */}
@@ -260,9 +270,8 @@ export default function QStoreSellerProfilePage() {
                 {displayName}
               </h1>
               <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 13, color: "#64748b" }}>
-                <span>
-                  <span style={{ fontWeight: 700, color: "#374151" }}>{productCount}</span>{" "}
-                  {productCount === 1 ? "product" : "products"}
+                <span style={{ fontWeight: 600, color: "#374151" }}>
+                  {t("seller.count", { n: productCount })}
                 </span>
                 <span style={{ color: "#cbd5e1" }}>·</span>
                 {profile.avgRating > 0 && (
@@ -289,7 +298,7 @@ export default function QStoreSellerProfilePage() {
               }}
             >
               <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                Products
+                {t("seller.products")}
               </div>
               <div style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>{productCount}</div>
             </div>
@@ -303,9 +312,9 @@ export default function QStoreSellerProfilePage() {
             >
               {/* «Total sales» снят 20.10.2026: при закрытой оплате счётчик продаж всегда 0 и работает против. */}
               <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                Payment
+                {t("seller.payment")}
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#475569" }}>Opens soon</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#475569" }}>{t("seller.paymentSoon")}</div>
             </div>
             <div
               style={{
@@ -316,7 +325,7 @@ export default function QStoreSellerProfilePage() {
               }}
             >
               <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                Avg rating
+                {t("seller.avgRating")}
               </div>
               <div style={{ fontSize: 24, fontWeight: 800, color: profile.avgRating > 0 ? "#0f172a" : "#94a3b8" }}>
                 {profile.avgRating > 0 ? profile.avgRating.toFixed(1) : "—"}
@@ -326,7 +335,7 @@ export default function QStoreSellerProfilePage() {
 
           {/* Products grid */}
           <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 14px" }}>
-            Products by this seller
+            {t("seller.byThis")}
           </h2>
 
           {productCount === 0 ? (
@@ -341,7 +350,7 @@ export default function QStoreSellerProfilePage() {
                 fontSize: 14,
               }}
             >
-              This seller hasn&apos;t published anything public yet.
+              {t("seller.nothing")}
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
@@ -373,10 +382,9 @@ export default function QStoreSellerProfilePage() {
                           padding: "2px 8px",
                           fontSize: 11,
                           fontWeight: 700,
-                          textTransform: "capitalize",
                         }}
                       >
-                        {p.category}
+                        {catName(lang, p.category)}
                       </span>
                       <span
                         style={{
@@ -385,7 +393,7 @@ export default function QStoreSellerProfilePage() {
                           color: p.price === 0 ? "#0d9488" : "#0f172a",
                         }}
                       >
-                        {priceLabel(p.price)}
+                        {priceText(lang, p.price)}
                       </span>
                     </div>
                     <div
@@ -411,7 +419,7 @@ export default function QStoreSellerProfilePage() {
           {/* Footer note about avg price (subtle) */}
           {productCount > 0 && (
             <div style={{ marginTop: 18, fontSize: 12, color: "#94a3b8", textAlign: "right" }}>
-              Avg price across listings: {priceLabel(Math.round(avgPrice))}
+              {t("seller.avgPrice", { price: priceText(lang, Math.round(avgPrice)) })}
             </div>
           )}
         </div>

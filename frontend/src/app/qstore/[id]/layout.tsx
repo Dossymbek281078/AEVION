@@ -24,6 +24,8 @@ type Product = {
   reviewCount?: number;
   isPublic: boolean;
   createdAt: string;
+  /** С 28.10.2026: демо-заглушка без файла — не продаётся. */
+  demo?: boolean;
 };
 
 type Props = {
@@ -66,22 +68,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const ogImage = `${SITE}/api-backend/api/qstore/og.svg?id=${encodeURIComponent(id)}`;
 
   const fallback: Metadata = {
-    title: "QStore product — AEVION digital marketplace",
+    title: "Товар QStore — маркетплейс цифровых товаров AEVION",
     description:
-      "Digital product on the AEVION QStore marketplace: templates, presets, code, music and design assets. Public catalogue, instant delivery.",
+      "Товар на маркетплейсе цифровых товаров AEVION QStore: продавцы выставляют свои шаблоны, пресеты, код, музыку и дизайн.",
     alternates: { canonical },
     openGraph: {
       type: "website",
-      title: "QStore product — AEVION",
-      description: "Digital product on the AEVION QStore marketplace.",
+      title: "Товар QStore — AEVION",
+      description: "Товар на маркетплейсе цифровых товаров AEVION QStore.",
       url: canonical,
       siteName: "AEVION",
       images: [{ url: ogImage, width: 1200, height: 630, alt: "AEVION QStore" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "QStore product — AEVION",
-      description: "Digital product on the AEVION QStore marketplace.",
+      title: "Товар QStore — AEVION",
+      description: "Товар на маркетплейсе цифровых товаров AEVION QStore.",
       images: [ogImage],
     },
   };
@@ -90,10 +92,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!product) return fallback;
 
   const price = priceLabel(product.price, product.currency);
-  const titleLine = clip(`${product.title} — ${price} on AEVION QStore`, 60);
+  // 28.10.2026: демо-заглушка — не товар: без цены в заголовке и без индексации.
+  // «Digital delivery» снято: у платных товаров касса не подключена.
+  const titleLine = product.demo
+    ? clip(`${product.title} — демо-пример, не продаётся`, 60)
+    : clip(`${product.title} — ${price} on AEVION QStore`, 60);
   const desc = clip(
-    product.description ||
-      `${product.category} on AEVION QStore. Digital delivery.`,
+    product.demo
+      ? "Демо-пример карточки товара QStore: файла за ним нет, купить его нельзя."
+      : product.description || `${product.category} on AEVION QStore.`,
     158
   );
 
@@ -101,6 +108,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: titleLine,
     description: desc,
     alternates: { canonical },
+    ...(product.demo ? { robots: { index: false, follow: true } } : {}),
     keywords: [
       "AEVION",
       "QStore",
@@ -145,7 +153,11 @@ export default async function QStoreItemLayout({ params, children }: Props) {
     ],
   };
 
-  const productJsonLd = product
+  // Предложение (Offer) для поисковика — только там, где его можно принять: демо-заглушка
+  // не продаётся, а у платных товаров касса не подключена (сервер: 503 no_payment_provider,
+  // на странице — форма «оплата скоро»). Остаются бесплатные товары, которые выдаются сразу.
+  const offerable = !!product && !product.demo && product.price === 0;
+  const productJsonLd = product && !product.demo
     ? {
         "@context": "https://schema.org",
         "@type": "Product",
@@ -158,7 +170,7 @@ export default async function QStoreItemLayout({ params, children }: Props) {
         image: product.previewUrl
           ? [product.previewUrl]
           : [`${SITE}/api-backend/api/qstore/og.svg?id=${encodeURIComponent(product.id)}`],
-        offers: {
+        offers: offerable ? {
           "@type": "Offer",
           price: (product.price / 100).toFixed(2),
           priceCurrency: (product.currency || "USD").toUpperCase(),
@@ -172,7 +184,7 @@ export default async function QStoreItemLayout({ params, children }: Props) {
             url: `${SITE}/qstore/seller/${encodeURIComponent(product.sellerId)}`,
           },
           itemCondition: "https://schema.org/NewCondition",
-        },
+        } : undefined,
         aggregateRating:
           product.avgRating && product.reviewCount && product.reviewCount > 0
             ? {

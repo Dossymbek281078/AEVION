@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getAuthToken } from "@/lib/auth";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { QStoreNotify } from "../QStoreNotify";
+import { useQStoreT, catName, priceText, dateText } from "../i18n";
 
 interface Product {
   id: string;
@@ -24,6 +25,8 @@ interface Product {
   reviewCount?: number;
   isPublic: boolean;
   createdAt: string;
+  /** С 28.10.2026 сервер отдаёт demo: true у заглушек без файла — их не продаём. */
+  demo?: boolean;
 }
 
 interface Review {
@@ -45,12 +48,6 @@ const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
   other: { bg: "#f1f5f9", fg: "#475569" },
 };
 
-function priceLabel(price: number, currency: string): string {
-  if (price === 0) return "Free";
-  const sym = currency === "usd" ? "$" : currency.toUpperCase() + " ";
-  return `${sym}${(price / 100).toFixed(2)}`;
-}
-
 function StarRating({ value, size = 14 }: { value: number; size?: number }) {
   const full = Math.floor(value);
   const half = value - full >= 0.5;
@@ -69,14 +66,21 @@ function StarRating({ value, size = 14 }: { value: number; size?: number }) {
 
 export default function QStoreItemPage() {
   const params = useParams();
-  const router = useRouter();
   const id = String(params?.id ?? "");
+  const { lang, t } = useQStoreT();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Отказ показывается отказом (красным, role="alert"), а не зелёной плашкой.
+  const [noticeIsError, setNoticeIsError] = useState(false);
+  const showNotice = (text: string, isError: boolean) => {
+    setNotice(text);
+    setNoticeIsError(isError);
+  };
   const [purchasing, setPurchasing] = useState(false);
 
   // Review form
@@ -97,6 +101,13 @@ export default function QStoreItemPage() {
         setProduct(null);
         return;
       }
+      // 503 хранилища — не «товара нет»: отдельное состояние.
+      if (!pRes.ok) {
+        setLoadFailed(true);
+        setProduct(null);
+        return;
+      }
+      setLoadFailed(false);
       const pData = await pRes.json();
       setProduct(pData.product || null);
       if (rRes.ok) {
@@ -104,6 +115,7 @@ export default function QStoreItemPage() {
         setReviews(rData.reviews || []);
       }
     } catch {
+      setLoadFailed(true);
       setProduct(null);
     } finally {
       setLoading(false);
@@ -115,10 +127,10 @@ export default function QStoreItemPage() {
   }, [fetchAll]);
 
   const handlePurchase = async () => {
-    if (!product) return;
+    if (!product || product.demo) return;
     const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
-      setNotice("Sign in to purchase products.");
+      showNotice(t("buy.signIn"), true);
       return;
     }
     setPurchasing(true);
@@ -127,15 +139,26 @@ export default function QStoreItemPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        setNotice(product.price === 0 ? "Added to your library!" : "Purchase successful!");
+      const d = await res.json().catch(() => null);
+      if (res.ok && d?.checkoutUrl) {
+        window.location.href = d.checkoutUrl;
+      } else if (res.ok) {
+        showNotice(t("buy.done"), false);
         fetchAll();
       } else {
-        const d = await res.json();
-        setNotice(d.error || "Purchase failed");
+        // Код сервера на экран не идёт. 410 demo_product_not_for_sale — тот же
+        // текст, что на плашке демо-товара, и карточка переходит в демо-вид.
+        const code = typeof d?.error === "string" ? d.error : "";
+        if (res.status === 410 || code === "demo_product_not_for_sale") {
+          setProduct((p) => (p ? { ...p, demo: true } : p));
+          showNotice(t("demo.badge"), true);
+        } else if (code === "no_payment_provider") showNotice(t("buy.noProvider"), true);
+        else if (res.status === 401) showNotice(t("buy.signIn"), true);
+        else if (res.status === 404) showNotice(t("buy.notFound"), true);
+        else showNotice(t("buy.fail"), true);
       }
     } catch {
-      setNotice("Network error");
+      showNotice(t("net.error"), true);
     } finally {
       setPurchasing(false);
     }
@@ -146,7 +169,7 @@ export default function QStoreItemPage() {
     if (!product) return;
     const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
-      setNotice("Sign in to leave a review.");
+      showNotice(t("item.reviewSignIn"), true);
       return;
     }
     setReviewSubmitting(true);
@@ -157,16 +180,15 @@ export default function QStoreItemPage() {
         body: JSON.stringify({ rating: reviewRating, comment: reviewComment.trim() || null }),
       });
       if (res.ok) {
-        setNotice("Review posted!");
+        showNotice(t("item.reviewPosted"), false);
         setReviewComment("");
         setReviewRating(5);
         fetchAll();
       } else {
-        const d = await res.json();
-        setNotice(d.error || "Failed to post review");
+        showNotice(res.status === 401 ? t("item.reviewSignIn") : t("item.reviewFail"), true);
       }
     } catch {
-      setNotice("Network error");
+      showNotice(t("net.error"), true);
     } finally {
       setReviewSubmitting(false);
     }
@@ -178,7 +200,7 @@ export default function QStoreItemPage() {
         <Wave1Nav />
         <ProductPageShell>
           <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px", color: "#94a3b8", textAlign: "center" }}>
-            Loading product...
+            {t("item.loading")}
           </div>
         </ProductPageShell>
       </>
@@ -192,10 +214,18 @@ export default function QStoreItemPage() {
         <ProductPageShell>
           <div style={{ maxWidth: 900, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
-            <h1 style={{ fontSize: 24, color: "#0f172a", margin: "0 0 8px" }}>Product not found</h1>
-            <p style={{ color: "#64748b", marginBottom: 24 }}>
-              The product you&apos;re looking for doesn&apos;t exist or has been removed.
-            </p>
+            {loadFailed && !notFound ? (
+              <p role="alert" style={{ color: "#78350f", marginBottom: 24, fontWeight: 600 }}>
+                {t("item.loadFail")}
+              </p>
+            ) : (
+              <>
+                <h1 style={{ fontSize: 24, color: "#0f172a", margin: "0 0 8px" }}>{t("item.notFound")}</h1>
+                <p style={{ color: "#64748b", marginBottom: 24 }}>
+                  {t("item.notFoundBody")}
+                </p>
+              </>
+            )}
             <Link
               href="/qstore"
               style={{
@@ -209,7 +239,7 @@ export default function QStoreItemPage() {
                 textDecoration: "none",
               }}
             >
-              Back to QStore
+              {t("item.back")}
             </Link>
           </div>
         </ProductPageShell>
@@ -232,26 +262,29 @@ export default function QStoreItemPage() {
               ← QStore
             </Link>
             <span style={{ margin: "0 8px" }}>/</span>
-            <span style={{ textTransform: "capitalize" }}>{product.category}</span>
+            <span>{catName(lang, product.category)}</span>
           </div>
 
           {/* Notice */}
           {notice && (
             <div
+              role={noticeIsError ? "alert" : "status"}
+              data-qstore-notice={noticeIsError ? "error" : "ok"}
               style={{
-                background: "#f0fdf4",
-                border: "1px solid #bbf7d0",
+                background: noticeIsError ? "#fef2f2" : "#f0fdf4",
+                border: noticeIsError ? "1px solid #fecaca" : "1px solid #bbf7d0",
                 borderRadius: 10,
                 padding: "10px 16px",
                 marginBottom: 20,
-                color: "#166534",
+                color: noticeIsError ? "#991b1b" : "#166534",
                 fontSize: 14,
                 display: "flex",
                 justifyContent: "space-between",
+                gap: 12,
               }}
             >
               {notice}
-              <button onClick={() => setNotice(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontWeight: 700 }}>×</button>
+              <button aria-label={t("page.close")} onClick={() => setNotice(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontWeight: 700 }}>×</button>
             </div>
           )}
 
@@ -311,16 +344,15 @@ export default function QStoreItemPage() {
                     padding: "3px 10px",
                     fontSize: 12,
                     fontWeight: 700,
-                    textTransform: "capitalize",
                   }}
                 >
-                  {product.category}
+                  {catName(lang, product.category)}
                 </span>
                 {avgRating > 0 && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#64748b" }}>
                     <StarRating value={avgRating} />
                     <span style={{ fontWeight: 600, color: "#374151" }}>{avgRating.toFixed(1)}</span>
-                    <span>({reviewCount} {reviewCount === 1 ? "review" : "reviews"})</span>
+                    <span>({t("item.reviewsShort", { n: reviewCount })})</span>
                   </span>
                 )}
               </div>
@@ -381,13 +413,19 @@ export default function QStoreItemPage() {
                     marginBottom: 4,
                   }}
                 >
-                  {priceLabel(product.price, product.currency)}
+                  {priceText(lang, product.price, product.currency)}
                 </div>
                 <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 20 }}>
-                  Listed {new Date(product.createdAt).toLocaleDateString()}
+                  {t("item.listed", { date: dateText(lang, product.createdAt) })}
                 </div>
 
-                {product.price > 0 ? (
+                {product.demo ? (
+                  // 28.10.2026: демо-заглушка без файла — ни кнопки, ни формы «оплата скоро».
+                  <div data-qstore-demo role="note" style={{ padding: "12px 14px", borderRadius: 10, background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", marginBottom: 14 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{t("demo.badge")}</div>
+                    <div style={{ fontSize: 12, lineHeight: 1.5 }}>{t("demo.hint")}</div>
+                  </div>
+                ) : product.price > 0 ? (
                   <QStoreNotify productId={product.id} productTitle={product.title} />
                 ) : (
                 <button
@@ -410,13 +448,13 @@ export default function QStoreItemPage() {
                     marginBottom: 14,
                   }}
                 >
-                  {purchasing ? "Processing..." : product.price === 0 ? "Get free" : "Buy now"}
+                  {purchasing ? t("buy.processing") : t("card.getFree")}
                 </button>
                 )}
 
                 <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14, fontSize: 13, color: "#64748b" }}>
                   <div style={{ marginBottom: 6 }}>
-                    <span style={{ color: "#94a3b8" }}>Seller:</span>{" "}
+                    <span style={{ color: "#94a3b8" }}>{t("item.seller")}</span>{" "}
                     <Link
                       href={`/qstore/seller/${encodeURIComponent(product.sellerId)}`}
                       style={{ color: "#0d9488", fontWeight: 600, textDecoration: "none" }}
@@ -441,7 +479,7 @@ export default function QStoreItemPage() {
                       boxSizing: "border-box",
                     }}
                   >
-                    View seller profile →
+                    {t("item.sellerProfile")}
                   </Link>
                 </div>
               </div>
@@ -451,7 +489,7 @@ export default function QStoreItemPage() {
           {/* Reviews section */}
           <section>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 16px" }}>
-              Reviews ({reviewCount})
+              {t("item.reviewsHeading", { n: reviewCount })}
             </h2>
 
             {/* Review form */}
@@ -466,7 +504,7 @@ export default function QStoreItemPage() {
               }}
             >
               <div style={{ fontWeight: 700, fontSize: 14, color: "#374151", marginBottom: 12 }}>
-                Leave a review
+                {t("item.leaveReview")}
               </div>
               <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
                 {[1, 2, 3, 4, 5].map((n) => (
@@ -482,7 +520,7 @@ export default function QStoreItemPage() {
                       color: n <= reviewRating ? "#f59e0b" : "#e2e8f0",
                       padding: 0,
                     }}
-                    aria-label={`${n} stars`}
+                    aria-label={t("item.stars", { n })}
                   >
                     ★
                   </button>
@@ -494,7 +532,8 @@ export default function QStoreItemPage() {
               <textarea
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="Share your experience (optional)"
+                aria-label={t("item.reviewAria")}
+                placeholder={t("item.reviewPh")}
                 rows={3}
                 style={{
                   width: "100%",
@@ -522,7 +561,7 @@ export default function QStoreItemPage() {
                   cursor: reviewSubmitting ? "not-allowed" : "pointer",
                 }}
               >
-                {reviewSubmitting ? "Posting..." : "Post review"}
+                {reviewSubmitting ? t("item.posting") : t("item.postReview")}
               </button>
             </form>
 
@@ -539,7 +578,7 @@ export default function QStoreItemPage() {
                   fontSize: 14,
                 }}
               >
-                No reviews yet. Be the first to share your thoughts!
+                {t("item.noReviews")}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -561,7 +600,7 @@ export default function QStoreItemPage() {
                         </span>
                       </div>
                       <span style={{ fontSize: 12, color: "#94a3b8" }}>
-                        {new Date(r.createdAt).toLocaleDateString()}
+                        {dateText(lang, r.createdAt)}
                       </span>
                     </div>
                     {r.comment && (

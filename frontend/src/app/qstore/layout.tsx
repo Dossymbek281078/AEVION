@@ -1,12 +1,19 @@
 import type { Metadata } from "next";
 
+// 28.10.2026: прежнее «Buy and sell digital products…» обещало покупку, которой нет — на проде
+// у платных товаров касса не подключена (сервер честно отвечает 503 no_payment_provider, на
+// странице — форма «оплата скоро», QStoreNotify), а шесть товаров витрины были демо-заглушками
+// без файла (бэкенд их снял). Здесь — то, что есть: маркетплейс, где продавцы выставляют свои
+// товары; бесплатные забираются сразу, оплата платных пока не открыта.
+const DESCRIPTION =
+  "Маркетплейс цифровых товаров AEVION: продавцы выставляют свои шаблоны, пресеты, код, музыку и дизайн. Бесплатные товары можно забрать сразу; оплата платных пока не открыта — можно оставить почту, и мы напишем.";
+
 export const metadata: Metadata = {
-  title: "QStore — Digital Marketplace",
-  description:
-    "Buy and sell digital products: templates, presets, code, music, design assets. AEVION digital marketplace.",
+  title: "QStore — маркетплейс цифровых товаров",
+  description: DESCRIPTION,
   openGraph: {
-    title: "QStore — Digital Marketplace",
-    description: "Buy and sell templates, code, music, design assets and more.",
+    title: "QStore — маркетплейс цифровых товаров AEVION",
+    description: "Продавцы выставляют свои шаблоны, пресеты, код, музыку и дизайн. Оплата платных товаров пока не открыта.",
     siteName: "AEVION",
   },
 };

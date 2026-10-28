@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, fireEvent, screen, cleanup, act } from "@testing-library/react";
 import { QStoreNotify, QSTORE_NOTIFY_SOURCE } from "../QStoreNotify";
+import { tQ } from "../i18n";
 
 vi.mock("@/lib/apiBase", () => ({ apiUrl: (p: string) => p }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -35,9 +36,20 @@ describe("QStoreNotify", () => {
     await отправить({ status: 201, body: { ok: true, storage: "memory" } });
     expect(screen.getByRole("status").textContent).toMatch(/temporarily/i);
   });
-  it("отказ сервера показывается его текстом", async () => {
+  // 28.10.2026: прежде здесь проверялось, что на экран идёт message сервера («Bad email»).
+  // Сервер пишет message по-английски/по-русски независимо от языка страницы, а без message
+  // на экран шёл сырой код (invalid_email). Теперь отказ — своим текстом на языке страницы,
+  // красной плашкой role="alert"; замысел «отказ виден человеку и понятен» сохранён.
+  it("отказ сервера — человеческим текстом на языке страницы, без сырого кода", async () => {
     await отправить({ status: 400, body: { error: "invalid_email", message: "Bad email" } });
-    expect(screen.getByRole("status").textContent).toContain("Bad email");
+    const плашка = screen.getByRole("alert").textContent ?? "";
+    expect(плашка).toContain("Enter a valid email address.");
+    expect(плашка).not.toMatch(/invalid_email|Bad email/);
+  });
+  it("сбой сервера (500) — «не удалось сохранить», а не зелёное «готово»", async () => {
+    await отправить({ status: 500, body: { error: "db_down" } });
+    expect(screen.getByRole("alert").textContent).toContain("Could not save the email");
+    expect(screen.queryByRole("status")).toBeNull();
   });
   it("источник ограничен 40 символами id", () => {
     expect(QSTORE_NOTIFY_SOURCE("x".repeat(60))).toBe("qstore-" + "x".repeat(40));
@@ -54,6 +66,8 @@ describe("поверхности магазина", () => {
   });
   it("у платных товаров — форма почты на странице товара и метка в ленте", () => {
     expect(файлы[1][1]).toContain("<QStoreNotify productId={product.id} productTitle={product.title} />");
-    expect(файлы[0][1]).toContain("Payment soon — leave your email");
+    // Текст метки живёт в словаре (i18n.ts) с 28.10.2026 — проверяем вызов и значение.
+    expect(файлы[0][1]).toContain(`t("card.paymentSoon")`);
+    expect(tQ("en", "card.paymentSoon")).toBe("Payment soon — leave your email");
   });
 });

@@ -18,7 +18,7 @@ interface Template {
 }
 
 export default function CreateDocument() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [contentType, setContentType] = useState<ContentType>("text");
@@ -51,14 +51,14 @@ export default function CreateDocument() {
   }, []);
 
   useEffect(() => {
-    fetch(apiUrl("/api/qcontract/templates"))
+    fetch(apiUrl(`/api/qcontract/templates?lang=${lang}`))
       .then((r) => r.json())
       .then((d) => setTemplates(d.templates ?? []))
       .catch(() => {});
-  }, []);
+  }, [lang]);
 
   async function applyTemplate(id: string) {
-    const res = await fetch(apiUrl(`/api/qcontract/templates/${id}`));
+    const res = await fetch(apiUrl(`/api/qcontract/templates/${id}?lang=${lang}`));
     const t = await res.json();
     setTitle(t.title);
     setContent(t.content);

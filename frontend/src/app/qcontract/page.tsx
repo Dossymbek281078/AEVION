@@ -32,8 +32,8 @@ function StatusBadge({ doc, t }: { doc: DocItem; t: TFn }) {
 }
 
 function formatDate(iso: string, lang: string) {
-  // ru / kk locales use the same "ru-RU" day-month-year ordering; en flips
-  const localeTag = lang === "en" ? "en-US" : "ru-RU";
+  // kk шёл через ru-RU, и на казахской странице стояло «28 окт. 2026 г.»
+  const localeTag = lang === "en" ? "en-US" : lang === "kk" ? "kk-KZ" : "ru-RU";
   return new Date(iso).toLocaleDateString(localeTag, { day: "numeric", month: "short", year: "numeric" });
 }
 

@@ -492,6 +492,39 @@ export const MODULE_NOTICES: Record<string, string> = {
     "квалифицированным специалистом.",
 };
 
+/**
+ * Те же оговорки на en/kk. 28.10.2026: на /qcontract?lang=en и kk русская плашка
+ * «Демонстрационный режим…» стояла под уже переведённым баннером — человек без
+ * русского не видел, на каком условии верны обещания страницы.
+ */
+export const MODULE_NOTICES_I18N: Record<string, { en: string; kk: string }> = {
+  qpaynet: {
+    en:
+      "Demonstration mode. AEVION is not a licensed bank, payment institution or " +
+      "e-money issuer: no real funds or payments are processed — evaluation and learning only.",
+    kk:
+      "Көрсетілім режимі. AEVION лицензияланған банк, төлем ұйымы немесе электрондық " +
+      "ақша эмитенті емес: нақты қаражат пен төлемдер өңделмейді — тек бағалау және оқу үшін.",
+  },
+  qcontract: {
+    en:
+      "Demonstration mode. Documents and signatures created here are not legal advice " +
+      "and may have no legal force without independent review by a qualified professional.",
+    kk:
+      "Көрсетілім режимі. Мұнда жасалған құжаттар мен қолтаңбалар заңгерлік кеңес емес " +
+      "және білікті маманның тәуелсіз тексеруінсіз заңды күші болмауы мүмкін.",
+  },
+};
+
+/** Оговорка модуля на языке страницы; нет перевода — русский исходник. */
+export function productNoticeIn(id: string, lang: string): string | undefined {
+  const ru = productNotice(id);
+  if (!ru || (lang !== "en" && lang !== "kk")) return ru;
+  if (productById(id)?.notice) return ru;
+  const tr = Object.prototype.hasOwnProperty.call(MODULE_NOTICES_I18N, id) ? MODULE_NOTICES_I18N[id] : undefined;
+  return tr ? tr[lang] : ru;
+}
+
 /** Оговорка продукта или модуля: сперва карточка каталога, затем MODULE_NOTICES. */
 export function productNotice(id: string): string | undefined {
   const own = productById(id)?.notice;

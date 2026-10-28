@@ -7,6 +7,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { safeErrorText } from "../lib/safeError";
+import { QCONTRACT_TEMPLATES_I18N } from "../data/qcontractTemplatesI18n";
 
 const capture = makeServiceCapture("qcontract");
 
@@ -260,18 +261,24 @@ _______________ (Арендодатель) и _______________ (Арендато�
   },
 ];
 
+// Шаблон на языке страницы: ?lang=en|kk берёт перевод, иначе русский исходник.
+function templateIn<T extends (typeof TEMPLATES)[number]>(t: T, lang: unknown): T {
+  const tr = lang === "en" || lang === "kk" ? QCONTRACT_TEMPLATES_I18N[lang][t.id] : undefined;
+  return tr ? { ...t, ...tr } : t;
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // GET /api/qcontract/templates
-qcontractRouter.get("/templates", (_req, res) => {
-  res.json({ templates: TEMPLATES.map(({ content: _, ...t }) => t) });
+qcontractRouter.get("/templates", (req, res) => {
+  res.json({ templates: TEMPLATES.map((t) => templateIn(t, req.query.lang)).map(({ content: _, ...t }) => t) });
 });
 
 // GET /api/qcontract/templates/:id
 qcontractRouter.get("/templates/:id", (req, res) => {
   const t = TEMPLATES.find((t) => t.id === req.params.id);
   if (!t) return res.status(404).json({ error: "template_not_found" });
-  res.json(t);
+  res.json(templateIn(t, req.query.lang));
 });
 
 // POST /api/qcontract/documents

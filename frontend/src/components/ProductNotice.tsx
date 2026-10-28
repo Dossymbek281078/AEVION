@@ -1,4 +1,7 @@
-import { productNotice } from "@/lib/products";
+"use client";
+
+import { productNoticeIn } from "@/lib/products";
+import { useI18nOptional } from "@/lib/i18n";
 
 /**
  * Оговорка продукта — там, где даются обещания, а не только там, где платят.
@@ -36,7 +39,8 @@ export function ProductNotice({
 }) {
   // productNotice, а не productById: с 15.09.2026 QPayNet и QContract отдельно не
   // продаются, карточек в каталоге у них нет, а оговорка на странице модуля нужна.
-  const notice = productNotice(productId);
+  const lang = useI18nOptional()?.lang ?? "ru";
+  const notice = productNoticeIn(productId, lang);
   if (!notice) return null;
   return (
     <div

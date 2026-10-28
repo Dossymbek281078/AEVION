@@ -5,6 +5,7 @@
  * Загружает задание из EXAM_TASKS по id и предоставляет редактор + грейдер.
  */
 
+import { AiBadge } from "@/components/AiBadge";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { use, useEffect, useMemo, useState } from "react";
@@ -935,6 +936,7 @@ function OpeningsAdvisorPanel({
           <div className="text-[10px] uppercase tracking-wider text-sky-700 font-bold mb-1">
             🤖 Объяснение ИИ
           </div>
+          <AiBadge />
           <div className="text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap">
             {aiText || (streaming ? "…" : "")}
           </div>

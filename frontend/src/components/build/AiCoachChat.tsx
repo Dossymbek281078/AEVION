@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useEffect, useRef, useState } from "react";
 import { buildApi, BuildApiError } from "@/lib/build/api";
 
@@ -90,6 +91,7 @@ export function AiCoachChat({
             </div>
           </div>
         )}
+        <AiBadge />
         {turns.map((t, i) => (
           <div
             key={i}

@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useEffect, useRef, useState } from "react";
 import { buildApi, BuildApiError } from "@/lib/build/api";
 import { regionLabel, WORK_MODE_LABELS, EDUCATION_LEVEL_LABELS, type WorkMode, type EducationLevel } from "@/lib/build/geo";
@@ -130,6 +131,7 @@ export function AiResumeBuilder({ onApplied }: { onApplied: () => void }) {
       </div>
 
       <div ref={scrollRef} className="mb-3 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-white/5 bg-slate-900/40 p-3">
+        <AiBadge />
         {turns.map((t, i) => (
           <div key={i} className={`flex ${t.role === "user" ? "justify-end" : "justify-start"}`}>
             <div

@@ -11,6 +11,7 @@
 // Цвета — только через токены ../../theme: контраст проверяется тестом
 // scripts/multichat-contrast.test.mjs, а сырой литерал проверка не видит.
 
+import { AiBadge } from "@/components/AiBadge";
 import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
@@ -221,6 +222,7 @@ export default function SharedConversationPage() {
                     <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, marginBottom: 8 }}>
                       {a}
                     </div>
+                    <AiBadge />
                     <div style={{ fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap", color: failed ? T.warn : T.textDim }}>
                       {failed ? "агент не ответил" : turn.content}
                     </div>

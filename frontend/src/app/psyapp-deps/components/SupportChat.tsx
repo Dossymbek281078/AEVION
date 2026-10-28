@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { ключОшибки } from "./oshibka";
@@ -91,7 +92,9 @@ export default function SupportChat({ alias }: Props) {
             ))}
           </div>
         ) : (
-          messages.map((m, i) => (
+          <>
+          <AiBadge />
+          {messages.map((m, i) => (
             <div
               key={i}
               style={{
@@ -104,7 +107,8 @@ export default function SupportChat({ alias }: Props) {
             >
               {m.content}
             </div>
-          ))
+          ))}
+        </>
         )}
         {loading ? <div style={styles.typing}>{t("chat.typing")}</div> : null}
       </div>

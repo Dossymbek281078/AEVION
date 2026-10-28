@@ -12,6 +12,7 @@
  * mismatch), and renders nothing on the server beyond an inert launcher button.
  */
 
+import { AiBadge } from "@/components/AiBadge";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
@@ -429,6 +430,7 @@ export function AgentDock() {
               : D.hint}
           </div>
         )}
+        <AiBadge />
         {log.map((m, i) => (
           <div
             key={i}

@@ -1,4 +1,5 @@
 "use client";
+import { AiBadge } from "@/components/AiBadge";
 import { стримГоден } from "./ответНеГоден";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
@@ -13171,7 +13172,7 @@ ${question.trim()}`;
                   </button>)}
                 </div>}
                 {coachChat.length>0&&<div ref={coachChatScrollRef} style={{maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:6,padding:"4px 0"}}>
-                  {coachChat.map((m,i)=><div key={i} style={{
+                  <AiBadge />{coachChat.map((m,i)=><div key={i} style={{
                     padding:"7px 10px",borderRadius:RADIUS.md,
                     background:m.role==="user"?"linear-gradient(135deg,#1e40af,#3b82f6)":"#fff",
                     color:m.role==="user"?"#fff":"#0f172a",

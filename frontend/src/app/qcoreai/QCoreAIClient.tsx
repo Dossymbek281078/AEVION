@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useCallback, useRef, useEffect, useState } from "react";
 import { renderMarkdown } from "@/lib/build/markdown";
 import { MODULE_NODES } from "@/data/pitchFacts";
@@ -520,7 +521,9 @@ export default function QCoreAIPage() {
               </div>
             </div>
           ) : (
-            visible.map((m, i) => (
+            <>
+            <AiBadge />
+            {visible.map((m, i) => (
               <div key={i} style={{ marginBottom: 14, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                 {m.role === "assistant" ? (
                   <div
@@ -566,7 +569,8 @@ export default function QCoreAIPage() {
                     : { children: m.content })}
                 />
               </div>
-            ))
+            ))}
+          </>
           )}
           {busy ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>

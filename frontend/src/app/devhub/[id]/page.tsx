@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useState, useEffect, useCallback, useRef, use, type ReactElement } from "react";
 import { getAuthToken } from "@/lib/auth";
 import dynamic from "next/dynamic";
@@ -4507,6 +4508,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>
                   {chatHistory.length > 0 && (
                     <div ref={chatLogRef} style={{ flex: "0 1 auto", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, maxHeight: "45%", paddingRight: 4 }}>
+                      <AiBadge />
                       {chatHistory.map((msg, mi) =>
                         msg.role === "user" ? (
                           <div key={mi} style={{ alignSelf: "flex-end", maxWidth: "85%", background: "#0d9488", color: "#fff", borderRadius: "12px 12px 2px 12px", padding: "8px 12px", fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>

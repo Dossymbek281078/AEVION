@@ -20,6 +20,7 @@
 // модуле нет: контраст проверяется тестом, а литерал проверка не видит).
 // Страница переведена на светлый газетный эталон AEVION 2026-07-27.
 
+import { AiBadge } from "@/components/AiBadge";
 import { useEffect, useState, type ReactNode } from "react";
 import { useI18nOptional } from "@/lib/i18n";
 import { tm } from "./mcText";
@@ -642,6 +643,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                   {r.provider || "—"}
                 </span>
               </div>
+              <AiBadge />
               <p style={{ marginTop: 10, whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.65, color: T.textDim }}>
                 {r.ok ? (
                   разметкаОтвета(r.reply ?? "")

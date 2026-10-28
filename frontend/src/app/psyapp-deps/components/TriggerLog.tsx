@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
-import { ошибкаСервера, НЕТ_СВЯЗИ } from "./oshibka";
+import { ключОшибки } from "./oshibka";
+import { usePsyT, type Key } from "../i18n";
 
 type TriggerType = "craving" | "stress" | "social" | "emotion";
 
@@ -20,11 +21,11 @@ interface Props {
   alias: string;
 }
 
-const TRIGGER_OPTIONS: { value: TriggerType; label: string; emoji: string }[] = [
-  { value: "craving", label: "Тяга", emoji: "🔥" },
-  { value: "stress", label: "Стресс", emoji: "⚡" },
-  { value: "social", label: "Соц. ситуация", emoji: "👥" },
-  { value: "emotion", label: "Эмоция", emoji: "🌊" },
+const TRIGGER_OPTIONS: { value: TriggerType; label: Key; emoji: string }[] = [
+  { value: "craving", label: "trig.craving", emoji: "🔥" },
+  { value: "stress", label: "trig.stress", emoji: "⚡" },
+  { value: "social", label: "trig.social", emoji: "👥" },
+  { value: "emotion", label: "trig.emotion", emoji: "🌊" },
 ];
 
 export default function TriggerLog({ alias }: Props) {
@@ -34,6 +35,7 @@ export default function TriggerLog({ alias }: Props) {
   const [copedHow, setCopedHow] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t, lang } = usePsyT();
   const [loadFailed, setLoadFailed] = useState(false);
 
   const [triggers, setTriggers] = useState<TriggerRecord[]>([]);
@@ -81,7 +83,7 @@ export default function TriggerLog({ alias }: Props) {
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setError(ошибкаСервера(d.error, "Не получилось записать. Попробуй ещё раз."));
+        setError(t(ключОшибки(d.error, "trig.fail")));
         return;
       }
       setNote("");
@@ -90,7 +92,7 @@ export default function TriggerLog({ alias }: Props) {
       setTriggerType("craving");
       loadTriggers();
     } catch {
-      setError(НЕТ_СВЯЗИ);
+      setError(t("err.offline"));
     } finally {
       setSubmitting(false);
     }
@@ -98,9 +100,9 @@ export default function TriggerLog({ alias }: Props) {
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.title}>Журнал триггеров</h2>
+      <h2 style={styles.title}>{t("trig.title")}</h2>
       <p style={styles.hint}>
-        Записывай моменты, когда сильно тянет. Это снижает власть триггера над тобой.
+        {t("trig.hint")}
       </p>
 
       <form onSubmit={handleSubmit} style={styles.form}>
@@ -120,7 +122,7 @@ export default function TriggerLog({ alias }: Props) {
                 }}
               >
                 <span>{o.emoji}</span>
-                <span>{o.label}</span>
+                <span>{t(o.label)}</span>
               </button>
             );
           })}
@@ -128,7 +130,7 @@ export default function TriggerLog({ alias }: Props) {
 
         <div style={styles.field}>
           <div style={styles.intensityRow}>
-            <label style={styles.label}>Интенсивность</label>
+            <label style={styles.label}>{t("trig.intensity")}</label>
             <span style={styles.intensityValue}>{intensity} / 10</span>
           </div>
           <input
@@ -140,29 +142,29 @@ export default function TriggerLog({ alias }: Props) {
             style={styles.slider}
           />
           <div style={styles.intensityScale}>
-            <span>лёгкая</span>
-            <span>средняя</span>
-            <span>невыносимая</span>
+            <span>{t("trig.light")}</span>
+            <span>{t("trig.medium")}</span>
+            <span>{t("trig.unbearable")}</span>
           </div>
         </div>
 
         <div style={styles.field}>
-          <label style={styles.label}>Что произошло? (опц.)</label>
+          <label style={styles.label}>{t("trig.what")}</label>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 500))}
-            placeholder="Контекст, мысли, ощущения…"
+            placeholder={t("trig.whatPh")}
             style={styles.textarea}
             rows={2}
           />
         </div>
 
         <div style={styles.field}>
-          <label style={styles.label}>Как справился? (опц.)</label>
+          <label style={styles.label}>{t("trig.coped")}</label>
           <textarea
             value={copedHow}
             onChange={(e) => setCopedHow(e.target.value.slice(0, 500))}
-            placeholder="Дыхание, прогулка, позвонил другу…"
+            placeholder={t("trig.copedPh")}
             style={styles.textarea}
             rows={2}
           />
@@ -171,32 +173,32 @@ export default function TriggerLog({ alias }: Props) {
         {error ? <div style={styles.error}>{error}</div> : null}
 
         <button type="submit" disabled={submitting} style={styles.submit}>
-          {submitting ? "Сохраняю…" : "Записать триггер"}
+          {submitting ? t("trig.saving") : t("trig.save")}
         </button>
       </form>
 
       <div style={styles.divider} />
 
-      <h3 style={styles.subtitle}>Последние 10 записей</h3>
+      <h3 style={styles.subtitle}>{t("trig.last10")}</h3>
       {loading ? (
-        <p style={styles.empty}>Загружаю…</p>
+        <p style={styles.empty}>{t("page.loading")}</p>
       ) : loadFailed && triggers.length === 0 ? (
-        <p style={styles.empty}>Не удалось загрузить журнал. Обнови страницу — записи на сервере не пропали.</p>
+        <p style={styles.empty}>{t("trig.loadFail")}</p>
       ) : triggers.length === 0 ? (
-        <p style={styles.empty}>Пока пусто. Первая запись — самая важная.</p>
+        <p style={styles.empty}>{t("trig.empty")}</p>
       ) : (
         <ul style={styles.list}>
-          {triggers.map((t) => {
-            const opt = TRIGGER_OPTIONS.find((o) => o.value === t.trigger_type);
+          {triggers.map((rec) => {
+            const opt = TRIGGER_OPTIONS.find((o) => o.value === rec.trigger_type);
             return (
-              <li key={t.id} style={styles.item}>
+              <li key={rec.id} style={styles.item}>
                 <div style={styles.itemHeader}>
                   <span style={styles.itemType}>
-                    {opt?.emoji} {opt?.label}
+                    {opt?.emoji} {opt ? t(opt.label) : rec.trigger_type}
                   </span>
-                  <span style={styles.itemIntensity}>{t.intensity}/10</span>
+                  <span style={styles.itemIntensity}>{rec.intensity}/10</span>
                   <span style={styles.itemDate}>
-                    {new Date(t.logged_at).toLocaleString("ru-RU", {
+                    {new Date(rec.logged_at).toLocaleString((({ ru: "ru-RU", en: "en-US", kk: "kk-KZ" }) as Record<string, string>)[lang] ?? "en-US", {
                       day: "2-digit",
                       month: "short",
                       hour: "2-digit",
@@ -204,9 +206,9 @@ export default function TriggerLog({ alias }: Props) {
                     })}
                   </span>
                 </div>
-                {t.note ? <div style={styles.itemNote}>{t.note}</div> : null}
-                {t.coped_how ? (
-                  <div style={styles.itemCoped}>↳ {t.coped_how}</div>
+                {rec.note ? <div style={styles.itemNote}>{rec.note}</div> : null}
+                {rec.coped_how ? (
+                  <div style={styles.itemCoped}>↳ {rec.coped_how}</div>
                 ) : null}
               </li>
             );

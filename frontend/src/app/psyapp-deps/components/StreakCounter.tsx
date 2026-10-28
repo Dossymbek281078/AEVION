@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
-import { ошибкаСервера, НЕТ_СВЯЗИ } from "./oshibka";
+import { ключОшибки } from "./oshibka";
+import { usePsyT, dayKey, type Key } from "../i18n";
 
 interface Props {
   alias: string;
@@ -12,12 +13,6 @@ interface Props {
   startedAt: string;
   onRelapse: () => void;
 }
-
-const ADDICTION_LABEL: Record<Props["addiction"], string> = {
-  alcohol: "алкоголя",
-  smoking: "курения",
-  other: "зависимости",
-};
 
 export default function StreakCounter({
   alias,
@@ -31,6 +26,7 @@ export default function StreakCounter({
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t, lang } = usePsyT();
 
   async function handleRelapse() {
     setLoading(true);
@@ -46,7 +42,7 @@ export default function StreakCounter({
       );
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setError(ошибкаСервера(d.error, "Не получилось. Попробуй ещё раз."));
+        setError(t(ключОшибки(d.error, "streak.fail")));
         setLoading(false);
         return;
       }
@@ -54,7 +50,7 @@ export default function StreakCounter({
       setReason("");
       onRelapse();
     } catch {
-      setError(НЕТ_СВЯЗИ);
+      setError(t("err.offline"));
     } finally {
       setLoading(false);
     }
@@ -64,24 +60,24 @@ export default function StreakCounter({
     <div style={styles.card}>
       <div style={styles.topRow}>
         <span style={styles.aliasChip}>{alias}</span>
-        <span style={styles.addictionChip}>без {ADDICTION_LABEL[addiction]}</span>
+        <span style={styles.addictionChip}>{t(`streak.without.${addiction}` as Key)}</span>
       </div>
 
       <div style={styles.bigNumber}>{streakDays}</div>
       <div style={styles.bigUnit}>
-        {dayWord(streakDays)} подряд
+        {t("streak.inARow", { days: t(dayKey(lang, streakDays)) })}
       </div>
 
       <div style={styles.metaRow}>
         <span style={styles.metaItem}>
-          С {new Date(startedAt).toLocaleDateString("ru-RU")}
+          {t("streak.since", { date: new Date(startedAt).toLocaleDateString((({ ru: "ru-RU", en: "en-US", kk: "kk-KZ" }) as Record<string, string>)[lang] ?? "en-US") })}
         </span>
         {totalRelapses > 0 ? (
           <span style={styles.metaItem}>
-            Перезапусков: {totalRelapses} — это часть пути.
+            {t("streak.restarts", { n: totalRelapses })}
           </span>
         ) : (
-          <span style={styles.metaItem}>Без перезапусков. Уверенно.</span>
+          <span style={styles.metaItem}>{t("streak.noRestarts")}</span>
         )}
       </div>
 
@@ -91,12 +87,12 @@ export default function StreakCounter({
           onClick={() => setConfirmStep(1)}
           style={styles.relapseBtnSubtle}
         >
-          Я сорвался
+          {t("streak.relapsed")}
         </button>
       ) : confirmStep === 1 ? (
         <div style={styles.confirmBox}>
           <p style={styles.confirmText}>
-            Срыв — не провал. Но обнулим счётчик, чтобы быть честным с собой?
+            {t("streak.q1")}
           </p>
           <div style={styles.confirmRow}>
             <button
@@ -104,26 +100,26 @@ export default function StreakCounter({
               onClick={() => setConfirmStep(0)}
               style={styles.cancelBtn}
             >
-              Нет, я продолжаю
+              {t("streak.keepGoing")}
             </button>
             <button
               type="button"
               onClick={() => setConfirmStep(2)}
               style={styles.confirmBtn}
             >
-              Да, обнулить
+              {t("streak.reset")}
             </button>
           </div>
         </div>
       ) : (
         <div style={styles.confirmBox}>
           <p style={styles.confirmText}>
-            Последнее подтверждение. Что стало триггером? (необязательно)
+            {t("streak.q2")}
           </p>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value.slice(0, 500))}
-            placeholder="Например: стресс на работе, встреча с друзьями…"
+            placeholder={t("streak.reasonPh")}
             style={styles.reasonInput}
             rows={2}
           />
@@ -139,7 +135,7 @@ export default function StreakCounter({
               style={styles.cancelBtn}
               disabled={loading}
             >
-              Передумал
+              {t("streak.changedMind")}
             </button>
             <button
               type="button"
@@ -147,22 +143,13 @@ export default function StreakCounter({
               style={{ ...styles.confirmBtn, opacity: loading ? 0.6 : 1 }}
               disabled={loading}
             >
-              {loading ? "Обнуляю…" : "Подтвердить и начать заново"}
+              {loading ? t("streak.resetting") : t("streak.confirm")}
             </button>
           </div>
         </div>
       )}
     </div>
   );
-}
-
-function dayWord(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return "дней";
-  if (mod10 === 1) return "день";
-  if (mod10 >= 2 && mod10 <= 4) return "дня";
-  return "дней";
 }
 
 const styles: Record<string, React.CSSProperties> = {

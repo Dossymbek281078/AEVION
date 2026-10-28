@@ -1,13 +1,13 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ошибкаСервера, НЕТ_СВЯЗИ } from "../oshibka";
+import { ключОшибки } from "../oshibka";
+import { tPsy, PSY_KEYS, PSY_DICT, AFFIRMATIONS, dayKey } from "../../i18n";
 
 /*
  * 28.10.2026 (окно «Приложения-2»). Коды ниже — дословно из ответов прода 7b16f03ce на неверный ввод
- * (проба curl 28.10: 10 из 10 ответили 400/404). Человек не должен видеть их сырыми.
+ * (проба curl 28.10: 10 из 10 ответили 400/404). Человек не должен видеть их сырыми — ни на ru, ни на en/kk.
  */
-const ЗАПАСНОЙ = "запасной текст";
 const КОДЫ_ПРОДА = [
   "alias must be 2..40 chars [a-z0-9_-]",
   "alias invalid (2..40 chars [a-z0-9_-])",
@@ -20,33 +20,75 @@ const КОДЫ_ПРОДА = [
   "message required",
   "invalid_json",
 ];
+const ПАПКА = join(process.cwd(), "src/app/psyapp-deps");
+const КОМПОНЕНТЫ = ["Onboarding.tsx", "StreakCounter.tsx", "SupportChat.tsx", "TriggerLog.tsx", "Affirmation.tsx"];
 
 describe("PsyApp: ошибки сервера человеческим текстом", () => {
-  test.each(КОДЫ_ПРОДА)("«%s» → русский текст, не сам код и не запасной", (код) => {
-    const т = ошибкаСервера(код, ЗАПАСНОЙ);
-    expect(т).not.toBe(код);
-    expect(т).not.toBe(ЗАПАСНОЙ);
-    expect(т).toMatch(/[а-яё]/i);
+  test.each(КОДЫ_ПРОДА)("«%s» → свой ключ err.*, не запасной", (код) => {
+    expect(ключОшибки(код, "onb.fail")).toMatch(/^err\./);
   });
 
-  test("неизвестный код и пустота → запасной текст, сырое не показываем", () => {
-    expect(ошибкаСервера("internal error", ЗАПАСНОЙ)).toBe(ЗАПАСНОЙ);
-    expect(ошибкаСервера(undefined, ЗАПАСНОЙ)).toBe(ЗАПАСНОЙ);
-    expect(ошибкаСервера({ x: 1 }, ЗАПАСНОЙ)).toBe(ЗАПАСНОЙ);
+  test("неизвестный код и пустота → запасной ключ места", () => {
+    expect(ключОшибки("internal error", "trig.fail")).toBe("trig.fail");
+    expect(ключОшибки(undefined, "trig.fail")).toBe("trig.fail");
+    expect(ключОшибки({ x: 1 }, "chat.unavailable")).toBe("chat.unavailable");
   });
 
   test("🔴 компоненты не показывают d.error и e.message сырыми; сбой загрузки журнала не выглядит пустым журналом", () => {
-    const папка = join(process.cwd(), "src/app/psyapp-deps/components");
-    for (const ф of ["Onboarding.tsx", "StreakCounter.tsx", "SupportChat.tsx", "TriggerLog.tsx"]) {
-      const s = readFileSync(join(папка, ф), "utf8");
-      expect(s, ф).not.toMatch(/setError\(d\.error \|\|/);
-      expect(s, ф).not.toMatch(/\.message : "Сеть недоступна"/);
-      expect(s, ф).toContain("НЕТ_СВЯЗИ");
+    for (const ф of КОМПОНЕНТЫ.slice(0, 4)) {
+      const s = readFileSync(join(ПАПКА, "components", ф), "utf8");
+      expect(s, ф).not.toMatch(/setError\(d\.error/);
+      expect(s, ф).not.toMatch(/\.message : /);
+      expect(s, ф).toContain('setError(t("err.offline"))');
     }
-    const t = readFileSync(join(папка, "TriggerLog.tsx"), "utf8");
-    expect(t).not.toMatch(/catch \{\s*\/\/ silent/);
+    const t = readFileSync(join(ПАПКА, "components/TriggerLog.tsx"), "utf8");
+    expect(t).not.toMatch(/\/\/ silent/);
     expect(t.indexOf("loadFailed && triggers.length === 0")).toBeGreaterThan(0);
-    expect(t.indexOf("loadFailed && triggers.length === 0")).toBeLessThan(t.indexOf("Пока пусто. Первая запись"));
-    expect(НЕТ_СВЯЗИ).toMatch(/[а-яё]/i);
+    expect(t.indexOf("loadFailed && triggers.length === 0")).toBeLessThan(t.indexOf('t("trig.empty")'));
+  });
+});
+
+describe("PsyApp: ru/en/kk", () => {
+  test("у всех трёх языков все ключи непустые; en и kk не совпадают с ru", () => {
+    for (const lang of ["ru", "en", "kk"]) for (const k of PSY_KEYS) expect(PSY_DICT[lang]![k].trim(), `${lang}:${k}`).not.toBe("");
+    const одинаковых = (lang: string) => PSY_KEYS.filter((k) => PSY_DICT[lang]![k] === PSY_DICT.ru![k] && /[а-яё]/i.test(PSY_DICT.ru![k]));
+    expect(одинаковых("en")).toEqual([]);
+    // kk пишется кириллицей; совпадения допустимы только для слов, общих с русским
+    expect(одинаковых("kk").filter((k) => !["onb.alcohol", "trig.stress", "trig.emotion"].includes(k))).toEqual([]);
+  });
+
+  test("подстановки: число дней и склонение", () => {
+    expect(tPsy("ru", "streak.inARow", { days: tPsy("ru", dayKey("ru", 21)) })).toBe("день подряд");
+    expect(tPsy("ru", dayKey("ru", 3))).toBe("дня");
+    expect(tPsy("ru", dayKey("ru", 11))).toBe("дней");
+    expect(tPsy("en", dayKey("en", 1))).toBe("day");
+    expect(tPsy("en", "streak.restarts", { n: 2 })).toBe("Restarts: 2 — that's part of the path.");
+  });
+
+  test("аффирмации: en и kk — по 10, сервер отдаёт только ru", () => {
+    expect(AFFIRMATIONS.en).toHaveLength(10);
+    expect(AFFIRMATIONS.kk).toHaveLength(10);
+    expect(AFFIRMATIONS.ru).toBeUndefined();
+  });
+
+  test("🔴 на экране нет русского текста мимо словаря (JSX-текст, подписи, placeholder, aria-label, title)", () => {
+    for (const ф of [...КОМПОНЕНТЫ.map((к) => `components/${к}`), "page.tsx"]) {
+      const s = readFileSync(join(ПАПКА, ф), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      const плохие = s.split("\n").filter((l) =>
+        />[^<{}]*[А-Яа-яЁё][^<{}]*</.test(l) ||
+        /(placeholder|aria-label|title|label|hint)[=:]\s*"[^"]*[А-Яа-яЁё]/.test(l) ||
+        /^\s*[^<>{}=:/*]*[А-Яа-яЁё]{3,}[^<>{}=:]*$/.test(l) && !/[a-zA-Z_]+[А-Яа-яЁё]|[А-Яа-яЁё]+[A-Z_(]|ключОшибки|местные|ТИПЫ/.test(l),
+      );
+      expect(плохие, ф).toEqual([]);
+    }
+  });
+
+  test("🔴 layout и og не обещают того, чего нет (ML-детекция, группы, эскалация к специалисту)", () => {
+    for (const ф of ["layout.tsx", "opengraph-image.tsx"]) {
+      const s = readFileSync(join(ПАПКА, ф), "utf8").replace(/^\s*\/\/.*$/gm, "");
+      expect(s, ф).not.toMatch(/ML trigger|trigger-детек|групп[ыа] поддержки|group support|escalation|эскалац|early-warning|Bridge → QGood/i);
+    }
   });
 });

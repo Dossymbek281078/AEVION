@@ -8,13 +8,14 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://a
 export const metadata: Metadata = {
   title: "PsyApp — Dependencies Exit",
   description:
-    "Платформа выхода из зависимостей: ML trigger-детекция, анонимные группы поддержки, профилактика срывов, эскалация к QGood-специалисту.",
+    // 28.10.2026: прежде обещала ML-детекцию триггеров, группы поддержки и эскалацию к специалисту — этого нет.
+    "Анонимная помощь в выходе из зависимостей: счётчик дней, журнал триггеров, ИИ-поддержка и аффирмация дня. Без имени и email.",
   alternates: { canonical: `${SITE}/psyapp-deps` },
   openGraph: {
     type: "website",
     url: `${SITE}/psyapp-deps`,
     title: "PsyApp — Dependencies Exit",
-    description: "Behavioral analytics for addiction recovery · anonymous group support · QGood specialist escalation.",
+    description: "Anonymous help with quitting addictions: day counter, trigger journal, AI support and a daily affirmation. No name, no email.",
     siteName: "AEVION",
   },
   robots: { index: true, follow: true },

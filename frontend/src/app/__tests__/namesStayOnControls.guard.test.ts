@@ -33,7 +33,9 @@ const ЗАКРЕПЛЕНО: Array<[string, string[]]> = [
   ["qcoreai/compare/page.tsx", ["Прогон A", "Прогон B"]],
   ["ventures/IdeaMarket.tsx", ["Название идеи", "Питч идеи", "Модель бизнеса", "Потолок рынка"]],
   ["qnews/page.tsx", ["В закладки:"]],
-  ["psyapp-deps/components/Onboarding.tsx", ["Сгенерировать новый псевдоним"]],
+  // 28.10.2026: PsyApp на словаре ru/en/kk — имя в i18n.ts, кнопка берёт его ключом
+  ["psyapp-deps/i18n.ts", ["Сгенерировать новый псевдоним", "Generate a new alias"]],
+  ["psyapp-deps/components/Onboarding.tsx", ["aria-label={t(\"onb.regen\")}"]],
   ["qlife/components/PlanCard.tsx", ['htmlFor="qlife-age"', 'id="qlife-age"']],
   ["devhub/i18n.ts", ["snip.codeAria"]],
   // Добавлено 04.09.2026: класс «одно имя у нескольких действий».

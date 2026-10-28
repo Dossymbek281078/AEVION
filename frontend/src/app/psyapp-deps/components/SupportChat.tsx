@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
-import { ошибкаСервера, НЕТ_СВЯЗИ } from "./oshibka";
+import { ключОшибки } from "./oshibka";
+import { usePsyT, type Key } from "../i18n";
 
 interface Message {
   role: "user" | "assistant";
@@ -14,17 +15,14 @@ interface Props {
   alias: string;
 }
 
-const STARTERS = [
-  "Сильно тянет, не справляюсь",
-  "Срыв близко, что делать?",
-  "Хочу выговориться",
-];
+const STARTERS: Key[] = ["chat.starter1", "chat.starter2", "chat.starter3"];
 
 export default function SupportChat({ alias }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = usePsyT();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function send(text: string) {
@@ -41,18 +39,18 @@ export default function SupportChat({ alias }: Props) {
         body: JSON.stringify({ message, alias }),
       });
       const d = await r.json();
-      const reply = (d.reply as string | undefined) ?? "Сейчас не получается ответить. Сделай один маленький шаг прямо сейчас — выпей воды и подыши.";
+      const reply = (d.reply as string | undefined) ?? t("chat.noReply");
       setMessages((m) => [...m, { role: "assistant", content: reply, ts: Date.now() }]);
       if (!r.ok && !d.reply) {
-        setError(ошибкаСервера(d.error, "Помощник временно недоступен. Попробуй через минуту."));
+        setError(t(ключОшибки(d.error, "chat.unavailable")));
       }
     } catch {
-      setError(НЕТ_СВЯЗИ);
+      setError(t("err.offline"));
       setMessages((m) => [
         ...m,
         {
           role: "assistant",
-          content: "Связь прервана. Сделай один шаг прямо сейчас: 4 медленных вдоха, ладонь на грудь.",
+          content: t("chat.lost"),
           ts: Date.now(),
         },
       ]);
@@ -71,23 +69,23 @@ export default function SupportChat({ alias }: Props) {
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.title}>AI-поддержка</h2>
+      <h2 style={styles.title}>{t("chat.title")}</h2>
       <p style={styles.hint}>
-        Мягкий советник. Не диагноз, не терапия — просто рядом, когда нужно. До 5 запросов в минуту.
+        {t("chat.sub")}
       </p>
 
       <div ref={scrollRef} style={styles.thread}>
         {messages.length === 0 ? (
           <div style={styles.starters}>
-            <p style={styles.startersTitle}>Начни с чего-то простого:</p>
+            <p style={styles.startersTitle}>{t("chat.startersTitle")}</p>
             {STARTERS.map((s) => (
               <button
                 key={s}
                 type="button"
-                onClick={() => send(s)}
+                onClick={() => send(t(s))}
                 style={styles.starterBtn}
               >
-                {s}
+                {t(s)}
               </button>
             ))}
           </div>
@@ -107,7 +105,7 @@ export default function SupportChat({ alias }: Props) {
             </div>
           ))
         )}
-        {loading ? <div style={styles.typing}>советник печатает…</div> : null}
+        {loading ? <div style={styles.typing}>{t("chat.typing")}</div> : null}
       </div>
 
       {error ? <div style={styles.error}>{error}</div> : null}
@@ -117,13 +115,14 @@ export default function SupportChat({ alias }: Props) {
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Расскажи, что происходит…"
+          placeholder={t("chat.placeholder")}
           style={styles.input}
           maxLength={1000}
           disabled={loading}
         />
         <button
           type="submit"
+          aria-label={t("chat.send")}
           disabled={loading || !draft.trim()}
           style={{
             ...styles.send,

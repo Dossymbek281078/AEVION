@@ -11,6 +11,7 @@ import StreakCounter from "./components/StreakCounter";
 import TriggerLog from "./components/TriggerLog";
 import SupportChat from "./components/SupportChat";
 import Affirmation from "./components/Affirmation";
+import { usePsyT, type Key } from "./i18n";
 
 type Addiction = "alcohol" | "smoking" | "other";
 
@@ -27,7 +28,10 @@ export default function PsyAppDepsPage() {
   const [user, setUser] = useState<UserState | null>(null);
   const [streakDays, setStreakDays] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
-  const [storageWarning, setStorageWarning] = useState<string | null>(null);
+  const [storageWarning, setStorageWarning] = useState<boolean>(false);
+  // Сервер не ответил на чтение пути — прежде молча показывался онбординг, будто счёта нет.
+  const [offline, setOffline] = useState<boolean>(false);
+  const { t } = usePsyT();
 
   // Hydrate alias from localStorage on mount.
   useEffect(() => {
@@ -47,6 +51,7 @@ export default function PsyAppDepsPage() {
         cache: "no-store",
       });
       const d = await r.json();
+      setOffline(false);
       if (r.ok && d.ok && d.user) {
         setUser(d.user as UserState);
         setStreakDays(Number(d.streak_days ?? 0));
@@ -61,7 +66,7 @@ export default function PsyAppDepsPage() {
         setAlias(null);
       }
     } catch {
-      // silent — server probably cold
+      setOffline(true);
     }
   }, []);
 
@@ -71,11 +76,7 @@ export default function PsyAppDepsPage() {
 
   function handleStarted(newAlias: string, storage?: string) {
     setAlias(newAlias);
-    setStorageWarning(
-      storage === "memory"
-        ? "Хранилище временно недоступно. Счёт начат, но НЕ переживёт перезапуск сервиса — зайдите позже и начните заново, чтобы он сохранился."
-        : null,
-    );
+    setStorageWarning(storage === "memory");
   }
 
   function handleRelapse() {
@@ -108,7 +109,7 @@ export default function PsyAppDepsPage() {
             <Link href="/qlife" style={styles.navLink}>QLife</Link>
             {user ? (
               <button type="button" onClick={handleSignOut} style={styles.signOutBtn}>
-                Сменить псевдоним
+                {t("page.changeAlias")}
               </button>
             ) : null}
             <ModulePricingChip moduleId="psyapp-deps" theme="dark" />
@@ -118,11 +119,11 @@ export default function PsyAppDepsPage() {
 
       {/* Hero */}
       <section style={styles.hero}>
-        <p style={styles.heroEyebrow}>Помощь выхода из зависимостей</p>
+        <p style={styles.heroEyebrow}>{t("page.eyebrow")}</p>
         <h1 style={styles.heroTitle}>
-          Ты сильнее.
+          {t("page.h1a")}
           <br />
-          <span style={styles.heroGradient}>Один день — это победа.</span>
+          <span style={styles.heroGradient}>{t("page.h1b")}</span>
         </h1>
       </section>
 
@@ -139,11 +140,13 @@ export default function PsyAppDepsPage() {
               fontSize: 14, lineHeight: 1.55,
             }}
           >
-            <b>Счёт сохранён не насовсем.</b> {storageWarning}
+            <b>{t("page.storageTitle")}</b> {t("page.storageWarn")}
           </div>
         )}
         {loading ? (
-          <div style={styles.placeholder}>Загружаю…</div>
+          <div style={styles.placeholder}>{t("page.loading")}</div>
+        ) : offline && alias && !user ? (
+          <div role="alert" style={styles.placeholder}>{t("page.offline")}</div>
         ) : !user ? (
           <Onboarding onStarted={handleStarted} />
         ) : (
@@ -173,8 +176,7 @@ export default function PsyAppDepsPage() {
         {/* 144г (18.10.2026): абзац героя — под онбордингом: на 390×844 карточка «Начнём путь» начиналась на ~700,
             её первое поле — за кадром (844); заголовок и действие теперь рядом. */}
         <p style={styles.heroSub}>
-          Алкоголь, курение или другие зависимости — путь один: маленькие шаги, поддержка и
-          честность с собой. Без диагнозов, без осуждения, без следов.
+          {t("page.heroSub")}
         </p>
         <CommunityStatsRow />
       </section>
@@ -182,10 +184,9 @@ export default function PsyAppDepsPage() {
       {/* Care reminder */}
       <section style={styles.section}>
         <div style={styles.careCard}>
-          <strong style={styles.careTitle}>Это поддержка, не лечение.</strong>
+          <strong style={styles.careTitle}>{t("page.careTitle")}</strong>
           <p style={styles.careText}>
-            При тяжёлых симптомах (галлюцинации, тремор, мысли о самоповреждении) — обратись
-            к врачу или на горячую линию помощи. PsyApp идёт рядом, не вместо специалиста.
+            {t("page.careText")}
           </p>
         </div>
       </section>
@@ -202,14 +203,14 @@ export default function PsyAppDepsPage() {
           moduleId="psyapp-deps"
           noun="concept/messages"
           accent="sky"
-          sectionTitle="Recovery concept board"
-          sectionHint="Что реально помогало в выходе из зависимости? Какие триггеры опаснее всего?"
+          sectionTitle={t("page.boardTitle")}
+          sectionHint={t("page.boardHint")}
           titleField="idea"
           summaryField="rationale"
           fields={[
-            { key: "idea", label: "Идея / практика / триггер", placeholder: "напр.: HALT-чек перед срывом", required: true },
-            { key: "rationale", label: "Что это даёт", type: "textarea", placeholder: "Как это работает, личный опыт" },
-            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            { key: "idea", label: t("page.boardIdea"), placeholder: t("page.boardIdeaPh"), required: true },
+            { key: "rationale", label: t("page.boardWhy"), type: "textarea", placeholder: t("page.boardWhyPh") },
+            { key: "author", label: t("page.boardAuthor"), placeholder: "anon" },
           ]}
         />
       </section>
@@ -346,8 +347,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
+const ТИПЫ = ["craving", "stress", "social", "emotion"];
+
 function CommunityStatsRow() {
   const [stats, setStats] = useState<{ total_users: number; top_trigger_type: string | null } | null>(null);
+  const { t } = usePsyT();
   useEffect(() => {
     let cancelled = false;
     fetch(apiUrl("/api/psyapp-deps/stats"), { cache: "no-store" })
@@ -369,10 +373,10 @@ function CommunityStatsRow() {
   const labStyle: React.CSSProperties = { fontSize: 10, color: "#a18962", marginTop: 4, textTransform: "uppercase", letterSpacing: "0.06em" };
   return (
     <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
-      <div style={cellStyle}><div style={valStyle}>{stats.total_users.toLocaleString()}</div><div style={labStyle}>в комьюнити</div></div>
+      <div style={cellStyle}><div style={valStyle}>{stats.total_users.toLocaleString()}</div><div style={labStyle}>{t("page.statsCommunity")}</div></div>
       {/* «Средний streak» снят 20.10.2026: считался по всем аккаунтам, включая брошенные — мерил заброшенность. */}
       {stats.top_trigger_type && (
-        <div style={cellStyle}><div style={valStyle}>{stats.top_trigger_type}</div><div style={labStyle}>топ-триггер</div></div>
+        <div style={cellStyle}><div style={valStyle}>{ТИПЫ.includes(stats.top_trigger_type) ? t(`trig.${stats.top_trigger_type}` as Key) : stats.top_trigger_type}</div><div style={labStyle}>{t("page.statsTopTrigger")}</div></div>
       )}
     </div>
   );

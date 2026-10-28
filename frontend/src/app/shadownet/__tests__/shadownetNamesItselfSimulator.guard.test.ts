@@ -23,8 +23,11 @@ describe("ShadowNet: без обещаний сети и «максимальн�
       expect(src).not.toMatch(/максимальная приватность|maximum privacy|Alternative Private Network|mesh-обмен|off-grid|mesh fallback/i);
     });
   }
-  it("кнопка Pro и title называют симулятор", () => {
-    expect(поверхности[0][1]).toContain("ShadowNet Pro — расширенный симулятор приватности");
+  // 28.10.2026 (Приложения-2): «ShadowNet Pro» снят — такого Pro в продаже нет, кнопка ведёт на подписку Планеты
+  // (сторож app/__tests__/knopkaOplatyNeObeshchaetPro). Кнопка теперь с подписью по умолчанию.
+  it("кнопка без несуществующего Pro, title называет симулятор", () => {
+    expect(поверхности[0][1]).toContain('<PaddleUpgradeButton variant="banner" appId="shadownet" />');
+    expect(поверхности[0][1]).not.toMatch(/ShadowNet Pro/);
     expect(поверхности[1][1]).toContain("ShadowNet — симулятор приватной сети");
   });
   it("реестр модулей (/api/pricing, /api/globus/projects) — тоже симулятор", () => {

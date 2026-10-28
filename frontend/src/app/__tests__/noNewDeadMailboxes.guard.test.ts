@@ -17,6 +17,14 @@
  * `feedback_promised_channel_never_verified` (там было 36 упоминаний). Сегодня
  * их 34 — то есть за это время ничего не починено и не выросло.
  *
+ * 28.10.2026 [Точно nslookup -type=MX aevion.app 8.8.8.8]: MX ПОЯВИЛСЯ — mx1/mx2.improvmx.com.
+ * Но доставка на support@, security@, privacy@, billing@ НЕ подтверждена: окно Почты
+ * (Gmail API, 28.10) видело пересылку improvmx только на случайные адреса до 23.10, на эти
+ * четыре — ни одного письма; контроль пробными письмами ждёт слова основателя. До него
+ * адреса считаем недоставляемыми, а список ниже ЗАМОРОЖЕН НА ЗАМЕРЕ 28.10 (29 файлов):
+ * сторож стоял красным с давних страниц, которых никто не вычёркивал, и его перестали читать.
+ * Подтвердят доставку — сторож снимается целиком; появится новый адрес — он красный.
+ *
  * Чинится не кодом, а почтой домена: это решение основателя. Пока не починено,
  * этот сторож держит РАЗМЕР беды — чтобы новые страницы не добавляли адресов,
  * которых потом никто не найдёт. Список ниже заморожен; уменьшать его можно и
@@ -31,17 +39,36 @@ const КОРЕНЬ = join(process.cwd(), "src/app");
 
 /** Страницы, где адрес на мёртвом домене уже стоит. Список только сокращается. */
 const ИЗВЕСТНЫЕ = new Set([
+  "apps/page.tsx",
   "build/onboarding/page.tsx",
   "constitution/pricing/page.tsx",
   "constitution/showcase/page.tsx",
+  "cyberchess/OshibkaForma.tsx",
+  "data-deletion/page.tsx",
   "developers/fintech/troubleshooting/page.tsx",
+  "developers/page.tsx",
   "devhub/[id]/page.tsx",
-  // pricing/affiliate-dashboard/page.tsx убрана 01.09.2026: обращение партнёра уходило в пустоту; то же.
-  // pricing/glossary/page.tsx убрана 01.09.2026: предложение термина уходило в пустоту; ссылка ведёт на форму с пометкой темы.
-  // pricing/page.tsx убрана 01.09.2026: подпись под FAQ звала на mailto; ссылка ведёт на форму, подпись заведена ключом faq.contactCta.
-  // pricing/refund-policy/page.tsx убрана 01.09.2026: страница возврата денег звала на ящик домена без MX — и это стояло ШАГОМ 1 процедуры; шесть мест на двух языках переведены на форму связи.
+  "global-error.tsx",
+  "help/page.tsx",
+  "investor/page.tsx",
+  "layout.tsx",
+  "partner/page.tsx",
+  "partner/print/page.tsx",
+  "pilot/page.tsx",
+  "planet/page.tsx",
+  "press/page.tsx",
+  "pricing/checkout/success/page.tsx",
+  "pricing/security/page.tsx",
+  "privacy/page.tsx",
+  "proof/page.tsx",
   "qcoreai/budget/page.tsx",
+  "qstore/QStoreNotify.tsx",
   "qstore/page.tsx",
+  "security/layout.tsx",
+  "security/page.tsx",
+  "studio/page.tsx",
+  "support/page.tsx",
+  "terms/page.tsx",
 ]);
 
 function страницы(каталог: string, префикс = ""): string[] {

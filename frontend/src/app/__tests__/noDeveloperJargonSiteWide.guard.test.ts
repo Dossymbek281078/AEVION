@@ -99,8 +99,6 @@ const OZHIDAYUT = new Set([
   "app/qright/page.tsx",
   "app/qright/webhooks/[id]/page.tsx",
   "app/qsign/keys/page.tsx",
-  "app/qsign/page.tsx",
-  "app/qsign/verify/[id]/page.tsx",
   "app/quantum-shield/page.tsx",
   "app/sdk/page.tsx",
   "app/sdks/page.tsx",

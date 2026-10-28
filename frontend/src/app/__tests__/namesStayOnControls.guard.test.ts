@@ -43,7 +43,8 @@ const ЗАКРЕПЛЕНО: Array<[string, string[]]> = [
   // объявит несколько одинаковых строк, и выбрать будет нельзя.
   // tier.tryTrial убран 17.09.2026 вместе с кнопкой пробного периода (решение основателя).
   ["pricing/page.tsx", ["tier.openCalc\")}: ${tier.id}"]],
-  ["ventures/IdeaMarket.tsx", ["Отметить интерес", "${i.name}"]],
+  // 28.10.2026: кнопка интереса вынесена в общий компонент (0456d692a) — имя теперь живёт там же, где кнопка.
+  ["ventures/VenturesInterest.tsx", ["Отметить интерес", "${name}"]],
   ["devhub/page.tsx", ["snip.copyAria", "snip.starAria", "${s.title}"]],
   ["smeta-trainer/drawings-practice/finishing/page.tsx", ["Проверить ответ: ${ex.title}"]],
   ["smeta-trainer/drawings-practice/walls/page.tsx", ["Проверить ответ: ${ex.title}"]],

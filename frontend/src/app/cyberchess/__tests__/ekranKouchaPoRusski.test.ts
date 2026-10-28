@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { bezKommentariev } from "./bezKommentariev";
+import { tFor } from "../i18n";
 
 /**
  * Обход экрана «Коуч» глазами 01.09.2026. Английские слова и внутренние
@@ -29,7 +30,10 @@ describe("экран коуча говорит по-русски", () => {
   it("режим за двоих — «Игрок 1/2»", () => {
     const s = KOD();
     expect(s).not.toContain('"Player 1"');
-    expect(s).toContain('"Игрок 1"');
+    // 28.10.2026: подписи «Игрок 1/2» переехали в словарь (панель следует языку): ru остаётся русским.
+    expect(s).toContain('cc.t("game.player1")');
+    expect(tFor("ru", "game.player1")).toBe("Игрок 1");
+    expect(tFor("ru", "game.player2")).toBe("Игрок 2");
   });
 
   it("тренер называется ИИ, а не AI", () => {

@@ -7,7 +7,9 @@ import { GLOSSARY } from "../lib/glossary";
  * Минимальный markdown-рендер без внешних библиотек.
  * Поддерживает: # заголовки (h1-h3), **bold**, *italic*, `inline code`,
  * списки (- / *), нумерованные списки (1. 2.), цитаты (>), блоки кода
- * (```...```), ссылки [text](url), горизонтальные разделители (---).
+ * (```...```), ссылки [text](url), горизонтальные разделители (---),
+ * таблицы «| a | b |» со строкой-разделителем «|---|---|» (28.10.2026: уроки держат 57 таблиц,
+ * и все они показывались сырой разметкой — замер Продаж на 390×844, урок 1).
  *
  * Не цель — полный CommonMark. Цель — корректный рендер ответов LLM
  * по сметному делу (заголовки, списки правил, код, цитаты НПА).
@@ -122,6 +124,37 @@ export function Markdown({ text, autoGloss = false }: Props) {
       continue;
     }
 
+    // Таблица: заголовок «| a | b |», затем разделитель «|---|---|», затем строки «| … |».
+    // Без разделителя строка с «|» остаётся обычным текстом — как в CommonMark GFM.
+    if (ЭТО_СТРОКА_ТАБЛИЦЫ(line) && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1])) {
+      const head = ЯЧЕЙКИ(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && ЭТО_СТРОКА_ТАБЛИЦЫ(lines[i])) { rows.push(ЯЧЕЙКИ(lines[i])); i++; }
+      blocks.push(
+        <div key={key++} className="my-1 overflow-x-auto">
+          <table className="min-w-full border-collapse text-[11px]">
+            <thead>
+              <tr>
+                {head.map((h, idx) => (
+                  <th key={idx} className="border border-slate-200 bg-slate-50 px-1.5 py-1 text-left font-semibold">{renderInline(h)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri}>
+                  {head.map((_, ci) => (
+                    <td key={ci} className="border border-slate-200 px-1.5 py-1 align-top">{renderInline(r[ci] ?? "")}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
     // Горизонтальная линия
     if (/^---+$/.test(line.trim())) {
       blocks.push(<hr key={key++} className="my-1.5 border-slate-200" />);
@@ -190,7 +223,7 @@ export function Markdown({ text, autoGloss = false }: Props) {
     // Обычный параграф (объединяем сплошные не-пустые строки)
     const paraLines: string[] = [line];
     i++;
-    while (i < lines.length && lines[i].trim() && !/^(#{1,3}|>|\d+\.|[-*])\s/.test(lines[i]) && !/^```/.test(lines[i])) {
+    while (i < lines.length && lines[i].trim() && !/^(#{1,3}|>|\d+\.|[-*])\s/.test(lines[i]) && !/^```/.test(lines[i]) && !ЭТО_СТРОКА_ТАБЛИЦЫ(lines[i])) {
       paraLines.push(lines[i]); i++;
     }
     blocks.push(
@@ -206,6 +239,15 @@ export function Markdown({ text, autoGloss = false }: Props) {
   }
 
   return <div className="markdown-content space-y-0.5">{blocks}</div>;
+}
+
+/** Строка таблицы: начинается и кончается вертикальной чертой. */
+function ЭТО_СТРОКА_ТАБЛИЦЫ(l: string): boolean {
+  return /^\s*\|.*\|\s*$/.test(l);
+}
+/** Ячейки строки таблицы без внешних черт, обрезанные по краям. */
+function ЯЧЕЙКИ(l: string): string[] {
+  return l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
 }
 
 // ── Inline-уровень: bold, italic, code, links ─────────────────────────

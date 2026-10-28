@@ -53,7 +53,7 @@ describe("ShadowNet: ru/en/kk", () => {
       const плохие = s.split("\n").filter((l) =>
         />\s*[A-Za-zА-Яа-яЁё][^<{}]*</.test(l) && !/>\s*(ShadowNet|← AEVION)\s*</.test(l) ||
         /(placeholder|aria-label|title|label|sectionTitle|sectionHint)[=:]\s*"[^"]*[A-Za-zА-Яа-яЁё]{3}/.test(l) && !/label: "(VeilNetX|Quantum Shield|QSign)"|placeholder: "anon"/.test(l) ||
-        /^\s+[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё ,.—-]{6,}$/.test(l),
+        /^\s+[A-Za-zА-Яа-яЁё]+( [A-Za-zА-Яа-яЁё,.—-]+)+$/.test(l), // проза — слова через пробел; «password,» — код
       );
       expect(плохие, ф).toEqual([]);
     }
@@ -62,7 +62,7 @@ describe("ShadowNet: ru/en/kk", () => {
   test("сырые ответы сервера и исключения не выводятся человеку", () => {
     for (const ф of ФАЙЛЫ) {
       const s = readFileSync(join(ПАПКА, ф), "utf8");
-      expect(s, ф).not.toMatch(/j\?\.error \|\||String\(e\)|e\.message|\{result\.weakest\}|\{n\.country\}|\{m\.threatLevel\}/);
+      expect(s, ф).not.toMatch(/j\?\.error \|\||String\(e\)|e\.message|(?<!\$)\{(result\.weakest|n\.country|m\.threatLevel)\}/);
     }
   });
 });

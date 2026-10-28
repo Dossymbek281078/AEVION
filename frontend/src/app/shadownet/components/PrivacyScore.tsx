@@ -60,7 +60,7 @@ export default function PrivacyScore() {
         if (j && j.success) {
           setResult(j.data);
         } else {
-          throw new Error(j?.error || "score request failed");
+          throw new Error("score request failed"); // уходит в catch → «оценка недоступна», человеку не показывается
         }
       })
       .catch(() => {

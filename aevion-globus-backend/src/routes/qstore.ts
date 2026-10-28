@@ -148,6 +148,22 @@ export function безДублейПоНазванию<T extends { id: string; t
   return rows.filter((r) => победители.has(r));
 }
 
+/*
+ * 🔴 28.10.2026 (окно «Приложения», слово Оркестратора: «честная витрина»). Замер прода (GET /api/qstore/products):
+ * все 6 товаров витрины — от одного продавца 652ca4d7…, это сиды scripts/seed-demo-content.js, а не товары:
+ * «GM-level repertoire, 200+ annotated lines» за $14.90, «курс» за $49 — файла за ними нет. Покупатель платил бы
+ * за пустое место. Решение: товары демо-продавца не попадают в выдачу и подборки и не продаются (410); в базе
+ * ничего не удаляется, карточка по прямому id открывается с пометкой demo. Список — QSTORE_DEMO_SELLER_IDS
+ * (через запятую) или учётка сида по умолчанию.
+ */
+const ДЕМО_ПРОДАВЦЫ = new Set(
+  (process.env.QSTORE_DEMO_SELLER_IDS ?? "652ca4d7-c4f4-4519-8bd9-562adab2ec2a")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean),
+);
+export const демоПродавец = (sellerId: unknown): boolean => ДЕМО_ПРОДАВЦЫ.has(String(sellerId ?? ""));
+
 /** Подборки витрины из одного списка публичных товаров (уже без дублей). */
 function подборки(allPublic: Product[], limit: number) {
   const popular = [...allPublic].sort((a, b) => b.salesCount - a.salesCount).slice(0, limit);
@@ -234,6 +250,7 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
       const params: unknown[] = [];
       if (category) { params.push(category); conditions.push(`"category" = $${params.length}`); }
       if (q) { params.push(`%${q}%`); conditions.push(`("title" ILIKE $${params.length} OR "description" ILIKE $${params.length})`); }
+      params.push([...ДЕМО_ПРОДАВЦЫ]); conditions.push(`NOT ("sellerId"::text = ANY($${params.length}::text[]))`);
       params.push(limit);
       const where = `WHERE ${conditions.join(" AND ")}`;
       // DISTINCT ON — до LIMIT, иначе страница из 20 строк схлопнулась бы в 5 названий; в коде — та же
@@ -245,7 +262,8 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
          ) AS odin ORDER BY ${orderClause} LIMIT $${params.length}`,
         params,
       );
-      const products = безДублейПоНазванию(rows.rows as Product[]);
+      // второй рубеж после SQL — как и склейка дублей
+      const products = безДублейПоНазванию((rows.rows as Product[]).filter((p) => !демоПродавец(p.sellerId)));
       res.json({ products, total: products.length, sort });
       return;
     } catch (e) {
@@ -258,7 +276,7 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
     }
   }
 
-  let products = безДублейПоНазванию(Array.from(memProducts.values()).filter((p) => p.isPublic));
+  let products = безДублейПоНазванию(Array.from(memProducts.values()).filter((p) => p.isPublic && !демоПродавец(p.sellerId)));
   if (category) products = products.filter((p) => p.category === category);
   if (q) products = products.filter((p) =>
     p.title.toLowerCase().includes(q.toLowerCase()) ||
@@ -292,7 +310,7 @@ qstoreRouter.get("/products/:id", async (req: Request, res: Response) => {
     try {
       const row = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "id" = $1`, [id]);
       if (row.rows.length === 0) { res.status(404).json({ error: "Product not found" }); return; }
-      res.json({ product: row.rows[0] });
+      res.json({ product: { ...row.rows[0], demo: демоПродавец(row.rows[0].sellerId) } });
       return;
     } catch (e) {
       // Голый catch без возврата уводил управление ниже, в память — в
@@ -305,7 +323,7 @@ qstoreRouter.get("/products/:id", async (req: Request, res: Response) => {
   }
   const product = memProducts.get(id);
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
-  res.json({ product });
+  res.json({ product: { ...product, demo: демоПродавец(product.sellerId) } });
 });
 
 // POST /api/qstore/me/products — create product
@@ -489,6 +507,7 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
       const row = await pool.query(`SELECT * FROM "QStoreProduct" WHERE "id" = $1`, [id]);
       if (row.rows.length === 0) { res.status(404).json({ error: "Product not found" }); return; }
       const pRow = row.rows[0];
+      if (демоПродавец(pRow.sellerId)) { res.status(410).json({ error: "demo_product_not_for_sale" }); return; }
       const purchaseId = crypto.randomUUID();
 
       // Gumroad checkout — the only KYC-cleared processor. Routes to a product
@@ -554,6 +573,7 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
   // In-memory fallback
   const product = memProducts.get(id);
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+  if (демоПродавец(product.sellerId)) { res.status(410).json({ error: "demo_product_not_for_sale" }); return; }
   // Третья поверхность той же меры: при недоступной базе запасной путь тоже
   // отвечал `status:"paid"`. Сбой базы не может быть основанием отдать товар.
   if (product.price > 0 && refusePaidWithoutProvider(res, { productId: product.id, price: product.price, reason: "db_unavailable" })) return;
@@ -700,14 +720,14 @@ qstoreRouter.get("/featured", async (req: Request, res: Response) => {
       const allPublicRes = await pool.query(
         `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE`,
       );
-      res.json(подборки(безДублейПоНазванию(allPublicRes.rows as Product[]), limit));
+      res.json(подборки(безДублейПоНазванию((allPublicRes.rows as Product[]).filter((p) => !демоПродавец(p.sellerId))), limit));
       return;
     } catch {
       // fall through
     }
   }
 
-  const allPublic = безДублейПоНазванию(Array.from(memProducts.values()).filter((p) => p.isPublic));
+  const allPublic = безДублейПоНазванию(Array.from(memProducts.values()).filter((p) => p.isPublic && !демоПродавец(p.sellerId)));
   res.json(подборки(allPublic, limit));
 });
 

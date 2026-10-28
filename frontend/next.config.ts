@@ -140,6 +140,22 @@ const nextConfig: NextConfig = {
   // (несёт адрес гостя бэкенду по AEVION_EDGE_KEY) не вызывался — трата нормы шла прямо на бэк
   // с адресом узла Vercel. Приёмка волны 2: новое устройство с того же адреса получало 2 из 2.
   // fallback проверяется после всех маршрутов, статических и динамических. Сторож: guestProxyRoutesWin.
+  // 28.10.2026 (Продажи → Оркестратор → Продукт): в Shorts ссылки не кликаются, зритель
+  // набирает адрес руками. Короткий aevion.app/chess → /cyberchess, 308; ?c= сохраняется
+  // (Next переносит query сам), а без метки ставим c=yt-typed — чтобы набранные руками
+  // заходы считались отдельно. Сторож: src/app/__tests__/korotkiyAdresChess.guard.test.ts.
+  async redirects() {
+    return [
+      {
+        source: "/chess",
+        missing: [{ type: "query", key: "c" }],
+        destination: "/cyberchess?c=yt-typed",
+        permanent: true,
+      },
+      { source: "/chess", destination: "/cyberchess", permanent: true },
+    ];
+  },
+
   async rewrites() {
     return {
       beforeFiles: [],

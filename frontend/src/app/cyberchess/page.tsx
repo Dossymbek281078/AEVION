@@ -65,6 +65,7 @@ import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { productById, keepChannel } from "@/lib/products";
 import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski, zadanieNadDoskoy, matovVResheniyi } from "./puzzleNormalize";
+import { задачаПоследнегоРолика, записиДляПопытки, датаРоликаПоId, type ЗадачаРолика } from "./rolikiAvi";
 import WaitlistCapture from "@/components/WaitlistCapture";
 import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
@@ -313,6 +314,8 @@ function resultText(o: string | null, locale: CcLocale | undefined): string {
   return locale === "en" ? (o || "") : ruResult(o);
 }
 
+// 28.10.2026: итог загрузки задачи банка (общий для ссылки ?puzzle= и блока ролика)
+type РезультатЗагрузкиЗадачи = {ok:true;pz:Puzzle}|{ok:false;status:number;klass:"нет"|"без-идентификаторов"|"испорчена"|"неполная"|"сеть"};
 type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;id?:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
 
 /* ═══ Stockfish with MultiPV ═══ */
@@ -1681,6 +1684,12 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("aevion_chess_art_v1",boardArt)}catch{}},[boardArt]);
   // Заход по ссылке на задачу (?puzzle=): крупнее доска, без рейла и лишних рядов на столе.
   const[зашёлЗаЗадачей,sЗашёлЗаЗадачей]=useState(false);
+  // 28.10.2026: блок «Задача из ролика Ави»; в состоянии, не при рендере: локальная дата, без расхождения гидрации.
+  const[rolikЗадача,sRolikЗадача]=useState<ЗадачаРолика|null>(null);
+  const[rolikСкрыт,sRolikСкрыт]=useState(false);
+  const[rolikПодпись,sRolikПодпись]=useState<typeof PUZZLES[number]|null>(null);
+  const поРоликуRef=useRef(false); // пришёл по ?c=yt-* без ?puzzle= — задача ролика открывается сразу
+  const rolikЗагрузкиRef=useRef<Map<string,Promise<РезультатЗагрузкиЗадачи>>>(new Map()); // один fetch на id
   const[boardScale,sBoardScale]=useState<number>(()=>{try{const v=parseFloat(localStorage.getItem("cc_board_scale_v1")||"1");return isNaN(v)?1:Math.max(0.5,Math.min(1.5,v))}catch{return 1}});
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
@@ -1723,6 +1732,12 @@ export default function CyberChessPage(){
      * не показываем, а запас под доской сокращаем — доска растёт на разницу.
      * Остальные режимы не трогаем: флаг живёт только у захода по ссылке.
      */
+    // 28.10.2026: приход с ролика (?c=yt-…) без ?puzzle= — тоже «за задачей». Адрес не переписываем (метка ?c=).
+    let поРолику=false;
+    try{поРолику=!поСсылке&&/^yt-/i.test(new URLSearchParams(window.location.search).get("c")||"")&&!!задачаПоследнегоРолика()}catch{}
+    поРоликуRef.current=поРолику;
+    sRolikЗадача(задачаПоследнегоРолика());
+    поСсылке=поСсылке||поРолику; // дальше «зашёл за задачей» — одно решение для флага и приветственного окна
     sЗашёлЗаЗадачей(поСсылке);
     if(!поСсылке&&!hasCompletedOnboarding())sShowOnboarding(true);
   },[]);
@@ -6708,63 +6723,90 @@ export default function CyberChessPage(){
        иное → не открылась, причина у нас.
      В любом случае раздел задач всё равно открывается: человек пришёл решать, и
      оставить его на домашнем экране — худшее из решений. */
-  useEffect(()=>{
-    if(typeof window==="undefined")return;
-    let otmenen=false;
-    let id="";
-    try{id=new URLSearchParams(window.location.search).get("puzzle")||""}catch{return}
-    if(!id)return;
-    // Форма проверяется ДО запроса: тот же признак, что на сервере. Мусор из
-    // адреса не доходит до сети вовсе.
+  // 28.10.2026: загрузка задачи банка общая для ?puzzle= и блока ролика; один fetch на id (кэш в rolikЗагрузкиRef).
+  const загрузитьЗадачуБанка=(id:string):Promise<РезультатЗагрузкиЗадачи>=>{
+    const кэш=rolikЗагрузкиRef.current;
+    const есть=кэш.get(id);
+    if(есть)return есть;
+    const p=(async():Promise<РезультатЗагрузкиЗадачи>=>{
+      try{
+        const r=await fetch(`/api-backend/api/cyberchess-puzzles/${encodeURIComponent(id)}`);
+        if(!r.ok){
+          let prichina="";
+          try{prichina=String(((await r.json()) as {reason?:string})?.reason??"")}catch{}
+          return{ok:false,status:r.status,klass:r.status===404?"нет":(prichina==="ids_unavailable"?"без-идентификаторов":"испорчена")};
+        }
+        const telo=await r.json() as {puzzle?:{fen?:string;sol?:string[];name?:string;r?:number;theme?:string;id?:string}};
+        const syraya=telo?.puzzle;
+        if(!syraya?.fen||!Array.isArray(syraya.sol)||syraya.sol.length===0){
+          // 200 с негодным телом — отдельный класс: ручка ответила, а открывать нечего.
+          return{ok:false,status:r.status,klass:"неполная"};
+        }
+        /* 🔴 id банка ДОНОСИМ до объекта задачи. Замер 12.10 на проде: событие `puzzle_solved` уходило с
+           `id: "нет id"` — связать решение с роликом было нечем. */
+        const pz={...(normalizePuzzle({fen:syraya.fen,sol:syraya.sol,name:syraya.name??syraya.theme??"Задача",
+          r:syraya.r??1200,theme:syraya.theme??"Тактика"}) as typeof PUZZLES[number]),id:syraya.id??id};
+        return{ok:true,pz};
+      }catch{
+        return{ok:false,status:0,klass:"сеть"};
+      }
+    })();
+    кэш.set(id,p);
+    return p;
+  };
+  const открытьЗадачуПоId=async(id:string,источник:"link"|"rolik",отменён:()=>boolean=()=>false):Promise<void>=>{
     if(!/^[A-Za-z0-9_-]{1,64}$/.test(id)){
       {const текст=tekstOshibkiSsylki("испорчена",id);showToast(текст,"error");sОшибкаСсылки(текст);}
       sTab("puzzles");
       return;
     }
-    (async()=>{
-      try{
-        const r=await fetch(`/api-backend/api/cyberchess-puzzles/${encodeURIComponent(id)}`);
-        if(otmenen)return;
-        if(!r.ok){
-          let prichina="";
-          try{prichina=String(((await r.json()) as {reason?:string})?.reason??"")}catch{}
-          const текст=tekstOshibkiSsylki(
-            r.status===404?"нет":(prichina==="ids_unavailable"?"без-идентификаторов":"испорчена"),id);
-          showToast(текст,"error");
-          sОшибкаСсылки(текст);
-          sTab("puzzles");
-          return;
-        }
-        const telo=await r.json() as {puzzle?:{fen?:string;sol?:string[];name?:string;r?:number;theme?:string;id?:string}};
-        const syraya=telo?.puzzle;
-        if(!syraya?.fen||!Array.isArray(syraya.sol)||syraya.sol.length===0){
-          // 200 с негодным телом — отдельный класс: ручка ответила, а открывать
-          // нечего. Молчать здесь нельзя, иначе это выглядит как «ссылка
-          // сработала, но задача пустая».
-          {const текст=tekstOshibkiSsylki("неполная",id);showToast(текст,"error");sОшибкаСсылки(текст);}
-          sTab("puzzles");
-          return;
-        }
-        if(otmenen)return;
-        /* 🔴 id банка ДОНОСИМ до объекта задачи. Замер 12.10 на проде: событие
-           `puzzle_solved` уходило с `id: "нет id"` — то есть мы знали, что
-           задачу решили, но не знали какую, и связать решение с роликом было
-           нечем. Тип `Puzzle` носит id как необязательный: у зашитых задач его
-           нет, у задач из банка есть. */
-        const pz={...(normalizePuzzle({fen:syraya.fen,sol:syraya.sol,name:syraya.name??syraya.theme??"Задача",
-          r:syraya.r??1200,theme:syraya.theme??"Тактика"}) as typeof PUZZLES[number]),id:syraya.id??id};
-        if(!postavitZadachuNaDosku(pz,{dnevnaya:false}))return;
-        showToast(cc.t("pz.link.opened").replace("{n}",String(pz.r)),"info");
-        // Своё событие не заводим: открытие задачи по ссылке — это та же
-        // ключевая возможность, и feature_use уже считается ступенью
-        // «попробовали» и разрезается по каналу и посту. Нужен именно разрез по
-        // каналу: ссылка и живёт в ролике или посте.
-        track({type:"feature_use",source:"cyberchess/link",meta:{feature:"puzzle_link_open",app:"cyberchess",puzzle:id}});
-      }catch{
-        if(otmenen)return;
+    const res=await загрузитьЗадачуБанка(id);
+    if(отменён())return;
+    if(!res.ok){
+      if(res.klass==="сеть"){
         showToast(cc.t("pz.link.failed"),"error");
         sTab("puzzles");
+        return;
       }
+      // Раздел задач всё равно открывается: человек пришёл решать, оставить его на домашнем экране — худшее.
+      const текст=tekstOshibkiSsylki(res.klass,id);
+      showToast(текст,"error");
+      sОшибкаСсылки(текст);
+      sTab("puzzles");
+      return;
+    }
+    const pz=res.pz;
+    if(!postavitZadachuNaDosku(pz,{dnevnaya:false}))return;
+    showToast(cc.t("pz.link.opened").replace("{n}",String(pz.r)),"info");
+    // rolik_puzzle_open отличает кнопку на первом экране от ссылки (puzzle_link_open).
+    if(источник==="rolik")track({type:"feature_use",source:"cyberchess/rolik",meta:{feature:"rolik_puzzle_open",app:"cyberchess",puzzle:id}});
+    else track({type:"feature_use",source:"cyberchess/link",meta:{feature:"puzzle_link_open",app:"cyberchess",puzzle:id}});
+  };
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    let otmenen=false;
+    let id="";
+    try{id=new URLSearchParams(window.location.search).get("puzzle")||""}catch{return}
+    if(id){void открытьЗадачуПоId(id,"link",()=>otmenen);return ()=>{otmenen=true}}
+    // 28.10.2026: ?puzzle= нет — ищем доступную задачу ролика; отказ не молчит (warn + rolik_puzzle_missing).
+    const попытки=записиДляПопытки();
+    if(!попытки.length)return;
+    (async()=>{
+      // 28.10.2026: берём последнюю ДОСТУПНУЮ задачу ролика (до 3 шагов назад): ручка могла ответить 404 на свежую.
+      let последний:{ok:false;status:number}|null=null;
+      for(const rid of попытки){
+        const res=await загрузитьЗадачуБанка(rid);
+        if(otmenen)return;
+        if(res.ok){
+          sRolikПодпись(res.pz);
+          if(поРоликуRef.current)await открытьЗадачуПоId(rid,"rolik",()=>otmenen);
+          return;
+        }
+        последний=res;
+      }
+      console.warn("[cyberchess] задача ролика недоступна",попытки.join(","),последний?.status);
+      track({type:"feature_use",source:"cyberchess/rolik",meta:{feature:"rolik_puzzle_missing",puzzle:попытки[0],tried:попытки.length,status:последний?.status??0}});
+      sRolikСкрыт(true);
     })();
     return ()=>{otmenen=true};
     // Один раз при открытии страницы: ссылка — это вход, а не состояние.
@@ -7925,7 +7967,10 @@ export default function CyberChessPage(){
         // Сторона превью = свободная высота (шапка ≤64 + поля) либо ширина без правой колонки; масштаб «−/+»
         // тот же, что у игровой доски (0,6–1,0 от доступного), запоминается в localStorage.
         const лоббиРядом=vwPx>=1280; // 1024–1279: лобби под доской, иначе колонка съедает ширину (замер 1024×900: 496 px)
-        const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200),vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
+        // 28.10.2026: блок «Задача из ролика» (48 px телефон / 72 px десктоп) вычитается из высоты, чтобы доска осталась на первом экране
+        const rolikВидим=!!rolikЗадача&&!rolikСкрыт;
+        const РОЛИК_БЛОК_PX=rolikВидим?(isMobileLayout?48:72):0;
+        const превьюPx=Math.round((isMobileLayout?vwPx-20-РОЛИК_БЛОК_PX:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200)-РОЛИК_БЛОК_PX,vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
         return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,...(лоббиРядом?{display:"grid",gridTemplateColumns:`minmax(0,auto) minmax(${320}px,${420}px)`,alignItems:"start",columnGap:24}:{display:"flex",flexDirection:"column"}),gap:SPACE[3],maxWidth:лоббиРядом?1700:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
@@ -7970,6 +8015,14 @@ export default function CyberChessPage(){
           {/* 136: доска — первая и крупная; на ≥1024 занимает левую колонку на всю высоту сетки,
               остальное лобби (карточка «С чего начать», выбор, статистика) ложится справа. */}
           <div data-cc-setup-board="1" style={лоббиРядом?{gridColumn:1,gridRow:`1 / span ${40}`,display:"flex",flexDirection:"column",alignItems:"center",gap:6,minWidth:0}:{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+          {rolikВидим&&<div data-cc-rolik="1" style={{display:"flex",alignItems:"center",gap:8,width:"100%",boxSizing:"border-box",height:isMobileLayout?44:64,padding:isMobileLayout?"0 8px":"0 12px",border:`1px solid ${CC.border}`,borderRadius:10,background:CC.surface1,overflow:"hidden"}}>
+            <span aria-hidden="true" style={{fontSize:isMobileLayout?18:24,flex:"none"}}>🎬</span>
+            <div style={{flex:1,minWidth:0,lineHeight:1.25}}>
+              <div style={{fontSize:isMobileLayout?13:14,fontWeight:800,color:CC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cc.t("rolik.title")}{rolikПодпись&&<span style={{fontWeight:600,color:CC.textDim}}>{" · "+датаРоликаПоId(rolikПодпись.id??"")}</span>}</div>
+              {!isMobileLayout&&<div style={{fontSize:12,color:CC.textDim,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{rolikПодпись?(imyaPoResheniyu(rolikПодпись,cc.locale)||zadanieNadDoskoy(rolikПодпись,cc.locale)):cc.t("rolik.loading")}</div>}
+            </div>
+            <button type="button" className="cc-touch" disabled={!rolikПодпись} onClick={()=>{if(rolikПодпись?.id)void открытьЗадачуПоId(rolikПодпись.id,"rolik")}} style={{flex:"none",padding:"6px 14px",borderRadius:8,border:"none",background:CC.accent,color:"#111",fontWeight:800,fontSize:13,cursor:rolikПодпись?"pointer":"default",opacity:rolikПодпись?1:0.6}}>{cc.t("rolik.solve")}</button>
+          </div>}
           <SetupBoardPreview
             orientation={pCol}
             light={bT.light}
@@ -9332,6 +9385,7 @@ export default function CyberChessPage(){
               по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
               это было только в подписи для скринридера и в карточке правой панели,
               а она на телефоне — закрытая шторка. Число ходов из РЕШЕНИЯ, не из тега. */}
+          {tab==="puzzles"&&pzCurrent&&rolikПодпись?.id&&pzCurrent.id===rolikПодпись.id&&<div data-cc-rolik-strip="1" style={{width:bw,paddingInlineStart:обвязкаДоскиPx+3,boxSizing:"border-box",height:24,lineHeight:"24px",fontSize:12,fontWeight:700,color:CC.textDim,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🎬 {cc.t("rolik.title")} · {датаРоликаПоId(rolikПодпись.id)}</div>}
           {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:обвязкаДоскиPx+3,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:nudgeSide!==null&&isMobileLayout?"normal":"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent,cc.locale)}{/* 140: до первого хода — призыв нажать подсвеченную фигуру (та же фраза, что в лёгкой задаче /p) */}{nudgeSide!==null&&<span data-cc-nudge-text="1" style={{color:"#2563eb"}}>{" · "+cc.t("pz.hint")}</span>}</div>}
           <div translate="no" style={{display:"flex",width:bw,gap:4,position:"relative"}}>
             {/* Eval bar — with W/B labels + centered numeric badge.

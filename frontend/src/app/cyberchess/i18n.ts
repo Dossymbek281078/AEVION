@@ -31,6 +31,10 @@ export const SUPPORTED_LOCALES: { code: CcLocale; label: string; flag: string }[
 
 const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   ru: {
+    "rolik.title": "Задача из последнего ролика Ави",
+    "rolik.solve": "Решить",
+    "rolik.loading": "Задача грузится…",
+    "rolik.date": "ролик от {d}",
     ...PZ_SLOVA.ru,
     // ── Видимый текст игрового экрана (волна EN, 19.10.2026). Русские значения —
     //    ДОСЛОВНО как было в page.tsx хардкодом; английские — рядом в en.
@@ -535,6 +539,10 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "attr.quick_game_setup": "Быстрая настройка партии",
   },
   en: {
+    "rolik.title": "Puzzle from Avi's latest video",
+    "rolik.solve": "Solve",
+    "rolik.loading": "Loading the puzzle…",
+    "rolik.date": "video of {d}",
     ...PZ_SLOVA.en,
     // ── Visible game-screen text (EN wave, 2026-10-19). RU originals kept verbatim.
     "game.check": "Check!",
@@ -993,6 +1001,10 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "attr.quick_game_setup": "Quick game setup",
   },
   kk: {
+    "rolik.title": "Авидің соңғы бейнесіндегі есеп",
+    "rolik.solve": "Шешу",
+    "rolik.loading": "Есеп жүктелуде…",
+    "rolik.date": "{d} бейнесі",
     ...PZ_SLOVA.kk,
     // 21.10.2026: 50 ключей игрового экрана здесь не было — tFor тихо брал русский
     // (замер yazyk-devhub.mjs --click: «Анализ варианта», «Игра за белых» у kk).

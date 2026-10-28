@@ -20,7 +20,14 @@ import { join } from "node:path";
 const ROOT = join(__dirname, "..", "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
-/** Домены без записи MX — письмо на них не доходит. Проверено отправкой. */
+/**
+ * Домены, письмо на которые считаем недоставленным.
+ *
+ * 28.10.2026 [Точно nslookup]: у aevion.app есть MX (mx1/mx2.improvmx.com) — запись
+ * «нет MX» выше устарела. Но доставка на support@/security@/privacy@/billing@ не
+ * подтверждена (Почта, Gmail API 28.10: писем на эти адреса не было ни одного, пересылка
+ * improvmx видна только до 23.10). До контроля пробными письмами домен остаётся здесь.
+ */
 const DOMAINS_WITHOUT_MAIL = ["@aevion.app"];
 /** Домен чужой компании с тем же названием — туда нельзя вести никого. */
 const FOREIGN_DOMAINS = ["@aevion.io"];
@@ -116,45 +123,59 @@ function allSourceFiles(dir: string, acc: string[] = []): string[] {
 
 // Файлы, где адреса на домене без почты ещё остались. Список тает; новые
 // записи сюда добавлять НЕЛЬЗЯ — в этом весь смысл.
+// 28.10.2026: список заморожен на замере (49 файлов). Сторож стоял красным с давних файлов,
+// которых никто не вычёркивал, и его перестали читать; теперь он снова ловит РОСТ. Подтвердят
+// доставку на aevion.app — домен уходит из DOMAINS_WITHOUT_MAIL и список тает сам.
 const PENDING_FILES = new Set([
   "app/api/payments/v1/_email.ts",
+  "app/apps/page.tsx",
   "app/build/onboarding/page.tsx",
   "app/constitution/pricing/page.tsx",
   "app/constitution/showcase/page.tsx",
+  "app/cyberchess/OshibkaForma.tsx",
+  "app/cyberchess/p/klientSkript.ts",
+  "app/data-deletion/page.tsx",
   "app/developers/fintech/troubleshooting/page.tsx",
+  "app/developers/page.tsx",
   "app/devhub/[id]/page.tsx",
-  // app/pricing/affiliate-dashboard/page.tsx убрана 01.09.2026: mailto заменён ссылкой на форму связи.
-  // app/pricing/glossary/page.tsx убрана 01.09.2026: mailto заменён ссылкой на форму связи.
-  // app/pricing/page.tsx убрана 01.09.2026: mailto в подписи к FAQ заменён ссылкой на форму связи.
-  // app/pricing/refund-policy убрана 01.09.2026: главная кнопка и шаг 1 процедуры возврата вели на ящик домена без MX; переведено на форму на двух языках.
+  "app/global-error.tsx",
+  "app/help/page.tsx",
+  "app/investor/page.tsx",
+  "app/layout.tsx",
+  "app/partner/page.tsx",
+  "app/partner/print/page.tsx",
+  "app/pilot/page.tsx",
+  "app/planet/page.tsx",
+  "app/press/page.tsx",
+  "app/pricing/checkout/success/page.tsx",
+  "app/pricing/security/page.tsx",
+  "app/privacy/page.tsx",
+  "app/proof/page.tsx",
   "app/qcoreai/budget/page.tsx",
+  "app/qstore/QStoreNotify.tsx",
   "app/qstore/page.tsx",
+  "app/security/layout.tsx",
+  "app/security/page.tsx",
+  "app/studio/page.tsx",
+  "app/support/page.tsx",
   "app/terms/page.tsx",
+  "components/PilotOrderForm.tsx",
+  "components/RazrabotkaPreduprezhdenie.tsx",
+  "components/SiteFooter.tsx",
+  "data/pitchModel.ts",
   "lib/build/calendar.ts",
-  // 28.08.2026: строки уехали из lib/i18n-data.ts в один файл на язык
-  // (lib/i18n-lang/*.ts). Адреса те же самые — это ПЕРЕЕЗД, а не новое
-  // нарушение, поэтому запись заменена на три файла, где они теперь лежат.
-  // Сам i18n-data.ts убран из списка: там осталась только метаинформация о
-  // языках, и держать его здесь значило бы охранять пустоту — вторая проверка
-  // этого сторожа («список не протух») на этом и краснела бы.
-  // lib/i18n-lang/{en,kk,ru}.ts убраны 02.09.2026: два последних мёртвых
-  // адреса в словаре были на ДЕНЕЖНОМ пути и оба звали писать туда,
-  // где письма не доходят. Первый — экран ПОСЛЕ ОПЛАТЫ: заплативший
-  // с первым вопросом отправлялся на ящик домена без записи MX.
-  // Второй — ответ FAQ Конституции, где адрес был каналом ПОДАЧИ
-  // ЗАЯВКИ на бесплатный план для вузов: заявка уходила в никуда,
-  // а человек ждал ответа. Все шесть строк (два ключа × три языка)
-  // переведены на форму связи aevion.app/pricing/contact.
-  //
-  // Казахский НЕ переписывался: сохранены существующие обороты
-  // («Сұрақтар бар ма?», «адресіне жазыңыз»), заменён только канал.
-  // Придумывать копирайт на языке, который не могу проверить, на
-  // денежном экране нельзя.
-  // lib/pricingI18n.ts убран 01.09.2026: страница возврата денег звала писать на
-  // billing@aevion.app — ящик домена без записи MX. Это был худший случай
-  // класса: человек, которому нужен ВОЗВРАТ, отправлял письмо в пустоту, и это
-  // стояло ШАГОМ 1 процедуры. Шесть мест на двух языках переведены на форму
-  // связи; сторож сам потребовал сократить список проверкой «не протух».
+  "lib/i18n-lang/ar.ts",
+  "lib/i18n-lang/de.ts",
+  "lib/i18n-lang/en.ts",
+  "lib/i18n-lang/es.ts",
+  "lib/i18n-lang/fr.ts",
+  "lib/i18n-lang/ja.ts",
+  "lib/i18n-lang/kk.ts",
+  "lib/i18n-lang/pt.ts",
+  "lib/i18n-lang/ru.ts",
+  "lib/i18n-lang/tr.ts",
+  "lib/i18n-lang/zh.ts",
+  "lib/proofPilot.ts",
 ]);
 
 describe("адреса на домене без почты не расползаются", () => {

@@ -124,7 +124,7 @@ import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
-import { useCcI18n } from "./i18n";
+import { useCcI18n, type CcLocale } from "./i18n";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
 import { createTierPaymentRequest, pollPaymentRequest, verifyPaymentRequest, type ChessyTier } from "./billing";
 import MultiPanel from "./MultiPanel";
@@ -306,6 +306,10 @@ function ruResult(o: string | null): string {
     .replace("Threefold repetition", "Троекратное повторение")
     .replace("Insufficient material", "Недостаточно материала")
     .replace("50-move draw", "Ничья по правилу 50 ходов");
+}
+/** Исход партии на языке игрока: en — строка движка как есть, ru/kk — русский перевод (kk-словаря исходов нет). */
+function resultText(o: string | null, locale: CcLocale | undefined): string {
+  return locale === "en" ? (o || "") : ruResult(o);
 }
 
 type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;id?:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
@@ -803,15 +807,15 @@ const BOARD_THEMES: BoardTheme[] = [
 export const ТЕМА_ДОСКИ_ПО_УМОЛЧАНИЮ = BOARD_THEMES[0];
 
 /* ═══ StatusBar — game state badge with inline SVG icons ═══ */
-type StatusBarProps = {over:string|null;chk:boolean;think:boolean;myT:boolean;useSF:boolean;pmsLen:number;histLen:number;rat:number;rkI:string;t:(k:string)=>string};
-function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI,t}:StatusBarProps){
+type StatusBarProps = {over:string|null;chk:boolean;think:boolean;myT:boolean;useSF:boolean;pmsLen:number;histLen:number;rat:number;rkI:string;t:(k:string)=>string;locale?:CcLocale};
+function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI,t,locale}:StatusBarProps){
   const isOver=!!over;
   const isWin=isOver&&over!.includes("You win");
   const sz={width:18,height:18,flexShrink:0};
   const bg=isOver?(isWin?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface;
   const bc=isOver?(isWin?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border;
   const col=isOver?(isWin?T.accent:T.danger):chk?T.danger:think?T.gold:myT?T.accent:T.dim;
-  const label=isOver?ruResult(over):chk?t("game.check"):think?(useSF?t("game.thinkingSF"):t("game.thinkingAI")):myT?t("game.yourMove"):t("game.aiMove");
+  const label=isOver?resultText(over,locale):chk?t("game.check"):think?(useSF?t("game.thinkingSF"):t("game.thinkingAI")):myT?t("game.yourMove"):t("game.aiMove");
   const icon=isOver?(isWin
       ? <svg viewBox="0 0 24 24" fill={col} style={sz}><path d="M7 3h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V3zm-3 1h3v2a3 3 0 0 1-3-3V4zm13 0h3v1a3 3 0 0 1-3 3V4zM9 13h6v2l2 5H7l2-5v-2z"/></svg>
       : <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" style={sz}><circle cx="12" cy="12" r="9"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
@@ -839,7 +843,7 @@ function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI,t}:StatusBar
             <span style={{animation:"pop 0.5s ease-out",display:"inline-flex"}}>{icon}</span>
             <span>{label}</span>
           </div>
-          <div style={{fontSize:13,color:T.dim,marginTop:4,paddingLeft:26}}>{histLen} ходов · {rat} {rkI}</div>
+          <div style={{fontSize:13,color:T.dim,marginTop:4,paddingLeft:26}}>{histLen} {t("game.moves")} · {rat} {rkI}</div>
         </div>
       ) : (
         <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -3659,7 +3663,7 @@ export default function CyberChessPage(){
   // per-square DOM — поэтому даём role="img" + это описание и live-регион на ход).
   const boardA11y=(()=>{
     const side=game.turn()==="w"?cc.t("a11y.white"):cc.t("a11y.black");
-    const state=over?ruResult(over):(myT?cc.t("a11y.yourMove"):cc.t("a11y.oppMove"));
+    const state=over?resultText(over,cc.locale):(myT?cc.t("a11y.yourMove"):cc.t("a11y.oppMove"));
     // В задачах «партия ещё не начата» звучит неверно: партии тут и нет,
     // есть позиция для решения. Диктор читает это на каждом заходе.
     const нетХодов=tab==="puzzles"?cc.t("a11y.noMovePuzzle"):cc.t("a11y.notStarted");
@@ -7796,7 +7800,7 @@ export default function CyberChessPage(){
 
         {/* Часто нужное — настройки, звук, мобильная панель — остаётся в шапке */}
         <div style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
-        <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title={cc.t("attr.settings")} ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
+        <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title={cc.t("attr.settings")} ariaLabel={cc.t("attr.settings")} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
         {vwPx>=769&&<Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>}
         {/* Mobile sidebar toggle — visible only on mobile via CSS */}
         <button onClick={()=>sMobileSidebarOpen(v=>!v)} title={mobileSidebarOpen?"Свернуть боковую панель":(tab==="puzzles"?"Открыть панель задачи: подсказка, решение, следующая":"Открыть боковую панель")}
@@ -9076,7 +9080,7 @@ export default function CyberChessPage(){
                     </div>
                     <div>
                       <div style={{fontWeight:700,color:CC.text,fontSize:13}}>{g.opening||"Unknown"}</div>
-                      <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{g.aiLevel} · {g.tc} · {g.moves.length} ходов</div>
+                      <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{g.aiLevel} · {g.tc} · {g.moves.length} {cc.t("game.moves")}</div>
                     </div>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
@@ -9191,8 +9195,8 @@ export default function CyberChessPage(){
               <div style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.eco?`${currentOpening.eco} `:""}{currentOpening.name}</div>
             </Card>}
             <Card {...cardProps}>
-              <div style={lbl}>Партия</div>
-              <div style={{fontSize:13,color:CC.textDim}}>Ход: <b style={{color:CC.text}}>{Math.max(1,Math.ceil(hist.length/2))}</b></div>
+              <div style={lbl}>{cc.t("game.panel")}</div>
+              <div style={{fontSize:13,color:CC.textDim}}>{cc.t("game.moveNo")} <b style={{color:CC.text}}>{Math.max(1,Math.ceil(hist.length/2))}</b></div>
               {/* Подпись говорит о том, что ПРОИСХОДИТ, а не о том, что задумано.
                   Замер 03.09.2026 на живом сайте: здесь стояло «Stockfish 18 · d22»,
                   а движок не выдал НИ ОДНОЙ реплики — ход считал запасной расчёт, и
@@ -9830,7 +9834,7 @@ export default function CyberChessPage(){
                 const isWin=over.includes("You win")||over.includes("timed out — you")||over.includes("timed out");
                 const isDraw=over.includes("Draw")||over.includes("draw")||over.includes("Ничья")||over.includes("ничья")||over.includes("1/2");
                 const accentCol=isWin?"#22c55e":isDraw?"#f59e0b":"#ef4444";
-                const resultLabel=isWin?"Вы выиграли":isDraw?"Ничья":"Вы проиграли";
+                const resultLabel=isWin?cc.t("game.youWon"):isDraw?cc.t("game.draw"):cc.t("game.youLost");
                 const resultIcon=isWin?"🏆":isDraw?"½":"💀";
                 return <div style={{
                   position:"absolute",inset:0,zIndex:20,
@@ -9851,7 +9855,7 @@ export default function CyberChessPage(){
                       <span style={{fontSize:28,lineHeight:1}}>{resultIcon}</span>
                       <span style={{fontSize:17,fontWeight:900,color:accentCol,letterSpacing:-0.3}}>{resultLabel}</span>
                     </div>
-                    <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center",maxWidth:190,lineHeight:1.4}}>{ruResult(over)}</div>
+                    <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center",maxWidth:190,lineHeight:1.4}}>{resultText(over,cc.locale)}</div>
                     {/* CPI статус — «считается…» пока анализ идёт, потом реальный рейтинг */}
                     {(()=>{
                       const cs=ldCPIState();const last=cs.history[cs.history.length-1];
@@ -9896,7 +9900,7 @@ export default function CyberChessPage(){
                       </button>
                       <button onClick={async()=>{
                         try{
-                          const white=pCol==="w"?"Вы":lv.name;const black=pCol==="b"?"Вы":lv.name;
+                          const white=pCol==="w"?cc.t("game.you"):lv.name;const black=pCol==="b"?cc.t("game.you"):lv.name;
                           const result=over.includes("You win")?"1-0":over.includes("AI wins")?"0-1":"1/2-1/2";
                           const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                           const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
@@ -10499,7 +10503,7 @@ export default function CyberChessPage(){
                   background:game.turn()===pCol?CC.brand:CC.textDim,
                   animation:game.turn()===pCol&&on&&!over?"cc-pulse-glow 1.5s infinite":undefined,
                 }}/>
-                {over?"Партия завершена":game.turn()===pCol?"Твой ход":"Ход ИИ"}
+                {over?cc.t("game.over"):game.turn()===pCol?cc.t("game.yourMove"):cc.t("game.aiMove")}
               </div>
               {/* Move count + TC */}
               <div style={{fontSize:10,color:CC.textMute,marginTop:1}}>
@@ -10614,8 +10618,8 @@ export default function CyberChessPage(){
             </button>}
               {over&&fenHist.length>2&&<>
                 <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
-                  const white=hotseat?"Игрок 1":(pCol==="w"?"Вы":lv.name);
-                  const black=hotseat?"Игрок 2":(pCol==="b"?"Вы":lv.name);
+                  const white=hotseat?cc.t("game.player1"):(pCol==="w"?cc.t("game.you"):lv.name);
+                  const black=hotseat?cc.t("game.player2"):(pCol==="b"?cc.t("game.you"):lv.name);
                   const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
                   const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                   const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
@@ -10623,14 +10627,14 @@ export default function CyberChessPage(){
                   try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Буфер обмена недоступен","error")}
                 }} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Скачать PGN</Btn>
                 <Btn size="sm" variant="secondary" onClick={()=>{
-                  const white=hotseat?"Игрок 1":(pCol==="w"?"Вы":lv.name);
-                  const black=hotseat?"Игрок 2":(pCol==="b"?"Вы":lv.name);
+                  const white=hotseat?cc.t("game.player1"):(pCol==="w"?cc.t("game.you"):lv.name);
+                  const black=hotseat?cc.t("game.player2"):(pCol==="b"?cc.t("game.you"):lv.name);
                   const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
                   sReelMeta({white,black,result});sShowReel(true);
                 }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Авто-ролик</Btn>
                 <Btn size="sm" variant="secondary" onClick={()=>{
-                  const white=hotseat?"Игрок 1":(pCol==="w"?"Вы":lv.name);
-                  const black=hotseat?"Игрок 2":(pCol==="b"?"Вы":lv.name);
+                  const white=hotseat?cc.t("game.player1"):(pCol==="w"?cc.t("game.you"):lv.name);
+                  const black=hotseat?cc.t("game.player2"):(pCol==="b"?cc.t("game.you"):lv.name);
                   const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
                   const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
                   const blob=new Blob([svg],{type:"image/svg+xml"});
@@ -10966,7 +10970,7 @@ export default function CyberChessPage(){
             <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast("Дуэль завершена","info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>Выйти</button>
           </div>}
           {/* Status bar */}
-          {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF&&sfOk} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i} t={cc.t}/>}
+          {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF&&sfOk} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i} t={cc.t} locale={cc.locale}/>}
           {(tab==="play"||tab==="coach")&&over&&<PostGameCard hist={hist} analysis={analysis} pCol={pCol} schitaem={hist.length>=6} />}
           {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}
           {variant!=="standard"&&on&&!over&&(tab==="play"||tab==="coach")&&<div style={{
@@ -11377,7 +11381,7 @@ export default function CyberChessPage(){
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{hotseat?"Игрок":"Вы"}</span>
+                <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{hotseat?cc.t("game.player"):cc.t("game.you")}</span>
                 <Badge tone="gold" size="xs">{rat}</Badge>
                 <Badge tone="neutral" size="xs">{rk.i} {cc.locale==="ru"?rk.t:rk.en}</Badge>
               </div>
@@ -11695,7 +11699,7 @@ export default function CyberChessPage(){
 
           {/* Analyze Game button - when game has history */}
           {tab==="analysis"&&hist.length>0&&!showAnal&&!analyzing&&<button onClick={()=>runAnalysis()} style={{padding:"10px 14px",borderRadius:10,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 6px rgba(124,58,237,0.2)"}}>
-            🔍 Проанализировать всю партию ({hist.length} ходов)
+            🔍 {cc.t("game.analyzeWhole")} ({hist.length} {cc.t("game.moves")})
           </button>}
           {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Анализирую… {analysisProgress}%</div>}
 
@@ -13807,8 +13811,8 @@ ${question.trim()}`;
         if(filtered.length===0){showToast("Нет партий для экспорта","error");return}
         const today=denPoMestnomu();
         const blocks=filtered.map((g,i)=>{
-          const white=g.playerColor==="w"?"Вы":g.aiLevel;
-          const black=g.playerColor==="b"?"Вы":g.aiLevel;
+          const white=g.playerColor==="w"?cc.t("game.you"):g.aiLevel;
+          const black=g.playerColor==="b"?cc.t("game.you"):g.aiLevel;
           const result=isWinG(g)?(g.playerColor==="w"?"1-0":"0-1"):isLossG(g)?(g.playerColor==="w"?"0-1":"1-0"):"1/2-1/2";
           const date=denPoMestnomu(new Date(g.date)).replace(/-/g,".");
           return buildPGN(g.moves,{white,black,result,date,event:`AEVION CyberChess · ${g.category} · ${g.opening||""}`});
@@ -16984,7 +16988,7 @@ ${question.trim()}`;
               <div style={{fontSize:48,lineHeight:1,flexShrink:0}}>{isWin?"🏆":isDraw?"🤝":"💀"}</div>
               <div>
                 <div style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:0.3}}>{isWin?"Победа!":isDraw?"Ничья":"Поражение"}</div>
-                <div style={{fontSize:13,color:"rgba(255,255,255,0.55)",marginTop:2}}>{ruResult(over)}</div>
+                <div style={{fontSize:13,color:"rgba(255,255,255,0.55)",marginTop:2}}>{resultText(over,cc.locale)}</div>
                 {ratDelta&&<div style={{marginTop:5,display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:6,
                   background:ratDelta.d>0?"rgba(16,185,129,0.2)":"rgba(239,68,68,0.2)",
                   border:`1px solid ${ratDelta.d>0?"rgba(16,185,129,0.4)":"rgba(239,68,68,0.4)"}`}}>

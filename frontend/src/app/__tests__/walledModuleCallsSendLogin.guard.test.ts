@@ -229,12 +229,22 @@ export function модулиСтены(): { пары: Array<[string, string]>; �
  * Планки qcoreai 205→206 и бюро 5→6 подняты не новым кодом, а прибором: с
  * 14.09 он видит адрес, собранный в переменной (`qcoreai/pipeline`, `bureau/notaries`).
  */
+/**
+ * 28.10.2026, замер этим же прибором на 3c6f3e120: бюро 10 (при планке 6), биржа 3 (при 2). Состав долга
+ * бюро: публичные страницы, которым вход не положен по смыслу, — проверка сертификата cert/[certId]
+ * (embed, verify), карточка и список нотариусов, cert-for-qright; заявка kyc-manual (GET и POST submit
+ * без заголовка — настоящий долг перед флипом стены); и две серверные пробы существования в макетах
+ * (bureau/kyc-manual/[id]/layout.tsx, startup-exchange/[id]/layout.tsx — честный 404, волна 2 от 27.10):
+ * у сервера нет токена посетителя, 401/402/403 там НЕ считаются «нет заявки» и пропускаются к странице,
+ * так что заплативший 402 не увидит. Планки подняты до измеренного, чтобы сторож снова ловил РОСТ,
+ * а не стоял красным с давних вызовов; перед флипом бюро долг всё равно обязан стать 0.
+ */
 const ДОЛГ_БЕЗ_ВХОДА: Record<string, number> = {
   qcoreai: 206, qreal: 23, qmedia: 15, qright: 14, "revenue-hub": 14, "qpaynet-embedded": 13,
   qgood: 12, qskyway: 11, qsign: 10, "psyapp-deps": 8, qmaskcard: 8, qventure: 8, "z-tide": 8,
-  shadownet: 7, qpersona: 6, qstore: 6, veilnetx: 6, "aevion-ip-bureau": 6, "kids-ai-content": 5,
+  shadownet: 7, qpersona: 6, qstore: 6, veilnetx: 6, "aevion-ip-bureau": 10, "kids-ai-content": 5,
   mapreality: 5, qchaingov: 5, qcontract: 5, qlife: 5, "voice-of-earth": 4, qevents: 3,
-  qmelanin: 3, qrenew: 3, ventures: 3, qtradeoffline: 2, "startup-exchange": 2, deepsan: 0, lifebox: 0,
+  qmelanin: 3, qrenew: 3, ventures: 3, qtradeoffline: 2, "startup-exchange": 3, deepsan: 0, lifebox: 0,
 };
 
 describe("вызовы модулей за стеной несут вход", () => {

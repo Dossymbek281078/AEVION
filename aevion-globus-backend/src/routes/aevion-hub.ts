@@ -99,7 +99,7 @@ const SUB_OPENAPI: { name: string; path: string; title: string; id?: string }[] 
  * external network. Uses an internal http call against the request's host so
  * Railway's per-deploy isolation still works.
  */
-async function probe(
+export async function probe(
   req: Request,
   path: string,
   timeoutMs: number,
@@ -126,11 +126,15 @@ async function probe(
     }
     return { ok: r.ok, status: r.status, body, durationMs: Date.now() - t0 };
   } catch (err) {
-    capture(err);
+    // 28.10.2026 (Sentry AEVION-BACKEND-B: 258 событий с 12.08, 0 пользователей): таймаут пробы —
+    // ожидаемый исход, он виден в теле /health как error:"timeout"; в Sentry летят только настоящие
+    // сбои (сеть, DNS, разбор). Признак таймаута — сигнал контроллера, а не текст ошибки.
+    const таймаут = controller.signal.aborted;
+    if (!таймаут) capture(err);
     return {
       ok: false,
       status: 0,
-      body: { error: err instanceof Error ? err.message : String(err) },
+      body: таймаут ? { error: "timeout", timeoutMs } : { error: err instanceof Error ? err.message : String(err) },
       durationMs: Date.now() - t0,
     };
   } finally {

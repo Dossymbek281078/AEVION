@@ -21,24 +21,18 @@ async function fetchCase(id: string): Promise<CaseSummary | null> {
 }
 
 /**
- * SSG — pre-render каждого case при build. Если backend недоступен на момент
- * build (например в CI без бека) — fallback к dynamic, страницы будут
- * генерироваться по запросу. Это безопасно: page.tsx уже умеет рендерить
- * клиентский fetch.
+ * 🔴 28.10.2026 (Sentry JAVASCRIPT-NEXTJS-2, прод 981c23da8): «Page changed from static to
+ * dynamic at runtime /pricing/cases/<id>, reason: headers» — страница кейса отдавала 500.
+ * Здесь стоял generateStaticParams (SSG + dynamicParams), а родительский
+ * src/app/pricing/layout.tsx с 27.10 читает язык читателя через cookies()/headers()
+ * (getServerLang). Статически собранный маршрут не имеет права трогать заголовки
+ * на запросе — Next роняет страницу целиком. Денежная страница: кейсы ведут в кассу.
+ *
+ * Решение: маршрут кейса — динамический (SSR на запрос), как и весь /pricing под этим
+ * layout; page.tsx и так грузит кейс клиентским fetch. Сторож:
+ * src/app/__tests__/staticSegmentPodDinamicheskimLayout.guard.test.ts.
  */
-export async function generateStaticParams(): Promise<Array<{ id: string }>> {
-  try {
-    const r = await fetch(`${getApiBase()}/api/pricing/cases`, { cache: "no-store" });
-    if (!r.ok) return [];
-    const j = (await r.json()) as { items?: Array<{ id: string }> };
-    return (j.items ?? []).map((c) => ({ id: c.id }));
-  } catch {
-    return [];
-  }
-}
-
-/** Принимать любые id — даже которых не было на момент build (новые кейсы). */
-export const dynamicParams = true;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;

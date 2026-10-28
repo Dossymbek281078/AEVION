@@ -65,6 +65,10 @@ describe("PsyApp: ru/en/kk", () => {
     expect(tPsy("en", "streak.restarts", { n: 2 })).toBe("Restarts: 2 — that's part of the path.");
   });
 
+  test("чат шлёт язык страницы — советник отвечает на нём (бэк: lib/psyappReplyLang.ts)", () => {
+    expect(readFileSync(join(ПАПКА, "components/SupportChat.tsx"), "utf8")).toContain("JSON.stringify({ message, alias, lang })");
+  });
+
   test("аффирмации: en и kk — по 10, сервер отдаёт только ru", () => {
     expect(AFFIRMATIONS.en).toHaveLength(10);
     expect(AFFIRMATIONS.kk).toHaveLength(10);

@@ -22,7 +22,7 @@ export default function SupportChat({ alias }: Props) {
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { t } = usePsyT();
+  const { t, lang } = usePsyT();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function send(text: string) {
@@ -36,7 +36,8 @@ export default function SupportChat({ alias }: Props) {
       const r = await fetch(apiUrl("/api/psyapp-deps/support"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, alias }),
+        // lang — чтобы советник ответил на языке страницы (бэк: lib/psyappReplyLang.ts)
+        body: JSON.stringify({ message, alias, lang }),
       });
       const d = await r.json();
       const reply = (d.reply as string | undefined) ?? t("chat.noReply");

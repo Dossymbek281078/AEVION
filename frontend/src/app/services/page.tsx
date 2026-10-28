@@ -6,12 +6,13 @@
  * сторож attrI18n, урок 21.10). Метка ?c= доезжает до кассы: withChannel для Lemon
  * Squeezy, keepChannelOrProbe для формы. Образцы сделаны ИИ — у каждого плашка.
  */
-import { useEffect, type CSSProperties } from "react";
+import { Suspense, useEffect, type CSSProperties } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { BuyLink } from "@/components/BuyLink";
 import { AiBadge } from "@/components/AiBadge";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import { useI18nOptional } from "@/lib/i18n";
 import { track } from "@/lib/track";
 import { channelFrom, keepChannelOrProbe, withChannel } from "@/lib/products";
@@ -106,7 +107,7 @@ function tierLabel(s: Service, t: ServiceTier, d: (typeof ТЕКСТ)[Lang]): st
   return t.monthly ? `${u.unit(t.qty)} ${d.perMonth}` : u.unit(t.qty);
 }
 
-export default function ServicesPage() {
+function ServicesInner() {
   const i18n = useI18nOptional();
   const lang: Lang = i18n?.lang === "en" ? "en" : "ru";
   const d = ТЕКСТ[lang];
@@ -170,9 +171,22 @@ export default function ServicesPage() {
       </div>
 
       <p style={{ ...p, marginTop: 20, fontSize: 13, color: "#64748b" }}>{d.pay}</p>
+      <PaymentReachNotice lang={lang} />
       <p style={{ marginTop: 16 }}>
         <Link href={keepChannelOrProbe("/pricing", raw, channel)} style={{ color: "#0d9488", fontWeight: 700 }}>{d.back}</Link>
       </p>
     </ProductPageShell>
+  );
+}
+
+/**
+ * useSearchParams на статической странице обязан стоять под Suspense — иначе боевая сборка
+ * падает на пререндере (сторож searchParamsNeedSuspense; поймано сборкой волны 8, 28.10).
+ */
+export default function ServicesPage() {
+  return (
+    <Suspense fallback={null}>
+      <ServicesInner />
+    </Suspense>
   );
 }

@@ -1688,6 +1688,9 @@ export default function CyberChessPage(){
   const[rolikЗадача,sRolikЗадача]=useState<ЗадачаРолика|null>(null);
   const[rolikСкрыт,sRolikСкрыт]=useState(false);
   const[rolikПодпись,sRolikПодпись]=useState<typeof PUZZLES[number]|null>(null);
+  // 28.10.2026: подпись даты и курсор кнопки считаются здесь, а не в JSX — храповик английских слов ловил обрывки между кавычками.
+  const rolikДата=rolikПодпись?датаРоликаПоId(rolikПодпись.id??""):"";
+  const rolikКурсор=rolikПодпись?"pointer":"default";
   const поРоликуRef=useRef(false); // пришёл по ?c=yt-* без ?puzzle= — задача ролика открывается сразу
   const rolikЗагрузкиRef=useRef<Map<string,Promise<РезультатЗагрузкиЗадачи>>>(new Map()); // один fetch на id
   const[boardScale,sBoardScale]=useState<number>(()=>{try{const v=parseFloat(localStorage.getItem("cc_board_scale_v1")||"1");return isNaN(v)?1:Math.max(0.5,Math.min(1.5,v))}catch{return 1}});
@@ -6804,7 +6807,7 @@ export default function CyberChessPage(){
         }
         последний=res;
       }
-      console.warn("[cyberchess] задача ролика недоступна",попытки.join(","),последний?.status);
+      console.warn("[cyberchess]","задача ролика недоступна",попытки.join(","),последний?.status);
       track({type:"feature_use",source:"cyberchess/rolik",meta:{feature:"rolik_puzzle_missing",puzzle:попытки[0],tried:попытки.length,status:последний?.status??0}});
       sRolikСкрыт(true);
     })();
@@ -7970,7 +7973,7 @@ export default function CyberChessPage(){
         // 28.10.2026: блок «Задача из ролика» (48 px телефон / 72 px десктоп) вычитается из высоты, чтобы доска осталась на первом экране
         const rolikВидим=!!rolikЗадача&&!rolikСкрыт;
         const РОЛИК_БЛОК_PX=rolikВидим?(isMobileLayout?48:72):0;
-        const превьюPx=Math.round((isMobileLayout?vwPx-20-РОЛИК_БЛОК_PX:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200)-РОЛИК_БЛОК_PX,vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
+        const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200)-РОЛИК_БЛОК_PX,vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
         return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,...(лоббиРядом?{display:"grid",gridTemplateColumns:`minmax(0,auto) minmax(${320}px,${420}px)`,alignItems:"start",columnGap:24}:{display:"flex",flexDirection:"column"}),gap:SPACE[3],maxWidth:лоббиРядом?1700:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
@@ -8018,10 +8021,10 @@ export default function CyberChessPage(){
           {rolikВидим&&<div data-cc-rolik="1" style={{display:"flex",alignItems:"center",gap:8,width:"100%",boxSizing:"border-box",height:isMobileLayout?44:64,padding:isMobileLayout?"0 8px":"0 12px",border:`1px solid ${CC.border}`,borderRadius:10,background:CC.surface1,overflow:"hidden"}}>
             <span aria-hidden="true" style={{fontSize:isMobileLayout?18:24,flex:"none"}}>🎬</span>
             <div style={{flex:1,minWidth:0,lineHeight:1.25}}>
-              <div style={{fontSize:isMobileLayout?13:14,fontWeight:800,color:CC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cc.t("rolik.title")}{rolikПодпись&&<span style={{fontWeight:600,color:CC.textDim}}>{" · "+датаРоликаПоId(rolikПодпись.id??"")}</span>}</div>
+              <div style={{fontSize:isMobileLayout?13:14,fontWeight:800,color:CC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cc.t("rolik.title")}{rolikПодпись&&<span style={{fontWeight:600,color:CC.textDim}}>{" · "}{rolikДата}</span>}</div>
               {!isMobileLayout&&<div style={{fontSize:12,color:CC.textDim,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{rolikПодпись?(imyaPoResheniyu(rolikПодпись,cc.locale)||zadanieNadDoskoy(rolikПодпись,cc.locale)):cc.t("rolik.loading")}</div>}
             </div>
-            <button type="button" className="cc-touch" disabled={!rolikПодпись} onClick={()=>{if(rolikПодпись?.id)void открытьЗадачуПоId(rolikПодпись.id,"rolik")}} style={{flex:"none",padding:"6px 14px",borderRadius:8,border:"none",background:CC.accent,color:"#111",fontWeight:800,fontSize:13,cursor:rolikПодпись?"pointer":"default",opacity:rolikПодпись?1:0.6}}>{cc.t("rolik.solve")}</button>
+            <button type="button" className="cc-touch" disabled={!rolikПодпись} onClick={()=>{if(rolikПодпись?.id)void открытьЗадачуПоId(rolikПодпись.id,"rolik")}} style={{flex:"none",padding:"6px 14px",borderRadius:8,border:"none",background:CC.accent,color:"#111",fontWeight:800,fontSize:13,cursor:rolikКурсор,opacity:rolikПодпись?1:0.6}}>{cc.t("rolik.solve")}</button>
           </div>}
           <SetupBoardPreview
             orientation={pCol}

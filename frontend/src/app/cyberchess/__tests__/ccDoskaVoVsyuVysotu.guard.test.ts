@@ -46,7 +46,7 @@ describe("доска во всю доступную высоту (136)", () => {
   });
   it("🔴 первый экран (настройка): превью по высоте окна, лобби колонкой справа с 1280, масштаб −/+ под превью, карточка после доски", () => {
     expect(src).toContain("const лоббиРядом=vwPx>=1280;");
-    expect(src).toContain("const превьюPx=Math.round((isMobileLayout?vwPx-20-РОЛИК_БЛОК_PX:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200)-РОЛИК_БЛОК_PX,vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));");
+    expect(src).toContain("const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200)-РОЛИК_БЛОК_PX,vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));");
     expect(src).toContain('maxPx={превьюPx}');
     expect(src).toContain('data-cc-setup-zoom="1"');
     expect(src).toContain("gridTemplateColumns:`minmax(0,auto) minmax(${320}px,${420}px)`");

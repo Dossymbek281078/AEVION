@@ -127,3 +127,13 @@ export function englishUrlWithChannel(
   return keepChannelOrProbe(цель, raw, channelFrom(raw));
 }
 
+/* Внутренняя ссылка с английской страницы остаётся английской: у цели есть своя
+   английская страница (список englishPages.ts) — ведём на /en/…, нет — добавляем
+   ?lang=en. 29.10.2026: «Open it» вело на русский /devhub. */
+export function englishHref(path: string): string {
+  const хеш = path.indexOf("#");
+  const без = хеш < 0 ? path : path.slice(0, хеш);
+  const хвост = хеш < 0 ? "" : path.slice(хеш);
+  if (hasOwnEnglishPage("/en" + без.split("?")[0])) return "/en" + без + хвост;
+  return без + (без.includes("?") ? "&" : "?") + "lang=en" + хвост;
+}

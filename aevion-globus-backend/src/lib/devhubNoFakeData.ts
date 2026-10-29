@@ -54,6 +54,9 @@ export function ukazanieBezVydumannyhDannyh(год: number, язык: ЯзыкЗ
     `If the request is in English: [your address], [your phone], [your email], [your price], ` +
     `[your company name]. NEVER mix languages inside one line — "[your price] руб." is wrong, ` +
     `"[ваша цена] руб." is right. ` +
+    `EXCEPTION: the <title> and the main <h1> must NEVER contain a placeholder in square brackets. ` +
+    `Use the company name the user gave; if they gave none, use a plain descriptive name from the topic ` +
+    `(for example "Coffee Shop"), without brackets. ` +
     `Do not delete the contacts or pricing block just because the data is unknown — ` +
     `a placeholder the user can fill in is useful, an invented address is harmful. ` +
     `The current year is ${год}: use ${год} for copyright lines and dates, or omit the ` +
@@ -110,4 +113,43 @@ export function ukazanieOYazyke(язык: ЯзыкЗапроса): string {
     );
   }
   return "";
+}
+
+/*
+ * 🔴 ЗАГЛУШКА В title/h1 — 29.10.2026, гостевой проход Продаж: сайт по примеру
+ * «coffee shop landing» вышел с title «[your company name] — Coffee Shop».
+ * Скобочная заглушка разрешена указанием выше ТОЛЬКО для контактов и цен в теле
+ * страницы; в названии вкладки и главном заголовке она читателю — брак.
+ * Поэтому (1) указание запрещает её в title/h1 словами, (2) этот сторож на ВЫХОДЕ
+ * вычищает её, если модель всё же написала: слово в промпте — просьба, код — гарантия.
+ */
+export const ZAGLUSHKA_V_SKOBKAH = /\[[^\]]{2,40}\]/;
+const ZAGLUSHKA_V_SKOBKAH_VSE = /\[[^\]]{2,40}\]/g;
+
+/** Название по теме запроса, без скобок: первые слова запроса, с заглавной. */
+export function nazvanieIzZaprosa(запрос: string | null | undefined): string {
+  const слова = String(запрос ?? "").replace(ZAGLUSHKA_V_SKOBKAH_VSE, " ").replace(/[^\p{L}\p{N}&' -]+/gu, " ").trim().split(/\s+/).filter(Boolean).slice(0, 3);
+  if (слова.length === 0) return "Home";
+  const с = слова.join(" ");
+  return с.charAt(0).toUpperCase() + с.slice(1);
+}
+
+function чистыйТекст(внутри: string, запрос: string | null | undefined): string {
+  if (!ZAGLUSHKA_V_SKOBKAH.test(внутри)) return внутри;
+  let т = внутри.replace(ZAGLUSHKA_V_SKOBKAH_VSE, " ").replace(/\s+/g, " ");
+  // «— Coffee Shop» после удаления заглушки: висячий разделитель по краям.
+  т = т.replace(/^[\s\-–—|:·•,]+|[\s\-–—|:·•,]+$/g, "").trim();
+  return т.length > 0 ? т : nazvanieIzZaprosa(запрос);
+}
+
+/** Вычищает [заглушки] из <title> и <h1> html-страницы; остальное тело не трогает. */
+export function ubratZaglushkiIzZagolovkov(html: string, запрос?: string | null): string {
+  return html
+    .replace(/(<title[^>]*>)([\s\S]*?)(<\/title>)/gi, (_m, a: string, б: string, в: string) => a + чистыйТекст(б, запрос) + в)
+    .replace(/(<h1[^>]*>)([\s\S]*?)(<\/h1>)/gi, (_m, a: string, б: string, в: string) => a + чистыйТекст(б, запрос) + в);
+}
+
+/** Применяет сторож к html-файлам набора; возвращает новый набор. */
+export function ochistitFaylyOtZaglushek<T extends { path: string; content: string }>(files: T[], запрос?: string | null): T[] {
+  return files.map((f) => (/\.html?$/i.test(f.path) ? { ...f, content: ubratZaglushkiIzZagolovkov(f.content, запрос) } : f));
 }

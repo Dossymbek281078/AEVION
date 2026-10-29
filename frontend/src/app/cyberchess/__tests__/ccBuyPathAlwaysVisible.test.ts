@@ -31,7 +31,8 @@ describe("путь к кассе CyberChess всегда на экране", () 
   it("телефон <769: первый пункт меню «Ещё» — купить", () => {
     const i = page.indexOf("...(vwPx<769?[\n");
     expect(i).toBeGreaterThan(0);
-    expect(page.slice(i, i + 400)).toContain("lbl:`Купить CyberChess · ${ccBuyLabel}`,act:()=>{window.location.href=ccBuyHref}");
+    // 29.10: на en/kk подпись из словаря (на /en шла «Купить CyberChess · $50/год»), на ru — прежняя.
+    expect(page.slice(i, i + 400)).toContain('lbl:cc.locale==="ru"?`Купить CyberChess · ${ccBuyLabel}`:`${cc.t("buy.card.title")} · ${ccBuyLabelLoc}`,act:()=>{window.location.href=ccBuyHref}');
   });
   it("магазин Chessy: карточка настоящей кассы стоит ВЫШЕ лестницы AEV", () => {
     const shop = page.indexOf('data-cc-buy="shop"');

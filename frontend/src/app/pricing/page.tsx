@@ -21,6 +21,7 @@ import {
   localizeModuleOneLiner,
   localizeNotes,
   localizePromoDescription,
+  localizeTrustBadge,
   localizeTier,
   localizeTrustNumber,
   localizeQuoteText,
@@ -2944,7 +2945,7 @@ export default function PricingPage() {
             {tp("compliance.title")}
           </h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {trust.badges.map((b) => {
+            {trust.badges.map((bRu) => localizeTrustBadge(bRu, lang)).map((b) => {
               const live = b.status === "live";
               return (
                 <div

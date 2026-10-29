@@ -25,7 +25,9 @@ export type AnchorBadge = {
   tone: "confirmed" | "pending" | "none" | "failed" | "unknown";
 };
 
-export function anchorBadge(a: AnchorInfo): AnchorBadge | null {
+// Подсказка (title) — на языке страницы: на /en шла по-русски (замер прода 29.10). kk — пока русская.
+export function anchorBadge(a: AnchorInfo, lang: string = "ru"): AnchorBadge | null {
+  const en = lang === "en";
   // Поля нет вовсе — молчим. См. главное правило выше.
   if (a === null || a === undefined) return null;
   const status = typeof a.status === "string" && a.status !== "" ? a.status : null;
@@ -40,35 +42,35 @@ export function anchorBadge(a: AnchorInfo): AnchorBadge | null {
       label: h === null ? "⛓ Bitcoin anchored" : `⛓ Bitcoin #${h}`,
       title:
         h === null
-          ? "Хеш работы закреплён в цепочке Bitcoin. Доказательство существует независимо от AEVION."
-          : `Хеш работы закреплён в блоке Bitcoin №${h}. Доказательство существует независимо от AEVION.`,
+          ? (en ? "The work's hash is anchored in the Bitcoin chain. The proof exists independently of AEVION." : "Хеш работы закреплён в цепочке Bitcoin. Доказательство существует независимо от AEVION.")
+          : (en ? `The work's hash is anchored in Bitcoin block #${h}. The proof exists independently of AEVION.` : `Хеш работы закреплён в блоке Bitcoin №${h}. Доказательство существует независимо от AEVION.`),
       tone: "confirmed",
     };
   }
   if (status === "pending") {
     return {
       label: "⏳ anchoring",
-      title: "Штамп отправлен в календари OpenTimestamps; подтверждение блоком Bitcoin появляется в течение нескольких часов.",
+      title: en ? "The stamp was sent to OpenTimestamps calendars; confirmation by a Bitcoin block arrives within a few hours." : "Штамп отправлен в календари OpenTimestamps; подтверждение блоком Bitcoin появляется в течение нескольких часов.",
       tone: "pending",
     };
   }
   if (status === "failed") {
     return {
       label: "⚠ anchor failed",
-      title: "Штамповка не удалась. Остальные слои доказательства (SHA-256, подпись, Ed25519) в силе.",
+      title: en ? "Stamping failed. The other proof layers (SHA-256, signature, Ed25519) still hold." : "Штамповка не удалась. Остальные слои доказательства (SHA-256, подпись, Ed25519) в силе.",
       tone: "failed",
     };
   }
   if (status === "not_stamped") {
     return {
       label: "no Bitcoin anchor",
-      title: "Эта запись создана до появления якорения в Bitcoin; якоря у неё нет и не появится. Остальные слои доказательства в силе.",
+      title: en ? "This record predates Bitcoin anchoring; it has no anchor and will not get one. The other proof layers still hold." : "Эта запись создана до появления якорения в Bitcoin; якоря у неё нет и не появится. Остальные слои доказательства в силе.",
       tone: "none",
     };
   }
   // Незнакомое состояние показываем КАК ЕСТЬ: спрятать его значило бы сделать
   // расхождение между базой и экраном невидимым.
-  return { label: status, title: `Состояние якоря: ${status}`, tone: "unknown" };
+  return { label: status, title: en ? `Anchor status: ${status}` : `Состояние якоря: ${status}`, tone: "unknown" };
 }
 
 export const ANCHOR_TONE_COLORS: Record<AnchorBadge["tone"], { bg: string; fg: string }> = {

@@ -172,3 +172,30 @@ export function installDevhubGuestHeader(): () => void {
     installed = false;
   };
 }
+
+/**
+ * Ссылка восстановления из письма «сохранить»: /devhub/<id>?k=<ключ гостя>.
+ * Гость, потерявший браузер, открывает её в чистом — ключ записывается ДО первого
+ * запроса к API (вызывается при вычислении модуля DevHubGuestIdentity, раньше эффектов
+ * страницы), затем ?k= убирается из адресной строки. Чужой ключ бэк отвечает 404.
+ * Возвращает true, если ключ записан. Мусор в ?k= игнорируется молча.
+ */
+export function adoptDevhubGuestKeyFromUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const u = new URL(window.location.href);
+    if (!/^\/devhub\/[^/]+/.test(u.pathname) || !u.searchParams.has("k")) return false;
+    const k = (u.searchParams.get("k") ?? "").trim();
+    let wrote = false;
+    if (GUEST_ID.test(k)) {
+      const cur = window.localStorage.getItem(STORAGE_KEY);
+      if (cur !== k) window.localStorage.setItem(STORAGE_KEY, k);
+      wrote = true;
+    }
+    u.searchParams.delete("k");
+    window.history.replaceState(window.history.state, "", u.pathname + (u.search || "") + u.hash);
+    return wrote;
+  } catch {
+    return false;
+  }
+}

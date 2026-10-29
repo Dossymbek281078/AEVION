@@ -24,6 +24,7 @@ const ФАЙЛЫ = [
   "app/qmedia/upload/page.tsx",
   "app/qmedia/playlists/page.tsx",
   "app/qmedia/likes/page.tsx",
+  "app/qmedia/TrackActions.tsx",
 ];
 const кириллица = /[А-Яа-яЁё]/;
 

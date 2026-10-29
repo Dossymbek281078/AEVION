@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import { useQMediaT, saveErrorKey } from "../i18n";
+import { TrackActions } from "../TrackActions";
 
 // значения фильтра уходят на сервер как есть; подпись — из словаря
 const GENRES = ["all", "pop", "rock", "electronic", "classical", "jazz", "hip-hop", "other"];
@@ -125,7 +126,7 @@ export default function QMediaMusicPage() {
           {loadFailed && <p role="alert" style={{ color: "#dc2626", fontSize: 13 }}>{t("err.loadFailed")}</p>}
           {!loadFailed && tracks.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13 }}>{t("music.empty")}</p>}
           {tracks.map((tr, i) => (
-            <div key={tr.id} onClick={() => play(tr)} style={{ padding: "10px 14px", borderRadius: 10, background: current?.id === tr.id ? "rgba(13,148,136,0.08)" : "#f8fafc", border: `1px solid ${current?.id === tr.id ? "rgba(13,148,136,0.3)" : "rgba(15,23,42,0.08)"}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+            <div key={tr.id} onClick={() => play(tr)} style={{ padding: "10px 14px", borderRadius: 10, background: current?.id === tr.id ? "rgba(13,148,136,0.08)" : "#f8fafc", border: `1px solid ${current?.id === tr.id ? "rgba(13,148,136,0.3)" : "rgba(15,23,42,0.08)"}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span style={{ width: 24, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>{current?.id === tr.id && isPlaying ? "▶" : i + 1}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{tr.title}</div>
@@ -133,6 +134,7 @@ export default function QMediaMusicPage() {
               </div>
               <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "rgba(13,148,136,0.08)", color: "#0d9488", fontWeight: 600 }}>{label("genre", tr.genre)}</span>
               <span style={{ fontSize: 11, color: "#94a3b8" }}>▶ {num(tr.playCount)}</span>
+              <TrackActions trackId={tr.id} />
             </div>
           ))}
         </div>

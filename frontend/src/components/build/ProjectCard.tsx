@@ -1,12 +1,7 @@
 import Link from "next/link";
 import type { BuildProject } from "@/lib/build/api";
 import { useI18n } from "@/lib/i18n";
-
-const STATUS_LABEL: Record<BuildProject["status"], string> = {
-  OPEN: "Открыт",
-  IN_PROGRESS: "В работе",
-  DONE: "Завершён",
-};
+import { useBuildT, type BuildKey } from "@/app/build/i18n";
 
 const STATUS_TONE: Record<BuildProject["status"], string> = {
   OPEN: "bg-[#0a7d72]/10 text-[#075b53] border-[#0a7d72]/30",
@@ -20,17 +15,20 @@ const STATUS_DOT: Record<BuildProject["status"], string> = {
   DONE: "bg-[#9a9c9f]",
 };
 
-function formatBudget(n: number): string {
-  if (!n) return "По договору";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} млн ₽`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)} тыс. ₽`;
-  return `${n} ₽`;
+// Бюджет проекта вводится в USD (create-project: «Budget (USD)», страница проекта — «$»);
+// до 29.10.2026 карточка показывала его как «тыс. ₽» — валюта расходилась с вводом.
+function formatBudget(n: number, t: (k: BuildKey, v?: Record<string, string | number>) => string): string {
+  if (!n) return t("card.negotiable");
+  if (n >= 1_000_000) return t("card.budgetM", { n: (n / 1_000_000).toFixed(1) });
+  if (n >= 1_000) return t("card.budgetK", { n: (n / 1_000).toFixed(0) });
+  return t("card.budget", { n });
 }
 
 export function ProjectCard({ project }: { project: BuildProject }) {
   const daysAgo = Math.floor((Date.now() - new Date(project.createdAt).getTime()) / 86400000);
   const openVacancies = typeof project.vacancyCount === "number" ? project.vacancyCount : null;
   const { t } = useI18n();
+  const { t: tb, tn, st } = useBuildT();
 
   return (
     <Link
@@ -46,14 +44,14 @@ export function ProjectCard({ project }: { project: BuildProject }) {
         )}
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${STATUS_TONE[project.status]}`}>
           <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[project.status]}`} />
-          {STATUS_LABEL[project.status]}
+          {st("pstatus", project.status)}
         </span>
         {project.city && (
           <span className="text-[11px] text-[#74767c]">📍 {project.city}</span>
         )}
         {openVacancies != null && openVacancies > 0 && (
           <span className="text-[11px] text-[#075b53] font-medium">
-            {openVacancies} {openVacancies === 1 ? "вакансия" : openVacancies < 5 ? "вакансии" : "вакансий"}
+            {tn("card.vacancies", openVacancies)}
           </span>
         )}
       </div>
@@ -70,9 +68,9 @@ export function ProjectCard({ project }: { project: BuildProject }) {
 
       {/* Footer */}
       <div className="mt-4 flex items-center justify-between text-xs text-[#74767c]">
-        <span className="font-semibold text-[#17181a]">{formatBudget(project.budget)}</span>
+        <span className="font-semibold text-[#17181a]">{formatBudget(project.budget, tb)}</span>
         <span>
-          {daysAgo === 0 ? "сегодня" : daysAgo === 1 ? "вчера" : `${daysAgo} дн. назад`}
+          {daysAgo === 0 ? tb("card.today") : daysAgo === 1 ? tb("card.yesterday") : tb("card.daysAgo", { n: daysAgo })}
         </span>
       </div>
     </Link>

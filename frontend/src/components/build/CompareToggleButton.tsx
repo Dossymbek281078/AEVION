@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { readCompare, toggleCompare, COMPARE_MAX, type CompareEntry } from "@/lib/build/compareList";
+import { useBuildT } from "@/app/build/i18n";
 
 export function CompareToggleButton({ entry }: { entry: CompareEntry }) {
   const [selected, setSelected] = useState(false);
   const [count, setCount] = useState(0);
+  const { t } = useBuildT();
 
   useEffect(() => {
     function refresh() {
@@ -33,10 +35,10 @@ export function CompareToggleButton({ entry }: { entry: CompareEntry }) {
       }}
       title={
         selected
-          ? "Remove from comparison"
+          ? t("cmp.remove")
           : disabled
-            ? `Compare list full (${COMPARE_MAX} max)`
-            : "Add to comparison"
+            ? t("cmp.full", { n: COMPARE_MAX })
+            : t("cmp.add")
       }
       aria-pressed={selected}
       disabled={disabled}
@@ -46,7 +48,7 @@ export function CompareToggleButton({ entry }: { entry: CompareEntry }) {
           : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
       }`}
     >
-      {selected ? "✓ Compare" : "+ Compare"}
+      {selected ? t("cmp.on") : t("cmp.off")}
     </button>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { buildApi, type BuildReview } from "@/lib/build/api";
 import { StarsDisplay, StarsInput } from "./StarRating";
+import { useBuildT } from "@/app/build/i18n";
 
 // ── Public list of reviews about a single user ─────────────────────
 // Reads /api/build/reviews/by-user/:userId and renders a card list.
@@ -12,13 +13,14 @@ export function ReviewsByUserSection({
   userId,
   initialAvg,
   initialCount,
-  emptyHint = "Пока нет отзывов о этом пользователе.",
+  emptyHint,
 }: {
   userId: string;
   initialAvg?: number;
   initialCount?: number;
   emptyHint?: string;
 }) {
+  const { t } = useBuildT();
   const [items, setItems] = useState<BuildReview[]>([]);
   const [avg, setAvg] = useState<number>(initialAvg ?? 0);
   const [count, setCount] = useState<number>(initialCount ?? 0);
@@ -45,17 +47,17 @@ export function ReviewsByUserSection({
     <section className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-6">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-          Reviews
+          {t("rev.title")}
         </h2>
         {count > 0 && (
           <StarsDisplay value={avg} size="md" showValue reviewCount={count} />
         )}
       </div>
 
-      {loading && <p className="text-xs text-slate-500">Loading…</p>}
+      {loading && <p className="text-xs text-slate-500">{t("common.loading")}</p>}
 
       {!loading && items.length === 0 && (
-        <p className="text-sm text-slate-500">{emptyHint}</p>
+        <p className="text-sm text-slate-500">{emptyHint ?? t("rev.emptyUser")}</p>
       )}
 
       {!loading && items.length > 0 && (
@@ -72,6 +74,7 @@ export function ReviewsByUserSection({
 // ── Reviews scoped to a single project ─────────────────────────────
 // Both directions, in chronological order. Used inside /build/project/[id].
 export function ReviewsByProjectSection({ projectId }: { projectId: string }) {
+  const { t } = useBuildT();
   const [items, setItems] = useState<BuildReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
@@ -93,20 +96,20 @@ export function ReviewsByProjectSection({ projectId }: { projectId: string }) {
     <section className="mt-6 rounded-xl border border-white/10 bg-white/5 p-5">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-          Reviews on this project
+          {t("rev.projTitle")}
         </h2>
         <button
           onClick={() => setReload((n) => n + 1)}
           className="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
         >
-          ↻ refresh
+          {t("rev.refresh")}
         </button>
       </div>
 
-      {loading && <p className="text-xs text-slate-500">Loading…</p>}
+      {loading && <p className="text-xs text-slate-500">{t("common.loading")}</p>}
       {!loading && items.length === 0 && (
         <p className="text-sm text-slate-500">
-          Пока никто не оставлял отзывов на этом проекте. После завершения вакансии у обеих сторон появится возможность оценить друг друга.
+          {t("rev.emptyProject")}
         </p>
       )}
       {!loading && items.length > 0 && (
@@ -127,8 +130,9 @@ function ReviewCard({
   review: BuildReview;
   showDirection?: boolean;
 }) {
+  const { t, date } = useBuildT();
   const directionLabel =
-    review.direction === "CLIENT_TO_WORKER" ? "Client → Worker" : "Worker → Client";
+    review.direction === "CLIENT_TO_WORKER" ? t("rev.c2w") : t("rev.w2c");
   return (
     <li className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -144,7 +148,7 @@ function ReviewCard({
           )}
           {review.projectTitle && (
             <span className="text-xs text-slate-500">
-              · on{" "}
+              {t("rev.on")}{" "}
               <Link
                 href={`/build/project/${review.projectId}`}
                 className="hover:underline"
@@ -160,7 +164,7 @@ function ReviewCard({
               {directionLabel}
             </span>
           )}
-          <span>{new Date(review.createdAt).toLocaleDateString()}</span>
+          <span>{date(review.createdAt)}</span>
         </div>
       </div>
       {review.comment && (
@@ -189,6 +193,7 @@ export function EligibleReviewsBlock({
   >([]);
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
+  const { t, tn } = useBuildT();
 
   useEffect(() => {
     let cancelled = false;
@@ -215,13 +220,13 @@ export function EligibleReviewsBlock({
   return (
     <section className="mt-6 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-slate-900 p-6">
       <div className="text-xs font-bold uppercase tracking-wider text-amber-300">
-        Leave a review
+        {t("rev.leave")}
       </div>
       <h2 className="mt-1 text-lg font-bold text-white">
-        У вас {items.length} pending {items.length === 1 ? "review" : "reviews"}
+        {tn("rev.pending", items.length)}
       </h2>
       <p className="mt-1 text-xs text-amber-200/70">
-        Оценка обеих сторон делает рейтинг честным — это и есть наш main differentiator от HH.
+        {t("rev.why")}
       </p>
       <div className="mt-4 space-y-3">
         {items.map((it) => (
@@ -250,10 +255,11 @@ function SingleReviewForm({
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useBuildT();
 
   async function submit() {
     if (!rating) {
-      setError("Выберите рейтинг от 1 до 5 звёзд.");
+      setError(t("rev.pickStars"));
       return;
     }
     setBusy(true);
@@ -277,7 +283,7 @@ function SingleReviewForm({
     <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="text-sm">
-          <span className="text-slate-400">Reviewing </span>
+          <span className="text-slate-400">{t("rev.reviewing")} </span>
           <Link
             href={`/build/u/${row.revieweeId}`}
             className="font-semibold text-white hover:underline"
@@ -287,7 +293,7 @@ function SingleReviewForm({
           {row.projectTitle && (
             <span className="text-slate-500">
               {" "}
-              · on{" "}
+              {t("rev.on")}{" "}
               <Link href={`/build/project/${row.projectId}`} className="hover:underline">
                 {row.projectTitle}
               </Link>
@@ -295,7 +301,7 @@ function SingleReviewForm({
           )}
         </div>
         <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs uppercase tracking-wider text-slate-400">
-          {row.direction === "CLIENT_TO_WORKER" ? "as client" : "as worker"}
+          {row.direction === "CLIENT_TO_WORKER" ? t("rev.asClient") : t("rev.asWorker")}
         </span>
       </div>
 
@@ -307,7 +313,8 @@ function SingleReviewForm({
       <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="Что было хорошо и что можно улучшить?"
+        placeholder={t("rev.ph")}
+        aria-label={t("rev.ph")}
         rows={3}
         maxLength={2000}
         disabled={busy}
@@ -322,7 +329,7 @@ function SingleReviewForm({
           disabled={busy || rating < 1}
           className="rounded-md bg-amber-500 px-4 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-400 disabled:opacity-50"
         >
-          {busy ? "…" : "Post review"}
+          {busy ? "…" : t("rev.post")}
         </button>
       </div>
     </div>

@@ -485,7 +485,7 @@ function PlanBadge() {
       className={`hidden items-center rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wider sm:inline-flex ${tone}`}
       title={tr("plan.title")}
     >
-      {planKey === "PPHIRE" ? tr("plan.pph") : planKey}
+      {planKey === "PPHIRE" ? tr("plan.pph") : planKey === "FREE" ? tr("plan.free") : planKey}
     </Link>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, BuildApiError } from "@/lib/build/api";
+import { useBuildT } from "../i18n";
 
 export default function CreateProjectPage() {
   return (
@@ -17,6 +18,7 @@ export default function CreateProjectPage() {
 
 function CreateProjectForm() {
   const router = useRouter();
+  const { t } = useBuildT();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [budget, setBudget] = useState("");
@@ -37,7 +39,7 @@ function CreateProjectForm() {
       });
       router.push(`/build/project/${encodeURIComponent(created.id)}`);
     } catch (e) {
-      setError((e as BuildApiError).code || (e as Error).message);
+      setError(t("create.error", { code: (e as BuildApiError).code || (e as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -45,25 +47,25 @@ function CreateProjectForm() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-1 text-2xl font-bold text-white">New construction project</h1>
+      <h1 className="mb-1 text-2xl font-bold text-white">{t("create.title")}</h1>
       <p className="mb-6 text-sm text-slate-400">
-        Describe the scope, budget, and location. You can add vacancies and files after the project is created.
+        {t("create.sub")}
       </p>
 
       <form onSubmit={submit} className="space-y-5 rounded-xl border border-white/10 bg-white/5 p-6">
-        <Field label="Title" required>
+        <Field label={t("create.fTitle")} required>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
             minLength={3}
             maxLength={200}
-            placeholder="3-storey residential block, downtown Almaty"
+            placeholder={t("create.titlePh")}
             className="input-build"
           />
         </Field>
 
-        <Field label="Description" required>
+        <Field label={t("common.description")} required>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -71,13 +73,13 @@ function CreateProjectForm() {
             minLength={10}
             maxLength={10000}
             rows={6}
-            placeholder="Scope of work, materials, expected timeline, special requirements…"
+            placeholder={t("create.descPh")}
             className="input-build"
           />
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Budget (USD)">
+          <Field label={t("create.fBudget")}>
             <input
               type="number"
               min={0}
@@ -89,7 +91,7 @@ function CreateProjectForm() {
               className="input-build"
             />
           </Field>
-          <Field label="City">
+          <Field label={t("common.city")}>
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
@@ -107,14 +109,14 @@ function CreateProjectForm() {
             onClick={() => router.back()}
             className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-200 hover:bg-white/5"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="submit"
             disabled={busy}
             className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
           >
-            {busy ? "Creating…" : "Create project"}
+            {busy ? t("create.creating") : t("create.submit")}
           </button>
         </div>
 

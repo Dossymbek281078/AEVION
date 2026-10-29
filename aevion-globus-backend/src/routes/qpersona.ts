@@ -140,7 +140,7 @@ async function dbUpdate(
  * проверяется тестом на общем наборе примеров, а не на честном слове.
  */
 export const SMOKE_ALIAS_SQL =
-  "(alias ~ '^smoke([-_0-9]|$)' OR alias ~ '^sm[0-9]{6,}$')";
+  "(alias ~ '^smoke([-_0-9]|$)' OR alias ~ '^probe([-_0-9]|$)' OR alias ~ '^sm[0-9]{6,}$')";
 
 export function isSmokeAlias(alias: string): boolean {
   const a = String(alias ?? "");
@@ -151,6 +151,11 @@ export function isSmokeAlias(alias: string): boolean {
   // бы честно пустой и одинаково бесполезной.
   if (a === "smoke") return true;
   if (a.startsWith("smoke") && /^[-_0-9]/.test(a.slice(5))) return true;
+  // 27.10.2026: проба окна Приложения `probe-apps-mvgwpivu` (20.10) жила на витрине /qpersona неделю:
+  // сторож очереди постов держал модуль вне публикаций. Та же форма, что у smoke-: слово + разделитель.
+  // Запись не удаляется — только не показывается; снять признак = вернуть на витрину.
+  if (a === "probe") return true;
+  if (a.startsWith("probe") && /^[-_0-9]/.test(a.slice(5))) return true;
   // `sm` + длинная метка времени: так подписывались прогоны до 01.09.
   if (a.startsWith("sm") && /^[0-9]{6,}$/.test(a.slice(2))) return true;
   return false;

@@ -108,7 +108,8 @@ describe("класс закрыт по маршрутам, а не по одно
   // помощников в один — отдельная задача, она трогает шесть файлов в чужой зоне.
   const VALIDATORS = ["queryDate(", "queryIsoTimestamp("];
 
-  const EXEMPT = new Set(["routes/aevion-hub.ts:734"]);
+  // 28.10.2026: 734 → 738 — в probe() выше добавлены 4 строки (таймаут не капчится, AEVION-BACKEND-B); само место не менялось.
+  const EXEMPT = new Set(["routes/aevion-hub.ts:738"]);
 
   test("каждое место, читающее дату из запроса, её проверяет", () => {
     const NAMES = /req\.query\.(before|after|since|until|from|to|date|day|start|end)\b/;

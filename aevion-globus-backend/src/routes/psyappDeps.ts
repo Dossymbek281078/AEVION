@@ -31,6 +31,7 @@ import { callProvider, getProviders, resolveProvider } from "../services/qcoreai
 import { verifyBearerOptional } from "../lib/authJwt";
 import { safeErrorText } from "../lib/safeError";
 import { нашВнутреннийАдрес } from "../lib/planGate";
+import { psyappReplyLanguage } from "../lib/psyappReplyLang";
 import { requesterId } from "../lib/devhubGuest";
 
 export const psyappDepsRouter = Router();
@@ -568,7 +569,7 @@ psyappDepsRouter.post("/support", aiLimit, async (req: Request, res: Response) =
     const systemPrompt =
       "Ты — поддерживающий советник по выходу из зависимостей. " +
       "Не суди, мягко поддержи, предложи 1 конкретный шаг, который человек может сделать прямо сейчас. " +
-      "Ответ на русском языке, не более 120 слов. " +
+      `${psyappReplyLanguage(body.lang)}, не более 120 слов. ` +
       "Не ставь диагнозы. При признаках кризиса напомни, что есть службы помощи и специалисты.";
 
     const messages = [

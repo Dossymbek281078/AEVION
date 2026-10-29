@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { createHash } from "node:crypto";
+import { адресОтПроксиСайта } from "./siteProxyAddress";
 
 /**
  * Two shapes, one Map. A key is never shared between shapes: keyPrefix is unique
@@ -400,6 +401,11 @@ export function clientIp(req: {
   // запрос посетителя от служебной проверки живости, а не для наблюдения.
   const url = String(req.originalUrl || req.path || "");
   logPeerShapeOnce(peer, req.headers, url.startsWith("/api") ? "/api" : "прочее");
+  // 28.10.2026: запрос пришёл через прокси сайта (aevion.app → api) — X-Real-IP здесь
+  // это выход Vercel, один на тысячи людей. Адрес гостя прокси кладёт в
+  // x-aevion-client-ip и подписывает AEVION_EDGE_KEY; принимаем только с верным ключом.
+  const отСайта = адресОтПроксиСайта({ headers: (req.headers ?? {}) as Request["headers"] });
+  if (отСайта && looksLikeAddress(отСайта)) return normalizeAddressForKey(отСайта);
   // 🔴 ИТОГ ЗАМЕРА 28.08.2026, читать до любой правки ниже.
   //
   // Ветка X-Real-IP СРАБАТЫВАЕТ на проде (зонд: «внутренний=да форма-real=адрес

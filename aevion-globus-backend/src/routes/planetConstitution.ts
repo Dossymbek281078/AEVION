@@ -189,7 +189,8 @@ planetConstitutionRouter.post(
             limit: FREE_SAVE_LIMIT,
             used,
             upgradeUrl: `${PUBLIC_BASE}/constitution/pricing`,
-            message: `Free-тариф: до ${FREE_SAVE_LIMIT} опубликованных конституций. Upgrade → Pro для безлимита.`,
+            // 27.10.2026: прежний англо-русский призыв купить Pro заменён — Pro даёт подписка AEVION (constitutionGate.resolvePlan)
+            message: `Бесплатно можно опубликовать до ${FREE_SAVE_LIMIT} конституций. Без ограничений — с подпиской AEVION.`,
           });
         }
       }

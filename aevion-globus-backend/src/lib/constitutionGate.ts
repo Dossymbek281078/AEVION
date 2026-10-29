@@ -54,7 +54,9 @@ function upgradeResponse(res: Response): void {
     error: "pro_required",
     plan: "free",
     upgradeUrl: `${PUBLIC_BASE}/constitution/pricing`,
-    message: "Функция доступна в Constitution Pro ($9/мес). Upgrade: /constitution/pricing",
+    // 27.10.2026: было «Constitution Pro ($9/мес)» — тариф снят 15.09 (pricing.ts: отдельно продаются
+    // только приложения витрины), Pro даёт подписка AEVION (resolvePlan: активная подписка → pro).
+    message: "Эта функция открывается с подпиской AEVION. Сроки и цены: /constitution/pricing",
   });
 }
 
@@ -196,7 +198,9 @@ export async function aiRateGate(req: Request, res: Response, next: NextFunction
     limit,
     resetInHours: 24,
     upgradeUrl: `${PUBLIC_BASE}/constitution/pricing`,
-    message: `Free tier: ${limit} AI-запросов в день. Ты использовал ${used}. Upgrade → Pro для безлимита.`,
+    // 27.10.2026: человеческий текст вместо прежнего английского призыва купить Pro — витрина показывает свой перевод
+    // (constitution.ai.errorDailyLimit), этот — для клиентов API и запасной.
+    message: `Бесплатные ИИ-подсказки на сегодня закончились (${used} из ${limit}). Новые — через сутки; без ограничений — с подпиской AEVION.`,
   });
 }
 

@@ -609,6 +609,17 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         </div>
       )}
 
+      {/* 29.10: дорога к прошлым беседам. Библиотека /multichat-engine/library существовала,
+          но ни одна страница на неё не ссылалась — вернувшийся человек не находил свой разбор. */}
+      {authed && results && results.length > 0 && (
+        <div style={{ marginTop: 10, fontSize: 13, color: T.textMute }}>
+          <a href="/multichat-engine/library" data-mc-library="after-answer" style={{ color: T.accent, fontWeight: 700 }}>
+            {tm(mcLang, "🗂 Мои беседы")}
+          </a>{" "}
+          {tm(mcLang, "— эта беседа сохранена в вашем аккаунте")}
+        </div>
+      )}
+
       {/* Отчёт доступен и без чека — например, у примера для гостя: пересылать
           коллеге разбор осмысленно и тогда, когда подписывать нечего. */}
       {results && results.length > 0 && (

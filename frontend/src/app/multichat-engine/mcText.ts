@@ -27,6 +27,8 @@ export const MC_TEXT: Record<string, Tr> = {
   "Порядок — по проверяемости: сверху то, что закрывается за минуту.": { en: "Ordered by how checkable it is: on top — what you can settle in a minute.", kk: "Тексерілу ретімен: жоғарыда — бір минутта анықталатыны." },
   "Скачать чек": { en: "Download receipt", kk: "Чекті жүктеу" },
   "проверить чек": { en: "verify receipt", kk: "чекті тексеру" },
+  "🗂 Мои беседы": { en: "🗂 My conversations", kk: "🗂 Менің әңгімелерім" },
+  "— эта беседа сохранена в вашем аккаунте": { en: "— this conversation is saved to your account", kk: "— бұл әңгіме аккаунтыңызда сақталды" },
   "Скачать отчёт": { en: "Download report", kk: "Есепті жүктеу" },
   "Markdown: вопрос, разногласия, что проверить, ответы и хеш чека": { en: "Markdown: question, disagreements, what to check, answers and receipt hash", kk: "Markdown: сұрақ, келіспеушіліктер, не тексеру керек, жауаптар және чек хеші" },
   "Бесплатные запросы на сегодня закончились. Войдите под почтой оплаты или откройте тариф — кнопки ниже.": { en: "Free requests for today are used up. Sign in with your payment email or open a plan — buttons below.", kk: "Бүгінгі тегін сұраулар таусылды. Төлем поштасымен кіріңіз немесе тарифті ашыңыз — батырмалар төменде." },

@@ -101,6 +101,9 @@ export default function MultichatLibraryPage() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 402 upgrade_required: список бесед — в подписке. Это не сбой агента и не «пусто»:
+  // замер 29.10 — бесплатный вошедший сразу после беседы видел «Агент не ответил. Здесь пока пусто».
+  const [upgrade, setUpgrade] = useState<{ url: string; plan: string } | null>(null);
   const [q, setQ] = useState("");
   const [usageMap, setUsageMap] = useState<Record<string, Usage>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -124,6 +127,7 @@ export default function MultichatLibraryPage() {
   async function load(t: string, query: string) {
     setLoading(true);
     setError("");
+    setUpgrade(null);
     try {
       // Через apiUrl, как и все остальные вызовы страницы: голый `/api/...`
       // уходит в сам Next (переписан только `/api-backend/*`) и стабильно
@@ -136,6 +140,13 @@ export default function MultichatLibraryPage() {
         // Голое «Ошибка: 429» человеку ничего не говорит и звучит как его вина:
         // предел общий для всех, кто пользуется сервисом в эту минуту.
         const d = await r.json().catch(() => ({}));
+        if (r.status === 402 && d?.error === "upgrade_required") {
+          setUpgrade({
+            url: typeof d.upgradeUrl === "string" ? d.upgradeUrl : "/pricing?app=multichat-engine",
+            plan: typeof d.requiredPlan === "string" ? d.requiredPlan : "AEVION Планета",
+          });
+          return;
+        }
         setError(agentFailure(d?.error ?? `upstream ${r.status}`).human);
         return;
       }
@@ -319,6 +330,17 @@ export default function MultichatLibraryPage() {
       </header>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px", display: "grid", gap: 16 }}>
+        {upgrade && (
+          <div data-mc-library="upgrade" style={{ background: T.surface, border: `1px solid ${T.accent}`, borderRadius: 10, padding: 16, fontSize: 14, lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>История бесед — в подписке «{upgrade.plan}»</div>
+            <div style={{ color: T.textMute, marginBottom: 12 }}>
+              Беседы, которые вы ведёте, сохраняются в аккаунте. Список, поиск и повторный разбор откроются здесь после оплаты.
+            </div>
+            <a href={upgrade.url} data-mc-buy="library" style={{ display: "inline-block", background: T.accent, color: T.onAccentDeep, borderRadius: 8, padding: "8px 16px", fontWeight: 700, textDecoration: "none" }}>
+              Подключить подписку
+            </a>
+          </div>
+        )}
         {error && (
           <div style={{ background: T.redFill18, border: `1px solid ${T.redEdge45}`, borderRadius: 10, padding: 12, fontSize: 14, color: T.bad }}>
             {error}
@@ -373,7 +395,7 @@ export default function MultichatLibraryPage() {
         {loading && items.length === 0 && (
           <div style={{ color: T.textMute, fontSize: 14, padding: "48px 0", textAlign: "center" }}>Загрузка…</div>
         )}
-        {!loading && items.length === 0 && (
+        {!loading && items.length === 0 && !error && !upgrade && (
           <div style={{ color: T.textMute, fontSize: 14, padding: "48px 0", textAlign: "center", lineHeight: 1.6 }}>
             {q ? (
               "По запросу ничего не найдено"

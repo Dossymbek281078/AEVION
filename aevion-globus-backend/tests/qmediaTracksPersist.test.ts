@@ -289,19 +289,22 @@ describe("треки QMedia переживают перезапуск", () => {
   });
 
   test("лайк ложится в базу и снимается там же", async () => {
+    // 29.10.2026: /me/likes отдаёт сам трек и прячет несуществующий — лайкаем настоящий, а не выдуманный t-99.
+    const created = await request(app()).post("/x/me/tracks").set("Authorization", `Bearer ${TOKEN}`).send({ title: "Нравится", isPublic: true });
+    const t99 = created.body.id as string;
     const before = likes.size;
     const on = await request(app())
-      .post("/x/track/t-99/like")
+      .post(`/x/track/${t99}/like`)
       .set("Authorization", `Bearer ${TOKEN}`);
     expect(on.status).toBe(200);
     expect(on.body.liked).toBe(true);
     expect(likes.size, "лайк не доехал до базы").toBe(before + 1);
 
     const list = await request(app()).get("/x/me/likes").set("Authorization", `Bearer ${TOKEN}`);
-    expect(list.body.items.some((l: { id: string }) => l.id === "t-99")).toBe(true);
+    expect(list.body.items.some((l: { id: string }) => l.id === t99)).toBe(true);
 
     const off = await request(app())
-      .post("/x/track/t-99/like")
+      .post(`/x/track/${t99}/like`)
       .set("Authorization", `Bearer ${TOKEN}`);
     expect(off.body.liked, "повторное нажатие не сняло лайк").toBe(false);
     expect(likes.size, "снятие лайка не дошло до базы").toBe(before);

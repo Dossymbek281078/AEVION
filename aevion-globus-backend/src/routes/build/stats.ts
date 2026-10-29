@@ -64,7 +64,7 @@ statsRouter.get("/activity", async (_req, res) => {
          FROM "BuildVacancy" v
          JOIN "BuildProject" p ON p."id" = v."projectId"
          JOIN "AEVIONUser" u ON u."id" = p."clientId"
-         WHERE v."status" = 'OPEN' AND ${excludeTestUsers("u")}
+         WHERE v."status" = 'OPEN' AND ${excludeTestUsers("u")} AND ${неОбразецSql('p."id"')}
          ORDER BY v."createdAt" DESC LIMIT 10`,
       ),
       pool.query(
@@ -73,7 +73,7 @@ statsRouter.get("/activity", async (_req, res) => {
          JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
          JOIN "BuildProject" p ON p."id" = v."projectId"
          JOIN "AEVIONUser" u ON u."id" = p."clientId"
-         WHERE ${excludeTestUsers("u")}
+         WHERE ${excludeTestUsers("u")} AND ${неОбразецSql('p."id"')}
          ORDER BY a."createdAt" DESC LIMIT 10`,
       ),
       pool.query(
@@ -82,7 +82,7 @@ statsRouter.get("/activity", async (_req, res) => {
          JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
          JOIN "BuildProject" p ON p."id" = v."projectId"
          JOIN "AEVIONUser" u ON u."id" = p."clientId"
-         WHERE a."status" = 'ACCEPTED' AND ${excludeTestUsers("u")}
+         WHERE a."status" = 'ACCEPTED' AND ${excludeTestUsers("u")} AND ${неОбразецSql('p."id"')}
          ORDER BY a."updatedAt" DESC LIMIT 5`,
       ),
     ]);

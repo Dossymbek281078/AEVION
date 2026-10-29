@@ -23,13 +23,15 @@ import { useToast } from "@/components/build/Toast";
 import { VacancyDetailSkeleton } from "@/components/build/Skeleton";
 import { recordVacancyView } from "@/lib/build/recentlyViewed";
 import { renderMarkdown } from "@/lib/build/markdown";
-import { regionLabel, WORK_MODE_LABELS, EDUCATION_LEVEL_LABELS, type WorkMode, type EducationLevel } from "@/lib/build/geo";
+import { regionLabelIn, workModeLabelIn, educationLabelIn } from "@/lib/build/geo";
+import { useBuildT, type BuildKey } from "../../i18n";
 
 export default function VacancyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const me = useBuildAuth((s) => s.user);
   const searchParams = useSearchParams();
   const previewMode = searchParams.get("preview");
+  const { t: tb, st, lang, date } = useBuildT();
 
   const [vacancy, setVacancy] = useState<BuildVacancy | null>(null);
   const [applications, setApplications] = useState<BuildApplication[] | null>(null);
@@ -205,9 +207,9 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
   if (error || !vacancy) {
     return (
       <BuildShell>
-        <p className="py-8 text-sm text-rose-300">{error || "Vacancy not found."}</p>
+        <p className="py-8 text-sm text-rose-300">{error || tb("vac.notFound")}</p>
         <Link href="/build" className="text-sm text-emerald-300 underline">
-          ← Back to projects
+          {tb("common.backToProjects")}
         </Link>
       </BuildShell>
     );
@@ -231,7 +233,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
         <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100">
           <div className="mx-auto max-w-3xl">{children}</div>
           <footer className="mx-auto mt-8 max-w-3xl border-t border-white/5 pt-3 text-center text-[10px] text-slate-500">
-            Powered by{" "}
+            {tb("vac.poweredBy")}{" "}
             <a
               href="https://aevion.app/build"
               target="_blank"
@@ -252,7 +254,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
         href={`/build/project/${encodeURIComponent(vacancy.projectId)}`}
         className="text-xs text-slate-400 underline-offset-2 hover:underline"
       >
-        ← {vacancy.projectTitle || "Back to project"}
+        ← {vacancy.projectTitle || tb("vac.backToProject")}
       </Link>
 
       <div className="mt-2 mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -260,21 +262,21 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
           <h1 className="text-2xl font-bold text-white">{vacancy.title}</h1>
           {(vacancy.city || vacancy.region || vacancy.workMode || vacancy.minExperienceYears != null || vacancy.educationLevel) && (
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
-              {vacancy.city && <span>📍 {vacancy.city}{vacancy.region ? `, ${regionLabel(vacancy.region)}` : ""}</span>}
-              {!vacancy.city && vacancy.region && <span>📍 {regionLabel(vacancy.region)}</span>}
-              {vacancy.workMode && <span>{WORK_MODE_LABELS[vacancy.workMode as WorkMode]}</span>}
-              {vacancy.minExperienceYears != null && <span>⏱ от {vacancy.minExperienceYears}y опыта</span>}
-              {vacancy.educationLevel && <span>🎓 {EDUCATION_LEVEL_LABELS[vacancy.educationLevel as EducationLevel]}</span>}
+              {vacancy.city && <span>📍 {vacancy.city}{vacancy.region ? `, ${regionLabelIn(vacancy.region, lang)}` : ""}</span>}
+              {!vacancy.city && vacancy.region && <span>📍 {regionLabelIn(vacancy.region, lang)}</span>}
+              {vacancy.workMode && <span>{workModeLabelIn(vacancy.workMode, lang)}</span>}
+              {vacancy.minExperienceYears != null && <span>{tb("vac.fromExp", { n: vacancy.minExperienceYears })}</span>}
+              {vacancy.educationLevel && <span>🎓 {educationLabelIn(vacancy.educationLevel, lang)}</span>}
             </div>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-400">
-            <span>Posted {new Date(vacancy.createdAt).toLocaleDateString()}</span>
+            <span>{tb("vac.posted", { date: date(vacancy.createdAt) })}</span>
             <span className={vacancy.status === "OPEN" ? "text-emerald-300" : "text-slate-500"}>
-              {vacancy.status}
+              {st("vstatus", vacancy.status)}
             </span>
             <VacancyExpiryBadge expiresAt={vacancy.expiresAt} status={vacancy.status} />
             {vacancy.viewCount != null && vacancy.viewCount >= 5 && (
-              <span title="Total page views">👁 {vacancy.viewCount} views</span>
+              <span title={tb("vac.viewsTitle")}>{tb("vac.viewsN", { n: vacancy.viewCount })}</span>
             )}
             <ApplyRateChip
               views={vacancy.viewCount ?? 0}
@@ -284,9 +286,9 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="text-right">
-            <div className="text-xs uppercase tracking-wider text-slate-400">Salary</div>
+            <div className="text-xs uppercase tracking-wider text-slate-400">{tb("vac.salary")}</div>
             <div className="text-2xl font-semibold text-emerald-300">
-              {formatSalary(vacancy.salary, vacancy.salaryCurrency)}
+              {formatSalary(vacancy.salary, vacancy.salaryCurrency, lang)}
             </div>
           </div>
           {isOwner && (
@@ -300,9 +302,9 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 <Link
                   href={`/build/vacancy/${encodeURIComponent(vacancy.id)}?preview=candidate`}
                   className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20"
-                  title="See exactly what an applicant sees"
+                  title={tb("vac.previewTitle")}
                 >
-                  👁 Preview
+                  {tb("vac.preview")}
                 </Link>
                 <CloneVacancyButton
                   vacancyId={vacancy.id}
@@ -347,7 +349,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
           <div className="rounded-xl border border-white/10 bg-white/5 p-5">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-                Role description
+                {tb("vac.roleDesc")}
               </h2>
               {isOwner && (
                 <div className="flex items-center gap-1.5">
@@ -367,7 +369,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
             {vacancy.skills && vacancy.skills.length > 0 && (
               <div className="mt-4">
                 <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Required skills
+                  {tb("vac.reqSkills")}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {vacancy.skills.map((s) => (
@@ -389,7 +391,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
             <div className="mt-6">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="text-lg font-semibold text-white">
-                  Applications <span className="text-slate-500">({applications.length})</span>
+                  {tb("vac.applications")} <span className="text-slate-500">({applications.length})</span>
                 </h2>
                 {applications.length > 0 && (
                   <div className="flex items-center gap-2">
@@ -397,7 +399,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                       type="button"
                       onClick={() => setShortcutsHelpOpen(true)}
                       className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-mono text-slate-400 transition hover:bg-white/10 hover:text-slate-200"
-                      title="Keyboard shortcuts (?)"
+                      title={tb("vac.kbdTitle")}
+                      aria-label={tb("vac.kbdTitle")}
                     >
                       ⌨ ?
                     </button>
@@ -417,7 +420,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               </div>
               {applications.length === 0 ? (
                 <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
-                  No applications yet.
+                  {tb("vac.noApps")}
                 </p>
               ) : (
                 <>
@@ -447,7 +450,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                     return (
                       <div className="mb-3 flex items-center gap-3 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
                         <span className="text-slate-300">
-                          💤 {snoozedCount} snoozed
+                          {tb("vac.snoozedN", { n: snoozedCount })}
                         </span>
                         <button
                           type="button"
@@ -461,7 +464,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                               : "bg-white/5 text-slate-400 hover:bg-white/10"
                           }`}
                         >
-                          {showSnoozed ? "Hide snoozed" : "Show snoozed"}
+                          {showSnoozed ? tb("vac.hideSnoozed") : tb("vac.showSnoozed")}
                         </button>
                       </div>
                     );
@@ -526,7 +529,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                                     return next;
                                   });
                                 }}
-                                aria-label={`Select ${a.applicantName ?? "application"}`}
+                                aria-label={tb("vac.selectAria", { name: a.applicantName ?? tb("vac.applicationWord") })}
                                 className="mt-3 h-4 w-4 shrink-0 rounded border-white/20 bg-white/5 accent-emerald-500"
                               />
                               <div className="flex-1 min-w-0">
@@ -552,7 +555,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                           ))}
                           {filtered.length === 0 && (
                             <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-4 text-center text-xs text-slate-500">
-                              No applications match this label filter.
+                              {tb("vac.noLabelMatch")}
                             </p>
                           )}
                         </div>
@@ -569,7 +572,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
           {!isOwner && (
             <div className="rounded-xl border border-white/10 bg-white/5 p-5">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
-                Apply
+                {tb("vac.apply")}
               </h2>
               <ApplicationForm
                 vacancyId={vacancy.id}
@@ -583,15 +586,15 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
           {isOwner && (applications !== null || vacancy.viewCount != null) && (
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-              <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Analytics</div>
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{tb("common.analytics")}</div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
                   <div className="text-xl font-bold text-white">{vacancy.viewCount ?? "—"}</div>
-                  <div className="text-[10px] text-slate-500">Views</div>
+                  <div className="text-[10px] text-slate-500">{tb("common.views")}</div>
                 </div>
                 <div>
                   <div className="text-xl font-bold text-white">{applications?.length ?? "—"}</div>
-                  <div className="text-[10px] text-slate-500">Applied</div>
+                  <div className="text-[10px] text-slate-500">{tb("common.applied")}</div>
                 </div>
                 <div>
                   <div className="text-xl font-bold text-white">
@@ -599,7 +602,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                       ? `${Math.round((applications.length / vacancy.viewCount) * 100)}%`
                       : "—"}
                   </div>
-                  <div className="text-[10px] text-slate-500">Conv.</div>
+                  <div className="text-[10px] text-slate-500">{tb("vac.conv")}</div>
                 </div>
               </div>
             </div>
@@ -625,12 +628,12 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
           {vacancy.clientId && (
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Employer</div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{tb("vac.employer")}</div>
               <Link
                 href={`/build/u/${encodeURIComponent(vacancy.clientId)}`}
                 className="text-emerald-300 hover:underline"
               >
-                View employer profile →
+                {tb("vac.employerProfile")}
               </Link>
             </div>
           )}
@@ -647,17 +650,18 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 }
 
 function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
-  const rows: { keys: string[]; label: string }[] = [
-    { keys: ["j"], label: "Next application" },
-    { keys: ["k"], label: "Previous application" },
-    { keys: ["a"], label: "Accept focused" },
-    { keys: ["r"], label: "Reject focused" },
-    { keys: ["t"], label: "Tag TOP_PICK" },
-    { keys: ["s"], label: "Tag SHORTLIST" },
-    { keys: ["i"], label: "Tag INTERVIEW" },
-    { keys: ["h"], label: "Tag HOLD" },
-    { keys: ["?"], label: "Toggle this overlay" },
-    { keys: ["Esc"], label: "Close" },
+  const { t, st } = useBuildT();
+  const rows: { keys: string[]; text: string }[] = [
+    { keys: ["j"], text: t("kbd.next") },
+    { keys: ["k"], text: t("kbd.prev") },
+    { keys: ["a"], text: t("kbd.accept") },
+    { keys: ["r"], text: t("kbd.reject") },
+    { keys: ["t"], text: t("kbd.tag", { label: st("label", "TOP_PICK") }) },
+    { keys: ["s"], text: t("kbd.tag", { label: st("label", "SHORTLIST") }) },
+    { keys: ["i"], text: t("kbd.tag", { label: st("label", "INTERVIEW") }) },
+    { keys: ["h"], text: t("kbd.tag", { label: st("label", "HOLD") }) },
+    { keys: ["?"], text: t("kbd.toggle") },
+    { keys: ["Esc"], text: t("common.close") },
   ];
   return (
     <div
@@ -665,7 +669,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="Keyboard shortcuts"
+      aria-label={t("kbd.title")}
     >
       <div
         className="w-[min(420px,calc(100vw-2rem))] rounded-xl border border-white/10 bg-slate-900 p-5 shadow-2xl"
@@ -673,13 +677,13 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
       >
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-            ⌨ Keyboard shortcuts
+            {t("kbd.heading")}
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">×</button>
+          <button onClick={onClose} aria-label={t("common.close")} className="text-slate-400 hover:text-slate-200">×</button>
         </div>
         <ul className="space-y-1.5 text-sm">
           {rows.map((r) => (
-            <li key={r.label} className="flex items-center justify-between gap-3">
+            <li key={r.keys[0]} className="flex items-center justify-between gap-3">
               <div className="flex gap-1">
                 {r.keys.map((k) => (
                   <kbd
@@ -690,12 +694,12 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
                   </kbd>
                 ))}
               </div>
-              <span className="text-slate-300">{r.label}</span>
+              <span className="text-slate-300">{r.text}</span>
             </li>
           ))}
         </ul>
         <p className="mt-3 text-[11px] text-slate-500">
-          Shortcuts only fire when no input or textarea is focused.
+          {t("kbd.note")}
         </p>
       </div>
     </div>
@@ -707,6 +711,7 @@ function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
     (BuildVacancy & { overlapCount: number; overlapSkills: string[]; projectCity?: string | null })[]
   >([]);
   const [loaded, setLoaded] = useState(false);
+  const { t, lang } = useBuildT();
 
   useEffect(() => {
     let cancelled = false;
@@ -731,9 +736,9 @@ function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
   return (
     <section className="mt-10 border-t border-white/5 pt-8">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Similar vacancies</h2>
+        <h2 className="text-lg font-semibold text-white">{t("vac.similar")}</h2>
         <Link href="/build/vacancies" className="text-xs text-emerald-300 hover:underline">
-          See all →
+          {t("common.seeAll")}
         </Link>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -753,7 +758,7 @@ function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
                 )}
               </div>
               <div className="shrink-0 text-right text-sm font-semibold text-emerald-300">
-                {formatSalary(v.salary, v.salaryCurrency)}
+                {formatSalary(v.salary, v.salaryCurrency, lang)}
               </div>
             </div>
             {v.overlapSkills.length > 0 && (
@@ -771,7 +776,7 @@ function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
             <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
               {v.projectCity && <span>📍 {v.projectCity}</span>}
               {v.overlapCount > 0 && (
-                <span className="text-emerald-300/80">{v.overlapCount} skill match</span>
+                <span className="text-emerald-300/80">{t("vac.skillMatch", { n: v.overlapCount })}</span>
               )}
             </div>
           </Link>
@@ -786,6 +791,7 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const { t } = useBuildT();
 
   useEffect(() => {
     let cancelled = false;
@@ -807,13 +813,13 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
     };
   }, [vacancyId]);
 
-  if (loading) return <p className="mt-6 text-sm text-slate-400">Searching talent pool…</p>;
+  if (loading) return <p className="mt-6 text-sm text-slate-400">{t("vac.searchingTalent")}</p>;
   if (!loaded) return null;
 
   if (note === "vacancy_has_no_required_skills") {
     return (
       <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200">
-        Add required skills to this vacancy and we&apos;ll surface matching candidates here automatically.
+        {t("vac.noSkillsHint")}
       </div>
     );
   }
@@ -822,10 +828,10 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
   return (
     <div className="mt-6">
       <h2 className="mb-3 text-lg font-semibold text-white">
-        Suggested candidates <span className="text-slate-500">({items.length})</span>
+        {t("vac.suggested")} <span className="text-slate-500">({items.length})</span>
       </h2>
       <p className="mb-3 text-xs text-slate-400">
-        From the AEVION talent pool, ranked by skill-coverage. They haven&apos;t applied yet — DM them to invite.
+        {t("vac.suggestedNote")}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         {items.map((c) => {
@@ -867,18 +873,18 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                       {c.name}
                     </Link>
                     <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${matchTone}`}>
-                      {c.matchScore}% match
+                      {t("common.match", { n: c.matchScore })}
                     </span>
                     {c.openToWork && (
                       <span className="shrink-0 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-200">
-                        open
+                        {t("vac.openToWork")}
                       </span>
                     )}
                   </div>
                   {c.title && <div className="truncate text-xs text-emerald-200/80">{c.title}</div>}
                   <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-400">
                     {c.city && <span>📍 {c.city}</span>}
-                    {c.experienceYears > 0 && <span>⏱ {c.experienceYears}y</span>}
+                    {c.experienceYears > 0 && <span>⏱ {t("common.years", { n: c.experienceYears })}</span>}
                   </div>
                   {c.matchedSkills.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
@@ -899,13 +905,13 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                   href={`/build/messages?to=${encodeURIComponent(c.userId)}`}
                   className="rounded-md bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30"
                 >
-                  Invite via DM
+                  {t("vac.inviteDm")}
                 </Link>
                 <Link
                   href={`/build/u/${encodeURIComponent(c.userId)}`}
                   className="rounded-md bg-white/5 px-3 py-1 text-xs text-slate-200 hover:bg-white/10"
                 >
-                  Profile →
+                  {t("vac.profile")}
                 </Link>
               </div>
             </div>
@@ -934,6 +940,7 @@ function ApplicationRow({
   onOptimisticLabel?: (labelKey: ApplicationLabel | null) => void;
 }) {
   const { t } = useI18n();
+  const { t: tb, st, num } = useBuildT();
   const [busy, setBusy] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const toast = useToast();
@@ -982,9 +989,9 @@ function ApplicationRow({
             {matchScore != null && (
               <span
                 className={`rounded-full px-2 py-1 text-xs font-bold ${matchTone}`}
-                title={`${app.matchedSkills?.length || 0} of required skills matched`}
+                title={tb("vac.matchedTitle", { n: app.matchedSkills?.length || 0 })}
               >
-                {matchScore}% match
+                {tb("common.match", { n: matchScore })}
               </span>
             )}
             {aiScore != null && (
@@ -992,7 +999,7 @@ function ApplicationRow({
                 type="button"
                 onClick={() => setAiOpen((v) => !v)}
                 className={`rounded-full px-2 py-1 text-xs font-bold ${aiTone}`}
-                title="Click to see AI breakdown"
+                title={tb("vac.aiTitle")}
               >
                 ✨ AI {aiScore}/100
               </button>
@@ -1004,12 +1011,12 @@ function ApplicationRow({
           <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-400">
             {app.applicantCity && <span>📍 {app.applicantCity}</span>}
             {app.applicantExperienceYears != null && app.applicantExperienceYears > 0 && (
-              <span>⏱ {app.applicantExperienceYears}y</span>
+              <span>⏱ {tb("common.years", { n: app.applicantExperienceYears })}</span>
             )}
             {app.sourceTag && (
               <span
                 className="rounded bg-slate-500/20 px-1.5 py-1 text-xs text-slate-300"
-                title={`Source: ${app.sourceTag}`}
+                title={tb("vac.sourceTitle", { s: app.sourceTag })}
               >
                 ↩ {app.sourceTag.replace(/^utm:/, "@").replace(/^ref:/, "←")}
               </span>
@@ -1032,7 +1039,7 @@ function ApplicationRow({
           <span
             className={`rounded-full border px-2.5 py-0.5 text-xs ${STATUS_TONE[app.status]}`}
           >
-            {app.status}
+            {st("astatus", app.status)}
           </span>
           <ApplicationLabelPicker
             applicationId={app.id}
@@ -1048,15 +1055,15 @@ function ApplicationRow({
         <Link
           href={`/build/vacancy/${encodeURIComponent(app.vacancyId)}/review/${encodeURIComponent(app.id)}`}
           className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100 hover:bg-cyan-500/20"
-          title="Open full-screen review (←/→ to navigate)"
+          title={tb("vac.reviewTitle")}
         >
-          🔍 Review
+          {tb("vac.review")}
         </Link>
         <Link
           href={`/build/messages?to=${encodeURIComponent(app.userId)}`}
           className="rounded-md bg-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/20"
         >
-          Message
+          {tb("vac.message")}
         </Link>
         {app.status !== "ACCEPTED" && (
           <button
@@ -1070,12 +1077,12 @@ function ApplicationRow({
                 if (r.hireOrder && r.hireOrder.amount > 0) {
                   toast.success(
                     t("build.vacancyDetail.candidateAcceptedHireFee", {
-                      amount: r.hireOrder.amount.toLocaleString(),
+                      amount: num(r.hireOrder.amount),
                       currency: r.hireOrder.currency,
                     }),
                   );
                 } else {
-                  toast.success("Candidate accepted.");
+                  toast.success(tb("vac.accepted"));
                 }
                 onChanged();
               } catch (err) {
@@ -1087,7 +1094,7 @@ function ApplicationRow({
             }}
             className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
           >
-            Accept
+            {tb("common.accept")}
           </button>
         )}
         {app.status !== "REJECTED" && (
@@ -1099,7 +1106,7 @@ function ApplicationRow({
               setBusy(true);
               try {
                 await buildApi.updateApplication(app.id, "REJECTED", composed || undefined);
-                toast.info("Candidate rejected.");
+                toast.info(tb("vac.rejected"));
                 onChanged();
               } catch (err) {
                 onOptimistic?.(previousStatusRef.current);
@@ -1125,7 +1132,7 @@ function ApplicationRow({
         <div className="mt-3 space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs">
           {aiDetails.summary && (
             <p className="text-fuchsia-100/90">
-              <span className="font-semibold text-fuchsia-200">AI summary:</span> {aiDetails.summary}
+              <span className="font-semibold text-fuchsia-200">{tb("vac.aiSummary")}</span> {aiDetails.summary}
             </p>
           )}
           {(aiDetails.perAnswer || []).map((pa, i) => (
@@ -1137,7 +1144,7 @@ function ApplicationRow({
                 </span>
               </div>
               <div className="mt-1 text-slate-300">{pa.question}</div>
-              <div className="mt-1 whitespace-pre-wrap text-slate-200">↳ {pa.answer || "(empty)"}</div>
+              <div className="mt-1 whitespace-pre-wrap text-slate-200">↳ {pa.answer || tb("vac.empty")}</div>
               {pa.reasoning && (
                 <div className="mt-1 italic text-slate-400">{pa.reasoning}</div>
               )}
@@ -1145,7 +1152,7 @@ function ApplicationRow({
           ))}
           {(aiDetails.redFlags || []).length > 0 && (
             <div>
-              <div className="font-semibold text-rose-200">⚠ Red flags</div>
+              <div className="font-semibold text-rose-200">{tb("vac.redFlags")}</div>
               <ul className="mt-1 list-disc pl-4 text-rose-200/90">
                 {aiDetails.redFlags!.map((f, i) => (
                   <li key={i}>{f}</li>
@@ -1170,13 +1177,14 @@ function ScoreRangeFilter({
   onChange: (ai: number, match: number) => void;
 }) {
   const active = minAi > 0 || minMatch > 0;
+  const { t } = useBuildT();
   return (
     <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
       <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-        Min scores:
+        {t("vac.minScores")}
       </span>
       <label className="flex items-center gap-1.5 text-slate-300">
-        <span title="Claude's overall fit score">✨ AI ≥</span>
+        <span title={t("vac.aiScoreTitle")}>{t("vac.aiGe")}</span>
         <input
           type="range"
           min={0}
@@ -1184,12 +1192,13 @@ function ScoreRangeFilter({
           step={5}
           value={minAi}
           onChange={(e) => onChange(Number(e.target.value), minMatch)}
+          aria-label={t("vac.aiScoreTitle")}
           className="h-1 w-24 accent-fuchsia-500"
         />
         <span className="w-7 text-right tabular-nums text-fuchsia-200">{minAi}</span>
       </label>
       <label className="flex items-center gap-1.5 text-slate-300">
-        <span title="Skill overlap with vacancy required skills">🎯 Match ≥</span>
+        <span title={t("vac.matchTitle")}>{t("vac.matchGe")}</span>
         <input
           type="range"
           min={0}
@@ -1197,6 +1206,7 @@ function ScoreRangeFilter({
           step={10}
           value={minMatch}
           onChange={(e) => onChange(minAi, Number(e.target.value))}
+          aria-label={t("vac.matchTitle")}
           className="h-1 w-24 accent-emerald-500"
         />
         <span className="w-7 text-right tabular-nums text-emerald-200">{minMatch}</span>
@@ -1207,7 +1217,7 @@ function ScoreRangeFilter({
           onClick={() => onChange(0, 0)}
           className="ml-auto text-[10px] text-slate-400 hover:text-slate-200"
         >
-          Clear
+          {t("common.clear")}
         </button>
       )}
     </div>
@@ -1228,17 +1238,18 @@ function ApplicationLabelFilter({
     return acc;
   }, {});
   const labelled = Object.keys(counts);
+  const { t, st } = useBuildT();
   if (labelled.length === 0) return null;
   return (
     <div className="mb-3 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">Filter by label:</span>
+      <span className="text-[10px] uppercase tracking-wider text-slate-500">{t("vac.filterByLabel")}</span>
       <button
         onClick={() => onChange("ALL")}
         className={`rounded-md px-2 py-1 text-[11px] font-medium ${
           value === "ALL" ? "bg-white/15 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"
         }`}
       >
-        All ({applications.length})
+        {t("vac.allN", { n: applications.length })}
       </button>
       {(["TOP_PICK", "SHORTLIST", "INTERVIEW", "OFFER", "HOLD"] as ApplicationLabel[]).map((l) => {
         const n = counts[l] ?? 0;
@@ -1252,7 +1263,7 @@ function ApplicationLabelFilter({
               active ? LABEL_TONE[l] : "border-transparent bg-white/5 text-slate-400 hover:bg-white/10"
             }`}
           >
-            {LABEL_EMOJI[l]} {l} ({n})
+            {LABEL_EMOJI[l]} {st("label", l)} ({n})
           </button>
         );
       })}
@@ -1273,26 +1284,27 @@ function BulkActionBar({
 }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
   if (selectedIds.length === 0) return null;
 
   async function bulk(status: "ACCEPTED" | "REJECTED") {
     if (
       !confirm(
         status === "ACCEPTED"
-          ? `Accept ${selectedIds.length} application${selectedIds.length === 1 ? "" : "s"}? They will be notified by email. (No hire fee from bulk — fee fires only from the per-row Accept.)`
-          : `Reject ${selectedIds.length} application${selectedIds.length === 1 ? "" : "s"}?`,
+          ? t("vac.bulkAcceptConfirm", { n: selectedIds.length })
+          : t("vac.bulkRejectConfirm", { n: selectedIds.length }),
       )
     ) return;
     let reason: string | undefined;
     if (status === "REJECTED") {
-      const r = prompt("Reason (optional, shown to candidate):") ?? "";
+      const r = prompt(t("vac.reasonPrompt")) ?? "";
       reason = r.trim() || undefined;
     }
     setBusy(true);
     onOptimistic(selectedIds, status);
     try {
       const r = await buildApi.bulkUpdateApplicationStatus(selectedIds, status, reason);
-      toast.success(`${r.updated} updated${r.skipped.length > 0 ? `, ${r.skipped.length} skipped` : ""}`);
+      toast.success(r.skipped.length > 0 ? t("vac.bulkSkipped", { n: r.updated, s: r.skipped.length }) : t("vac.bulkDone", { n: r.updated }));
       onDone();
     } catch (e) {
       toast.error((e as Error).message);
@@ -1303,27 +1315,27 @@ function BulkActionBar({
 
   return (
     <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.05] px-3 py-2 text-xs">
-      <span className="font-semibold text-emerald-200">{selectedIds.length} selected</span>
+      <span className="font-semibold text-emerald-200">{t("vac.selectedN", { n: selectedIds.length })}</span>
       <span className="text-slate-500">·</span>
       <button
         onClick={() => bulk("ACCEPTED")}
         disabled={busy}
         className="rounded-md bg-emerald-500/20 px-3 py-1 font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
       >
-        Bulk accept
+        {t("vac.bulkAccept")}
       </button>
       <button
         onClick={() => bulk("REJECTED")}
         disabled={busy}
         className="rounded-md bg-rose-500/20 px-3 py-1 font-semibold text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
       >
-        Bulk reject
+        {t("vac.bulkReject")}
       </button>
       <button
         onClick={onClear}
         className="ml-auto text-[11px] text-slate-400 hover:text-slate-200"
       >
-        Clear
+        {t("common.clear")}
       </button>
     </div>
   );
@@ -1356,6 +1368,7 @@ function ApplicationLabelPicker({
 }) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
+  const { t, st } = useBuildT();
 
   async function set(label: ApplicationLabel | null) {
     const prev = current;
@@ -1377,9 +1390,9 @@ function ApplicationLabelPicker({
         className={`rounded-full border px-2 py-1 text-xs font-semibold ${
           current ? LABEL_TONE[current] : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
         }`}
-        title="Recruiter label (private)"
+        title={t("vac.labelTitle")}
       >
-        {current ? `${LABEL_EMOJI[current]} ${current}` : "+ Label"}
+        {current ? `${LABEL_EMOJI[current]} ${st("label", current)}` : t("vac.addLabel")}
       </button>
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-white/10 bg-slate-900 p-1 shadow-2xl">
@@ -1392,7 +1405,7 @@ function ApplicationLabelPicker({
                 current === l ? "text-emerald-200" : "text-slate-200"
               }`}
             >
-              {LABEL_EMOJI[l]} {l}
+              {LABEL_EMOJI[l]} {st("label", l)}
             </button>
           ))}
           {current && (
@@ -1401,7 +1414,7 @@ function ApplicationLabelPicker({
               onClick={() => set(null)}
               className="mt-0.5 block w-full rounded border-t border-white/5 px-2 py-1 text-left text-[11px] text-slate-500 hover:bg-white/5 hover:text-rose-300"
             >
-              ✕ Clear label
+              {t("vac.clearLabel")}
             </button>
           )}
         </div>
@@ -1419,6 +1432,7 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const toast = useToast();
+  const { t, dateTime } = useBuildT();
 
   useEffect(() => {
     if (!open || loaded) return;
@@ -1479,7 +1493,7 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
         onClick={() => setOpen((v) => !v)}
         className="text-[11px] text-slate-400 hover:text-slate-200"
       >
-        {open ? "▼" : "▶"} Private notes {loaded && items.length > 0 ? `(${items.length})` : ""}
+        {open ? "▼" : "▶"} {t("vac.privateNotes")} {loaded && items.length > 0 ? `(${items.length})` : ""}
       </button>
       {open && (
         <div className="mt-2 space-y-2 rounded-md border border-amber-500/20 bg-amber-500/[0.04] p-3">
@@ -1489,7 +1503,8 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
               onChange={(e) => setDraft(e.target.value)}
               rows={2}
               maxLength={4000}
-              placeholder="Private note (only you and admins see this)…"
+              placeholder={t("vac.notePh")}
+              aria-label={t("vac.notePh")}
               className="flex-1 rounded border border-white/10 bg-white/5 p-2 text-xs text-white placeholder:text-slate-500 focus:border-amber-500/40 focus:outline-none"
             />
             <button
@@ -1498,13 +1513,13 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
               disabled={busy || !draft.trim()}
               className="self-start rounded-md bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
             >
-              {busy ? "…" : "Add"}
+              {busy ? "…" : t("common.add")}
             </button>
           </div>
           {!loaded ? (
-            <p className="text-xs text-slate-500">Loading…</p>
+            <p className="text-xs text-slate-500">{t("common.loading")}</p>
           ) : items.length === 0 ? (
-            <p className="text-[11px] text-slate-500">No notes yet — first one logs the impression you don&apos;t want to forget by next interview.</p>
+            <p className="text-[11px] text-slate-500">{t("vac.noNotes")}</p>
           ) : (
             <ul className="space-y-1.5">
               {items.map((n) => (
@@ -1521,17 +1536,17 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
                     {n.body}
                   </div>
                   <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
-                    <span>{new Date(n.createdAt).toLocaleString()}</span>
+                    <span>{dateTime(n.createdAt)}</span>
                     <span className="flex items-center gap-2">
                       <button
                         onClick={() => togglePin(n.id, !n.isPinned)}
                         className={n.isPinned ? "text-amber-300 hover:text-amber-200" : "hover:text-slate-300"}
-                        title={n.isPinned ? "Unpin" : "Pin to top"}
+                        title={n.isPinned ? t("vac.unpin") : t("vac.pinTitle")}
                       >
-                        {n.isPinned ? "Unpin" : "Pin"}
+                        {n.isPinned ? t("vac.unpin") : t("vac.pin")}
                       </button>
                       <button onClick={() => remove(n.id)} className="hover:text-rose-300">
-                        Delete
+                        {t("common.delete")}
                       </button>
                     </span>
                   </div>
@@ -1547,6 +1562,7 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
 
 function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
   const { t } = useI18n();
+  const { t: tb } = useBuildT();
   const me = useBuildAuth((s) => s.user);
   const [copied, setCopied] = useState(false);
 
@@ -1583,14 +1599,14 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
           onClick={() => copy(false)}
           className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10"
         >
-          🔗 Copy link
+          {tb("vac.copyLink")}
         </button>
         {me && (
           <button
             onClick={() => copy(true)}
             className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20"
           >
-            🎯 Copy ref-link
+            {tb("vac.copyRef")}
           </button>
         )}
         <QuickShareButtons getLink={() => buildLink(!!me)} />
@@ -1601,16 +1617,17 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
 }
 
 function QuickShareButtons({ getLink }: { getLink: () => string }) {
+  const { t } = useBuildT();
   function open(url: string) {
     if (typeof window === "undefined") return;
     window.open(url, "_blank", "noopener,noreferrer");
   }
   function tg() {
     const u = encodeURIComponent(getLink());
-    open(`https://t.me/share/url?url=${u}&text=${encodeURIComponent("AEVION QBuild — vacancy")}`);
+    open(`https://t.me/share/url?url=${u}&text=${encodeURIComponent(t("vac.shareText"))}`);
   }
   function wa() {
-    const u = encodeURIComponent(`AEVION QBuild — vacancy: ${getLink()}`);
+    const u = encodeURIComponent(`${t("vac.shareText")}: ${getLink()}`);
     open(`https://wa.me/?text=${u}`);
   }
   function li() {
@@ -1619,7 +1636,7 @@ function QuickShareButtons({ getLink }: { getLink: () => string }) {
   }
   function tw() {
     const u = encodeURIComponent(getLink());
-    open(`https://twitter.com/intent/tweet?url=${u}&text=${encodeURIComponent("Hiring on AEVION QBuild")}`);
+    open(`https://twitter.com/intent/tweet?url=${u}&text=${encodeURIComponent(t("vac.hiringText"))}`);
   }
   const base =
     "rounded-md border px-2 py-1.5 text-xs font-semibold transition";
@@ -1628,7 +1645,7 @@ function QuickShareButtons({ getLink }: { getLink: () => string }) {
       <button
         type="button"
         onClick={tg}
-        title="Share via Telegram"
+        title={t("vac.shareTg")}
         className={`${base} border-sky-400/40 bg-sky-400/15 text-sky-100 hover:bg-sky-400/25`}
       >
         ✈ Telegram
@@ -1636,7 +1653,7 @@ function QuickShareButtons({ getLink }: { getLink: () => string }) {
       <button
         type="button"
         onClick={wa}
-        title="Share via WhatsApp"
+        title={t("vac.shareWa")}
         className={`${base} border-emerald-400/40 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/25`}
       >
         🟢 WhatsApp
@@ -1644,7 +1661,7 @@ function QuickShareButtons({ getLink }: { getLink: () => string }) {
       <button
         type="button"
         onClick={li}
-        title="Share on LinkedIn"
+        title={t("vac.shareLi")}
         className={`${base} border-blue-400/40 bg-blue-400/15 text-blue-100 hover:bg-blue-400/25`}
       >
         in LinkedIn
@@ -1652,7 +1669,8 @@ function QuickShareButtons({ getLink }: { getLink: () => string }) {
       <button
         type="button"
         onClick={tw}
-        title="Share on X/Twitter"
+        title={t("vac.shareX")}
+        aria-label={t("vac.shareX")}
         className={`${base} border-white/20 bg-white/10 text-slate-100 hover:bg-white/20`}
       >
         𝕏
@@ -1663,6 +1681,7 @@ function QuickShareButtons({ getLink }: { getLink: () => string }) {
 
 function SalaryMarketWidget({ skill }: { skill: string }) {
   const [data, setData] = useState<{ median: number; count: number } | null>(null);
+  const { t, num } = useBuildT();
 
   useEffect(() => {
     buildApi.salaryStats(skill).then(setData).catch(() => {});
@@ -1673,12 +1692,12 @@ function SalaryMarketWidget({ skill }: { skill: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
       <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
-        Market salary for «{skill}»
+        {t("vac.market", { skill })}
       </div>
       <div className="text-xl font-bold text-emerald-300">
-        ${data.median.toLocaleString()} <span className="text-xs font-normal text-slate-400">median</span>
+        ${num(data.median)} <span className="text-xs font-normal text-slate-400">{t("vac.median")}</span>
       </div>
-      <div className="mt-0.5 text-[10px] text-slate-500">Based on {data.count} vacancies on QBuild</div>
+      <div className="mt-0.5 text-[10px] text-slate-500">{t("vac.basedOn", { n: data.count })}</div>
     </div>
   );
 }
@@ -1687,13 +1706,13 @@ function SalaryMarketWidget({ skill }: { skill: string }) {
 // onto the persisted rejectReason as "reason:bucket|free-form note" so the
 // existing column doesn't need a schema change. The dashboard chart parses
 // the prefix back out for aggregation.
-const REJECT_BUCKETS: { key: string; label: string }[] = [
-  { key: "overqualified", label: "Overqualified" },
-  { key: "missing-skill", label: "Missing required skill" },
-  { key: "salary-mismatch", label: "Salary mismatch" },
-  { key: "location", label: "Location / relocation" },
-  { key: "timing", label: "Bad timing / availability" },
-  { key: "other", label: "Other" },
+const REJECT_BUCKETS: { key: string; textKey: BuildKey }[] = [
+  { key: "overqualified", textKey: "rej.overqualified" },
+  { key: "missing-skill", textKey: "rej.missing-skill" },
+  { key: "salary-mismatch", textKey: "rej.salary-mismatch" },
+  { key: "location", textKey: "rej.location" },
+  { key: "timing", textKey: "rej.timing" },
+  { key: "other", textKey: "rej.other" },
 ];
 
 function RejectButton({
@@ -1707,6 +1726,7 @@ function RejectButton({
   const [bucket, setBucket] = useState<string>("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const { t } = useBuildT();
 
   async function submit() {
     setBusy(true);
@@ -1731,27 +1751,29 @@ function RejectButton({
         onClick={() => setOpen((v) => !v)}
         className="rounded-md bg-rose-500/20 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
       >
-        Reject
+        {t("common.reject")}
       </button>
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-rose-500/30 bg-slate-900 p-3 shadow-2xl">
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-rose-200">
-            Reason for rejection
+            {t("rej.title")}
           </div>
           <select
             value={bucket}
             onChange={(e) => setBucket(e.target.value)}
+            aria-label={t("rej.categoryAria")}
             className="mb-2 w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white focus:border-rose-500/40 focus:outline-none"
           >
-            <option value="">— pick a category —</option>
+            <option value="">{t("rej.pick")}</option>
             {REJECT_BUCKETS.map((b) => (
-              <option key={b.key} value={b.key}>{b.label}</option>
+              <option key={b.key} value={b.key}>{t(b.textKey)}</option>
             ))}
           </select>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Optional message to candidate (a short, kind explanation goes a long way)"
+            placeholder={t("rej.notePh")}
+            aria-label={t("rej.notePh")}
             rows={3}
             maxLength={500}
             className="w-full rounded border border-white/10 bg-white/5 p-2 text-xs text-white placeholder:text-slate-500 focus:border-rose-500/40 focus:outline-none"
@@ -1762,7 +1784,7 @@ function RejectButton({
               onClick={() => setOpen(false)}
               className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/5"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -1770,7 +1792,7 @@ function RejectButton({
               disabled={busy}
               className="rounded-md bg-rose-500 px-3 py-1 text-[11px] font-semibold text-rose-50 hover:bg-rose-400 disabled:opacity-50"
             >
-              {busy ? "…" : "Confirm reject"}
+              {busy ? "…" : t("rej.confirm")}
             </button>
           </div>
         </div>
@@ -1781,6 +1803,7 @@ function RejectButton({
 
 function VacancySourceMiniPanel({ vacancyId }: { vacancyId: string }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.recruiterSourceBreakdown>> | null>(null);
+  const { t } = useBuildT();
 
   useEffect(() => {
     let cancelled = false;
@@ -1800,17 +1823,17 @@ function VacancySourceMiniPanel({ vacancyId }: { vacancyId: string }) {
   if (!data || data.total === 0) return null;
 
   const order: { key: keyof typeof data.buckets; label: string; color: string }[] = [
-    { key: "organic", label: "Organic", color: "#10b981" },
-    { key: "utm", label: "UTM", color: "#06b6d4" },
-    { key: "ref", label: "Refs", color: "#f59e0b" },
-    { key: "widget", label: "Widget", color: "#a855f7" },
-    { key: "other", label: "Other", color: "#64748b" },
+    { key: "organic", label: t("src.organic"), color: "#10b981" },
+    { key: "utm", label: t("src.utm"), color: "#06b6d4" },
+    { key: "ref", label: t("src.ref"), color: "#f59e0b" },
+    { key: "widget", label: t("src.widget"), color: "#a855f7" },
+    { key: "other", label: t("src.other"), color: "#64748b" },
   ];
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-        Application sources <span className="text-slate-600">(90d)</span>
+        {t("src.title")} <span className="text-slate-600">{t("src.days")}</span>
       </div>
       <div className="flex h-2 w-full overflow-hidden rounded-full bg-white/5">
         {order.map(({ key, color }) => {
@@ -1821,7 +1844,7 @@ function VacancySourceMiniPanel({ vacancyId }: { vacancyId: string }) {
             <div
               key={key}
               style={{ width: `${pct}%`, backgroundColor: color }}
-              title={`${key}: ${n}`}
+              title={`${order.find((o) => o.key === key)?.label ?? key}: ${n}`}
             />
           );
         })}
@@ -1844,17 +1867,18 @@ function VacancySourceMiniPanel({ vacancyId }: { vacancyId: string }) {
 }
 
 function PreviewAsCandidateBanner({ vacancyId }: { vacancyId: string }) {
+  const { t } = useBuildT();
   return (
     <div className="-mx-4 mb-3 border-y border-cyan-400/30 bg-cyan-500/10 px-4 py-2">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 text-xs text-cyan-100">
         <span className="font-semibold">
-          👁 Preview as candidate — owner UI is hidden so you see exactly what applicants see.
+          {t("vac.previewBanner")}
         </span>
         <Link
           href={`/build/vacancy/${encodeURIComponent(vacancyId)}`}
           className="rounded-md border border-cyan-300/40 bg-cyan-300/15 px-3 py-1 text-cyan-50 hover:bg-cyan-300/25"
         >
-          Exit preview ×
+          {t("vac.exitPreview")}
         </Link>
       </div>
     </div>
@@ -1864,6 +1888,7 @@ function PreviewAsCandidateBanner({ vacancyId }: { vacancyId: string }) {
 function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
 
   const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
   const snippet = `<div data-aevion-build data-key="qb_pk_..." data-vacancy-id="${vacancyId}"></div>
@@ -1871,8 +1896,8 @@ function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
 
   function copy() {
     navigator.clipboard.writeText(snippet).then(
-      () => toast.success("Embed snippet copied"),
-      () => toast.error("Copy failed"),
+      () => toast.success(t("vac.embedCopied")),
+      () => toast.error(t("vac.copyFailed")),
     );
   }
 
@@ -1880,22 +1905,22 @@ function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Embed on your site
+          {t("vac.embedH")}
         </div>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
           className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10"
         >
-          {open ? "Hide" : "Show snippet"}
+          {open ? t("common.hide") : t("vac.showSnippet")}
         </button>
       </div>
       {open && (
         <div className="mt-3 space-y-2">
           <p className="text-[11px] text-slate-400">
-            Drop this on any website. Replace <code className="rounded bg-black/40 px-1 text-emerald-200">qb_pk_...</code> with a partner key from{" "}
+            {t("vac.embedNote1")} <code className="rounded bg-black/40 px-1 text-emerald-200">qb_pk_...</code> {t("vac.embedNote2")}{" "}
             <Link href="/build/admin/partner-keys" className="text-emerald-300 underline">
-              admin → partner keys
+              {t("vac.partnerKeys")}
             </Link>
             .
           </p>
@@ -1907,7 +1932,7 @@ function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
             onClick={copy}
             className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-400/25"
           >
-            📋 Copy snippet
+            {t("vac.copySnippet")}
           </button>
         </div>
       )}
@@ -1927,6 +1952,7 @@ function SnoozeApplicationButton({
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+  const { t, tn } = useBuildT();
 
   const isSnoozed = !!(currentSnoozedUntil && new Date(currentSnoozedUntil).getTime() > Date.now());
   const daysLeft = isSnoozed
@@ -1937,8 +1963,8 @@ function SnoozeApplicationButton({
     setBusy(true);
     try {
       await buildApi.snoozeApplication(applicationId, days);
-      if (days > 0) toast.success(`Snoozed ${days}d`);
-      else toast.success("Snooze cleared");
+      if (days > 0) toast.success(t("snz.done", { n: days }));
+      else toast.success(t("snz.cleared"));
       onChanged();
       setOpen(false);
     } catch (e) {
@@ -1954,19 +1980,19 @@ function SnoozeApplicationButton({
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={busy}
-        title={isSnoozed ? `Snoozed ${daysLeft}d more` : "Snooze this application"}
+        title={isSnoozed ? t("snz.moreTitle", { n: daysLeft }) : t("snz.title")}
         className={`rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition disabled:opacity-50 ${
           isSnoozed
             ? "border-amber-500/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
             : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
         }`}
       >
-        💤 {isSnoozed ? `${daysLeft}d` : "Snooze"}
+        💤 {isSnoozed ? t("snz.daysShort", { n: daysLeft }) : t("snz.btn")}
       </button>
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-white/10 bg-slate-900 p-2 shadow-2xl">
           <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500">
-            Snooze for
+            {t("snz.for")}
           </div>
           {[1, 3, 7, 14].map((d) => (
             <button
@@ -1976,7 +2002,7 @@ function SnoozeApplicationButton({
               disabled={busy}
               className="block w-full rounded px-2 py-1 text-left text-xs text-slate-200 hover:bg-white/5"
             >
-              {d} day{d === 1 ? "" : "s"}
+              {tn("snz.days", d)}
             </button>
           ))}
           {isSnoozed && (
@@ -1986,7 +2012,7 @@ function SnoozeApplicationButton({
               disabled={busy}
               className="mt-1 block w-full rounded border-t border-white/5 px-2 py-1 text-left text-xs text-rose-200 hover:bg-rose-500/10"
             >
-              Clear snooze
+              {t("snz.clear")}
             </button>
           )}
         </div>
@@ -1998,17 +2024,15 @@ function SnoozeApplicationButton({
 function FlagApplicationButton({ applicationId }: { applicationId: string }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const { t } = useBuildT();
 
   async function flag() {
-    const reason = window.prompt(
-      "Reason (spam / fake-profile / abuse / other):",
-      "spam",
-    );
+    const reason = window.prompt(t("flag.prompt"), "spam");
     if (!reason?.trim()) return;
     setBusy(true);
     try {
       await buildApi.flagApplication(applicationId, reason.trim().slice(0, 64));
-      toast.success("Flagged for moderation. Admin will review.");
+      toast.success(t("flag.done"));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -2021,7 +2045,8 @@ function FlagApplicationButton({ applicationId }: { applicationId: string }) {
       type="button"
       onClick={flag}
       disabled={busy}
-      title="Report as spam / abuse / fake — sent to admin moderation queue"
+      title={t("flag.title")}
+      aria-label={t("flag.title")}
       className="rounded-md border border-rose-500/20 bg-rose-500/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-rose-200/80 transition hover:bg-rose-500/15 disabled:opacity-50"
     >
       {busy ? "…" : "⚐"}
@@ -2032,6 +2057,7 @@ function FlagApplicationButton({ applicationId }: { applicationId: string }) {
 function VacancyEditHistory({ vacancyId }: { vacancyId: string }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Awaited<ReturnType<typeof buildApi.vacancyHistory>>["items"] | null>(null);
+  const { t, dateTime } = useBuildT();
 
   useEffect(() => {
     if (!open || items !== null) return;
@@ -2056,22 +2082,22 @@ function VacancyEditHistory({ vacancyId }: { vacancyId: string }) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200"
       >
-        <span>Edit history</span>
+        <span>{t("hist.title")}</span>
         <span className="text-slate-500">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="mt-3">
           {items === null ? (
-            <p className="text-xs text-slate-500">Loading…</p>
+            <p className="text-xs text-slate-500">{t("common.loading")}</p>
           ) : items.length === 0 ? (
-            <p className="text-xs text-slate-500">No edits yet.</p>
+            <p className="text-xs text-slate-500">{t("hist.none")}</p>
           ) : (
             <ol className="space-y-2 border-l border-white/10 pl-3 text-xs">
               {items.map((e) => (
                 <li key={e.id}>
                   <div className="flex items-center gap-2 text-slate-400">
-                    <span className="text-slate-200">{e.editorName || "Owner"}</span>
-                    <span className="text-slate-500">{new Date(e.createdAt).toLocaleString()}</span>
+                    <span className="text-slate-200">{e.editorName || t("hist.owner")}</span>
+                    <span className="text-slate-500">{dateTime(e.createdAt)}</span>
                   </div>
                   <ul className="mt-0.5 space-y-0.5 text-slate-300">
                     {Object.entries(e.changes).map(([field, ba]) => {
@@ -2100,6 +2126,7 @@ function VacancyEditHistory({ vacancyId }: { vacancyId: string }) {
 function BoostRoiTile({ vacancyId }: { vacancyId: string }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.vacancyBoostRoi>> | null>(null);
   const [err, setErr] = useState(false);
+  const { t } = useBuildT();
 
   useEffect(() => {
     let cancelled = false;
@@ -2130,41 +2157,41 @@ function BoostRoiTile({ vacancyId }: { vacancyId: string }) {
     <div className="rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-500/10 via-amber-400/5 to-transparent p-4 text-sm">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2 font-semibold text-amber-100">
-          ⚡ Boost ROI
+          {t("roi.title")}
           {data.active && (
             <span className="rounded-full border border-amber-400/40 bg-amber-400/15 px-2 py-1 text-xs uppercase tracking-wider text-amber-200">
-              Active
+              {t("roi.active")}
             </span>
           )}
         </div>
         <div className="text-[11px] text-amber-200/70">
-          {data.periodDays}d window · {data.source || "boost"}
+          {t("roi.window", { n: data.periodDays })}{data.source ? ` · ${data.source}` : ""}
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400">During</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400">{t("roi.during")}</div>
           <div className="mt-0.5 text-xl font-semibold text-white">{during}</div>
-          <div className="text-[10px] text-slate-500">applications</div>
+          <div className="text-[10px] text-slate-500">{t("roi.apps")}</div>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400">Before</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400">{t("roi.before")}</div>
           <div className="mt-0.5 text-xl font-semibold text-white">{before}</div>
-          <div className="text-[10px] text-slate-500">prior {data.periodDays}d</div>
+          <div className="text-[10px] text-slate-500">{t("roi.prior", { n: data.periodDays })}</div>
         </div>
         <div className={`rounded-lg border p-2.5 ${tone}`}>
-          <div className="text-[10px] uppercase tracking-wider opacity-70">Delta</div>
+          <div className="text-[10px] uppercase tracking-wider opacity-70">{t("roi.delta")}</div>
           <div className="mt-0.5 text-xl font-semibold">
             {positive ? "+" : ""}
             {delta}
           </div>
           <div className="text-[10px] opacity-80">
-            {pct !== null ? `${positive ? "+" : ""}${pct}%` : before === 0 ? "n/a baseline" : "—"}
+            {pct !== null ? `${positive ? "+" : ""}${pct}%` : before === 0 ? t("roi.na") : "—"}
           </div>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-amber-200/60">
-        Comparing applications during the boost period vs. the same-length window immediately before.
+        {t("roi.note")}
       </p>
     </div>
   );
@@ -2172,6 +2199,7 @@ function BoostRoiTile({ vacancyId }: { vacancyId: string }) {
 
 function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
   const { t } = useI18n();
+  const { t: tb, dateTime } = useBuildT();
   type Note = Awaited<ReturnType<typeof buildApi.vacancyNotes>>["items"][number];
   const [items, setItems] = useState<Note[] | null>(null);
   const [draft, setDraft] = useState("");
@@ -2212,7 +2240,7 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this team note?")) return;
+    if (!confirm(tb("notes.deleteConfirm"))) return;
     try {
       await buildApi.deleteVacancyNote(vacancyId, id);
       setItems((arr) => arr?.filter((n) => n.id !== id) ?? null);
@@ -2228,13 +2256,13 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-sm font-semibold text-slate-200"
       >
-        <span>📝 Team notes {items && items.length > 0 ? `(${items.length})` : ""}</span>
+        <span>{tb("notes.title")} {items && items.length > 0 ? `(${items.length})` : ""}</span>
         <span className="text-xs text-slate-500">{open ? "▾" : "▸"}</span>
       </button>
       {open && (
         <>
           <p className="mt-1 text-[11px] text-slate-500">
-            Private notes about this role — visible to vacancy owner only. {t("build.vacancyDetail.teamNotes.disclaimer")}
+            {tb("notes.private")} {t("build.vacancyDetail.teamNotes.disclaimer")}
           </p>
           <div className="mt-3 flex items-end gap-2">
             <textarea
@@ -2243,6 +2271,7 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
               rows={2}
               maxLength={4000}
               placeholder={t("build.vacancyDetail.teamNotes.placeholder")}
+              aria-label={t("build.vacancyDetail.teamNotes.placeholder")}
               className="flex-1 resize-none rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-emerald-400/40 focus:outline-none"
             />
             <button
@@ -2251,7 +2280,7 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
               disabled={!draft.trim() || busy}
               className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-50"
             >
-              {busy ? "…" : "Add"}
+              {busy ? "…" : tb("common.add")}
             </button>
           </div>
           {items && items.length > 0 && (
@@ -2265,11 +2294,12 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
                   <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
                     <span>
                       {n.authorName || n.authorUserId.slice(0, 8)} ·{" "}
-                      {new Date(n.createdAt).toLocaleString()}
+                      {dateTime(n.createdAt)}
                     </span>
                     <button
                       type="button"
                       onClick={() => remove(n.id)}
+                      aria-label={tb("notes.deleteAria")}
                       className="text-slate-500 hover:text-rose-300"
                     >
                       ✕
@@ -2293,6 +2323,7 @@ function VacancyTimeline({ vacancyId }: { vacancyId: string }) {
     meta?: Record<string, unknown>;
   }[] | null>(null);
   const [open, setOpen] = useState(false);
+  const { t: tb, dateTime } = useBuildT();
 
   useEffect(() => {
     if (!open || events !== null) return;
@@ -2327,15 +2358,15 @@ function VacancyTimeline({ vacancyId }: { vacancyId: string }) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200"
       >
-        <span>Activity timeline</span>
+        <span>{tb("tl.title")}</span>
         <span className="text-slate-500">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="mt-3">
           {events === null ? (
-            <p className="text-xs text-slate-500">Loading…</p>
+            <p className="text-xs text-slate-500">{tb("common.loading")}</p>
           ) : events.length === 0 ? (
-            <p className="text-xs text-slate-500">No events yet.</p>
+            <p className="text-xs text-slate-500">{tb("tl.none")}</p>
           ) : (
             <ol className="space-y-2 border-l border-white/10 pl-3">
               {events.map((e, i) => {
@@ -2347,7 +2378,7 @@ function VacancyTimeline({ vacancyId }: { vacancyId: string }) {
                     </span>
                     <span className="text-xs text-slate-200">{e.title}</span>
                     <span className="ml-2 text-[10px] text-slate-500">
-                      {new Date(e.ts).toLocaleString()}
+                      {dateTime(e.ts)}
                     </span>
                   </li>
                 );
@@ -2366,6 +2397,7 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const validationError = emailError(email);
   const canSubmit = !busy && isEmail(email);
+  const { t } = useBuildT();
 
   async function invite() {
     if (!canSubmit) return;
@@ -2373,7 +2405,7 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
     setMsg(null);
     try {
       await buildApi.inviteCandidate(vacancyId, email.trim());
-      setMsg({ ok: true, text: `Invite sent to ${email.trim()}` });
+      setMsg({ ok: true, text: t("inv.sent", { email: email.trim() }) });
       setEmail("");
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
@@ -2384,7 +2416,7 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Invite candidate</div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{t("inv.title")}</div>
       <div className="flex gap-2">
         <input
           type="email"
@@ -2394,6 +2426,7 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
             if (e.key === "Enter" && canSubmit) invite();
           }}
           placeholder="candidate@email.com"
+          aria-label={t("inv.emailAria")}
           aria-invalid={validationError ? true : undefined}
           className={`flex-1 rounded-md border bg-white/5 px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none ${
             validationError
@@ -2406,7 +2439,7 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
           disabled={!canSubmit}
           className="rounded-md bg-sky-500/20 px-3 py-1.5 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/30 disabled:opacity-50"
         >
-          {busy ? "…" : "Send"}
+          {busy ? "…" : t("common.send")}
         </button>
       </div>
       {validationError && (
@@ -2420,6 +2453,7 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
 }
 
 function ApplyRateChip({ views, apps }: { views: number; apps: number }) {
+  const { t } = useBuildT();
   // Need at least 20 views before the ratio is meaningful — sub-20 is noise.
   if (views < 20 || apps === 0) return null;
   const pct = (apps / views) * 100;
@@ -2432,9 +2466,9 @@ function ApplyRateChip({ views, apps }: { views: number; apps: number }) {
   return (
     <span
       className={`rounded-full border px-2 py-1 text-xs font-semibold ${tone}`}
-      title={`${apps} applications / ${views} views — apply rate`}
+      title={t("rate.title", { apps, views })}
     >
-      📈 {pct.toFixed(1)}% apply rate
+      {t("rate.chip", { pct: pct.toFixed(1) })}
     </span>
   );
 }
@@ -2446,13 +2480,14 @@ function VacancyExpiryBadge({
   expiresAt?: string | null;
   status: string;
 }) {
+  const { t, tn, date } = useBuildT();
   if (!expiresAt || status !== "OPEN") return null;
   const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000);
   if (days > 14) return null;
   if (days < 0) {
     return (
       <span className="rounded-full bg-rose-500/20 px-2 py-1 text-xs font-semibold text-rose-200">
-        expired
+        {t("exp.expired")}
       </span>
     );
   }
@@ -2465,9 +2500,9 @@ function VacancyExpiryBadge({
   return (
     <span
       className={`rounded-full px-2 py-1 text-xs font-semibold ${tone}`}
-      title={`Closes ${new Date(expiresAt).toLocaleDateString()}`}
+      title={t("common.closes", { date: date(expiresAt) })}
     >
-      {days === 0 ? "ends today" : `${days} day${days === 1 ? "" : "s"} left`}
+      {days === 0 ? t("common.endsToday") : tn("common.daysLeft", days)}
     </span>
   );
 }
@@ -2482,6 +2517,7 @@ function WhyMatchButton({ applicationId }: { applicationId: string }) {
     cached: boolean;
   } | null>(null);
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function load(force = false) {
     setBusy(true);
@@ -2508,9 +2544,9 @@ function WhyMatchButton({ applicationId }: { applicationId: string }) {
         onClick={() => (open ? setOpen(false) : load(false))}
         disabled={busy}
         className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
-        title="Claude explains why this candidate matches"
+        title={t("why.title")}
       >
-        {busy ? "…" : open ? "Hide ✨" : "✨ Why match?"}
+        {busy ? "…" : open ? t("why.hide") : t("why.btn")}
       </button>
       {open && data && (
         <div className="mt-2 w-full rounded-md border border-cyan-500/30 bg-cyan-500/5 p-3 text-xs text-cyan-50">
@@ -2530,14 +2566,14 @@ function WhyMatchButton({ applicationId }: { applicationId: string }) {
             </div>
           )}
           <div className="mt-2 flex items-center justify-between text-[10px] text-cyan-200/60">
-            <span>{data.cached ? "Cached — click 🔄 to regenerate" : "Generated just now"}</span>
+            <span>{data.cached ? t("why.cached") : t("why.fresh")}</span>
             <button
               type="button"
               onClick={() => load(true)}
               disabled={busy}
               className="text-cyan-200 hover:text-white"
             >
-              🔄 Regenerate
+              {t("why.regen")}
             </button>
           </div>
         </div>
@@ -2555,6 +2591,7 @@ function InterviewPrepButton({ applicationId }: { applicationId: string }) {
     missingSkills: string[];
   } | null>(null);
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function run() {
     setBusy(true);
@@ -2576,9 +2613,9 @@ function InterviewPrepButton({ applicationId }: { applicationId: string }) {
       .join("\n\n");
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Copied questions");
+      toast.success(t("prep.copied"));
     } catch {
-      toast.error("Clipboard blocked");
+      toast.error(t("common.clipboardBlocked"));
     }
   }
 
@@ -2589,32 +2626,32 @@ function InterviewPrepButton({ applicationId }: { applicationId: string }) {
         onClick={() => (data ? setOpen((v) => !v) : run())}
         disabled={busy}
         className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-50"
-        title="Claude drafts 5 interview questions tailored to this candidate + role"
+        title={t("prep.title")}
       >
-        {busy ? "✨ prepping…" : "✨ Interview prep"}
+        {busy ? t("prep.busy") : t("prep.btn")}
       </button>
       {open && data && (
         <div className="absolute right-0 top-full z-30 mt-1 w-[min(440px,calc(100vw-2rem))] rounded-lg border border-fuchsia-500/30 bg-slate-900 p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-fuchsia-200">
-              Interview prep · {data.questions.length} questions
+              {t("prep.heading", { n: data.questions.length })}
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={copyAll}
                 className="text-[10px] text-fuchsia-300 hover:text-fuchsia-200"
-                title="Copy all to clipboard"
+                title={t("prep.copyTitle")}
               >
-                ⎘ copy
+                {t("common.copy")}
               </button>
-              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+              <button onClick={() => setOpen(false)} aria-label={t("common.close")} className="text-[10px] text-slate-400 hover:text-slate-200">
                 ×
               </button>
             </div>
           </div>
           {data.missingSkills.length > 0 && (
             <p className="mb-2 rounded border border-amber-500/20 bg-amber-500/[0.06] px-2 py-1 text-[10px] text-amber-200">
-              ⚠ Missing skills: {data.missingSkills.slice(0, 5).join(", ")}
+              {t("prep.missing", { list: data.missingSkills.slice(0, 5).join(", ") })}
             </p>
           )}
           <ol className="space-y-2">
@@ -2650,6 +2687,7 @@ function AiShortlistButton({
   } | null>(null);
   const [open, setOpen] = useState(false);
   const toast = useToast();
+  const { t, st } = useBuildT();
 
   if (pendingCount === 0) return null;
 
@@ -2659,7 +2697,7 @@ function AiShortlistButton({
       const r = await buildApi.aiShortlist(vacancyId);
       setResult({ summary: r.summary, picks: r.items });
       setOpen(true);
-      if (r.items.length === 0) toast.info("No clear top picks among pending applicants.");
+      if (r.items.length === 0) toast.info(t("sl.none"));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -2672,7 +2710,7 @@ function AiShortlistButton({
     try {
       await buildApi.setApplicationLabel(applicationId, label);
       onLabel(applicationId, label);
-      toast.success(`Tagged as ${label}`);
+      toast.success(t("sl.tagged", { label: st("label", label) }));
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -2685,26 +2723,27 @@ function AiShortlistButton({
         onClick={() => (result ? setOpen((v) => !v) : run())}
         disabled={busy}
         className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
-        title="Claude reads all pending applications and picks the top 3"
+        title={t("sl.title")}
       >
-        {busy ? "✨ analysing…" : result ? "✨ AI picks" : `✨ AI shortlist (${pendingCount})`}
+        {busy ? t("sl.busy") : result ? t("sl.picks") : t("sl.btn", { n: pendingCount })}
       </button>
       {open && result && (
         <div className="absolute right-0 top-full z-20 mt-1 w-96 rounded-lg border border-fuchsia-500/30 bg-slate-900 p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-fuchsia-200">
-              Claude shortlist
+              {t("sl.heading")}
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={run}
                 disabled={busy}
                 className="text-[10px] text-slate-400 hover:text-slate-200"
-                title="Re-run"
+                title={t("sl.rerun")}
+                aria-label={t("sl.rerun")}
               >
                 ⟳
               </button>
-              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+              <button onClick={() => setOpen(false)} aria-label={t("common.close")} className="text-[10px] text-slate-400 hover:text-slate-200">
                 ×
               </button>
             </div>
@@ -2715,7 +2754,7 @@ function AiShortlistButton({
             </p>
           )}
           {result.picks.length === 0 ? (
-            <p className="text-[11px] text-slate-500">Claude couldn&apos;t identify clear top picks.</p>
+            <p className="text-[11px] text-slate-500">{t("sl.noClear")}</p>
           ) : (
             <ul className="space-y-2">
               {result.picks.map((p) => (
@@ -2728,7 +2767,7 @@ function AiShortlistButton({
                       onClick={() => applyLabel(p.applicationId, p.rank)}
                       className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/15 px-2 py-1 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/25"
                     >
-                      Tag {p.rank === 1 ? "TOP_PICK" : "SHORTLIST"}
+                      {t("sl.tag", { label: st("label", p.rank === 1 ? "TOP_PICK" : "SHORTLIST") })}
                     </button>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-200">{p.reasoning}</p>
@@ -2754,6 +2793,7 @@ function BulkMessageButton({
   const [busy, setBusy] = useState(false);
   const [templates, setTemplates] = useState<{ id: string; name: string; body: string }[] | null>(null);
   const toast = useToast();
+  const { t: tb } = useBuildT();
 
   // Lazy-load templates the first time the dropdown opens.
   useEffect(() => {
@@ -2769,14 +2809,14 @@ function BulkMessageButton({
   async function send() {
     const body = content.trim();
     if (body.length < 5) {
-      toast.error("Message is too short.");
+      toast.error(tb("bm.short"));
       return;
     }
-    if (!confirm(`Send this DM to all ${pendingCount} PENDING applicants?`)) return;
+    if (!confirm(tb("bm.confirm", { n: pendingCount }))) return;
     setBusy(true);
     try {
       const r = await buildApi.bulkMessageApplicants(vacancyId, body, "PENDING");
-      toast.success(`Sent to ${r.sent} applicant${r.sent === 1 ? "" : "s"}.`);
+      toast.success(tb("bm.sent", { n: r.sent }));
       setContent("");
       setOpen(false);
     } catch (e) {
@@ -2789,12 +2829,12 @@ function BulkMessageButton({
   async function saveAsTemplate() {
     const body = content.trim();
     if (body.length < 5) return;
-    const name = window.prompt("Template name:", body.slice(0, 40));
+    const name = window.prompt(tb("bm.tplPrompt"), body.slice(0, 40));
     if (!name?.trim()) return;
     try {
       const t = await buildApi.saveBulkTemplate({ name: name.trim(), body });
       setTemplates((arr) => (arr ? [t, ...arr] : [t]));
-      toast.success("Template saved");
+      toast.success(tb("bm.tplSaved"));
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -2815,14 +2855,14 @@ function BulkMessageButton({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-200 transition hover:bg-sky-500/20"
-        title="Send the same DM to every PENDING applicant on this vacancy"
+        title={tb("bm.btnTitle")}
       >
-        ✉ Message all ({pendingCount})
+        {tb("bm.btn", { n: pendingCount })}
       </button>
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 w-96 rounded-lg border border-white/10 bg-slate-900 p-3 shadow-2xl">
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sky-200">
-            Message {pendingCount} pending applicants
+            {tb("bm.heading", { n: pendingCount })}
           </div>
           {templates && templates.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1">
@@ -2842,7 +2882,7 @@ function BulkMessageButton({
                   <button
                     type="button"
                     onClick={() => removeTemplate(t.id)}
-                    aria-label={`Delete template ${t.name}`}
+                    aria-label={tb("bm.tplDeleteAria", { name: t.name })}
                     className="text-slate-500 hover:text-rose-300"
                   >
                     ×
@@ -2856,7 +2896,8 @@ function BulkMessageButton({
             onChange={(e) => setContent(e.target.value)}
             rows={4}
             maxLength={4000}
-            placeholder="Hi, thanks for applying — I'd like to schedule a 15-min call this week. Free Tue/Wed afternoon?"
+            placeholder={tb("bm.ph")}
+            aria-label={tb("bm.heading", { n: pendingCount })}
             className="w-full rounded border border-white/10 bg-white/5 p-2 text-xs text-white placeholder:text-slate-500 focus:border-sky-500/40 focus:outline-none"
           />
           <div className="mt-2 flex items-center justify-between gap-1.5">
@@ -2865,9 +2906,9 @@ function BulkMessageButton({
               onClick={saveAsTemplate}
               disabled={content.trim().length < 5}
               className="text-[10px] text-slate-400 hover:text-emerald-300 disabled:opacity-40"
-              title="Save current text as a reusable template"
+              title={tb("bm.tplTitle")}
             >
-              ★ Save as template
+              {tb("bm.saveTpl")}
             </button>
             <div className="flex items-center gap-1.5">
               <button
@@ -2875,7 +2916,7 @@ function BulkMessageButton({
                 onClick={() => setOpen(false)}
                 className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/5"
               >
-                Cancel
+                {tb("common.cancel")}
               </button>
               <button
                 type="button"
@@ -2883,7 +2924,7 @@ function BulkMessageButton({
                 disabled={busy || content.trim().length < 5}
                 className="rounded-md bg-sky-500 px-3 py-1 text-[11px] font-semibold text-sky-950 hover:bg-sky-400 disabled:opacity-50"
               >
-                {busy ? "…" : "Send"}
+                {busy ? "…" : tb("common.send")}
               </button>
             </div>
           </div>
@@ -2898,6 +2939,7 @@ function VacancyFeedbackButton({ vacancyId }: { vacancyId: string }) {
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.aiVacancyFeedback>> | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { t } = useBuildT();
 
   async function run() {
     setOpen(true);
@@ -2929,18 +2971,19 @@ function VacancyFeedbackButton({ vacancyId }: { vacancyId: string }) {
         type="button"
         onClick={run}
         disabled={busy}
-        title="AI quality review of this vacancy"
+        title={t("fb.title")}
         className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition hover:opacity-90 disabled:opacity-50 ${tone}`}
       >
-        {busy ? "…" : data ? `🤖 ${data.score}/100` : "🤖 AI feedback"}
+        {busy ? "…" : data ? `🤖 ${data.score}/100` : t("fb.btn")}
       </button>
       {open && (data || err) && (
         <div className="absolute right-0 top-full z-30 mt-2 w-80 rounded-xl border border-white/10 bg-slate-900 p-4 text-xs shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
-            <div className="font-semibold text-white">AI quality review</div>
+            <div className="font-semibold text-white">{t("fb.heading")}</div>
             <button
               type="button"
               onClick={() => setOpen(false)}
+              aria-label={t("common.close")}
               className="text-slate-500 hover:text-slate-200"
             >
               ✕
@@ -2956,7 +2999,7 @@ function VacancyFeedbackButton({ vacancyId }: { vacancyId: string }) {
               {data.strengths.length > 0 && (
                 <>
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
-                    Strengths
+                    {t("fb.strengths")}
                   </div>
                   <ul className="mb-2 space-y-0.5 pl-4 text-slate-300">
                     {data.strengths.map((s, i) => (
@@ -2968,7 +3011,7 @@ function VacancyFeedbackButton({ vacancyId }: { vacancyId: string }) {
               {data.suggestions.length > 0 && (
                 <>
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
-                    Suggestions
+                    {t("fb.suggestions")}
                   </div>
                   <ul className="space-y-0.5 pl-4 text-slate-300">
                     {data.suggestions.map((s, i) => (
@@ -2997,6 +3040,7 @@ function TranslateVacancyButton({
   const [data, setData] = useState<Record<string, { title: string; description: string }> | null>(null);
   const [activeLoc, setActiveLoc] = useState<string>("en");
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function run() {
     setBusy(true);
@@ -3018,9 +3062,9 @@ function TranslateVacancyButton({
     const text = `${data[activeLoc].title}\n\n${data[activeLoc].description}`;
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard");
+      toast.success(t("common.copied"));
     } catch {
-      toast.error("Clipboard blocked");
+      toast.error(t("common.clipboardBlocked"));
     }
   }
 
@@ -3031,9 +3075,9 @@ function TranslateVacancyButton({
         onClick={() => (data ? setOpen((v) => !v) : run())}
         disabled={busy}
         className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
-        title="Claude generates RU/EN/KK variants of this vacancy"
+        title={t("tr.title")}
       >
-        {busy ? "✨ translating…" : "✨ Translate"}
+        {busy ? t("tr.busy") : t("tr.btn")}
       </button>
       {open && data && (
         <div className="absolute right-0 top-full z-30 mt-1 w-[min(560px,calc(100vw-2rem))] rounded-lg border border-fuchsia-500/30 bg-slate-900 p-3 shadow-2xl">
@@ -3053,9 +3097,9 @@ function TranslateVacancyButton({
             </div>
             <div className="flex items-center gap-2">
               <button onClick={copy} className="text-[10px] text-fuchsia-300 hover:text-fuchsia-200">
-                ⎘ copy
+                {t("common.copy")}
               </button>
-              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+              <button onClick={() => setOpen(false)} aria-label={t("common.close")} className="text-[10px] text-slate-400 hover:text-slate-200">
                 ×
               </button>
             </div>
@@ -3082,17 +3126,18 @@ function DeleteVacancyButton({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function del() {
     if (
       !confirm(
-        "Permanently delete this vacancy? This is only allowed when no applications exist. Otherwise close the vacancy instead.",
+        t("del.confirm"),
       )
     ) return;
     setBusy(true);
     try {
       await buildApi.deleteVacancy(vacancyId);
-      toast.success("Vacancy deleted");
+      toast.success(t("del.done"));
       router.push(`/build/project/${encodeURIComponent(projectId)}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -3106,10 +3151,10 @@ function DeleteVacancyButton({
       type="button"
       onClick={del}
       disabled={busy}
-      title="Permanently delete (only when 0 applications)"
+      title={t("del.title")}
       className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
     >
-      {busy ? "…" : "🗑 Delete"}
+      {busy ? "…" : t("del.btn")}
     </button>
   );
 }
@@ -3124,6 +3169,7 @@ function ExportCsvButton({
   const token = useBuildAuth((s) => s.token);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function download() {
     if (!token || busy) return;
@@ -3145,7 +3191,7 @@ function ExportCsvButton({
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      toast.error(`CSV download failed: ${(e as Error).message}`);
+      toast.error(t("csv.failed", { err: (e as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -3156,7 +3202,7 @@ function ExportCsvButton({
       type="button"
       onClick={download}
       disabled={busy}
-      title="Download all applications as CSV (includes label, skills, AI score)"
+      title={t("csv.title")}
       className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
     >
       {busy ? "…" : "↓ CSV"}
@@ -3173,17 +3219,14 @@ function ArchiveVacancyButton({
 }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function archive() {
-    if (
-      !confirm(
-        "Archive this vacancy? It will be hidden from public feeds and partner widgets, but its application history and analytics stay intact. You can republish it later.",
-      )
-    ) return;
+    if (!confirm(t("arch.confirm"))) return;
     setBusy(true);
     try {
       await buildApi.patchVacancy(vacancyId, { status: "ARCHIVED" });
-      toast.success("Vacancy archived");
+      toast.success(t("arch.done"));
       onDone();
     } catch (e) {
       toast.error((e as Error).message);
@@ -3197,10 +3240,10 @@ function ArchiveVacancyButton({
       type="button"
       onClick={archive}
       disabled={busy}
-      title="Hide from public feeds; preserve application history"
+      title={t("arch.title")}
       className="rounded-md border border-slate-500/40 bg-slate-500/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-500/20 disabled:opacity-50"
     >
-      {busy ? "…" : "📦 Archive"}
+      {busy ? "…" : t("arch.btn")}
     </button>
   );
 }
@@ -3214,13 +3257,14 @@ function RepublishVacancyButton({
 }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function republish() {
-    if (!confirm("Reopen this vacancy? Status will return to OPEN and expiry will reset to 30 days from now.")) return;
+    if (!confirm(t("rep.confirm"))) return;
     setBusy(true);
     try {
       await buildApi.republishVacancy(vacancyId);
-      toast.success("Vacancy reopened — expiry reset to 30 days");
+      toast.success(t("rep.done"));
       onDone();
     } catch (e) {
       toast.error((e as Error).message);
@@ -3234,10 +3278,10 @@ function RepublishVacancyButton({
       type="button"
       onClick={republish}
       disabled={busy}
-      title="Reopen this vacancy and reset expiry"
+      title={t("rep.title")}
       className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-50"
     >
-      {busy ? "…" : "↻ Reopen"}
+      {busy ? "…" : t("rep.btn")}
     </button>
   );
 }
@@ -3251,14 +3295,13 @@ function ExtendVacancyButton({
 }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t, date } = useBuildT();
 
   async function extend() {
     setBusy(true);
     try {
       const r = await buildApi.extendVacancy(vacancyId, 30);
-      toast.success(
-        `Expiry pushed to ${new Date(r.newExpiresAt).toLocaleDateString()} (+${r.extendedDays}d)`,
-      );
+      toast.success(t("ext.done", { date: date(r.newExpiresAt), n: r.extendedDays }));
       onDone();
     } catch (e) {
       toast.error((e as Error).message);
@@ -3272,10 +3315,10 @@ function ExtendVacancyButton({
       type="button"
       onClick={extend}
       disabled={busy}
-      title="Push expiry out by 30 more days"
+      title={t("ext.title")}
       className="rounded-md border border-amber-400/40 bg-amber-400/15 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-400/25 disabled:opacity-50"
     >
-      {busy ? "…" : "+30d expiry"}
+      {busy ? "…" : t("ext.btn")}
     </button>
   );
 }
@@ -3283,9 +3326,10 @@ function ExtendVacancyButton({
 function SaveAsTemplateButton({ vacancy }: { vacancy: BuildVacancy }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function save() {
-    const name = prompt("Template name (e.g. 'Senior welder · Astana'):");
+    const name = prompt(t("tpl.prompt"));
     if (!name?.trim()) return;
     setBusy(true);
     try {
@@ -3299,7 +3343,7 @@ function SaveAsTemplateButton({ vacancy }: { vacancy: BuildVacancy }) {
         city: vacancy.city,
         questions: vacancy.questions,
       });
-      toast.success("Saved as template — pick it on the next vacancy you post.");
+      toast.success(t("tpl.done"));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -3312,10 +3356,10 @@ function SaveAsTemplateButton({ vacancy }: { vacancy: BuildVacancy }) {
       type="button"
       onClick={save}
       disabled={busy}
-      title="Save the current vacancy as a reusable template"
+      title={t("tpl.title")}
       className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
     >
-      {busy ? "…" : "★ Template"}
+      {busy ? "…" : t("tpl.btn")}
     </button>
   );
 }
@@ -3330,12 +3374,13 @@ function CloneVacancyButton({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
 
   async function clone() {
     setBusy(true);
     try {
       const r = await buildApi.duplicateVacancy(vacancyId, projectId);
-      toast.success("Vacancy cloned. Edit the copy and re-publish.");
+      toast.success(t("clone.done"));
       router.push(`/build/vacancy/${encodeURIComponent(r.id)}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -3349,10 +3394,10 @@ function CloneVacancyButton({
       type="button"
       onClick={clone}
       disabled={busy}
-      title="Create a draft copy of this vacancy in the same project"
+      title={t("clone.title")}
       className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
     >
-      {busy ? "…" : "⎘ Clone"}
+      {busy ? "…" : t("clone.btn")}
     </button>
   );
 }
@@ -3367,6 +3412,7 @@ function VacancyStatusToggle({
   onToggled: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const { t } = useBuildT();
   const isOpen = currentStatus === "OPEN";
   async function toggle() {
     setBusy(true);
@@ -3389,7 +3435,7 @@ function VacancyStatusToggle({
           : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
       }`}
     >
-      {busy ? "…" : isOpen ? "Close vacancy" : "Reopen vacancy"}
+      {busy ? "…" : isOpen ? t("toggle.close") : t("toggle.reopen")}
     </button>
   );
 }

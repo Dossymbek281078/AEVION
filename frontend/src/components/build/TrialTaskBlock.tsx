@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { buildApi, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";
 import { HelpTip } from "./HelpTip";
+import { useBuildT } from "@/app/build/i18n";
 
 const TONE: Record<TrialTaskStatus, string> = {
   PROPOSED: "border-amber-500/40 bg-amber-500/10 text-amber-200",
@@ -23,6 +24,7 @@ export function TrialTaskBlock({
   isCandidate: boolean;
   onChanged?: () => void;
 }) {
+  const { t } = useBuildT();
   const [tasks, setTasks] = useState<BuildTrialTask[] | null>(null);
   const [proposing, setProposing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,12 +49,15 @@ export function TrialTaskBlock({
     <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
-          🧪 Тестовое задание
+          {t("trial.heading")}
+          {/* 29.10.2026: прежний текст обещал «эскроу» и «деньги уже зарезервированы» — в коде
+              (routes/build/trial-tasks.ts) сумма не резервируется: при одобрении создаётся
+              заказ на выплату со статусом PENDING. Текст приведён к тому, что делает код. */}
           <HelpTip>
-            <p className="mb-1 font-semibold text-white">Что это?</p>
-            <p>Работодатель предлагает небольшое платное задание — сварить образец, сделать замеры, составить смету. Оплата замораживается в <strong>эскроу</strong> до одобрения.</p>
-            <p className="mt-1.5">Жизненный цикл: <br/>
-              📬 Предложено → ✅ Принято → 📤 Сдано → 💰 Оплачено
+            <p className="mb-1 font-semibold text-white">{t("trial.what")}</p>
+            <p>{t("trial.whatText")}</p>
+            <p className="mt-1.5">{t("trial.cycle")} <br/>
+              {t("trial.cycleSteps")}
             </p>
           </HelpTip>
         </div>
@@ -61,7 +66,7 @@ export function TrialTaskBlock({
             onClick={() => setProposing(true)}
             className="rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25"
           >
-            + Propose paid task
+            {t("trial.propose")}
           </button>
         )}
       </div>
@@ -96,7 +101,7 @@ export function TrialTaskBlock({
 
       {!hasTasks && !proposing && !isRecruiter && (
         <p className="text-xs text-slate-500">
-          Recruiter hasn&apos;t proposed a paid trial task on this application yet.
+          {t("trial.none")}
         </p>
       )}
     </div>
@@ -117,6 +122,7 @@ function ProposeForm({
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { t } = useBuildT();
 
   return (
     <form
@@ -143,7 +149,8 @@ function ProposeForm({
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Task title (e.g. Weld 2 sample joints, photo proof)"
+        placeholder={t("trial.titlePh")}
+        aria-label={t("trial.titlePh")}
         required
         minLength={3}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
@@ -152,7 +159,8 @@ function ProposeForm({
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         rows={3}
-        placeholder="What exactly does the candidate need to do? Include acceptance criteria."
+        placeholder={t("trial.descPh")}
+        aria-label={t("trial.descPh")}
         required
         minLength={10}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
@@ -163,7 +171,8 @@ function ProposeForm({
           min={0}
           value={amount}
           onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
-          placeholder="Payment amount (₽, 0 = unpaid trial)"
+          placeholder={t("trial.amountPh")}
+          aria-label={t("trial.amountPh")}
           className="flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
         />
         <span className="text-xs text-slate-500">RUB</span>
@@ -175,14 +184,14 @@ function ProposeForm({
           onClick={onCancel}
           className="rounded-md border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/5"
         >
-          Cancel
+          {t("common.cancel")}
         </button>
         <button
           type="submit"
           disabled={busy}
           className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
         >
-          {busy ? "…" : "Propose"}
+          {busy ? "…" : t("trial.proposeBtn")}
         </button>
       </div>
     </form>
@@ -206,6 +215,7 @@ function TaskRow({
   const [submitOpen, setSubmitOpen] = useState(false);
   const [subUrl, setSubUrl] = useState("");
   const [subNote, setSubNote] = useState("");
+  const { t, st, num } = useBuildT();
 
   const act = async (op: () => Promise<unknown>) => {
     setBusy(true);
@@ -227,18 +237,18 @@ function TaskRow({
           <p className="mt-0.5 whitespace-pre-wrap text-xs opacity-80">{task.description}</p>
           <div className="mt-1 text-xs opacity-70">
             {task.paymentAmount > 0
-              ? `${task.paymentAmount.toLocaleString("ru-RU")} ${task.paymentCurrency}`
-              : "Unpaid trial"}
+              ? `${num(task.paymentAmount)} ${task.paymentCurrency}`
+              : t("trial.unpaid")}
           </div>
         </div>
         <span className="shrink-0 rounded-full bg-black/20 px-2 py-1 text-xs font-bold uppercase">
-          {task.status}
+          {st("tstatus", task.status)}
         </span>
       </div>
 
       {task.status === "SUBMITTED" && (task.submissionUrl || task.submissionNote) && (
         <div className="mt-2 rounded border border-white/10 bg-black/20 p-2 text-xs">
-          <div className="mb-1 font-bold opacity-70">Submission</div>
+          <div className="mb-1 font-bold opacity-70">{t("trial.submission")}</div>
           {task.submissionUrl && (
             <a
               href={task.submissionUrl}
@@ -254,27 +264,26 @@ function TaskRow({
       )}
 
       {task.status === "REJECTED" && task.rejectReason && (
-        <p className="mt-2 text-xs opacity-80">Reason: {task.rejectReason}</p>
+        <p className="mt-2 text-xs opacity-80">{t("common.reason", { r: task.rejectReason })}</p>
       )}
 
-      {/* Escrow badge */}
+      {/* Плашка оплаты. До 29.10.2026 — «Эскроу: 🔒 Заморожен»; резерва денег в коде нет. */}
       {task.paymentAmount > 0 && (
         <div className="mt-2 flex items-center gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-[11px]">
-          <span className="text-slate-400">Эскроу:</span>
+          <span className="text-slate-400">{t("trial.payment")}</span>
           <HelpTip>
-            <p className="mb-1 font-semibold text-white">Что такое эскроу?</p>
-            <p>Оплата <strong>заморожена</strong> на счёте платформы до одобрения работы. Работодатель не может просто не заплатить — деньги уже зарезервированы.</p>
-            <p className="mt-1.5">🔒 Заморожен — ждём сдачи работы<br/>✓ Освобождён — деньги переведены<br/>↩ Возврат — задание отклонено</p>
+            <p className="mb-1 font-semibold text-white">{t("trial.payWhat")}</p>
+            <p>{t("trial.payText")}</p>
           </HelpTip>
           <span className={`font-bold ${
             task.status === "APPROVED" ? "text-emerald-300" :
             task.status === "REJECTED" ? "text-rose-300" : "text-amber-300"
           }`}>
-            {task.status === "APPROVED" ? "✓ Освобождён" :
-             task.status === "REJECTED" ? "↩ Возврат" : "🔒 Заморожен"}
+            {task.status === "APPROVED" ? t("trial.payApproved") :
+             task.status === "REJECTED" ? t("trial.payRejected") : t("trial.payWaiting")}
           </span>
           <span className="ml-auto font-semibold text-slate-300">
-            {task.paymentAmount.toLocaleString("ru-RU")} {task.paymentCurrency}
+            {num(task.paymentAmount)} {task.paymentCurrency}
           </span>
         </div>
       )}
@@ -287,14 +296,14 @@ function TaskRow({
               onClick={() => act(() => buildApi.acceptTrialTask(task.id))}
               className="rounded-md bg-emerald-500/30 px-3 py-1 text-xs font-semibold hover:bg-emerald-500/50 disabled:opacity-50"
             >
-              Accept
+              {t("common.accept")}
             </button>
             <button
               disabled={busy}
-              onClick={() => act(() => buildApi.rejectTrialTask(task.id, "Declined by candidate"))}
+              onClick={() => act(() => buildApi.rejectTrialTask(task.id, t("trial.declinedReason")))}
               className="rounded-md bg-rose-500/30 px-3 py-1 text-xs font-semibold hover:bg-rose-500/50 disabled:opacity-50"
             >
-              Decline
+              {t("trial.decline")}
             </button>
           </>
         )}
@@ -304,7 +313,7 @@ function TaskRow({
             onClick={() => setSubmitOpen(true)}
             className="rounded-md bg-emerald-500/30 px-3 py-1 text-xs font-semibold hover:bg-emerald-500/50"
           >
-            Submit work
+            {t("trial.submitWork")}
           </button>
         )}
 
@@ -315,17 +324,17 @@ function TaskRow({
               onClick={() => act(() => buildApi.approveTrialTask(task.id))}
               className="rounded-md bg-emerald-500/30 px-3 py-1 text-xs font-semibold hover:bg-emerald-500/50 disabled:opacity-50"
             >
-              Approve + create payout
+              {t("trial.approve")}
             </button>
             <button
               disabled={busy}
               onClick={() => {
-                const reason = prompt("Why are you rejecting this submission?") || "";
+                const reason = prompt(t("trial.rejectPrompt")) || "";
                 if (reason) act(() => buildApi.rejectTrialTask(task.id, reason));
               }}
               className="rounded-md bg-rose-500/30 px-3 py-1 text-xs font-semibold hover:bg-rose-500/50 disabled:opacity-50"
             >
-              Reject
+              {t("common.reject")}
             </button>
           </>
         )}
@@ -350,14 +359,16 @@ function TaskRow({
           <input
             value={subUrl}
             onChange={(e) => setSubUrl(e.target.value)}
-            placeholder="Photo / video URL (optional)"
+            placeholder={t("trial.urlPh")}
+            aria-label={t("trial.urlPh")}
             className="w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-white placeholder:text-slate-500"
           />
           <textarea
             value={subNote}
             onChange={(e) => setSubNote(e.target.value)}
             rows={2}
-            placeholder="Notes about your submission"
+            placeholder={t("trial.notePh")}
+            aria-label={t("trial.notePh")}
             className="w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-white placeholder:text-slate-500"
           />
           <div className="flex justify-end gap-2">
@@ -366,14 +377,14 @@ function TaskRow({
               onClick={() => setSubmitOpen(false)}
               className="rounded border border-white/10 px-2 py-1"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               disabled={busy}
               className="rounded bg-emerald-500 px-2 py-1 font-semibold text-emerald-950 disabled:opacity-50"
             >
-              Submit
+              {t("trial.submit")}
             </button>
           </div>
         </form>

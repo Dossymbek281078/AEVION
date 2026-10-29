@@ -6,6 +6,7 @@ import { useBuildAuth } from "@/lib/build/auth";
 import { AiImprove } from "@/components/build/AiImprove";
 import { useToast } from "@/components/build/Toast";
 import { deriveApplySource, deriveReferrerUserId } from "@/lib/build/applySource";
+import { useBuildT } from "@/app/build/i18n";
 
 export function ApplicationForm({
   vacancyId,
@@ -20,6 +21,7 @@ export function ApplicationForm({
 }) {
   const token = useBuildAuth((s) => s.token);
   const toast = useToast();
+  const { t, lang } = useBuildT();
   const [message, setMessage] = useState("");
   const qs = questions || [];
   const [answers, setAnswers] = useState<string[]>(() => qs.map(() => ""));
@@ -32,17 +34,17 @@ export function ApplicationForm({
   async function generateCoverLetter() {
     setAiBusy(true);
     try {
-      const r = await buildApi.aiCoverLetter({ vacancyId, locale: "ru" });
+      const r = await buildApi.aiCoverLetter({ vacancyId, locale: lang === "ru" ? "ru" : lang === "kk" ? "kz" : "en" });
       setMessage(r.coverLetter);
       if ((r.skillsOverlap || []).length > 0) {
-        toast.success(`Drafted with skill match: ${(r.skillsOverlap || []).slice(0, 3).join(", ")}`);
+        toast.success(t("form.drafted", { list: (r.skillsOverlap || []).slice(0, 3).join(", ") }));
       } else {
-        toast.info("Draft ready — review and tweak before sending.");
+        toast.info(t("form.draftReady"));
       }
     } catch (e) {
       const err = e as BuildApiError;
       if (err.code === "profile_required_for_ai_cover_letter") {
-        toast.error("Fill out your profile first — Claude needs material to work from.");
+        toast.error(t("form.profileFirst"));
       } else {
         toast.error(err.message);
       }
@@ -64,7 +66,7 @@ export function ApplicationForm({
   if (!token) {
     return (
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
-        Sign in to apply for this vacancy.
+        {t("form.signIn")}
       </div>
     );
   }
@@ -72,10 +74,10 @@ export function ApplicationForm({
   if (alreadyApplied || success) {
     return (
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
-        Application submitted. The project owner will review it shortly.
+        {t("form.submitted")}
         {qs.length > 0 && (
           <div className="mt-1 text-xs text-emerald-200/80">
-            ✨ Claude is scoring your answers in the background — the recruiter sees the result on their dashboard.
+            {t("form.scoring")}
           </div>
         )}
       </div>
@@ -98,7 +100,7 @@ export function ApplicationForm({
       onApplied?.();
     } catch (err) {
       const e = err as BuildApiError;
-      setError(e.code === "already_applied" ? "You have already applied to this vacancy." : e.message);
+      setError(e.code === "already_applied" ? t("form.already") : e.message);
     } finally {
       setSubmitting(false);
     }
@@ -108,15 +110,15 @@ export function ApplicationForm({
     <form onSubmit={submit} className="space-y-3">
       <label className="block text-sm font-medium text-slate-200">
         <span className="flex items-center justify-between gap-2">
-          <span>Cover note (optional)</span>
+          <span>{t("form.cover")}</span>
           <button
             type="button"
             onClick={generateCoverLetter}
             disabled={aiBusy}
             className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
-            title="Claude drafts a cover from your profile + this vacancy"
+            title={t("form.genTitle")}
           >
-            {aiBusy ? "✨ drafting…" : "✨ Generate from profile"}
+            {aiBusy ? t("form.drafting") : t("form.gen")}
           </button>
         </span>
         <textarea
@@ -124,7 +126,7 @@ export function ApplicationForm({
           onChange={(e) => setMessage(e.target.value)}
           rows={4}
           maxLength={4000}
-          placeholder="Briefly describe your experience for this role…"
+          placeholder={t("form.coverPh")}
           className="mt-1.5 w-full rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
         />
       </label>
@@ -132,12 +134,12 @@ export function ApplicationForm({
         value={message}
         onAccept={(v) => setMessage(v)}
         kind="cover_note"
-        hint="Сделать сопроводительное письмо конкретнее"
+        hint={t("form.improveHint")}
       />
       {qs.length > 0 && (
         <div className="space-y-2 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/5 p-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-fuchsia-200">
-            Quick questions ✨ (Claude scores these)
+            {t("form.questions")}
           </div>
           {qs.map((q, i) => (
             <label key={i} className="block text-xs text-slate-200">
@@ -151,7 +153,7 @@ export function ApplicationForm({
                 }}
                 rows={2}
                 maxLength={2000}
-                placeholder="Your answer…"
+                placeholder={t("form.answerPh")}
                 className="mt-1 w-full rounded-md border border-white/10 bg-white/5 p-2 text-sm text-white placeholder:text-slate-500 focus:border-fuchsia-400/50 focus:outline-none"
               />
             </label>
@@ -164,7 +166,7 @@ export function ApplicationForm({
         disabled={submitting}
         className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50"
       >
-        {submitting ? "Submitting…" : "Submit application"}
+        {submitting ? t("form.submitting") : t("form.submit")}
       </button>
     </form>
   );

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useBuildT } from "@/app/build/i18n";
 
 export function HelpTip({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const { t } = useBuildT();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,7 +23,7 @@ export function HelpTip({ children }: { children: React.ReactNode }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="inline-grid h-4 w-4 place-items-center rounded-full border border-slate-600 bg-slate-800 text-[10px] font-bold text-slate-400 hover:border-emerald-500/60 hover:text-emerald-300 transition"
-        aria-label="Подсказка"
+        aria-label={t("help.aria")}
       >
         ?
       </button>

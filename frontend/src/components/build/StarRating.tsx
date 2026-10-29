@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useBuildT } from "@/app/build/i18n";
 
 // Display-only star bar. Accepts a fractional value (e.g. 4.3) and
 // renders 5 stars with a partial fill on the matching slot via CSS clip.
@@ -15,13 +16,14 @@ export function StarsDisplay({
   showValue?: boolean;
   reviewCount?: number | null;
 }) {
+  const { t } = useBuildT();
   const v = Math.max(0, Math.min(5, Number(value) || 0));
   const px = size === "sm" ? 12 : size === "lg" ? 22 : 16;
   const text = size === "sm" ? "text-[10px]" : size === "lg" ? "text-base" : "text-xs";
 
   return (
     <span className="inline-flex items-baseline gap-1.5 align-middle">
-      <span className="relative inline-flex" aria-label={`${v.toFixed(1)} of 5 stars`}>
+      <span className="relative inline-flex" aria-label={t("star.of5", { v: v.toFixed(1) })}>
         <span className="text-slate-700" style={{ fontSize: px, lineHeight: 1 }} aria-hidden>
           ★★★★★
         </span>
@@ -58,13 +60,14 @@ export function StarsInput({
   disabled?: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const { t } = useBuildT();
   const px = size === "xl" ? 32 : size === "lg" ? 26 : 20;
   const display = hover ?? value;
 
   return (
     <div
       role="radiogroup"
-      aria-label="Star rating"
+      aria-label={t("star.rating")}
       className="inline-flex items-center gap-1"
     >
       {[1, 2, 3, 4, 5].map((star) => {
@@ -75,7 +78,7 @@ export function StarsInput({
             key={star}
             role="radio"
             aria-checked={value === star}
-            aria-label={`${star} stars`}
+            aria-label={t("star.n", { n: star })}
             disabled={disabled}
             onClick={() => onChange(star)}
             onMouseEnter={() => setHover(star)}

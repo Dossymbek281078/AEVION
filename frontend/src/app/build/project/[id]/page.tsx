@@ -20,16 +20,21 @@ import {
 } from "@/lib/build/api";
 import {
   WORK_MODES,
-  WORK_MODE_LABELS,
   EDUCATION_LEVELS,
-  EDUCATION_LEVEL_LABELS,
   WORK_REGIONS_KZ,
+  regionLabelIn,
+  workModeLabelIn,
+  educationLabelIn,
   type WorkMode,
   type EducationLevel,
 } from "@/lib/build/geo";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 import { useI18n } from "@/lib/i18n";
+import { useBuildT } from "../../i18n";
+
+// Образец CSV для массового импорта — формат, а не подпись: одинаков на всех языках.
+const CSV_SAMPLE = `title,description,salary,city,skills\n"Senior welder","TIG/MIG, certified, 5+y",800000,Astana,"welding|tig|certified"`;
 
 const STATUSES: ProjectStatus[] = ["OPEN", "IN_PROGRESS", "DONE"];
 
@@ -44,6 +49,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const me = useBuildAuth((s) => s.user);
   const { t } = useI18n();
+  const { t: tb, st, date, num } = useBuildT();
 
   const [bundle, setBundle] = useState<ProjectBundle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,16 +71,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   if (loading) {
     return (
       <BuildShell>
-        <p className="py-8 text-sm text-slate-400">Loading project…</p>
+        <p className="py-8 text-sm text-slate-400">{tb("proj.loading")}</p>
       </BuildShell>
     );
   }
   if (error || !bundle) {
     return (
       <BuildShell>
-        <p className="py-8 text-sm text-rose-300">{error || "Project not found."}</p>
+        <p className="py-8 text-sm text-rose-300">{error || tb("proj.notFound")}</p>
         <Link href="/build" className="text-sm text-emerald-300 underline">
-          ← Back to projects
+          {tb("common.backToProjects")}
         </Link>
       </BuildShell>
     );
@@ -86,7 +92,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   return (
     <BuildShell>
       <Link href="/build" className="text-xs text-slate-400 underline-offset-2 hover:underline">
-        ← All projects
+        {tb("proj.allProjects")}
       </Link>
 
       <div className="mt-2 mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -98,9 +104,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           )}
           <h1 className="text-2xl font-bold text-white">{project.title}</h1>
           <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
-            <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>
+            <span>{tb("proj.created", { date: date(project.createdAt) })}</span>
             {project.city && <span>· {project.city}</span>}
-            {project.budget > 0 && <span>· Budget ${project.budget.toLocaleString()}</span>}
+            {project.budget > 0 && <span>{tb("proj.budget", { amount: `$${num(project.budget)}` })}</span>}
           </div>
         </div>
         <div className="flex items-start gap-2">
@@ -122,7 +128,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           )}
           {client && (
             <div className="text-right text-xs text-slate-400">
-              <div>Posted by</div>
+              <div>{tb("proj.postedBy")}</div>
               <div className="text-sm font-medium text-slate-200">{client.name}</div>
               <div>{client.email}</div>
             </div>
@@ -134,7 +140,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <div className="lg:col-span-2">
           <div className="rounded-xl border border-white/10 bg-white/5 p-5">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
-              Description
+              {tb("common.description")}
             </h2>
             <p className="whitespace-pre-wrap text-sm text-slate-200">{project.description}</p>
           </div>
@@ -142,7 +148,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <div className="mt-6">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-white">
-                Vacancies <span className="text-slate-500">({vacancies.length})</span>
+                {tb("common.vacancies")} <span className="text-slate-500">({vacancies.length})</span>
               </h2>
               {isOwner && (
                 <div className="flex items-center gap-2">
@@ -160,8 +166,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </div>
             {vacancies.length === 0 ? (
               <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
-                No vacancies yet.{" "}
-                {isOwner ? "Add one above to start receiving applications." : "Check back later."}
+                {tb("proj.noVac")}{" "}
+                {isOwner ? tb("proj.noVacOwner") : tb("proj.noVacOther")}
               </p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
@@ -182,7 +188,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
           {files.length > 0 && (
             <div className="mt-6">
-              <h2 className="mb-2 text-lg font-semibold text-white">Files</h2>
+              <h2 className="mb-2 text-lg font-semibold text-white">{tb("proj.files")}</h2>
               <ul className="divide-y divide-white/5 rounded-xl border border-white/10 bg-white/5">
                 {files.map((f) => (
                   <li key={f.id} className="flex items-center justify-between px-4 py-3 text-sm">
@@ -195,7 +201,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       {f.name || f.url}
                     </a>
                     <span className="text-xs text-slate-500">
-                      {f.sizeBytes ? `${(f.sizeBytes / 1024).toFixed(0)} KB` : "—"}
+                      {f.sizeBytes ? tb("proj.kb", { n: (f.sizeBytes / 1024).toFixed(0) }) : "—"}
                     </span>
                   </li>
                 ))}
@@ -206,8 +212,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         <aside className="space-y-4">
           <div className="rounded-xl border border-white/10 bg-white/5 p-5">
-            <div className="text-xs uppercase tracking-wider text-slate-400">Status</div>
-            <div className="mt-2 text-2xl font-semibold text-white">{project.status}</div>
+            <div className="text-xs uppercase tracking-wider text-slate-400">{tb("proj.status")}</div>
+            <div className="mt-2 text-2xl font-semibold text-white">{st("pstatus", project.status)}</div>
             {isOwner && <OwnerStatusControls project={project} onUpdated={refresh} />}
           </div>
 
@@ -225,7 +231,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               download
               className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs font-medium text-slate-300 transition hover:bg-white/5"
             >
-              ⬇ Export project PDF
+              {tb("proj.exportPdf")}
             </a>
           )}
         </aside>
@@ -238,6 +244,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 }
 
 function ShareButton({ projectId }: { projectId: string }) {
+  const { t } = useBuildT();
   const [copied, setCopied] = useState(false);
   const onClick = useCallback(() => {
     const url =
@@ -257,10 +264,10 @@ function ShareButton({ projectId }: { projectId: string }) {
   return (
     <button
       onClick={onClick}
-      title="Copy public link to clipboard"
+      title={t("proj.shareTitle")}
       className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/10"
     >
-      {copied ? "✓ Link copied" : "🔗 Share"}
+      {copied ? t("proj.linkCopied") : t("proj.share")}
     </button>
   );
 }
@@ -274,6 +281,7 @@ function VacancyBoostButton({
 }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t, date } = useBuildT();
   const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
   return (
     <button
@@ -282,7 +290,7 @@ function VacancyBoostButton({
         e.preventDefault();
         e.stopPropagation();
         if (isFeatured) return;
-        if (!confirm("Boost this vacancy for 7 days? Free if your plan has boosts left, otherwise creates a 990 ₽ pending order.")) {
+        if (!confirm(t("proj.boostConfirm"))) {
           return;
         }
         setBusy(true);
@@ -290,11 +298,9 @@ function VacancyBoostButton({
           const r = await buildApi.boostVacancy(vacancy.id, 7);
           onUpdated();
           if (r.source === "PLAN") {
-            toast.success("Boost activated! Vacancy is featured for 7 days.");
+            toast.success(t("proj.boostOk"));
           } else {
-            toast.info(
-              `Boost is a pending order (id ${r.orderId?.slice(0, 8)}…). Pay on Pricing to activate.`,
-            );
+            toast.info(t("proj.boostPending", { id: r.orderId?.slice(0, 8) ?? "" }));
           }
         } catch (err) {
           toast.error((err as Error).message);
@@ -302,14 +308,14 @@ function VacancyBoostButton({
           setBusy(false);
         }
       }}
-      title={isFeatured ? `Featured until ${new Date(vacancy.boostUntil!).toLocaleDateString()}` : "Boost this vacancy for 7 days"}
+      title={isFeatured ? t("proj.featuredUntil", { date: date(vacancy.boostUntil!) }) : t("proj.boostTitle")}
       className={`w-full rounded-md px-2.5 py-1 text-xs ${
         isFeatured
           ? "bg-amber-500/15 text-amber-200"
           : "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
       } disabled:opacity-50`}
     >
-      {busy ? "…" : isFeatured ? "★ Featured" : "★ Boost 7d"}
+      {busy ? "…" : isFeatured ? t("proj.featured") : t("proj.boost")}
     </button>
   );
 }
@@ -322,6 +328,7 @@ function VacancyOwnerToggle({
   onUpdated: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const { t } = useBuildT();
   const isClosed = vacancy.status === "CLOSED";
   return (
     <button
@@ -343,7 +350,7 @@ function VacancyOwnerToggle({
           : "bg-white/5 text-slate-300 hover:bg-white/10"
       }`}
     >
-      {busy ? "…" : isClosed ? "↻ Reopen vacancy" : "✕ Close vacancy"}
+      {busy ? "…" : isClosed ? t("proj.reopenVac") : t("proj.closeVac")}
     </button>
   );
 }
@@ -356,6 +363,7 @@ function OwnerStatusControls({
   onUpdated: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const { st } = useBuildT();
   return (
     <div className="mt-3 flex flex-wrap gap-1">
       {STATUSES.map((s: any) => (
@@ -377,7 +385,7 @@ function OwnerStatusControls({
               : "bg-white/5 text-slate-300 hover:bg-white/10"
           }`}
         >
-          {s}
+          {st("pstatus", s)}
         </button>
       ))}
     </div>
@@ -398,6 +406,7 @@ function TemplatePicker({
   const [items, setItems] = useState<Awaited<ReturnType<typeof buildApi.listVacancyTemplates>>["items"]>([]);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
+  const { t: tb } = useBuildT();
 
   useEffect(() => {
     if (loaded) return;
@@ -413,13 +422,13 @@ function TemplatePicker({
   return (
     <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/[0.06] p-2 text-xs">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold text-fuchsia-200">★ Use template</span>
+        <span className="font-semibold text-fuchsia-200">{tb("proj.useTemplate")}</span>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
           className="text-[10px] text-fuchsia-300 hover:underline"
         >
-          {open ? "Hide" : `${items.length} saved`}
+          {open ? tb("common.hide") : tb("proj.nSaved", { n: items.length })}
         </button>
       </div>
       {open && (
@@ -456,6 +465,7 @@ function BulkImportButton({ projectId, onCreated }: { projectId: string; onCreat
   const [csv, setCsv] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ created: number; errors: { index: number; error: string }[] } | null>(null);
+  const { t } = useBuildT();
 
   function parse(text: string): { rows: { title: string; description: string; salary?: number; city?: string; skills?: string }[]; parseErrors: string[] } {
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -489,7 +499,7 @@ function BulkImportButton({ projectId, onCreated }: { projectId: string; onCreat
     setResult(null);
     try {
       const { rows } = parse(csv);
-      if (rows.length === 0) throw new Error("No rows parsed");
+      if (rows.length === 0) throw new Error(t("proj.noRows"));
       const r = await buildApi.bulkCreateVacancies({ projectId, rows });
       setResult({ created: r.created, errors: r.errors });
       if (r.created > 0) onCreated();
@@ -506,39 +516,40 @@ function BulkImportButton({ projectId, onCreated }: { projectId: string; onCreat
         type="button"
         onClick={() => setOpen(true)}
         className="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200 transition hover:bg-white/10"
-        title="Paste CSV with title,description,salary,city,skills to create many vacancies at once"
+        title={t("proj.bulkTitle")}
       >
-        ↑ Bulk import CSV
+        {t("proj.bulkBtn")}
       </button>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setOpen(false)}>
           <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-bold text-white">Bulk import vacancies</h3>
-              <button onClick={() => setOpen(false)} aria-label="Close" className="text-slate-400 hover:text-white">×</button>
+              <h3 className="text-base font-bold text-white">{t("proj.bulkH")}</h3>
+              <button onClick={() => setOpen(false)} aria-label={t("common.close")} className="text-slate-400 hover:text-white">×</button>
             </div>
             <p className="mb-2 text-xs text-slate-400">
-              CSV columns: <code className="rounded bg-white/10 px-1 text-slate-200">title,description,salary,city,skills</code>.
-              Skills are pipe-separated within the cell (welding|autocad). Header row optional. Up to 50 rows per call.
+              {t("proj.csvCols")} <code className="rounded bg-white/10 px-1 text-slate-200">title,description,salary,city,skills</code>.{" "}
+              {t("proj.csvHelp")}
             </p>
             <textarea
               value={csv}
               onChange={(e) => setCsv(e.target.value)}
               rows={10}
-              placeholder={`title,description,salary,city,skills\n"Senior welder","TIG/MIG, certified, 5+y",800000,Astana,"welding|tig|certified"`}
+              placeholder={CSV_SAMPLE}
+              aria-label={t("proj.bulkH")}
               className="w-full rounded-md border border-white/10 bg-black/40 p-2 font-mono text-[11px] text-slate-100 focus:border-emerald-500/40 focus:outline-none"
             />
             {result && (
               <div className="mt-3 rounded-md border border-white/10 bg-white/[0.03] p-2 text-xs">
-                <div className="font-semibold text-emerald-300">Created: {result.created}</div>
+                <div className="font-semibold text-emerald-300">{t("proj.bulkCreated", { n: result.created })}</div>
                 {result.errors.length > 0 && (
                   <ul className="mt-1 space-y-0.5 text-rose-200">
                     {result.errors.slice(0, 8).map((e, i) => (
                       <li key={i}>
-                        Row {e.index >= 0 ? e.index + 1 : "?"}: {e.error}
+                        {t("proj.row", { n: e.index >= 0 ? e.index + 1 : "?", error: e.error })}
                       </li>
                     ))}
-                    {result.errors.length > 8 && <li>+{result.errors.length - 8} more…</li>}
+                    {result.errors.length > 8 && <li>{t("proj.more", { n: result.errors.length - 8 })}</li>}
                   </ul>
                 )}
               </div>
@@ -549,7 +560,7 @@ function BulkImportButton({ projectId, onCreated }: { projectId: string; onCreat
                 onClick={() => setOpen(false)}
                 className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
               >
-                Close
+                {t("common.close")}
               </button>
               <button
                 type="button"
@@ -557,7 +568,7 @@ function BulkImportButton({ projectId, onCreated }: { projectId: string; onCreat
                 disabled={busy || csv.trim().length < 10}
                 className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
               >
-                {busy ? "Importing…" : "Import"}
+                {busy ? t("proj.importing") : t("proj.import")}
               </button>
             </div>
           </div>
@@ -626,6 +637,7 @@ function NewVacancyButton({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { t } = useI18n();
+  const { t: tb, lang } = useBuildT();
 
   // Cheap fuzzy-match: normalise → token-set Jaccard. Triggers a soft warning
   // if there's an active vacancy in this project with very similar title.
@@ -720,7 +732,7 @@ function NewVacancyButton({
       const apiErr = e as { code?: string; payload?: Record<string, unknown> };
       if (apiErr.code === "plan_vacancy_limit_reached") {
         setError(
-          `Plan limit reached: ${apiErr.payload?.used}/${apiErr.payload?.limit} active vacancies. Upgrade your plan on /build/pricing.`,
+          tb("proj.planLimit", { used: String(apiErr.payload?.used ?? "?"), limit: String(apiErr.payload?.limit ?? "?") }),
         );
       } else {
         setError((e as Error).message);
@@ -736,7 +748,7 @@ function NewVacancyButton({
         onClick={() => setOpen(true)}
         className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30"
       >
-        + Add vacancy
+        {tb("proj.addVac")}
       </button>
     );
   }
@@ -772,32 +784,34 @@ function NewVacancyButton({
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Role title (e.g. Welder, day shift)"
+        placeholder={tb("proj.rolePh")}
+        aria-label={tb("proj.rolePh")}
         required
         minLength={3}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
       {duplicateCandidate && (
         <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[11px] text-amber-100">
-          ⚠ Looks similar to an existing vacancy in this project:{" "}
+          {tb("proj.dup1")}{" "}
           <span className="font-semibold">“{duplicateCandidate.title}”</span>
           <span className="ml-1 text-amber-200/70">
-            ({Math.round(duplicateCandidate.score * 100)}% match)
+            ({tb("common.match", { n: Math.round(duplicateCandidate.score * 100) })})
           </span>
-          . Consider editing the existing one — duplicates split applicant attention.
+          {tb("proj.dup2")}
         </div>
       )}
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        placeholder="Requirements, schedule, equipment provided… (Markdown ok: **bold**, _italic_, - bullet, 1. numbered)"
+        placeholder={tb("proj.vacDescPh")}
+        aria-label={tb("common.description")}
         required
         minLength={10}
         rows={4}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
       <div className="text-[10px] text-slate-500">
-        Supports Markdown: <code className="text-slate-300">**bold**</code> <code className="text-slate-300">_italic_</code> <code className="text-slate-300">- bullet</code> <code className="text-slate-300">1. numbered</code> <code className="text-slate-300">`code`</code>
+        {tb("proj.md")} <code className="text-slate-300">**bold**</code> <code className="text-slate-300">_italic_</code> <code className="text-slate-300">- bullet</code> <code className="text-slate-300">1. numbered</code> <code className="text-slate-300">`code`</code>
       </div>
       <AiImprove
         value={description}
@@ -811,28 +825,31 @@ function NewVacancyButton({
         step="any"
         value={salary}
         onChange={(e) => setSalary(e.target.value)}
-        placeholder="Monthly salary (USD, optional)"
+        placeholder={tb("proj.salaryPh")}
+        aria-label={tb("proj.salaryPh")}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <select
           value={region}
           onChange={(e) => setRegion(e.target.value)}
+          aria-label={tb("proj.regionAny")}
           className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white"
         >
-          <option value="">Region (any)</option>
+          <option value="">{tb("proj.regionAny")}</option>
           {WORK_REGIONS_KZ.map((r) => (
-            <option key={r.slug} value={r.slug}>{r.label}</option>
+            <option key={r.slug} value={r.slug}>{regionLabelIn(r.slug, lang)}</option>
           ))}
         </select>
         <select
           value={workMode}
           onChange={(e) => setWorkMode(e.target.value as WorkMode | "")}
+          aria-label={tb("proj.modeAny")}
           className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white"
         >
-          <option value="">Work mode (any)</option>
+          <option value="">{tb("proj.modeAny")}</option>
           {WORK_MODES.map((m) => (
-            <option key={m} value={m}>{WORK_MODE_LABELS[m]}</option>
+            <option key={m} value={m}>{workModeLabelIn(m, lang)}</option>
           ))}
         </select>
         <input
@@ -841,22 +858,24 @@ function NewVacancyButton({
           max={80}
           value={minExperienceYears}
           onChange={(e) => setMinExperienceYears(e.target.value.replace(/[^\d]/g, ""))}
-          placeholder="Min years exp."
+          placeholder={tb("proj.minExpPh")}
+          aria-label={tb("proj.minExpPh")}
           className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white placeholder:text-slate-500"
         />
         <select
           value={educationLevel}
           onChange={(e) => setEducationLevel(e.target.value as EducationLevel | "")}
+          aria-label={tb("proj.eduAny")}
           className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white"
         >
-          <option value="">Education req. (any)</option>
+          <option value="">{tb("proj.eduAny")}</option>
           {EDUCATION_LEVELS.map((lvl) => (
-            <option key={lvl} value={lvl}>{EDUCATION_LEVEL_LABELS[lvl]}</option>
+            <option key={lvl} value={lvl}>{educationLabelIn(lvl, lang)}</option>
           ))}
         </select>
       </div>
       <div className="rounded-md border border-white/10 bg-white/5 p-2">
-        <div className="mb-1 text-xs text-slate-400">Required skills (Enter to add — used for match score)</div>
+        <div className="mb-1 text-xs text-slate-400">{tb("proj.skillsLabel")}</div>
         <div className="flex flex-wrap gap-1.5">
           {skills.map((s: any) => (
             <span
@@ -868,7 +887,7 @@ function NewVacancyButton({
                 type="button"
                 onClick={() => setSkills(skills.filter((x) => x !== s))}
                 className="text-emerald-200/60 hover:text-emerald-200"
-                aria-label={`Remove ${s}`}
+                aria-label={tb("proj.removeAria", { s })}
               >
                 ×
               </button>
@@ -884,7 +903,8 @@ function NewVacancyButton({
               }
             }}
             onBlur={addSkill}
-            placeholder={skills.length === 0 ? "Welding, AutoCAD…" : ""}
+            placeholder={skills.length === 0 ? tb("proj.skillsPh") : ""}
+            aria-label={tb("proj.skillsLabel")}
             list="qbuild-skill-suggestions"
             className="flex-1 min-w-[100px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
           />
@@ -898,7 +918,7 @@ function NewVacancyButton({
         </div>
         {popularSkills.length > 0 && skills.length < 5 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500">Popular:</span>
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">{tb("proj.popular")}</span>
             {popularSkills
               .filter((s) => !skills.includes(s))
               .slice(0, 12)
@@ -917,7 +937,7 @@ function NewVacancyButton({
       </div>
       <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
         <div className="mb-1 text-xs text-fuchsia-200/80">
-          Quick questions for applicants (max 5) — Claude will score answers automatically ✨
+          {tb("proj.questionsLabel")}
         </div>
         <div className="space-y-1.5">
           {questions.map((q, i) => (
@@ -931,7 +951,7 @@ function NewVacancyButton({
                 type="button"
                 onClick={() => setQuestions(questions.filter((x) => x !== q))}
                 className="text-fuchsia-200/60 hover:text-fuchsia-100"
-                aria-label={`Remove question ${i + 1}`}
+                aria-label={tb("proj.removeQ", { n: i + 1 })}
               >
                 ×
               </button>
@@ -949,6 +969,7 @@ function NewVacancyButton({
               }}
               onBlur={addQuestion}
               placeholder={t("build.projectDetail.questionPlaceholder")}
+              aria-label={t("build.projectDetail.questionPlaceholder")}
               className="w-full rounded-md border border-fuchsia-500/20 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-fuchsia-300/40"
             />
           )}
@@ -961,14 +982,14 @@ function NewVacancyButton({
           onClick={() => setOpen(false)}
           className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
         >
-          Cancel
+          {tb("common.cancel")}
         </button>
         <button
           type="submit"
           disabled={busy}
           className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
         >
-          {busy ? "…" : "Create vacancy"}
+          {busy ? "…" : tb("proj.createVac")}
         </button>
       </div>
     </form>
@@ -978,6 +999,7 @@ function NewVacancyButton({
 function OwnerFileUpload({ projectId, onUploaded }: { projectId: string; onUploaded: () => void }) {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const { t } = useBuildT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1004,19 +1026,21 @@ function OwnerFileUpload({ projectId, onUploaded }: { projectId: string; onUploa
   return (
     <form onSubmit={submit} className="rounded-xl border border-white/10 bg-white/5 p-5 text-sm">
       <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
-        Attach file URL
+        {t("proj.attachH")}
       </h3>
       <input
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         placeholder="https://…"
+        aria-label={t("proj.fileUrlAria")}
         required
         className="mb-2 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Display name (optional)"
+        placeholder={t("proj.fileNamePh")}
+        aria-label={t("proj.fileNamePh")}
         className="mb-3 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
       {error && <p className="mb-2 text-xs text-rose-300">{error}</p>}
@@ -1025,10 +1049,10 @@ function OwnerFileUpload({ projectId, onUploaded }: { projectId: string; onUploa
         disabled={busy || !url}
         className="w-full rounded-md bg-white/10 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-white/20 disabled:opacity-50"
       >
-        {busy ? "Saving…" : "Attach file"}
+        {busy ? t("proj.saving") : t("proj.attach")}
       </button>
       <p className="mt-2 text-xs text-slate-500">
-        Files are stored externally. Paste a public URL (CDN, object store).
+        {t("proj.filesNote")}
       </p>
     </form>
   );
@@ -1040,12 +1064,13 @@ function HiringProgressCard({ vacancies }: { vacancies: { status: string; applic
   const open = vacancies.filter((v) => v.status === "OPEN").length;
   const pct = total > 0 ? Math.round((closed / total) * 100) : 0;
   const totalApps = vacancies.reduce((acc, v) => acc + (v.applicationsCount ?? 0), 0);
+  const { t } = useBuildT();
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Hiring progress</div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{t("proj.hiring")}</div>
       <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
-        <span>{closed}/{total} positions filled</span>
+        <span>{t("proj.filled", { closed, total })}</span>
         <span>{pct}%</span>
       </div>
       <div className="h-2 w-full rounded-full bg-white/10">
@@ -1057,15 +1082,15 @@ function HiringProgressCard({ vacancies }: { vacancies: { status: string; applic
       <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
         <div>
           <div className="font-bold text-white">{total}</div>
-          <div className="text-slate-500">Total</div>
+          <div className="text-slate-500">{t("common.total")}</div>
         </div>
         <div>
           <div className="font-bold text-emerald-300">{open}</div>
-          <div className="text-slate-500">Open</div>
+          <div className="text-slate-500">{t("common.open")}</div>
         </div>
         <div>
           <div className="font-bold text-slate-300">{totalApps}</div>
-          <div className="text-slate-500">Applies</div>
+          <div className="text-slate-500">{t("proj.applies")}</div>
         </div>
       </div>
     </div>
@@ -1074,6 +1099,7 @@ function HiringProgressCard({ vacancies }: { vacancies: { status: string; applic
 
 function ProjectAnalyticsWidget({ projectId }: { projectId: string }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.projectAnalytics>> | null>(null);
+  const { t, tn } = useBuildT();
 
   useEffect(() => {
     buildApi.projectAnalytics(projectId).then(setData).catch(() => {});
@@ -1083,16 +1109,16 @@ function ProjectAnalyticsWidget({ projectId }: { projectId: string }) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Analytics</div>
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{t("common.analytics")}</div>
       <div className="grid grid-cols-2 gap-2 text-center">
-        <Metric label="Views" value={data.vacancies.totalViews} />
-        <Metric label="Applied" value={data.applications.total} />
-        <Metric label="Accepted" value={data.applications.accepted} tone="emerald" />
-        <Metric label="Conv%" value={`${data.applications.conversionRate}%`} />
+        <Metric label={t("common.views")} value={data.vacancies.totalViews} />
+        <Metric label={t("common.applied")} value={data.applications.total} />
+        <Metric label={t("common.accepted")} value={data.applications.accepted} tone="emerald" />
+        <Metric label={t("proj.conv")} value={`${data.applications.conversionRate}%`} />
       </div>
       {data.reviews.count > 0 && (
         <div className="mt-3 border-t border-white/5 pt-3 text-center text-xs text-slate-400">
-          {"★".repeat(Math.round(data.reviews.avgRating))} {data.reviews.avgRating.toFixed(1)} ({data.reviews.count} review{data.reviews.count !== 1 ? "s" : ""})
+          {"★".repeat(Math.round(data.reviews.avgRating))} {data.reviews.avgRating.toFixed(1)} {tn("proj.reviews", data.reviews.count)}
         </div>
       )}
     </div>
@@ -1119,6 +1145,7 @@ function ProjectStatusButton({
 }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { t } = useBuildT();
 
   const next =
     currentStatus === "OPEN" ? "IN_PROGRESS" :
@@ -1127,8 +1154,8 @@ function ProjectStatusButton({
   if (!next) return null;
 
   const label =
-    next === "IN_PROGRESS" ? "Mark In Progress" :
-    next === "DONE" ? "Mark Complete ✓" : "";
+    next === "IN_PROGRESS" ? t("proj.markIP") :
+    next === "DONE" ? t("proj.markDone") : "";
 
   const cls =
     next === "DONE"
@@ -1139,7 +1166,7 @@ function ProjectStatusButton({
     setBusy(true);
     try {
       await buildApi.updateProject(projectId, { status: next as "IN_PROGRESS" | "DONE" });
-      toast.success(next === "DONE" ? "Project marked complete ✓" : "Project moved to In Progress");
+      toast.success(next === "DONE" ? t("proj.doneToast") : t("proj.ipToast"));
       onUpdated();
     } catch (e) {
       toast.error((e as Error).message);

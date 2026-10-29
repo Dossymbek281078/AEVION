@@ -54,4 +54,16 @@ describe("/services — цены основателя, образцы, метк�
     expect(en.length).toBeGreaterThan(500);
     expect(/[Ѐ-ӿ]/.test(en)).toBe(false);
   });
+  test("🔴 единый срок исполнения «до 3 рабочих дней» (слово Оркестратора 29.10: как в товарах LS и письмах Продаж)", () => {
+    // 29.10.2026: на странице стояли «1–3 рабочих дня», «3», «1 рабочий день», «2 рабочих дня» — обещания
+    // расходились с кассой. Знаменатель: лид + 3 услуги + og:description в layout = ru 5; en лид + 3 услуги = 4.
+    const layout = readFileSync(join(process.cwd(), "src/app/services/layout.tsx"), "utf8");
+    const всё = страница + "\n" + layout;
+    const счёт = (n: string) => всё.split(n).length - 1;
+    expect(счёт("до 3 рабочих дней")).toBe(5);
+    expect(счёт("within 3 business days")).toBe(4);
+    for (const z of ["1 рабочий день", "1–3", "2 рабочих", "1 business day", "1–3 business", "2 business", "за 3 рабочих"]) {
+      expect(счёт(z), `запрещённый срок «${z}»`).toBe(0);
+    }
+  });
 });

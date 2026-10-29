@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/services" },
   openGraph: {
     title: "Услуги AEVION — ИИ-ролики, фото товаров, перевод и озвучка",
-    description: "Образцы и цены. Готово за 1–3 рабочих дня.",
+    description: "Образцы и цены. Готово до 3 рабочих дней.",
     url: "https://aevion.app/services",
     siteName: "AEVION",
     type: "website",

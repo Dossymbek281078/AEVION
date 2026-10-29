@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, fromPerMonthOf, channelFrom, channelFromRef, withChannel, keepChannel } from "@/lib/products";
+import { englishHref } from "@/lib/englishPages";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 /* Предел бесплатных выкаток. Число ДУБЛИРУЕТ бэкенд (TIER_LIMITS.free.deploy), и
@@ -102,7 +103,7 @@ export default async function EnDevhubPage({
               The full studio comes with the AEVION Planet plan —{" "}
               <strong>from ${fromPerMonthOf(devhub)}/mo</strong>{" "}
               on the 12-month term, ${devhub.priceUsd}/mo with no term.{" "}
-              <a href={withChannel(devhub.href, channel)} style={styles.heroPriceLink}>
+              <a href={withChannel(englishHref(devhub.href), channel)} style={styles.heroPriceLink}>
                 See plans and buy →
               </a>
             </p>
@@ -114,7 +115,7 @@ export default async function EnDevhubPage({
             переносится при регистрации. */}
         <section style={styles.section}>
           <h2 style={styles.h2}>Try it free, right now</h2>
-          <a href={keepChannel("/devhub", channel)} style={styles.card}>
+          <a href={keepChannel(englishHref("/devhub"), channel)} style={styles.card}>
             <div style={styles.cardKicker}>free · no account required</div>
             <div style={styles.cardTitle}>Open DevHub</div>
             {/* 🔴 ТЕКСТ ЕДИНСТВЕННОЙ БЕСПЛАТНОЙ КНОПКИ, правка 07.10.2026.
@@ -146,7 +147,7 @@ export default async function EnDevhubPage({
           <h2 style={styles.h2}>The full studio</h2>
           {devhub ? (
             <BuyLink
-              href={withChannel(devhub.href, channel, "en-devhub")}
+              href={withChannel(englishHref(devhub.href), channel, "en-devhub")}
               source="en-devhub"
               productId={devhub.id}
               priceUsd={devhub.priceUsd}
@@ -213,7 +214,7 @@ export default async function EnDevhubPage({
             AEVION home (EN)
           </a>
           <span style={styles.footDot}>·</span>
-          <a href={keepChannel("/pricing", channel)} style={styles.footLink}>
+          <a href={keepChannel(englishHref("/pricing"), channel)} style={styles.footLink}>
             All plans
           </a>
 

@@ -898,7 +898,7 @@ const kk: Record<string, string> = {
   "build.home.chipCashback": "2% AEV кэшбэк",
   "build.home.chipDirectMessages": "Премиумсыз тікелей хабарлама",
   "build.home.chipFreePost": "Бос орын үшін 0 ₸",
-  "build.home.chipTrialJobs": "Trial Jobs",
+  "build.home.chipTrialJobs": "Сынақ тапсырмалары",
   "build.home.chipVideoResume": "Бейне түйіндеме",
   "build.home.compareWithHh": "HH-мен салыстыру →",
   "build.home.createProfileFree": "Тегін профиль жасау →",

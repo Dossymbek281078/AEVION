@@ -88,7 +88,6 @@
   "app/qlearn/page.tsx": 3,
   "app/qlife/page.tsx": 2,
   "app/qmaskcard/new/page.tsx": 2,
-  "app/qmedia/creative/page.tsx": 3,
   "app/qnews/page.tsx": 1,
   "app/qpaynet/merchant/page.tsx": 1,
   "app/qright/object/[id]/page.tsx": 1,

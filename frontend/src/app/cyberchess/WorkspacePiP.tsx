@@ -14,6 +14,7 @@
  *   - Optional Twitch chat side-panel
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useCcI18n } from "./i18n";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export type PiPSource = {
@@ -145,6 +146,7 @@ function clampToViewport(p: { x: number; y: number }, s: { w: number; h: number 
 
 // ── Main component ─────────────────────────────────────────────────────────
 export default function WorkspacePiP({ initialSource, defaultPosition, onClose, showChatPanel }: Props) {
+  const { t } = useCcI18n();
   const [hydrated, setHydrated] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number }>(defaultPosition || DEFAULT_POS);
   const [size, setSize] = useState<{ w: number; h: number }>(DEFAULT_SIZE);
@@ -333,7 +335,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
           >–</button>
           <button
             onClick={(e) => { e.stopPropagation(); onClose?.(); }}
-            title="Закрыть"
+            title={t("oshibka.close")}
             style={{
               border: "none", background: "transparent", color: "#ef4444",
               fontSize: 13, fontWeight: 800, cursor: "pointer", padding: "0 4px", lineHeight: 1,
@@ -425,7 +427,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
         }}>
           <button
             onClick={() => setMuted(m => !m)}
-            title={muted ? "Включить звук" : "Выключить звук"}
+            title={muted ? t("attr.sound_on") : t("attr.sound_off")}
             style={{
               border: "none", background: "transparent",
               color: muted ? "#64748b" : "#fbbf24",

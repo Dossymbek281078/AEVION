@@ -27,6 +27,8 @@ export const MC_TEXT: Record<string, Tr> = {
   "Порядок — по проверяемости: сверху то, что закрывается за минуту.": { en: "Ordered by how checkable it is: on top — what you can settle in a minute.", kk: "Тексерілу ретімен: жоғарыда — бір минутта анықталатыны." },
   "Скачать чек": { en: "Download receipt", kk: "Чекті жүктеу" },
   "проверить чек": { en: "verify receipt", kk: "чекті тексеру" },
+  "Месячной квоты бесплатного тарифа не хватит на консилиум. Откройте тариф — ссылка ниже.": { en: "The free plan's monthly quota is not enough for a council. Open a plan — link below.", kk: "Тегін тарифтің айлық квотасы консилиумға жетпейді. Тарифті ашыңыз — сілтеме төменде." },
+  "Открыть тариф →": { en: "Open a plan →", kk: "Тарифті ашу →" },
   "🗂 Мои беседы": { en: "🗂 My conversations", kk: "🗂 Менің әңгімелерім" },
   "— эта беседа сохранена в вашем аккаунте": { en: "— this conversation is saved to your account", kk: "— бұл әңгіме аккаунтыңызда сақталды" },
   "Скачать отчёт": { en: "Download report", kk: "Есепті жүктеу" },

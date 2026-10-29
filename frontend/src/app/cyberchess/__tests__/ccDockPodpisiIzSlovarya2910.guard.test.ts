@@ -44,6 +44,9 @@ describe("подписи дока и PiP CyberChess — из словаря", ()
     const стр = readFileSync(join(КОРЕНЬ, "page.tsx"), "utf8");
     expect(стр).not.toContain('ariaLabel={muted?"Включить звук":"Выключить звук"}');
     expect(стр).not.toContain('aria-label={mobileSidebarOpen?"Свернуть боковую панель"');
+    // 30.10, приёмка f2db0ee93 на 390: кнопка покупки в шапке телефона — aria-label «Купить CyberChess · $50/год» на /en.
+    expect(стр).not.toContain('aria-label={`Купить CyberChess · ${ccBuyLabel}`}');
+    expect(стр).toContain('aria-label={cc.locale==="ru"?`Купить CyberChess · ${ccBuyLabel}`:`${cc.t("buy.card.title")} · ${ccBuyLabelLoc}`}');
   });
 
   it("ключи есть на en и kk и не совпадают с ru", () => {

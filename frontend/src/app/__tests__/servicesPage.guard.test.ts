@@ -17,7 +17,8 @@ const ТАБЛИЦА_ОСНОВАТЕЛЯ: Record<string, number> = {
   "photo-5": 15, "photo-20": 49,
   "dub-trial": 19, "dub-min": 29,
 };
-const страница = readFileSync(join(process.cwd(), "src/app/services/page.tsx"), "utf8");
+const страница = readFileSync(join(process.cwd(), "src/app/services/ServicesClient.tsx"), "utf8");
+const метаданные = readFileSync(join(process.cwd(), "src/app/services/page.tsx"), "utf8");
 
 describe("/services — цены основателя, образцы, метка канала", () => {
   test("🔴 цены тарифов равны таблице основателя 28.10 (7 тарифов)", () => {
@@ -56,12 +57,13 @@ describe("/services — цены основателя, образцы, метк�
   });
   test("🔴 единый срок исполнения «до 3 рабочих дней» (слово Оркестратора 29.10: как в товарах LS и письмах Продаж)", () => {
     // 29.10.2026: на странице стояли «1–3 рабочих дня», «3», «1 рабочий день», «2 рабочих дня» — обещания
-    // расходились с кассой. Знаменатель: лид + 3 услуги + og:description в layout = ru 5; en лид + 3 услуги = 4.
-    const layout = readFileSync(join(process.cwd(), "src/app/services/layout.tsx"), "utf8");
-    const всё = страница + "\n" + layout;
+    // расходились с кассой. Знаменатель: лид + 3 услуги + og:description в метаданных = ru 5; en лид + 3 услуги + og:description = 5.
+    // Позже 29.10: метаданные переехали из layout.tsx в page.tsx и стали двуязычными (?lang/кука) —
+    // og:description есть и ru, и en, поэтому en = лид + 3 услуги + og = 5.
+    const всё = страница + "\n" + метаданные;
     const счёт = (n: string) => всё.split(n).length - 1;
     expect(счёт("до 3 рабочих дней")).toBe(5);
-    expect(счёт("within 3 business days")).toBe(4);
+    expect(счёт("within 3 business days")).toBe(5);
     for (const z of ["1 рабочий день", "1–3", "2 рабочих", "1 business day", "1–3 business", "2 business", "за 3 рабочих"]) {
       expect(счёт(z), `запрещённый срок «${z}»`).toBe(0);
     }

@@ -70,19 +70,30 @@ export function pismoGostyuDevHub(z: { email: string; source: string; channel: s
  * Studio» Gmail клал в спам, и оно было по-русски для en-гостя — живой человек ссылку не видел.
  * Сроков «минуты» не обещаем: подтверждение — в течение суток, как на карточке.
  */
-export function pismoGostyuNaEgoYazyke(z: { email: string; lang: "ru" | "en" | "kk"; siteUrl: string | null; domain: string | null }) {
+/** Ключ гостя DevHub: как в lib/devhubGuest.ts — 8–64 знака [A-Za-z0-9_-]; иное — null. */
+export function godnyiKlyuchGostya(raw: unknown): string | null {
+  return typeof raw === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(raw.trim()) ? raw.trim() : null;
+}
+/** В журнал — только начало ключа: по почте проект найти можно, ключ целиком в журнале не лежит. */
+export function klyuchDlyaZhurnala(key: string | null): string | null {
+  return key ? key.slice(0, 6) + "…" : null;
+}
+export function pismoGostyuNaEgoYazyke(z: { email: string; lang: "ru" | "en" | "kk"; siteUrl: string | null; domain: string | null; projectId?: string | null; guestKey?: string | null }) {
   const own = z.domain ? `https://${z.domain}` : null;
   // 135б: имя сайта в теме — письма одному адресату не склеиваются в один тред и различимы в ящике.
   const метка = metkaSayta(z.siteUrl, z.domain);
   const T = {
-    en: { subject: "Your site on AEVION DevHub: link and address", live: "Your site is live:", own: "Your own address:", connecting: "it is being connected now; we confirm by email within a day.", keep: "Keep this email — the links stay valid.", reply: "Reply to data@aevion.app with any question. — AEVION" },
-    ru: { subject: "Ваш сайт в AEVION DevHub: ссылка и адрес", live: "Ваш сайт в интернете:", own: "Ваш собственный адрес:", connecting: "он подключается сейчас; подтвердим письмом в течение суток.", keep: "Сохраните это письмо — ссылки остаются действительными.", reply: "На любой вопрос ответим: data@aevion.app. — AEVION" },
-    kk: { subject: "AEVION DevHub-тағы сайтыңыз: сілтеме және мекенжай", live: "Сайтыңыз интернетте:", own: "Өз мекенжайыңыз:", connecting: "ол қазір қосылуда; бір тәулік ішінде хатпен растаймыз.", keep: "Бұл хатты сақтаңыз — сілтемелер жарамды болып қалады.", reply: "Кез келген сұрақ бойынша: data@aevion.app. — AEVION" },
+    en: { subject: "Your site on AEVION DevHub: link and address", live: "Your site is live:", own: "Your own address:", connecting: "it is being connected now; we confirm by email within a day.", keep: "Keep this email — the links stay valid.", restore: "Open your project from any browser:", restoreNote: "This link opens your project in any browser — do not forward it.", reply: "Reply to data@aevion.app with any question. — AEVION" },
+    ru: { subject: "Ваш сайт в AEVION DevHub: ссылка и адрес", live: "Ваш сайт в интернете:", own: "Ваш собственный адрес:", connecting: "он подключается сейчас; подтвердим письмом в течение суток.", keep: "Сохраните это письмо — ссылки остаются действительными.", restore: "Открыть ваш проект в любом браузере:", restoreNote: "Ссылка открывает проект в любом браузере — не пересылайте её.", reply: "На любой вопрос ответим: data@aevion.app. — AEVION" },
+    kk: { subject: "AEVION DevHub-тағы сайтыңыз: сілтеме және мекенжай", live: "Сайтыңыз интернетте:", own: "Өз мекенжайыңыз:", connecting: "ол қазір қосылуда; бір тәулік ішінде хатпен растаймыз.", keep: "Бұл хатты сақтаңыз — сілтемелер жарамды болып қалады.", restore: "Жобаңызды кез келген браузерде ашу:", restoreNote: "Сілтеме жобаны кез келген браузерде ашады — басқаға жібермеңіз.", reply: "Кез келген сұрақ бойынша: data@aevion.app. — AEVION" },
   }[z.lang];
+  const ключ = godnyiKlyuchGostya(z.guestKey);
+  const projId = z.projectId && /^[A-Za-z0-9_-]{1,64}$/.test(z.projectId) ? z.projectId : null;
   const text = [
     `${T.live} ${z.siteUrl ?? "—"}`,
     own ? `${T.own} ${own} — ${T.connecting}` : "",
     "",
+    ...(ключ && projId ? [`${T.restore} https://aevion.app/devhub/${projId}?k=${ключ}`, T.restoreNote, ""] : []),
     T.keep,
     T.reply,
   ].filter((l, i) => l !== "" || i === 2).join("\n");
@@ -248,7 +259,7 @@ constitutionWaitlistRouter.post(
   validate(WaitlistSubscribeSchema),
   async (req: Request, res: Response) => {
     try {
-      const body = req.body as { email: string; source?: string; channel?: string; projectId?: string; lang?: "ru" | "en" | "kk"; siteUrl?: string; domain?: string };
+      const body = req.body as { email: string; source?: string; channel?: string; projectId?: string; lang?: "ru" | "en" | "kk"; siteUrl?: string; domain?: string; guestKey?: string };
       const projectId = body.projectId ? String(body.projectId).slice(0, 64) : null;
       const гостьDevHub = DEVHUB_GUEST_SOURCE.test((body.source ?? "unknown").slice(0, 60));
       const emailRaw = body.email.trim().toLowerCase();
@@ -357,7 +368,7 @@ constitutionWaitlistRouter.post(
         const domain = body.domain ?? null;
         // 135б: письмо ГОСТЮ — первым (единственная нить к живому человеку), уведомление нам — вторым;
         // через 60 с проверяем доставку у Resend и при отказе повторяем через Brevo (14.10: отскок SpamCop).
-        const письмоГостю = pismoGostyuNaEgoYazyke({ email: row.email, lang: body.lang ?? "en", siteUrl, domain });
+        const письмоГостю = pismoGostyuNaEgoYazyke({ email: row.email, lang: body.lang ?? "en", siteUrl, domain, projectId, guestKey: godnyiKlyuchGostya(body.guestKey) });
         const гостю = await sendEmail(письмоГостю);
         guestMailed = гостю.ok;
         if (!гостю.ok) console.error("[waitlist] письмо ГОСТЮ DevHub НЕ ушло:", гостю.error ?? "failed");
@@ -367,7 +378,7 @@ constitutionWaitlistRouter.post(
         mailed = письмо.ok;
         if (!письмо.ok) console.error(`[waitlist] письмо о госте DevHub НЕ ушло на ${DEVHUB_GUEST_TO}:`, письмо.error ?? "failed");
         else if (письмо.mode === "real") zaplanirovatProverkuDostavki({ id: письмо.id, pismo: письмоНам });
-        const журнал = zapisatZayavkuGostya({ ts: row.createdAt, kind: "devhub_save_email", email: row.email, source: sourceRaw, channel: channelRaw, projectId, siteUrl, domain, lang: body.lang ?? "en", mailed, guestMailed });
+        const журнал = zapisatZayavkuGostya({ ts: row.createdAt, kind: "devhub_save_email", email: row.email, source: sourceRaw, channel: channelRaw, projectId, siteUrl, domain, lang: body.lang ?? "en", mailed, guestMailed, guestKey: klyuchDlyaZhurnala(godnyiKlyuchGostya(body.guestKey)) });
         if (журнал) console.error("[waitlist] журнал заявок:", журнал);
       }
       res.status(201).json({ ok: true, storage, ...(mailed === undefined ? {} : { mailed, guestMailed }) });

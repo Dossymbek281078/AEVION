@@ -129,6 +129,8 @@ export const WaitlistSubscribeSchema = z.object({
   lang: z.enum(["ru", "en", "kk"]).optional(),
   siteUrl: z.string().max(200).regex(/^https:\/\/[a-z0-9.-]+\.pages\.dev\/?$/, "неверный адрес сайта").optional(),
   domain: z.string().max(120).regex(/^[a-z0-9-]+\.aevion\.app$/, "неверный домен").optional(),
+  /** 31.10.2026: ключ гостя DevHub для ссылки восстановления в письме. Формат проверяет роут (мусор игнорируется, а не 400). */
+  guestKey: z.string().max(200).optional(),
   /*
    * Канал привлечения — ОТДЕЛЬНО от source.
    *

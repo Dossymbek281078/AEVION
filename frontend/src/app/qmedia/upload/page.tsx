@@ -4,7 +4,7 @@ import { useState } from "react";
 import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
-import { useQMediaT, saveErrorKey } from "../i18n";
+import { useQMediaT, saveErrorKey, VIDEO_CATS } from "../i18n";
 
 function authHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -13,7 +13,6 @@ function authHeader(): Record<string, string> {
 }
 
 const GENRES = ["pop", "rock", "electronic", "hip-hop", "jazz", "classical", "folk", "rnb", "other"];
-const VIDEO_CATS = ["music-video", "tutorial", "live", "documentary", "shortfilm", "other"];
 type MediaType = "track" | "video";
 
 export default function QMediaUploadPage() {

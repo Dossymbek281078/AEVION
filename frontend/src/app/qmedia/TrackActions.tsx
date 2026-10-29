@@ -31,11 +31,12 @@ async function call(f: Fetch, path: string, init: RequestInit, what: string): Pr
   }
 }
 
-/** Лайк-переключатель: POST /api/qmedia/track/:id/like → { liked }. */
-export async function likeTrack(f: Fetch, trackId: string): Promise<ActResult> {
-  const r = await call(f, `/api/qmedia/track/${encodeURIComponent(trackId)}/like`, { method: "POST" }, "like");
+/** Лайк-переключатель: POST /api/qmedia/:type/:id/like → { liked } (type — track | video). */
+export async function likeResource(f: Fetch, type: "track" | "video", id: string): Promise<ActResult> {
+  const r = await call(f, `/api/qmedia/${type}/${encodeURIComponent(id)}/like`, { method: "POST" }, `like-${type}`);
   return r.ok ? { ok: true, liked: Boolean(r.body?.liked) } : { ok: false, status: r.status };
 }
+export const likeTrack = (f: Fetch, trackId: string) => likeResource(f, "track", trackId);
 
 /** Мои плейлисты: GET /api/qmedia/me/playlists. */
 export async function myPlaylists(f: Fetch): Promise<{ ok: true; items: { id: string; name: string }[] } | { ok: false; status: number }> {
@@ -53,6 +54,28 @@ export async function addToPlaylist(f: Fetch, playlistId: string, trackId: strin
 
 export function actErrorKey(status: number): QMediaKey {
   return status === 401 ? "err.signInToLike" : "err.saveFailed";
+}
+
+/** Одна кнопка «Нравится» (карточка видео): тот же переключатель, отказ — текст + журнал. */
+export function LikeButton({ type, id }: { type: "track" | "video"; id: string }) {
+  const { t } = useQMediaT();
+  const [liked, setLiked] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const onLike = async () => {
+    setBusy(true);
+    const r = await likeResource(fetch, type, id);
+    setBusy(false);
+    if (r.ok) { setLiked(Boolean(r.liked)); setErr(null); } else setErr(t(actErrorKey(r.status)));
+  };
+  return (
+    <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <button type="button" disabled={busy} onClick={onLike} aria-pressed={liked} style={{ fontSize: 11, padding: "2px 7px", borderRadius: 8, border: "1px solid #e2e8f0", background: liked ? "rgba(225,29,72,0.08)" : "#fff", color: liked ? "#e11d48" : "#475569", cursor: "pointer" }}>
+        {liked ? t("act.liked") : t("act.like")}
+      </button>
+      {err && <span role="alert" style={{ fontSize: 11, color: "#b91c1c" }}>{err}</span>}
+    </span>
+  );
 }
 
 export function TrackActions({ trackId }: { trackId: string }) {

@@ -5,10 +5,11 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
-import { useQMediaT, saveErrorKey } from "../i18n";
+import { useQMediaT, saveErrorKey, VIDEO_CATS } from "../i18n";
+import { LikeButton } from "../TrackActions";
 
 // значения фильтра уходят на сервер как есть; подпись — из словаря
-const CATEGORIES = ["all", "tutorial", "music-video", "short-film", "documentary", "other"];
+const CATEGORIES = ["all", ...VIDEO_CATS];
 
 function bearerHeader(): HeadersInit {
   const t = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
@@ -76,7 +77,7 @@ export default function QMediaVideosPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
               <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} aria-label={t("common.titleA")} placeholder={t("common.title")} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
               <select aria-label={t("common.category")} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
-                {["tutorial", "music-video", "short-film", "documentary", "other"].map(c => <option key={c} value={c}>{label("vcat", c)}</option>)}
+                {VIDEO_CATS.map(c => <option key={c} value={c}>{label("vcat", c)}</option>)}
               </select>
             </div>
             <input value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} aria-label={t("videos.urlA")} placeholder={t("videos.url")} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
@@ -115,9 +116,10 @@ export default function QMediaVideosPage() {
               </div>
               <div style={{ padding: "10px 12px" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>{v.title}</div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, background: "rgba(124,58,237,0.08)", color: "#7c3aed", fontWeight: 600 }}>{label("vcat", v.category)}</span>
                   <span style={{ fontSize: 11, color: "#94a3b8" }}>👁 {num(v.viewCount)}</span>
+                  <LikeButton type="video" id={v.id} />
                 </div>
               </div>
             </div>

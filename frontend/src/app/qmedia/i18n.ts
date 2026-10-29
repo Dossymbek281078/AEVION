@@ -270,6 +270,9 @@ export function genErrorKey(status: number): "err.tooMany" | "err.genFailed" {
 
 const LOCALE: Record<string, string> = { en: "en-US", ru: "ru-RU", kk: "kk-KZ" };
 
+/** Категории видео — одни и те же в форме добавления и в фильтре /videos (до 29.10 форма писала «shortfilm», фильтр искал «short-film»). */
+export const VIDEO_CATS = ["tutorial", "music-video", "short-film", "documentary", "live", "other"] as const;
+
 export const QMEDIA_KEYS = Object.keys(T) as QMediaKey[];
 export const QMEDIA_DICT = DICT;
 

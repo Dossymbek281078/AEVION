@@ -14,6 +14,7 @@ import PlatformAiSavings from "@/components/PlatformAiSavings";
 import RevenueGoalBadge from "@/components/RevenueGoalBadge";
 import AiOfflineToggle from "@/components/AiOfflineToggle";
 import SkipToContent from "@/components/SkipToContent";
+import { useNavHref } from "@/components/useNavHref";
 import { useChromeLang, type ChromeKey } from "@/components/siteChromeI18n";
 
 /**
@@ -44,6 +45,7 @@ const РАЗДЕЛЫ: { href: string; key?: ChromeKey; brand?: string }[] = [
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
+  const nav = useNavHref();
   const { t, own } = useChromeLang();
   // translate="no" — только когда подпись уже на языке посетителя (ru/en/kk);
   // на прочих языках ярлык остаётся живому переводчику.
@@ -152,7 +154,7 @@ export function SiteHeader() {
           flexWrap: "wrap",
         }}
       >
-        <KeepChannelLink href="/" style={{ textDecoration: "none", color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+        <KeepChannelLink href={nav("/")} style={{ textDecoration: "none", color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.02em" }}>AEVION</span>
           <span translate={tr} style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
             {t("tagline")}
@@ -176,14 +178,14 @@ export function SiteHeader() {
             {ГЛАВНЫЕ.map((x) => (
               <KeepChannelLink
                 key={x.href}
-                href={x.href}
+                href={nav(x.href)}
                 style={{ gridColumn: "1 / -1", padding: "11px 12px", borderRadius: 10, textDecoration: "none", fontWeight: 800, fontSize: 15, color: x.color, background: x.bg, textAlign: "center" }}
               >
                 <span translate={tr}>{подпись(x)}</span>
               </KeepChannelLink>
             ))}
             {РАЗДЕЛЫ.map((x) => (
-              <KeepChannelLink key={x.href} href={x.href} style={{ padding: "10px 12px", textDecoration: "none", color: "#0f172a", fontSize: 15, fontWeight: 700 }}>
+              <KeepChannelLink key={x.href} href={nav(x.href)} style={{ padding: "10px 12px", textDecoration: "none", color: "#0f172a", fontSize: 15, fontWeight: 700 }}>
                 <span translate={tr}>{подпись(x)}</span>
               </KeepChannelLink>
             ))}
@@ -200,12 +202,12 @@ export function SiteHeader() {
 
         <div className="aev-hdr-full" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
           {ГЛАВНЫЕ.map((x) => (
-            <KeepChannelLink key={x.href} href={x.href} style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: x.color, background: x.bg }}>
+            <KeepChannelLink key={x.href} href={nav(x.href)} style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: x.color, background: x.bg }}>
               <span translate={tr}>{подпись(x)}</span>
             </KeepChannelLink>
           ))}
           {РАЗДЕЛЫ.map((x) => (
-            <KeepChannelLink key={x.href} href={x.href} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
+            <KeepChannelLink key={x.href} href={nav(x.href)} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
               <span translate={tr}>{подпись(x)}</span>
             </KeepChannelLink>
           ))}

@@ -7888,7 +7888,7 @@ export default function CyberChessPage(){
                 // Телефон (<769): то, что убрано из шапки ради одной строки (20.09.2026), живёт здесь —
                 // вход/аккаунт, рейтинг и Chessy (→ дашборд «Профиль»), «Все разделы».
                 ...(vwPx<769?[
-                  {ic:<span style={{fontSize:14}} aria-hidden>💳</span>,lbl:`Купить CyberChess · ${ccBuyLabel}`,act:()=>{window.location.href=ccBuyHref}},
+                  {ic:<span style={{fontSize:14}} aria-hidden>💳</span>,lbl:cc.locale==="ru"?`Купить CyberChess · ${ccBuyLabel}`:`${cc.t("buy.card.title")} · ${ccBuyLabelLoc}`,act:()=>{window.location.href=ccBuyHref}},
                   ...(ccAuth.checked&&!ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}}]:[]),
                   ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
                   {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},

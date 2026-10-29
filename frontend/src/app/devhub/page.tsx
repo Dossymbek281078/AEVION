@@ -25,7 +25,7 @@ import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { stackForIdea, даннымНуженСервер, доступенРежимПриложения, стекДляРежима,
   type РежимПостройки } from "@/lib/devhubStackChoice";
-import { indexCapabilities, isCapabilityBlocked, type CapabilityIndex } from "@/lib/devhubCapabilities";
+import { capabilityLabel, indexCapabilities, isCapabilityBlocked, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { DEVHUB_EXAMPLES, exampleText } from "./examples";
 import { primerDlyaPustogoPolya, ПОЛЕ_ОПИСАНИЯ_ФОН, ПОЛЕ_ОПИСАНИЯ_ТЕКСТ } from "@/lib/devhubPervyyShag";
 
@@ -1270,7 +1270,7 @@ export default function DevHubPage() {
                     */}
                   {off.map((c, i) => (
                     <span key={c.id} title={capabilityOffReason(c.status, c.offCode, t)}>
-                      <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
+                      <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{capabilityLabel(c.id, c.name, lang)}</span>
                       {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}
                     </span>
                   ))}

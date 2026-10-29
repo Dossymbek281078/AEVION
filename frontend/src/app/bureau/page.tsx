@@ -1137,7 +1137,7 @@ function BureauPageInner() {
                       {(() => {
                         // Состояние якоря в биткойне — главный козырь продукта,
                         // и до 28.08.2026 его не было видно в реестре вовсе.
-                        const b = anchorBadge(cert.bitcoinAnchor);
+                        const b = anchorBadge(cert.bitcoinAnchor, buLang);
                         if (!b) return null;
                         const c = ANCHOR_TONE_COLORS[b.tone];
                         return (

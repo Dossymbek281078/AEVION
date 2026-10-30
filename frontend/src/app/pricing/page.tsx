@@ -446,6 +446,16 @@ export default function PricingPage() {
         setCheckingOut(null);
         return;
       }
+      /*
+       * 31.10.2026: касса на неверный адрес почты отвечает 400 invalid_email с
+       * текстом для человека («Проверьте адрес почты…»). Без этой ветки витрина
+       * знала только checkout_unavailable и показывала общую «Ошибка оплаты».
+       */
+      if (j.error === "invalid_email" && typeof j.message === "string") {
+        setCheckoutNotice(j.message);
+        setCheckingOut(null);
+        return;
+      }
       if (j.url) {
         // Метка канала доводится до кассы. Найдено 31.08.2026: главный путь
         // оплаты — этот, и он уходил по готовому адресу от бэкенда как есть.

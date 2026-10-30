@@ -1,12 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import { KeepChannelLink } from "./KeepChannelLink";
-import { tierLabel, требуемоеСловами, type PaywallPayload, type CanonicalTier } from "@/lib/paywall";
+import { tierLabel, требуемоеСловами, языкСтены, type PaywallPayload, type CanonicalTier } from "@/lib/paywall";
 import { WaitlistIfMissing } from "./FooterWaitlist";
+import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 
 /**
  * Reusable blocking screen rendered when the backend returns a 402
- * upgrade_required response (see lib/paywall.ts). RSC-friendly — no client
- * state needed; it's a pure presentation component over the payload.
+ * upgrade_required response (see lib/paywall.ts). Pure presentation over the
+ * payload — no own state.
  *
  * Visual contract:
  *   - clear module name + current plan
@@ -14,8 +18,85 @@ import { WaitlistIfMissing } from "./FooterWaitlist";
  *   - primary CTA → /pricing (anchored to the tier the user needs)
  *   - secondary "Back" link to the module's hub
  *
- * Pair with <PaywallScreen> in any RSC page that calls fetchOrPaywall().
+ * Pair with <PaywallScreen> in any page that calls fetchOrPaywall().
+ *
+ * Почему «use client» (30.10.2026, окно Приложения-2·Бюро). Экран рисуют
+ * 17 страниц: 9 серверных (qcoreai, multichat-engine, healthai…) и 8 клиентских
+ * (qai, qfusionai, qmedia, veilnetx…). Все подписи были зашиты по-русски для
+ * любого языка — английский гость закрытого модуля читал «Перейти к тарифам →»
+ * и «Уже оплатили?». Язык страницы живёт в I18nProvider (клиент), поэтому экран
+ * становится клиентским компонентом: серверные страницы передают ему
+ * сериализуемый payload, как и раньше.
+ *
+ * Язык кадра — языкКадра(i18n, серверный): I18nProvider стартует с «en» и
+ * определяет язык уже в браузере, поэтому пока он не готов (langReady) берётся
+ * язык, выбранный серверным макетом маршрута (ServerLangProvider, кука →
+ * Accept-Language → ru). Так SSR-HTML, первый кадр и гидрация совпадают — без
+ * английской вспышки перед оплатой у русского гостя (замечание Продукта 30.10).
+ * Макеты всех серверных маршрутов со стеной дают провайдер — сторож
+ * app/__tests__/paywallScreenServerLang.guard. Вне обоих провайдеров (тест
+ * одиночного компонента) — document.lang, как у PaywallModal.
  */
+
+type Яз = "ru" | "en" | "kk";
+
+const СТРОКИ: Record<Яз, {
+  back: string;
+  titleAnyPaid: string;
+  titleHigher: string;
+  plan: (label: string) => [string, string];
+  tiersAria: string;
+  login: string;
+  pricing: string;
+  paid: string;
+  status: string;
+  waitTitle: string;
+  waitDescription: string;
+  waitButton: string;
+}> = {
+  ru: {
+    back: "← На главную",
+    titleAnyPaid: "Этот модуль входит в любую платную подписку",
+    titleHigher: "Этот модуль доступен на старших тарифах",
+    plan: () => ["Ваш текущий план — ", ". Чтобы открыть его, выберите один из тарифов ниже."],
+    tiersAria: "Доступные тарифы",
+    login: "Войти под почтой оплаты →",
+    pricing: "Перейти к тарифам →",
+    paid: "Уже оплатили? ",
+    status: "Проверьте статус подписки",
+    waitTitle: "Платить сегодня рано? Оставьте адрес",
+    waitDescription: "Напишем, когда у AEVION откроются новые модули и возможности.",
+    waitButton: "Сообщить мне",
+  },
+  en: {
+    back: "← Home",
+    titleAnyPaid: "This module is part of any paid plan",
+    titleHigher: "This module is available on higher plans",
+    plan: () => ["Your current plan is ", ". To open it, choose one of the plans below."],
+    tiersAria: "Available plans",
+    login: "Sign in with the payment email →",
+    pricing: "Go to pricing →",
+    paid: "Already paid? ",
+    status: "Check your subscription status",
+    waitTitle: "Not ready to pay today? Leave your address",
+    waitDescription: "We will write when AEVION opens new modules and features.",
+    waitButton: "Notify me",
+  },
+  kk: {
+    back: "← Басты бетке",
+    titleAnyPaid: "Бұл модуль кез келген ақылы жазылымға кіреді",
+    titleHigher: "Бұл модуль жоғары тарифтерде қолжетімді",
+    plan: () => ["Қазіргі жоспарыңыз — ", ". Ашу үшін төмендегі тарифтердің бірін таңдаңыз."],
+    tiersAria: "Қолжетімді тарифтер",
+    login: "Төлем поштасымен кіру →",
+    pricing: "Тарифтерге өту →",
+    paid: "Төлеп қойдыңыз ба? ",
+    status: "Жазылым күйін тексеріңіз",
+    waitTitle: "Бүгін төлеуге ерте ме? Мекенжай қалдырыңыз",
+    waitDescription: "AEVION-да жаңа модульдер мен мүмкіндіктер ашылғанда жазамыз.",
+    waitButton: "Маған хабарлау",
+  },
+};
 
 /**
  * Акценты тарифов — 700-оттенки, потому что экран светлый.
@@ -39,17 +120,23 @@ interface Props {
   payload: PaywallPayload;
   /** Optional hub path to link back to (e.g. "/modules"). Default: "/". */
   backHref?: string;
-  /** Optional override label for the back link. */
+  /** Optional override label for the back link. Default: by language. */
   backLabel?: string;
 }
 
-export function PaywallScreen({ payload, backHref = "/", backLabel = "← На главную" }: Props) {
+export function PaywallScreen({ payload, backHref = "/", backLabel }: Props) {
+  const i18n = useI18nOptional();
+  const серверный = useServerLang();
+  const кадр = языкКадра(i18n, серверный, языкСтены());
+  const lang: Яз = кадр === "ru" || кадр === "kk" ? кадр : "en";
+  const с = СТРОКИ[lang];
   const { plan, requiredTiers, upgradeUrl, authState, loginUrl } = payload;
   // Не вошёл → возможно, уже оплатил: главный шаг — вход под почтой оплаты, а
   // не «выбрать тариф» (иначе плательщику предлагают платить второй раз).
   const anonymous = authState === "anonymous";
   const primaryTier = requiredTiers[0] ?? "full";
   const accent = TIER_ACCENT[primaryTier] ?? "#f59e0b";
+  const [planBefore, planAfter] = с.plan(tierLabel(plan));
 
   return (
     <main
@@ -69,7 +156,7 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
           href={backHref}
           style={{ fontSize: 12, color: "#64748b", textDecoration: "none", display: "inline-block", marginBottom: 24 }}
         >
-          {backLabel}
+          {backLabel ?? с.back}
         </Link>
 
         <div
@@ -88,13 +175,12 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
           {requiredTiers.includes("full")
             // Без служебного имени: «Модуль «qai»…» человеку ничего не говорит
             // (прод /qai, 24.10.2026); название модуля он и так видит в адресе и меню.
-            ? "Этот модуль входит в любую платную подписку"
-            : "Этот модуль доступен на старших тарифах"}
+            ? с.titleAnyPaid
+            : с.titleHigher}
         </h1>
 
         <p style={{ fontSize: 14, color: "#475569", margin: "0 0 24px", lineHeight: 1.5 }}>
-          Ваш текущий план — <strong style={{ color: "#0f172a" }}>{tierLabel(plan)}</strong>.
-          Чтобы открыть его, выберите один из тарифов ниже.
+          {planBefore}<strong style={{ color: "#0f172a" }}>{tierLabel(plan)}</strong>{planAfter}
         </p>
 
         <div
@@ -105,7 +191,7 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
             justifyContent: "center",
             marginBottom: 28,
           }}
-          aria-label="Доступные тарифы"
+          aria-label={с.tiersAria}
         >
           {/* Одна фраза вместо ярлыков: «FULL» в лестнице сроков значит 9 месяцев,
               а требование — «любой платный». Разбор в lib/paywall.ts. */}
@@ -121,7 +207,7 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
               letterSpacing: "0.04em",
             }}
           >
-            {требуемоеСловами(requiredTiers)}
+            {требуемоеСловами(requiredTiers, lang)}
           </span>
         </div>
 
@@ -149,7 +235,7 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
                 boxShadow: `0 8px 24px -8px ${accent}99`,
               }}
             >
-              Войти под почтой оплаты →
+              {с.login}
             </Link>
           </div>
         ) : null}
@@ -169,11 +255,11 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
             boxShadow: anonymous && loginUrl ? "none" : `0 8px 24px -8px ${accent}99`,
           }}
         >
-          Перейти к тарифам →
+          {с.pricing}
         </KeepChannelLink>
 
         <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 28, lineHeight: 1.5 }}>
-          Уже оплатили? <Link href="/account" style={{ color: "#0d9488", textDecoration: "underline" }}>Проверьте статус подписки</Link>
+          {с.paid}<Link href="/account" style={{ color: "#0d9488", textDecoration: "underline" }}>{с.status}</Link>
         </p>
 
         {/*
@@ -190,9 +276,10 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
         <div style={{ maxWidth: 520, margin: "28px auto 0", textAlign: "left" }}>
           <WaitlistIfMissing
             source="paywall"
-            title="Платить сегодня рано? Оставьте адрес"
-            description="Напишем, когда у AEVION откроются новые модули и возможности."
-            buttonLabel="Сообщить мне"
+            lang={lang}
+            title={с.waitTitle}
+            description={с.waitDescription}
+            buttonLabel={с.waitButton}
           />
         </div>
       </div>

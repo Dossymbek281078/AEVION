@@ -12,6 +12,7 @@
  */
 
 import { degraded } from "./degradedResponse";
+import type { MailLang } from "./mailLang";
 import { адресНаТестовомДомене } from "./reservedEmailDomain";
 import { записатьПропуск } from "./build/emailOutcomes";
 import { noteEmailSent } from "./brevoQuota";
@@ -697,33 +698,70 @@ export function buildWeeklyDigestEmail(
  * Отправляем тем же путём, каким уходят письма подписчикам, — он проверен и
  * работает. Ссылка ведёт на страницу подтверждения с токеном в адресе.
  */
-export function buildEmailVerifyEmail(email: string, verifyUrl: string): ConstitutionEmailPayload {
+const VERIFY_BREVO_TEXT: Record<MailLang, {
+  subject: string; lead: string; why: (email: string) => string; ignore: string; btn: string; copy: string; plain: string; plainIgnore: string;
+}> = {
+  ru: {
+    subject: "Подтвердите адрес — AEVION",
+    lead: "Подтвердите адрес — это займёт одно нажатие.",
+    why: (email) => `Мы отправили это письмо, потому что на аккаунте ${email} запросили подтверждение адреса.`,
+    ignore: "Если это были не вы, просто не открывайте ссылку — без неё ничего не изменится.",
+    btn: "Подтвердить адрес",
+    copy: "Ссылка действует ограниченное время. Если кнопка не открывается, скопируйте адрес:",
+    plain: "Подтвердите адрес:",
+    plainIgnore: "Если это были не вы — просто не открывайте ссылку.",
+  },
+  en: {
+    subject: "Confirm your email — AEVION",
+    lead: "Confirm your email address — it takes one click.",
+    why: (email) => `We sent this email because someone requested address confirmation for the account ${email}.`,
+    ignore: "If it was not you, just do not open the link — nothing will change without it.",
+    btn: "Confirm email",
+    copy: "The link is valid for a limited time. If the button does not open, copy the address:",
+    plain: "Confirm your email:",
+    plainIgnore: "If it was not you, just do not open the link.",
+  },
+  kk: {
+    subject: "Email мекенжайыңызды растаңыз — AEVION",
+    lead: "Email мекенжайыңызды растаңыз — бір басу жеткілікті.",
+    why: (email) => `Бұл хатты ${email} аккаунтына мекенжайды растау сұралғандықтан жібердік.`,
+    ignore: "Егер бұл сіз болмасаңыз, сілтемені ашпаңыз — онсыз ештеңе өзгермейді.",
+    btn: "Email растау",
+    copy: "Сілтеме шектеулі уақыт жарамды. Батырма ашылмаса, мекенжайды көшіріп алыңыз:",
+    plain: "Email мекенжайыңызды растаңыз:",
+    plainIgnore: "Егер бұл сіз болмасаңыз, сілтемені ашпаңыз.",
+  },
+};
+
+/** `lang` — язык основного письма (resolveMailLang в ручке); без него — ru, как раньше. */
+export function buildEmailVerifyEmail(email: string, verifyUrl: string, lang: MailLang = "ru"): ConstitutionEmailPayload {
+  const T = VERIFY_BREVO_TEXT[lang] ?? VERIFY_BREVO_TEXT.ru;
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b1736;color:#e7ecf8;border-radius:12px">
       <div style="color:#d4af37;font-size:24px;font-weight:900;margin-bottom:8px">AEVION</div>
-      <p style="margin:0 0 16px">Подтвердите адрес — это займёт одно нажатие.</p>
+      <p style="margin:0 0 16px">${T.lead}</p>
       <p style="color:#9aa3c0;margin:0 0 20px">
-        Мы отправили это письмо, потому что на аккаунте ${email} запросили подтверждение адреса.
-        Если это были не вы, просто не открывайте ссылку — без неё ничего не изменится.
+        ${T.why(email)}
+        ${T.ignore}
       </p>
       <p style="margin:0 0 24px">
         <a href="${verifyUrl}" style="display:inline-block;background:#22d3ee;color:#0b1736;font-weight:700;padding:12px 20px;border-radius:8px;text-decoration:none">
-          Подтвердить адрес
+          ${T.btn}
         </a>
       </p>
       <p style="color:#64748b;font-size:11px;margin:0">
-        Ссылка действует ограниченное время. Если кнопка не открывается, скопируйте адрес:<br>
+        ${T.copy}<br>
         <span style="color:#9aa3c0">${verifyUrl}</span>
       </p>
     </div>
   `;
   return {
     to: [{ email }],
-    subject: "Подтвердите адрес — AEVION",
+    subject: T.subject,
     htmlContent: html,
-    textContent: `Подтвердите адрес: ${verifyUrl}
+    textContent: `${T.plain} ${verifyUrl}
 
-Если это были не вы — просто не открывайте ссылку.`,
+${T.plainIgnore}`,
     tags: ["auth", "email-verify"],
   };
 }
@@ -778,8 +816,8 @@ async function отправитьСЗапасом(
   return true;
 }
 
-export async function sendEmailVerify(email: string, verifyUrl: string): Promise<boolean> {
-  const result = await sendBrevoEmail(buildEmailVerifyEmail(email, verifyUrl));
+export async function sendEmailVerify(email: string, verifyUrl: string, lang: MailLang = "ru"): Promise<boolean> {
+  const result = await sendBrevoEmail(buildEmailVerifyEmail(email, verifyUrl, lang));
   if (!result.ok) {
     console.error("[Brevo] email-verify failed:", result.error);
     return false;

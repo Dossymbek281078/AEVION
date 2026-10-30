@@ -1071,6 +1071,8 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
       });
     }
 
+    // Язык письма: тело `lang` → Accept-Language → ru. Решается ОДИН раз и для основного, и для запасного (Brevo) пути.
+    const mailLang = resolveMailLang((req.body as { lang?: unknown } | undefined)?.lang, req.headers["accept-language"]);
     const emailSent = viaQBuild
       ? await sendVerificationEmail({
           to: user.email,
@@ -1082,10 +1084,9 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
           // «Подтвердите email — AEVION QBuild» от «AEVION QPayNet».
           brand: "AEVION",
           tokenId: id,
-          // Язык письма: тело `lang` → Accept-Language → ru.
-          lang: resolveMailLang((req.body as { lang?: unknown } | undefined)?.lang, req.headers["accept-language"]),
+          lang: mailLang,
         })
-      : await sendEmailVerify(user.email, verifyUrl);
+      : await sendEmailVerify(user.email, verifyUrl, mailLang);
 
     if (!emailSent) {
       return res.status(502).json({

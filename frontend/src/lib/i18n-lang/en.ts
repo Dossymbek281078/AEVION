@@ -5171,7 +5171,7 @@ const en: Record<string, string> = {
   "pricing.home.tier.termTotalOne": "{total} for one month",
   "pricing.home.tier.saving": "Save {percent}%",
   "pricing.home.tier.termNote": "A plan is a commitment to the whole AEVION planet for a term: every module in every paid plan. Billed monthly at the term's price; pay the whole term up front and take up to 12.5% off.",
-  "pricing.home.tier.monthlyBilling": "Billed monthly at {perMonth} — a {months}-{unit} commitment",
+  "pricing.home.tier.monthlyBilling": "Billed monthly at {perMonth} — a {months}-month commitment",
   "pricing.home.tier.prepay": "Or pay the whole term up front: {total} (−{percent}%)",
   "pricing.home.tier.prepayRenews": "This is a subscription: {total} is charged every {months} {unit} until you cancel it; cancel in your Lemon Squeezy account (link in the payment email)",
   "pricing.home.tier.prepayCta": "Pay the whole term up front — {total}",

@@ -195,9 +195,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 30.10: +56 в ru/en/kk — auth.* (страница /auth): при ?lang=en заголовок, подзаголовок,
   // «Почта», подсказки проверки, блок «Что открывает аккаунт» шли по-русски литералами
   // рядом с английской кнопкой «Create account». Число — счёт по словарям.
-  ru: 7538,
-  en: 7538,
-  kk: 7538,
+  // 30.10: +2 в ru/en/kk — moduleChip.perYear и moduleChip.buyTitleYear: годовая плашка CyberChess показывала сырое «$50moduleChip.perYear» (и подсказку-ключ на кнопке); сторож moduleChipKeysExistInDictionaries.
+  ru: 7540,
+  en: 7540,
+  kk: 7540,
 
   de: 134,
   fr: 134,

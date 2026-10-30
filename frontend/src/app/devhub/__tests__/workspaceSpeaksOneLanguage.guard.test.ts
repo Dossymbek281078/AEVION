@@ -86,14 +86,38 @@ function messages(): string[] {
   return out;
 }
 
+/** Вызовы из FN, чей текст идёт из словаря страницы (TL.ключ или fill(TL.ключ, …)). */
+function slovarnyeVyzovy(src: string = code()): number {
+  let n = 0;
+  for (const m of src.matchAll(FN)) {
+    let i = (m.index ?? 0) + m[0].length;
+    let depth = 1;
+    let buf = "";
+    while (i < src.length && depth > 0 && buf.length < 400) {
+      const c = src[i];
+      if (c === "(") depth++;
+      else if (c === ")") depth--;
+      if (depth > 0) buf += c;
+      i++;
+    }
+    if (/\bTL\.\w+/.test(buf)) n++;
+  }
+  return n;
+}
+
 describe("рабочее окно не смешивает языки", () => {
   test("прибор работает: сообщения находятся и среди них есть русские", () => {
+    // 30.10.2026: тексты путей ошибок ушли в словарь TOAST_UI (ru/en/kk) — вызов несёт TL.ключ,
+    // а не литерал. Такие вызовы прибор считает НАЙДЕННЫМИ и локализованными: их язык проверяет
+    // сторож errorPathsSpeakTheUiLanguage (ru-значения русские, en без кириллицы). Порог прежний.
     const all = messages();
-    expect(all.length, "сообщений не найдено — сторож смотрит не туда").toBeGreaterThan(30);
+    const slovarnyh = slovarnyeVyzovy();
+    expect(all.length + slovarnyh, "сообщений не найдено — сторож смотрит не туда").toBeGreaterThan(30);
     expect(
-      all.filter((t) => /[А-Яа-я]/.test(t)).length,
+      all.filter((t) => /[А-Яа-я]/.test(t)).length + slovarnyh,
       "русских сообщений нет — разбор сломан",
     ).toBeGreaterThan(20);
+    expect(slovarnyeVyzovy.call(null, "showToast(TL.saveFailed, \"error\"); confirm(fill(TL.delAsk, { p }))"), "контроль: словарные вызовы считаются").toBe(2);
   });
 
   test("ни одно сообщение не осталось только на латинице", () => {

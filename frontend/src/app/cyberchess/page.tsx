@@ -1612,6 +1612,13 @@ export function kanonicheskoeReshenie(srv:{sol:string[];solRaw?:string[]}):strin
   return (srv.solRaw&&srv.solRaw.length)?srv.solRaw:srv.sol;
 }
 
+/** Разметка ответа тренера (31.10.2026, находка Продаж: на экране было «**Bxf7+**»). Только жирный,
+ *  код и снятие решёток заголовков — без HTML из строки модели. */
+function razmetkaTrenera(t:string){
+  return t.replace(/^\s{0,3}#{1,4}\s+/gm,"").split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g).map((ч,i)=>
+    /^\*\*[^*\n]+\*\*$/.test(ч)?<strong key={i}>{ч.slice(2,-2)}</strong>
+    :/^`[^`\n]+`$/.test(ч)?<code key={i} style={{fontFamily:"ui-monospace,monospace"}}>{ч.slice(1,-1)}</code>:ч);
+}
 export default function CyberChessPage(){
   const{showToast}=useToast();
   // Workspace preset (Focus / Standard / Stream / Study / Coach), keys 1..5.
@@ -13064,12 +13071,18 @@ export default function CyberChessPage(){
                 if(coachChatLoading)return;
                 if(!question.trim())return;
                 sendChatRef.current=sendChat;
-                const fen=game.fen();
-                const turn=game.turn()==="w"?"белые":"чёрные";
-                const lastMove=hist.length>0?hist[hist.length-1]:"(партия не начата)";
-                const recent=hist.slice(-10).join(" ");
+                // 31.10.2026 (находка Продаж): при листании ◀/▶ доска — просматриваемый ход, а история
+                // уходила целиком, и тренер разбирал позицию, к которой его ходы не вели. Теперь одна точка:
+                // позиция fenHist[ply] и история до неё.
+                const plyVid=browseIdx<0?hist.length:Math.min(browseIdx,hist.length);
+                const histVid=hist.slice(0,plyVid);
+                const fen=fenHist[plyVid]??game.fen();
+                const pozVid=new Chess(fen);
+                const turn=pozVid.turn()==="w"?"белые":"чёрные";
+                const lastMove=histVid.length>0?histVid[histVid.length-1]:"(партия не начата)";
+                const recent=histVid.slice(-10).join(" ");
                 const evalCpStr=evalMate!==0?`#${evalMate>0?evalMate:-evalMate}`:`${evalCp>=0?"+":""}${(evalCp/100).toFixed(2)}`;
-                const phase=hist.length<14?"дебют":hist.length<40?"миттельшпиль":"эндшпиль";
+                const phase=histVid.length<14?"дебют":histVid.length<40?"миттельшпиль":"эндшпиль";
                 const userMsg:CoachMsg={role:"user",content:question.trim(),ts:Date.now()};
                 const newMsgs=[...coachChat,userMsg];
                 sCoachChat(newMsgs);
@@ -13077,7 +13090,7 @@ export default function CyberChessPage(){
                 sCoachChatLoading(true);
                 // Annotated moves summary for coach context
                 const annotSummary=Object.keys(moveAnnotations).length>0
-                  ?"\nАннотации игрока: "+Object.entries(moveAnnotations).map(([i,a])=>{const mv=hist[Number(i)];return mv?`${mv}${a}`:"";}).filter(Boolean).join(", ")
+                  ?"\nАннотации игрока: "+Object.entries(moveAnnotations).filter(([i])=>Number(i)<plyVid).map(([i,a])=>{const mv=histVid[Number(i)];return mv?`${mv}${a}`:"";}).filter(Boolean).join(", ")
                   :"";
                 const openingCtx=currentOpening?`\nДебют: ${currentOpening.eco} ${currentOpening.name}`:"";
                 const variantCtx=variant!=="standard"?`\nВариант: ${variant}`:"";
@@ -13085,24 +13098,51 @@ export default function CyberChessPage(){
                 // chess.js is deterministic and always correct, unlike an LLM reading a raw
                 // FEN string. This is what stops the coach from suggesting moves that don't
                 // exist on the board (reported bug: hallucinated non-existent moves).
-                const legalSan=game.moves();
+                const legalSan=pozVid.moves();
                 const legalMovesCtx=legalSan.length>0
                   ?`\nЛегальные ходы в этой позиции (${legalSan.length}): ${legalSan.join(", ")}`
                   :"\n(партия окончена — легальных ходов нет)";
                 const bestSan=getEngineBestSan(fen);
-                const bestMoveCtx=bestSan?`\nЛучший ход по движку (проверен, легален): ${bestSan}`:"";
+                // (1) 31.10.2026: «где моя ошибка» тренер угадывал сам и в 3 из 5 прогонов называл неверный
+                // ход. Ошибку считает движок (оценка до/после каждого хода игрока), ИИ только объясняет.
+                let vyvodDvizhka="";
+                if(/ошибк|зев|mistake|blunder|қате/i.test(question)&&histVid.length>0){
+                  if(!sfR.current?.ready()){
+                    vyvodDvizhka="ВЫВОД ДВИЖКА: движок ещё не загружен, ошибки не посчитаны — не называй конкретный ход ошибкой, предложи открыть разбор партии.";
+                  }else{
+                    try{
+                      const m=await import("./poslednyayaOshibka");
+                      const otsenka=(f:string)=>new Promise<{cp:number;mate:number;best?:string}>(res=>{
+                        const sign=f.split(" ")[1]==="w"?1:-1;let cp=0,mt=0,gotovo=false;
+                        const fin=(b?:string)=>{if(!gotovo){gotovo=true;clearTimeout(st);res({cp,mate:mt,best:b})}};
+                        const st=setTimeout(()=>fin(),6000);
+                        sfR.current!.eval(f,12,(c,mm)=>{cp=c*sign;mt=mm*sign},fin);
+                      });
+                      const r=await m.poslednyayaOshibka(fenHist.slice(0,plyVid+1),histVid,pCol==="b"?"b":"w",otsenka,12,20000);
+                      vyvodDvizhka=m.vyvodDlyaTrenera(r,pCol==="b"?"b":"w");
+                    }catch(e){
+                      console.error("[CyberChess] вывод движка для тренера не посчитан",e);
+                      vyvodDvizhka="ВЫВОД ДВИЖКА: посчитать ошибки не удалось — не называй конкретный ход ошибкой.";
+                    }
+                  }
+                }
+                // 31.10.2026: тренер дописывал продолжения сам («Bxf7+ Kd7» в ловушке Легаля, а Kd7 нелегален —
+                // поле бьёт конь e5). Ответы соперника на лучший ход тоже даёт chess.js, не модель.
+                let otvetySopernika="";
+                if(bestSan){try{const pp=new Chess(fen);pp.move(bestSan);const ot=pp.moves();otvetySopernika=ot.length?`\nПосле ${bestSan} у соперника легальны только: ${ot.join(", ")}`:`\nПосле ${bestSan} у соперника ходов нет (мат или пат)`;}catch{/* ход движка не лёг на позицию — строку не даём */}}
+                const bestMoveCtx=bestSan?`\nЛучший ход по движку (проверен, легален): ${bestSan}${otvetySopernika}`:"";
                 // Build context block prepended to the user's question for the API.
                 const contextBlock=`КОНТЕКСТ ПОЗИЦИИ:
 FEN: ${fen}
-Ход ${Math.floor(hist.length/2)+1}, ${turn} ходят. Фаза: ${phase}.${openingCtx}${variantCtx}
+Ход ${Math.floor(histVid.length/2)+1}, ${turn} ходят. Фаза: ${phase}.${openingCtx}${variantCtx}${plyVid<hist.length?`\nИгрок листает партию: на доске позиция после полухода ${plyVid} из ${hist.length}, ходы после неё в контекст не входят.`:""}
 Последние ходы: ${recent||"начало партии"}
 Последний ход: ${lastMove}
 Engine eval: ${evalCpStr} (с точки зрения белых)${bestMoveCtx}${legalMovesCtx}
-Игрок играет: ${pCol==="w"?"белыми":"чёрными"}, рейтинг ${rat}${annotSummary}
+Игрок играет: ${pCol==="w"?"белыми":"чёрными"}, рейтинг ${rat}${annotSummary}${vyvodDvizhka?`\n${vyvodDvizhka}`:""}
 
 ВОПРОС УЧЕНИКА:
 ${question.trim()}`;
-                const SYSTEM=`Ты AEVION CyberChess Coach — опытный шахматный тренер. Отвечай на русском, конкретно, по позиции. 2-5 предложений. Без воды и общих фраз. Если просят план — дай конкретные ходы (SAN) и идею. Если про ошибку — назови ход и худшую альтернативу. Используй FEN и engine eval как источник истины. КРИТИЧЕСКИ ВАЖНО: любой ход, который ты называешь как возможный/рекомендуемый ход В ТЕКУЩЕЙ позиции, ДОЛЖЕН дословно совпадать с одним из ходов в списке «Легальные ходы» из контекста — если хода там нет, он невозможен на доске, не называй его. Если не уверен в конкретном ходе — говори про идею/план словами, а не выдумывай нотацию. «Лучший ход по движку», если он есть в контексте, уже проверен и всегда легален — используй его как основу для конкретных рекомендаций. Если есть аннотации — прокомментируй отмеченные моменты.`;
+                const SYSTEM=`Ты AEVION CyberChess Coach — опытный шахматный тренер. Отвечай на русском, конкретно, по позиции. 2-5 предложений. Без воды и общих фраз. Если просят план — дай конкретные ходы (SAN) и идею. Если про ошибку — назови ход и худшую альтернативу. Используй FEN и engine eval как источник истины. КРИТИЧЕСКИ ВАЖНО: любой ход, который ты называешь как возможный/рекомендуемый ход В ТЕКУЩЕЙ позиции, ДОЛЖЕН дословно совпадать с одним из ходов в списке «Легальные ходы» из контекста — если хода там нет, он невозможен на доске, не называй его. Если не уверен в конкретном ходе — говори про идею/план словами, а не выдумывай нотацию. «Лучший ход по движку», если он есть в контексте, уже проверен и всегда легален — используй его как основу для конкретных рекомендаций. Если есть аннотации — прокомментируй отмеченные моменты. Если в контексте есть «ВЫВОД ДВИЖКА» — это готовый ответ про ошибку: назови ровно этот ход (или скажи, что ошибок нет, если так сказано) и объясни, чем он плох; никакой другой ход ошибкой не называй и с выводом не спорь. Ответ соперника на рекомендованный ход называй только из списка «у соперника легальны только» — других ходов там нет.`;
                 try{
                   const ctrl=new AbortController();
                   const tId=setTimeout(()=>ctrl.abort(),30000);
@@ -13256,7 +13296,7 @@ ${question.trim()}`;
                     boxShadow:m.role==="user"?"0 1px 3px rgba(30,64,175,0.2)":"none"
                   }}>
                     <div style={{fontSize:9,fontWeight:900,opacity:0.7,marginBottom:2,letterSpacing:0.4,textTransform:"uppercase" as const}}>{m.role==="user"?"ты":"☕ coach"}</div>
-                    {m.content}
+                    {m.role==="user"?m.content:razmetkaTrenera(m.content)}
                   </div>)}
                   {coachChatLoading&&<div style={{padding:"7px 10px",borderRadius:RADIUS.md,background:"#fff",border:"1px solid #c7d2fe",color:T.dim,fontSize:12,fontStyle:"italic",alignSelf:"flex-start",maxWidth:"92%"}}>
                     Coach печатает<span style={{animation:"cc-fade-in 0.6s ease-out infinite alternate"}}>…</span>

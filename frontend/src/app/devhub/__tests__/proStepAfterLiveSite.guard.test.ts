@@ -17,7 +17,13 @@ describe("DevHub: ступень «Планета» сразу под живым
     expect(i).toBeGreaterThan(src.indexOf("{GL.openSite} →"));
   });
   it("показывается при живом адресе и не показывается платящему", () => {
-    expect(block).toContain('тарифСтудии !== "pro" && тарифСтудии !== "enterprise"');
+    expect(block).toContain('тарифСтудии != null && тарифСтудии !== "pro" && тарифСтудии !== "enterprise"');
+  });
+  it("тариф не загрузился → ступени нет, отказ не проглочен", () => {
+    const i = src.indexOf("setТарифСтудии(d.tier)");
+    const окно = src.slice(i, i + 700);
+    expect(окно).not.toMatch(/\.catch\(\(\)\s*=>\s*\{\s*(\/\*.*?\*\/)?\s*\}\)/);
+    expect(окно).toContain("console.warn(\"[devhub] тариф для ступени «Планета» не прочитан:\"");
     expect(block).toContain("pagesResult?.liveUrl");
   });
   it("кнопка ведёт к срокам «Планеты» и пишет checkout_start со своим источником", () => {

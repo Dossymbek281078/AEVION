@@ -46,6 +46,8 @@ describe("страница успеха: подсказка про вход с �
     const at = page.indexOf('t("pricing.checkoutSuccess.nextLoginPlatform"');
     const ветка = page.slice(at, page.indexOf(": []", at));
     expect(ветка).toContain('t("pricing.checkoutSuccess.nextDevhubLink"), href: "/devhub/link"');
+    // …и только при явном признаке «Планеты» — поведение в devhubLinkOnlyForPlanet.test.tsx
+    expect(ветка).toContain("точноПланета ?");
   });
 
   it("ключ nextLoginPlatform есть во всех трёх словарях", () => {

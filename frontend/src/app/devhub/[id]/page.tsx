@@ -1012,7 +1012,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         const n = d?.usage?.deploy?.limit;
         if (typeof n === "number" && n > 0) setПределВыкладок(n);
       })
-      .catch(() => { /* тариф неизвестен — ступень всё равно показываем, как баннер на /devhub */ });
+      // Упавший запрос — не «бесплатный»: при неизвестном тарифе ступень НЕ показываем,
+      // иначе её увидит платящий. Молча не глотаем (вычитка Оркестратора 30.10).
+      .catch((e) => console.warn("[devhub] тариф для ступени «Планета» не прочитан:", e instanceof Error ? e.message : e));
   }, []);
 
   // AI Chat state
@@ -5196,7 +5198,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         причина платить — на его сайте уже стоит значок AEVION
                         (lib/aevionBadge.ts на бэке ставит его только бесплатным). */}
                     {(pagesResult?.liveUrl || pagesResult?.pagesUrl || project?.deployUrl?.includes("pages.dev")) &&
-                      тарифСтудии !== "pro" && тарифСтудии !== "enterprise" && STUDIO_PRO && (
+                      тарифСтудии != null && тарифСтудии !== "pro" && тарифСтудии !== "enterprise" && STUDIO_PRO && (
                       <div data-devhub-pro-after-live style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 8, background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)", color: "#fff" }}>
                         <div style={{ fontSize: 12, lineHeight: 1.45, marginBottom: 8 }}>
                           {tPro("pro.afterLive").replace("{n}", String(пределВыкладок ?? 10))}

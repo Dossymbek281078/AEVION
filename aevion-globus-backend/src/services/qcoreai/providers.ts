@@ -270,13 +270,15 @@ export function getProviders(): Provider[] {
       // доступности под нагрузкой»: такого замера у нас нет и сделать его без
       // ключа нельзя, поэтому обещание убрано, а не переписано заново.
       models: [
-        "nvidia/nemotron-3-super-120b-a12b:free",
         "nvidia/nemotron-3-ultra-550b-a55b:free",
         "google/gemma-4-31b-it:free",
         "google/gemma-4-26b-a4b-it:free",
         "nvidia/nemotron-3.5-lightning:free",
       ],
-      defaultModel: process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-super-120b-a12b:free",
+      // 30.10.2026: прежнее умолчание nemotron-3-super снято OpenRouter (404
+      // «unavailable for free»), и каждый ответ уходил в платную запасную
+      // цепочку gemini→anthropic. Жива из наших бесплатных только gemma-4-31b.
+      defaultModel: process.env.OPENROUTER_MODEL || "google/gemma-4-31b-it:free",
       envKey: "OPENROUTER_API_KEY",
       configured: isConfigured("OPENROUTER_API_KEY"),
       free: true,

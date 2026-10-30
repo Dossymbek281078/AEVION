@@ -784,8 +784,27 @@ export async function sendEmailVerify(email: string, verifyUrl: string): Promise
 
 /** Возвращает, УДАЛОСЬ ли отправить. Вызывающий обязан заметить false:
  *  молчаливый провал неотличим от задержки почты и не всплывает никогда. */
+function marksOf(source?: string): string[] {
+  return String(source ?? "").split(",").map((m) => m.trim().toLowerCase()).filter(Boolean);
+}
+
 export async function sendWaitlistConfirm(email: string, source?: string): Promise<boolean> {
   const payload = buildWaitlistConfirmEmail(email, source);
+  // 30.10.2026: подтверждение DevHub шло через Brevo с пикселем открытия и трекер-ссылками
+  // (sendibt3.com) — Gmail клал его в спам, тогда как «Ваш сайт в AEVION DevHub» через Resend
+  // без трекинга приходит во входящие. DevHub шлём тем же sendEmail (Resend); тема, текст,
+  // получатель — те же. Resend не принял (или ключа нет, режим stub) — прежний путь Brevo.
+  if (marksOf(source).some((m) => m === "devhub" || m.startsWith("devhub-") || m === "en-devhub" || m.startsWith("en-devhub-"))) {
+    const { sendEmail } = await import("../routes/provisioning");
+    const r = await sendEmail({
+      to: email,
+      subject: payload.subject,
+      html: payload.htmlContent,
+      text: payload.textContent ?? "",
+    });
+    if (r.ok && r.mode === "real") return true;
+    console.error(`[mail:лист-ожидания] Resend для DevHub не принял (${r.ok ? "stub" : r.error}) — Brevo`);
+  }
   // Сбор адресов — единственный денежный след большинства витрин. Запасной
   // канал обязателен: 05.10 Brevo пометил ключи неактивными, и без запаса
   // поток умер бы целиком и молча.

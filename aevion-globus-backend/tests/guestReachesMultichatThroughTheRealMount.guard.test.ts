@@ -111,14 +111,17 @@ describe("гость и консилиум", () => {
     // НАСТОЯЩИЙ роутер проверяют случаи выше.
     const a = express();
     a.use(express.json());
-    a.use("/api/multichat", (req, res) => {
-      const решение = решениеПоГостю(req);
-      if (решение.пускать) {
-        if (решение.тратить) засчитатьГостю(req);
-        res.status(200).json({ ok: true });
-        return;
-      }
-      res.status(402).json({ error: "upgrade_required" });
+    a.use("/api/multichat", (req, res, next) => {
+      решениеПоГостю(req)
+        .then(async (решение) => {
+          if (решение.пускать) {
+            if (решение.тратить) await засчитатьГостю(req);
+            res.status(200).json({ ok: true });
+            return;
+          }
+          res.status(402).json({ error: "upgrade_required" });
+        })
+        .catch(next);
     });
 
     for (let i = 0; i < гостевойЛимит(); i += 1) {

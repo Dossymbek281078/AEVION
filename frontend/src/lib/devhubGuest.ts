@@ -12,6 +12,8 @@
  * присылается — подделавший чужое получит чужие черновики. Оно разделяет
  * посетителей, а не защищает от злоумышленника; защита — вход в аккаунт.
  */
+import { getAuthToken } from "./auth";
+
 export const DEVHUB_GUEST_HEADER = "x-devhub-guest";
 const STORAGE_KEY = "devhub_guest_id";
 
@@ -101,6 +103,37 @@ export function withGuestHeader(init: RequestInit | undefined, id: string): Requ
 }
 
 /**
+ * 🔴 30.10.2026: вошедшему — и вход в заголовке запросов DevHub.
+ *
+ * Замер прода 4f71ad70f: гость создал сайт → вошёл (как советует страница
+ * после оплаты) → adopt-guest 200 перенёс проект в аккаунт и сменил гостевой
+ * ключ → а список /devhub уходил БЕЗ Authorization, только с новым ключом, и
+ * был пуст. С токеном тот же API проект отдаёт. Бэк ставит вход выше гостя
+ * (requesterId: sub, потом заголовок), поэтому достаточно приложить токен.
+ * Только /api/devhub: остальные префиксы обёртки (qcoreai и др.) считают квоты
+ * по-своему, их не трогаем. Свой Authorization вызывающего не перезаписываем;
+ * устаревший токен бэк не узнает и честно откатится на гостевой ключ.
+ */
+export function withAccountHeader(init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers as HeadersInit | undefined);
+  if (headers.has("authorization")) return init;
+  const token = getAuthToken();
+  if (!token) return init;
+  headers.set("authorization", `Bearer ${token}`);
+  return { ...init, headers };
+}
+
+function isDevhubOwnApi(input: RequestInfo | URL): boolean {
+  try {
+    const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const path = new URL(raw, "https://aevion.app").pathname;
+    return /\/api\/devhub(\/|$)/.test(path);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Личность только на эту страницу — когда хранилище недоступно.
  *
  * 🔴 ЗАЧЕМ. Ниже стоял ранний выход: `const id = getDevhubGuestId(); if (!id)
@@ -165,7 +198,8 @@ export function installDevhubGuestHeader(): () => void {
     // Запасное значение — то, что было при установке: если хранилище вдруг
     // отказало, лучше слать прежнюю личность, чем не слать заголовок вовсе
     // (без него посетитель попадает в ОБЩИЙ ящик к чужим черновикам).
-    return original(input, withGuestHeader(init, getDevhubGuestId() ?? вПамяти ?? id));
+    const сГостем = withGuestHeader(init, getDevhubGuestId() ?? вПамяти ?? id);
+    return original(input, isDevhubOwnApi(input) ? withAccountHeader(сГостем) : сГостем);
   }) as typeof window.fetch;
   return () => {
     window.fetch = original;

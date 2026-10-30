@@ -12,6 +12,8 @@ import { apiUrl } from "@/lib/apiBase";
 import { getAuthToken } from "@/lib/auth";
 
 import { useEffect, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { tm } from "../mcText";
 import Link from "next/link";
 import { T } from "../theme";
 import { agentFailure } from "../failureText";
@@ -87,8 +89,12 @@ function dangerBtn(busy: boolean) {
   };
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString("ru-RU", {
+function dateLocale(lang: string) {
+  return lang === "ru" ? "ru-RU" : lang === "kk" ? "kk-KZ" : "en-GB";
+}
+
+function fmtDate(iso: string, lang: string) {
+  return new Date(iso).toLocaleString(dateLocale(lang), {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -97,6 +103,9 @@ function fmtDate(iso: string) {
 }
 
 export default function MultichatLibraryPage() {
+  // 30.10.2026: на /en библиотека бесед была русской — язык из провайдера, подписи и alert/confirm через tm.
+  const lang = useI18nOptional()?.lang ?? "ru";
+  const t = (s: string) => tm(lang, s);
   const [token, setToken] = useState("");
   const [items, setItems] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +133,7 @@ export default function MultichatLibraryPage() {
     void load(t, "");
   }, []);
 
-  async function load(t: string, query: string) {
+  async function load(tok: string, query: string) {
     setLoading(true);
     setError("");
     setUpgrade(null);
@@ -135,7 +144,7 @@ export default function MultichatLibraryPage() {
       const url = query
         ? apiUrl(`/api/multichat/search?q=${encodeURIComponent(query)}&limit=200`)
         : apiUrl(`/api/multichat/conversations`);
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${t}` } });
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${tok}` } });
       if (!r.ok) {
         // Голое «Ошибка: 429» человеку ничего не говорит и звучит как его вина:
         // предел общий для всех, кто пользуется сервисом в эту минуту.
@@ -147,7 +156,7 @@ export default function MultichatLibraryPage() {
           });
           return;
         }
-        setError(agentFailure(d?.error ?? `upstream ${r.status}`).human);
+        setError(t(agentFailure(d?.error ?? `upstream ${r.status}`).human));
         return;
       }
       const d = await r.json();
@@ -155,7 +164,7 @@ export default function MultichatLibraryPage() {
     } catch {
       // Без этого сбой сети уходил в finally, «Загрузка» гасла, и экран уверенно
       // писал «У вас пока нет чатов» — упавшее чтение становилось фактом.
-      setError("Не удалось получить список. Проверьте соединение и попробуйте снова.");
+      setError(t("Не удалось получить список. Проверьте соединение и попробуйте снова."));
     } finally {
       setLoading(false);
     }
@@ -177,7 +186,7 @@ export default function MultichatLibraryPage() {
 
   async function rename(id: string) {
     const current = items.find(i => i.id === id);
-    const next = prompt("Новое название:", current?.title ?? "")?.trim();
+    const next = prompt(t("Новое название:"), current?.title ?? "")?.trim();
     if (!next || next === current?.title) return;
     setBusyId(id);
     try {
@@ -188,7 +197,7 @@ export default function MultichatLibraryPage() {
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        alert(`Ошибка: ${d.error ?? r.status}`);
+        alert(`${t("Ошибка")}: ${d.error ?? r.status}`);
         return;
       }
       setItems(prev => prev.map(i => (i.id === id ? { ...i, title: next } : i)));
@@ -199,7 +208,7 @@ export default function MultichatLibraryPage() {
 
   async function del(id: string) {
     const conv = items.find(i => i.id === id);
-    if (!confirm(`Удалить "${conv?.title}"? Это необратимо.`)) return;
+    if (!confirm(`${t("Удалить")} "${conv?.title}"? ${t("Это необратимо.")}`)) return;
     setBusyId(id);
     try {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${id}`), {
@@ -208,7 +217,7 @@ export default function MultichatLibraryPage() {
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        alert(`Ошибка: ${d.error ?? r.status}`);
+        alert(`${t("Ошибка")}: ${d.error ?? r.status}`);
         return;
       }
       setItems(prev => prev.filter(i => i.id !== id));
@@ -226,7 +235,7 @@ export default function MultichatLibraryPage() {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        alert(`Ошибка: ${d.error ?? r.status}`);
+        alert(`${t("Ошибка")}: ${d.error ?? r.status}`);
         return;
       }
       const url = `${window.location.origin}${d.shareUrl}`;
@@ -236,7 +245,7 @@ export default function MultichatLibraryPage() {
         .writeText(url)
         .then(() => true)
         .catch(() => false);
-      alert(copied ? `Ссылка скопирована:\n${url}` : `Скопируйте ссылку вручную:\n${url}`);
+      alert(copied ? `${t("Ссылка скопирована:")}\n${url}` : `${t("Скопируйте ссылку вручную:")}\n${url}`);
       setItems(prev => prev.map(i => (i.id === id ? { ...i, shareToken: d.shareToken } : i)));
     } finally {
       setBusyId(null);
@@ -244,7 +253,7 @@ export default function MultichatLibraryPage() {
   }
 
   async function revoke(id: string) {
-    if (!confirm("Отозвать public-ссылку? Старая перестанет работать.")) return;
+    if (!confirm(t("Отозвать public-ссылку? Старая перестанет работать."))) return;
     setBusyId(id);
     try {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${id}/share`), {
@@ -252,7 +261,7 @@ export default function MultichatLibraryPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) {
-        alert(`Ошибка: ${r.status}`);
+        alert(`${t("Ошибка")}: ${r.status}`);
         return;
       }
       setItems(prev => prev.map(i => (i.id === id ? { ...i, shareToken: null } : i)));
@@ -277,15 +286,14 @@ export default function MultichatLibraryPage() {
         a.click();
         URL.revokeObjectURL(a.href);
       })
-      .catch(() => alert("Не удалось скачать"));
+      .catch(() => alert(t("Не удалось скачать")));
   }
 
   if (!token) {
     return (
       <div style={{ minHeight: "100vh", background: T.canvas, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <p style={{ color: T.textMute, fontSize: 15, textAlign: "center", maxWidth: 420, lineHeight: 1.6 }}>
-          Войдите, чтобы увидеть свои беседы. Библиотека хранит вопросы, ответы всех
-          агентов и расход по каждой беседе.
+          {t("Войдите, чтобы увидеть свои беседы. Библиотека хранит вопросы, ответы всех агентов и расход по каждой беседе.")}
         </p>
       </div>
     );
@@ -306,10 +314,10 @@ export default function MultichatLibraryPage() {
       >
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <Link href="/multichat-engine" style={{ color: T.textMute, fontSize: 14, textDecoration: "none" }}>
-            ← Мультичат
+            {t("← Мультичат")}
           </Link>
           <span style={{ color: T.textFaded }}>·</span>
-          <h1 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: T.text }}>Библиотека бесед</h1>
+          <h1 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: T.text }}>{t("Библиотека бесед")}</h1>
         </div>
         <button
           onClick={() => void load(token, q)}
@@ -325,19 +333,19 @@ export default function MultichatLibraryPage() {
             cursor: loading ? "default" : "pointer",
           }}
         >
-          {loading ? "Обновляю…" : "Обновить"}
+          {loading ? t("Обновляю…") : t("Обновить")}
         </button>
       </header>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px", display: "grid", gap: 16 }}>
         {upgrade && (
           <div data-mc-library="upgrade" style={{ background: T.surface, border: `1px solid ${T.accent}`, borderRadius: 10, padding: 16, fontSize: 14, lineHeight: 1.6 }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>История бесед — в подписке «{upgrade.plan}»</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>{t("История бесед — в подписке")} «{upgrade.plan}»</div>
             <div style={{ color: T.textMute, marginBottom: 12 }}>
-              Беседы, которые вы ведёте, сохраняются в аккаунте. Список, поиск и повторный разбор откроются здесь после оплаты.
+              {t("Беседы, которые вы ведёте, сохраняются в аккаунте. Список, поиск и повторный разбор откроются здесь после оплаты.")}
             </div>
             <a href={upgrade.url} data-mc-buy="library" style={{ display: "inline-block", background: T.accent, color: T.onAccentDeep, borderRadius: 8, padding: "8px 16px", fontWeight: 700, textDecoration: "none" }}>
-              Подключить подписку
+              {t("Подключить подписку")}
             </a>
           </div>
         )}
@@ -352,7 +360,7 @@ export default function MultichatLibraryPage() {
             type="text"
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Поиск по названию…"
+            placeholder={t("Поиск по названию…")}
             style={{
               flex: "1 1 220px",
               background: T.surface,
@@ -374,7 +382,7 @@ export default function MultichatLibraryPage() {
               padding: "9px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer",
             }}
           >
-            Найти
+            {t("Найти")}
           </button>
           {q && (
             <button
@@ -387,25 +395,25 @@ export default function MultichatLibraryPage() {
                 borderRadius: 10, padding: "9px 14px", fontSize: 14, cursor: "pointer",
               }}
             >
-              Сбросить
+              {t("Сбросить")}
             </button>
           )}
         </div>
 
         {loading && items.length === 0 && (
-          <div style={{ color: T.textMute, fontSize: 14, padding: "48px 0", textAlign: "center" }}>Загрузка…</div>
+          <div style={{ color: T.textMute, fontSize: 14, padding: "48px 0", textAlign: "center" }}>{t("Загрузка…")}</div>
         )}
         {!loading && items.length === 0 && !error && !upgrade && (
           <div style={{ color: T.textMute, fontSize: 14, padding: "48px 0", textAlign: "center", lineHeight: 1.6 }}>
             {q ? (
-              "По запросу ничего не найдено"
+              t("По запросу ничего не найдено")
             ) : (
               <>
-                Здесь пока пусто.{" "}
+                {t("Здесь пока пусто.")}{" "}
                 <Link href="/multichat-engine" style={{ color: T.accent }}>
-                  Спросите консилиум
+                  {t("Спросите консилиум")}
                 </Link>{" "}
-                — беседа появится в библиотеке сразу после ответа.
+                {t("— беседа появится в библиотеке сразу после ответа.")}
               </>
             )}
           </div>
@@ -433,30 +441,30 @@ export default function MultichatLibraryPage() {
                       {c.title}
                     </Link>
                     <div style={{ fontSize: 12, color: T.textFaded, marginTop: 3 }}>
-                      Изменена {fmtDate(c.updatedAt)} · создана {fmtDate(c.createdAt)}
+                      {t("Изменена")} {fmtDate(c.updatedAt, lang)} · {t("создана")} {fmtDate(c.createdAt, lang)}
                     </div>
                     {u && (
                       <div style={{ fontSize: 12, color: T.textMute, marginTop: 5, fontFamily: "ui-monospace, monospace" }}>
                         {/* Беседа длиннее потолка выборки в подсчёт входит не вся:
                             сумма тогда — нижняя граница, и назвать её итоговой
                             значит занизить расход молча. */}
-                        {u.truncated ? "не менее " : ""}
-                        {u.calls} вызовов · {u.tokens.total.toLocaleString("ru-RU")} токенов · ${u.costUsd.toFixed(4)}
+                        {u.truncated ? `${t("не менее")} ` : ""}
+                        {u.calls} {t("вызовов")} · {u.tokens.total.toLocaleString(dateLocale(lang))} {t("токенов")} · ${u.costUsd.toFixed(4)}
                         {/* «$0.0000» при неизвестной цене читается как «бесплатно».
                             Говорим прямо, сколько вызовов посчитать не смогли. */}
                         {u.unpricedCalls ? (
-                          <span style={{ color: T.warn }}> · {u.unpricedCalls} без известной цены</span>
+                          <span style={{ color: T.warn }}> · {u.unpricedCalls} {t("без известной цены")}</span>
                         ) : null}
                         {u.truncated ? (
                           <span style={{ color: T.warn }}>
-                            {" "}· посчитано по части беседы{u.totalTurns ? ` (${u.totalTurns} реплик)` : ""}
+                            {" "}· {t("посчитано по части беседы")}{u.totalTurns ? ` (${u.totalTurns} ${t("реплик")})` : ""}
                           </span>
                         ) : null}
                       </div>
                     )}
                     {c.shareToken && (
                       <div style={{ fontSize: 12, color: T.accent, marginTop: 5 }}>
-                        Открыта по ссылке:{" "}
+                        {t("Открыта по ссылке:")}{" "}
                         <code style={{ background: T.surfaceSoft, padding: "1px 5px", borderRadius: 4, color: T.textDim }}>
                           /multichat-engine/shared/{c.shareToken.slice(0, 12)}…
                         </code>
@@ -465,25 +473,25 @@ export default function MultichatLibraryPage() {
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
                     <button onClick={() => rename(c.id)} disabled={busy} style={secondaryBtn(busy)}>
-                      Переименовать
+                      {t("Переименовать")}
                     </button>
                     <button onClick={() => downloadExport(c.id, "json")} style={secondaryBtn(false)}>
-                      Скачать JSON
+                      {t("Скачать JSON")}
                     </button>
                     <button onClick={() => downloadExport(c.id, "csv")} style={secondaryBtn(false)}>
-                      Скачать CSV
+                      {t("Скачать CSV")}
                     </button>
                     {c.shareToken ? (
                       <button onClick={() => revoke(c.id)} disabled={busy} style={warnBtn(busy)}>
-                        Отозвать ссылку
+                        {t("Отозвать ссылку")}
                       </button>
                     ) : (
                       <button onClick={() => share(c.id)} disabled={busy} style={accentBtn(busy)}>
-                        Поделиться
+                        {t("Поделиться")}
                       </button>
                     )}
                     <button onClick={() => del(c.id)} disabled={busy} style={dangerBtn(busy)}>
-                      Удалить
+                      {t("Удалить")}
                     </button>
                   </div>
                 </div>

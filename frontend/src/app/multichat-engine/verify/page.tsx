@@ -47,7 +47,7 @@ export default function VerifyReceiptPage() {
       try {
         parsed = JSON.parse(text);
       } catch {
-        throw new Error("Это не JSON — вставьте содержимое скачанного файла чека целиком.");
+        throw new Error(t("Это не JSON — вставьте содержимое скачанного файла чека целиком."));
       }
       const r = await fetch(apiUrl(`/api/multichat/receipt/verify?lang=${encodeURIComponent(lang)}`), {
         method: "POST",
@@ -58,7 +58,7 @@ export default function VerifyReceiptPage() {
       if (!r.ok) throw new Error(d?.message || d?.error || `сервер ответил ${r.status}`);
       setRes(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "проверка не прошла");
+      setError(e instanceof Error ? e.message : t("проверка не прошла"));
     } finally {
       setBusy(false);
     }
@@ -85,16 +85,12 @@ export default function VerifyReceiptPage() {
   return (
     <main style={{ background: T.canvas, minHeight: "100vh", padding: "48px 20px", color: T.text }}>
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 30, margin: "0 0 8px", fontWeight: 600 }}>Проверка чека</h1>
+        <h1 style={{ fontSize: 30, margin: "0 0 8px", fontWeight: 600 }}>{t("Проверка чека")}</h1>
         <p style={{ fontSize: 15, color: T.textMute, lineHeight: 1.65, margin: "0 0 6px" }}>
-          Каждый ответ консилиума AEVION сопровождается чеком: состав панели, хеши ответов,
-          карта разногласий и стоимость. Уроните сюда скачанный файл — и увидите, соответствует
-          ли содержимое своему хешу.
+          {t("Каждый ответ консилиума AEVION сопровождается чеком: состав панели, хеши ответов, карта разногласий и стоимость. Уроните сюда скачанный файл — и увидите, соответствует ли содержимое своему хешу.")}
         </p>
         <p style={{ fontSize: 13, color: T.textFaded, lineHeight: 1.6, margin: "0 0 22px" }}>
-          Наш ответ «сходится» — это удобство, а не доказательство. Доказательство в том, что
-          спецификация открыта: канонизация RFC8785, дайджест sha256, подпись ed25519. Пересчитайте
-          хеш любой сторонней реализацией и не доверяйте этой кнопке.
+          {t("Наш ответ «сходится» — это удобство, а не доказательство. Доказательство в том, что спецификация открыта: канонизация RFC8785, дайджест sha256, подпись ed25519. Пересчитайте хеш любой сторонней реализацией и не доверяйте этой кнопке.")}
         </p>
 
         <div
@@ -109,7 +105,7 @@ export default function VerifyReceiptPage() {
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             rows={8}
-            aria-label="Содержимое чека" placeholder="Перетащите файл чека сюда или вставьте его содержимое"
+            aria-label={t("Содержимое чека")} placeholder={t("Перетащите файл чека сюда или вставьте его содержимое")}
             style={{
               width: "100%", background: "transparent", border: "none", outline: "none",
               color: T.textDim, fontSize: 13, fontFamily: "ui-monospace, monospace", lineHeight: 1.5, resize: "vertical",
@@ -128,12 +124,12 @@ export default function VerifyReceiptPage() {
               cursor: busy || raw.trim().length < 10 ? "default" : "pointer",
             }}
           >
-            {busy ? "Считаю…" : "Проверить"}
+            {busy ? t("Считаю…") : t("Проверить")}
           </button>
           <label style={{ fontSize: 13, color: T.textFaded, cursor: "pointer" }}>
             <input type="file" accept="application/json,.json" className="aevion-file-input"
               onChange={(e) => void onFile(e.target.files?.[0] || undefined)} />
-            …или выберите файл
+            {t("…или выберите файл")}
           </label>
         </div>
 

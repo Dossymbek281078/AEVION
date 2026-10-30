@@ -97,7 +97,7 @@ const ZONE_ROOTS = ["frontend/src/app", "aevion-globus-backend/src/routes"];
 const ROOTS_SPEC = ZONE_ROOTS.map((p) => `"${p}"`).join(" ");
 // Срок жизни снимка «что грязно в worktree». Только он — не вечный кэш: чистоту
 // по mtime кэшировать нельзя (см. шапку). Цена: чужая правка, начатая менее
-// двух минут назад, может не попасть в ответ. Отключить: SESSION_CLAIM_NOCACHE=1.
+// 30 секунд назад, может не попасть в ответ. Отключить: SESSION_CLAIM_NOCACHE=1.
 const STATUS_TTL_MS = process.env.SESSION_CLAIM_NOCACHE ? 0 : 30_000; // 30.10.2026, решение Оркестратора: 30 с, не 120 — окно ложного FREE сужено до одного прохода (живой запуск ~43 с), 2 минуты слепоты = окно, когда два окна берут один файл
 let cacheDirty = false;
 function saveCache() {

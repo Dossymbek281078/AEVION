@@ -862,6 +862,9 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     email: authorEmail || null,
     location: [city, country].filter(Boolean).join(", ") || null,
     contentHash,
+    // Отпечаток приложенного файла — в ответе, чтобы карточка результата
+    // показала его из того же источника, что /verify и пакет (null = файла не было).
+    fileHash: safeFileHash,
     signatureHmac,
     signatureEd25519: signatureEd25519.slice(0, 64) + "...",
     publicKey: publicKeySpkiHex.slice(0, 32) + "...",

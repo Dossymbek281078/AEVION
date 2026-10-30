@@ -318,8 +318,17 @@ export default function DailyPuzzlePage() {
     setSolIndex(0);
     setHintLevel(0);
     setHintsUsed(0);
-    setSolved(false);
-    setMessage('');
+    // Сброс не должен стирать «решено сегодня»: этот эффект идёт ПОСЛЕ чтения
+    // серии при монтировании и снова — когда приходит серверная задача, и без
+    // проверки решивший утром вечером видел задачу нерешённой.
+    let solvedToday = false;
+    let savedStreak = 0;
+    try {
+      solvedToday = localStorage.getItem('cc_daily_last_solved') === todayKey();
+      savedStreak = parseInt(localStorage.getItem('cc_daily_streak') || '0', 10) || 0;
+    } catch {}
+    setSolved(solvedToday);
+    setMessage(solvedToday ? tt(L, "Уже решено сегодня. Серия: {s}").replace("{s}", String(savedStreak)) : '');
     setPromoMove(null);
     setBotPending(false);
   }, [puzzle]);
@@ -414,9 +423,12 @@ export default function DailyPuzzlePage() {
   const finalizeSolved = useCallback(async (totalMs: number, hUsed: number) => {
     const today = todayKey();
     const usedHints = hUsed > 0;
+    let againToday = false;
+    try { againToday = localStorage.getItem('cc_daily_last_solved') === today; } catch {}
     // Streak: hint-use breaks streak gain but does not zero it. Per spec:
     // "Использование hint = streak break (но не reset)" → we interpret as: streak stays same, no +1.
-    const newStreak = usedHints ? streak : streak + 1;
+    // Повторное решение в тот же день серию не растит.
+    const newStreak = usedHints || againToday ? streak : streak + 1;
     const newBest = Math.max(bestStreak, newStreak);
     try {
       localStorage.setItem('cc_daily_streak', String(newStreak));

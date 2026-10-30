@@ -43,6 +43,14 @@ describe("отчёт консилиума говорит на языке стр�
     expect(md).toContain(`- sha256: \`${receipt.hash}\``);
   });
 
+  test("«Дальше всех» называет роль, а не внутренний id агента (30.10.2026)", () => {
+    const ru = buildReport("q", results as never, dissent as never, null, false);
+    const en = buildReport("q", results as never, dissent as never, null, false, "en");
+    expect(ru).toContain("Дальше всех от остальных: **Скептик**");
+    expect(en).toContain("Farthest from the rest: **Skeptic**");
+    expect(ru + en, "сырой id агента в отчёте").not.toContain("**skeptic**");
+  });
+
   test("без lang — русский отчёт как прежде, с теми же числами и хешем", () => {
     const md = buildReport("Стоит ли запускать платный тариф до первой продажи?", results, dissent, receipt, true);
     expect(md).toContain("# Консилиум AEVION");

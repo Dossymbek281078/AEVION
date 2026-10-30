@@ -202,7 +202,7 @@ export function buildReport(
           : t("сравнивать не с чем");
     L.push(`## ${t("Итог:")} ${verdict}`, "", dissent.note, "");
     if (dissent.agreement != null) L.push(`${t("Схожесть ответов:")} ${dissent.agreement}`, "");
-    if (dissent.outlier) L.push(`${t("Дальше всех от остальных:")} **${dissent.outlier.agentId}**`, "");
+    if (dissent.outlier) L.push(`${t("Дальше всех от остальных:")} **${имяАгента(dissent.outlier.agentId, lang)}**`, "");
 
     if (dissent.contradictions?.length) {
       L.push(`### ${t("Прямое противоречие")}`, "");

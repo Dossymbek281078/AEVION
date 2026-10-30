@@ -33,6 +33,7 @@ import { costUsd } from "../services/qcoreai/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { buildDissentMap, dissentLang } from "../services/multichat/dissent";
+import { answerLanguageInstruction } from "../services/multichat/answerLang";
 import { buildReceipt, signReceipt, verifyReceipt } from "../services/multichat/receipt";
 
 const captureMultichatError = makeServiceCapture("multichat");
@@ -653,8 +654,10 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
     const model = typeof a.model === "string" ? a.model : undefined;
     const temperature = typeof a.temperature === "number" ? a.temperature : 0.6;
 
+    // Язык ответа — явно, по lang со страницы (services/multichat/answerLang.ts): роль приходит
+    // по-русски, и без этой фразы на /en один агент из трёх отвечал по-русски (замер 30.10.2026).
     const messages = [
-      { role: "system", content: `You are ${role}. Respond concisely (under 200 words).` },
+      { role: "system", content: `You are ${role}. Respond concisely (under 200 words). ${answerLanguageInstruction(req.body?.lang)}` },
       { role: "user", content: prompt },
     ];
 

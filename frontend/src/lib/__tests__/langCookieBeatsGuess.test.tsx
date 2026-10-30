@@ -33,15 +33,22 @@ describe("кука языка — источник, а не только зер�
     expect(localStorage.getItem("aevion_lang") ?? localStorage.getItem("lang") ?? "ru").toContain("ru");
   });
 
-  test("localStorage старше куки: явный сохранённый выбор не перебивается", async () => {
-    // Порядок источников: localStorage (свежий выбор на ЭТОЙ машине) →
-    // кука → догадка. Если оба заданы и расходятся — верим localStorage,
-    // его пишет тот же setLang последним.
-    document.cookie = `${LANG_COOKIE}=en; path=/`;
-    const КЛЮЧИ = ["aevion_lang", "lang", "aevion_lang_v1"];
-    // ключ хранения берём фактом: выставим через провайдера невозможно до
-    // рендера, поэтому пишем во все кандидаты — лишние провайдер игнорирует.
-    for (const k of КЛЮЧИ) { try { localStorage.setItem(k, "kk"); } catch {} }
+  test("кука сильнее устаревшего localStorage: переход по /kk/… после /en/", async () => {
+    // 30.10.2026 порядок перевёрнут (был «localStorage → кука»). setLang пишет
+    // ОБА хранилища, поэтому расходятся они только когда куку поставил сервер —
+    // middleware при 308 с /kk/… и /en/…, до localStorage ему не дотянуться.
+    // Замер на проде f2db0ee93: localStorage=en, /kk/multichat-engine → кука kk,
+    // страница английская. Предзагрузка словаря верит куке с 07.10.2026 —
+    // провайдер обязан совпадать с ней, иначе словарь kk, а экран en.
+    document.cookie = `${LANG_COOKIE}=kk; path=/`;
+    localStorage.setItem("aevion_lang_v1", "en");
+    const { getByTestId } = render(<I18nProvider><Показ /></I18nProvider>);
+    await waitFor(() => expect(getByTestId("lang").textContent).toBe("kk"));
+    expect(localStorage.getItem("aevion_lang_v1")).toBe("kk");
+  });
+
+  test("без куки сохранённый выбор по-прежнему сильнее догадки", async () => {
+    localStorage.setItem("aevion_lang_v1", "kk");
     const { getByTestId } = render(<I18nProvider><Показ /></I18nProvider>);
     await waitFor(() => expect(getByTestId("lang").textContent).toBe("kk"));
   });

@@ -3022,7 +3022,9 @@ devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
     userId = `guest:${выданнаяМетка}`;
   }
   const { name, description, stack } = req.body || {};
-  if (!name || typeof name !== "string") {
+  // 30.10.2026: имя из одних пробелов проходило проверку и ниже резалось trim() в
+  // «» — проект без имени (201), тогда как "" честно получал 400 (замер прода).
+  if (!name || typeof name !== "string" || !name.trim()) {
     return res.status(400).json({ error: "name is required" });
   }
   const validStacks = ["next", "express", "static", "react", "python"];

@@ -15,7 +15,8 @@ import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { getAuthToken } from "@/lib/auth";
 import { TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetPricePerMonth, planetTotal, planetFromPerMonth } from "@/lib/termPricing";
-import { useI18n } from "@/lib/i18n";
+import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
@@ -212,7 +213,8 @@ export default function DevHubPage() {
   const t = useDevhubT();
   // Цена и ссылка на кассу — из одного источника с бэкендом, см. блок ниже.
   const devhubProduct = productById("aevion-planet"); // 19.10: цена в герое — план, а не отдельный DevHub
-  const { lang } = useI18n();
+  // 30.10.2026: язык кадра — серверный, пока провайдер не определил свой (см. useDevhubT).
+  const lang = языкКадра(useI18nOptional(), useServerLang());
   /* Заголовок первого экрана по метке ролика (?c=). Метка живёт в window, поэтому на сервере и в
      первой отрисовке — общее обещание, после монтирования — обещание ролика (13.10.2026). */
   const [обещание, setОбещание] = useState(() => zagolovokPoMetke(lang, null));

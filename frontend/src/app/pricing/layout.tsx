@@ -4,8 +4,15 @@ import { fromPricePerMonth } from "@/lib/termPricing";
 import { разметкаТоваров } from "@/lib/shopJsonLd";
 import { разметкаПриложений, оплачиваемыеПриложения } from "@/lib/appsJsonLd";
 import { getServerLang } from "@/lib/i18n-server";
+import { serverLang } from "@/lib/serverLang";
+import { ServerLangProvider } from "@/lib/serverLangContext";
 import { isEnglish } from "@/lib/pricingLocalize";
 import { moduleTitle } from "@/data/moduleNames";
+
+// 30.10.2026 (замер Науки): первый кадр /pricing шёл по-английски для русского гостя
+// (I18nProvider стартует с "en"). Макет решает язык на сервере (кука →
+// Accept-Language → ru) и кладёт его в ServerLangProvider — маршрут рисуется на каждый запрос.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   // Двуязычный заголовок (образец /qventure, /qright, /bureau): metadata у
@@ -59,8 +66,9 @@ export default async function PricingLayout({ children }: { children: React.Reac
   // 27.10.2026: язык читателя по куке — блок внизу был по-русски на любом языке,
   // в том числе в ar-режиме саудовской волны.
   const lang = await getServerLang();
+  const langFrame = await serverLang("ru");
   return (
-    <>
+    <ServerLangProvider lang={langFrame}>
       {товары ? (
         <script
           type="application/ld+json"
@@ -75,7 +83,7 @@ export default async function PricingLayout({ children }: { children: React.Reac
       ) : null}
       {children}
       <ЦеныДляРобота приложения={приложения_список} lang={lang} />
-    </>
+    </ServerLangProvider>
   );
 }
 

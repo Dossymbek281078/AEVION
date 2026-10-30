@@ -1,6 +1,7 @@
 "use client";
 
-import { useI18n } from "./i18n";
+import { useI18nOptional } from "./i18n";
+import { useServerLang, языкКадра } from "./serverLangContext";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import { STANDALONE_APPS } from "./termPricing";
 import { predlagaemOtdelno } from "./neProdayotsyaOtdelno";
@@ -1047,7 +1048,11 @@ export function pricingDictFor(lang: string): Record<string, string> {
 }
 
 export function usePricingT() {
-  const { lang } = useI18n();
+// 30.10.2026 (замер Науки): I18nProvider до langReady держит "en", и русский гость
+// из соцсети видел английский первый кадр. Пока язык не определён, берём язык,
+// выбранный сервером в макете маршрута (кука → Accept-Language → ru); без макета
+// (тест одиночного компонента) — прежнее поведение.
+  const lang = языкКадра(useI18nOptional(), useServerLang());
   return (key: string, vars?: Record<string, string | number>): string => {
     const raw = pricingDictFor(lang)[key] ?? dict.en?.[key] ?? key;
     if (!vars) return raw;

@@ -97,6 +97,12 @@ export const BUREAU_TEXT: Record<string, Tr> = {
   "▲ live": { ru: "▲ работает", kk: "▲ жұмыс істейді" },
   "View Notary Registry": { ru: "Реестр нотариусов", kk: "Нотариустар тізілімі" },
   "Upgrade your Verified cert — select a notary and submit a request.": { ru: "Повысьте свой Verified-сертификат: выберите нотариуса и отправьте запрос.", kk: "Verified сертификатыңызды көтеріңіз: нотариусты таңдап, сұраныс жіберіңіз." },
+  // 30.10.2026: пока kyc/payment — заглушка, витрина не продаёт платные уровни (решение Оркестратора)
+  "price appears when notary co-signing opens": { ru: "цена появится, когда откроется нотариальная соподпись", kk: "баға нотариалдық қосымша қолтаңба ашылғанда көрсетіледі" },
+  "The Verified mark is still being connected — leave your address and we will write when it opens.": { ru: "Отметка Verified ещё подключается — оставьте адрес, напишем, когда откроется.", kk: "Verified белгісі әлі қосылуда — мекенжай қалдырыңыз, ашылғанда жазамыз." },
+  "Notary co-signing is still being connected — leave your address and we will write when it opens.": { ru: "Нотариальная соподпись ещё подключается — оставьте адрес, напишем, когда откроется.", kk: "Нотариалдық қосымша қолтаңба әлі қосылуда — мекенжай қалдырыңыз, ашылғанда жазамыз." },
+  "Verified mark and notary co-signing are still being connected": { ru: "Отметка Verified и нотариальная соподпись ещё подключаются", kk: "Verified белгісі мен нотариалдық қосымша қолтаңба әлі қосылуда" },
+  "Leave your address — we will send one email when they can be ordered. Nothing is charged today.": { ru: "Оставьте адрес — пришлём одно письмо, когда их можно будет заказать. Сегодня ничего не списывается.", kk: "Мекенжай қалдырыңыз — тапсырыс беруге болғанда бір хат жібереміз. Бүгін ештеңе алынбайды." },
   // реестр
   "Certificate Registry": { ru: "Реестр сертификатов", kk: "Сертификаттар тізілімі" },
   "+ New Certificate": { ru: "+ Новый сертификат", kk: "+ Жаңа сертификат" },

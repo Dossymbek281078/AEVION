@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { ценаVerifiedДляВитрины } from "./verifiedPrice";
-import { verifiedCta, verifiedContactLabel } from "./verifiedCta";
+import { verifiedCta, verifiedContactLabel, tiersSellable } from "./verifiedCta";
+import { WaitlistCapture, языкФормы } from "@/components/WaitlistCapture";
 import { useI18nOptional } from "@/lib/i18n";
 import { useBureauText } from "./bureauText";
 import { MyCertificates } from "./MyCertificates";
@@ -228,6 +229,10 @@ function BureauPageInner() {
   // обещает и не пугает. Пока бэкенд с ручкой не выкачен, так и будет.
   const [notaryCount, setNotaryCount] = useState<number | null>(null);
   const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
+  // Касса платных уровней — тоже из /api/bureau/health (`payment`). Витрина
+  // продаёт Verified и Notarized только когда ОБА барьера живые (tiersSellable);
+  // замер прода 30.10.2026: kyc и payment — "stub".
+  const [paymentMode, setPaymentMode] = useState<"live" | "stub" | null>(null);
   // Чем НА САМОМ ДЕЛЕ подписывает нотариус. Без ключа подпись — HMAC на
   // ПУБЛИЧНОМ ключе нотариуса, то есть пересчитать её может кто угодно; код
   // честно зовёт это "demo-hmac-sha256". Значок тарифа шёл только от
@@ -257,12 +262,23 @@ function BureauPageInner() {
         if (!alive || !d) return;
         const v = d?.kyc;
         setKycMode(v === "live" || v === "stub" ? v : null);
+        const p = d?.payment;
+        setPaymentMode(p === "live" || p === "stub" ? p : null);
         const sig = d?.notarySignature;
         setNotarySig(sig === "ed25519" || sig === "demo" ? sig : null);
       })
       .catch(() => { /* оставляем null: своя неудача — не «настроено» */ });
     return () => { alive = false; };
   }, []);
+
+  // Витрина продаёт платные уровни только при живых kyc И payment; незнание
+  // (health не ответил) — тоже «не готово». Решение Оркестратора 30.10.2026.
+  const sellable = tiersSellable(kycMode, paymentMode);
+  // Цена нотариальной соподписи называется только когда её можно купить;
+  // до этого — честное «появится, когда откроется».
+  const notarizedPrice = sellable
+    ? { price: tb("From $89 / cert") }
+    : { price: tb("price appears when notary co-signing opens") };
 
   // Чем закончилась загрузка панели вошедшего человека. Три исхода, а не два:
   // «идёт», «загрузилось», «не удалось» — и последний обязан быть виден.
@@ -783,6 +799,7 @@ function BureauPageInner() {
                 badge: tb("✓ active"),
                 badgeColor: "#059669",
                 cta: { label: tb("Protect work"), href: "/qright" },
+                waitNote: null,
               },
               {
                 name: "Verified",
@@ -832,11 +849,14 @@ function BureauPageInner() {
                 // единственная кнопка платного тарифа не делала ничего видимого.
                 // Ведёт в реестр: обновление начинается с выбора сертификата,
                 // и у каждой карточки там есть своя кнопка «Upgrade to Verified».
-                cta: { label: tb("Pick a cert to upgrade"), href: "#registry" },
+                // 30.10.2026: призыв — только когда уровень можно купить (kyc И payment
+                // живые); при заглушке вместо него — честная строка и форма раннего доступа.
+                cta: sellable ? { label: tb("Pick a cert to upgrade"), href: "#registry" } : null,
+                waitNote: sellable ? null : tb("The Verified mark is still being connected — leave your address and we will write when it opens."),
               },
               {
                 name: "Notarized",
-                price: tb("From $89 / cert"),
+                ...notarizedPrice,
                 // Обещание переписано вместе со значком (28.08). Прежний текст утверждал
 // готовый результат — «apostille-ready document admissible in EAEU courts» —
 // у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
@@ -880,6 +900,7 @@ function BureauPageInner() {
                     : tb("▲ by request"),
                 badgeColor: "#7c3aed",
                 cta: { label: tb("View Notary Registry"), href: "/bureau/notaries" },
+                waitNote: sellable ? null : tb("Notary co-signing is still being connected — leave your address and we will write when it opens."),
               },
             ].map((tier) => (
               <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: tier.name === "Notarized" ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
@@ -894,7 +915,12 @@ function BureauPageInner() {
                     {tier.cta.label}
                   </Link>
                 )}
-                {tier.name === "Notarized" && (
+                {tier.waitNote && (
+                  <Link href="#tiers-waitlist" data-tier-wait={tier.name} style={{ marginTop: 6, padding: "8px 12px", borderRadius: 8, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.1)", fontSize: 14, color: "#334155", fontWeight: 600, textAlign: "center" as const, textDecoration: "none", lineHeight: 1.45 }}>
+                    {tier.waitNote}
+                  </Link>
+                )}
+                {tier.name === "Notarized" && sellable && (
                   <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", fontSize: 15, color: "#7c3aed", fontWeight: 700, textAlign: "center" as const }}>
                     {tb("Upgrade your Verified cert — select a notary and submit a request.")}
                   </div>
@@ -902,6 +928,20 @@ function BureauPageInner() {
               </div>
             ))}
           </div>
+          {/* Пока kyc/payment — заглушка: вместо продажи — форма раннего доступа
+              (тот же компонент, что на /qright «Написать, когда откроется отметка Verified»). */}
+          {!sellable && (
+            <div id="tiers-waitlist" style={{ marginTop: 14, maxWidth: 640, scrollMarginTop: 80 }}>
+              <WaitlistCapture
+                source="bureau-tiers"
+                tone="light"
+                lang={языкФормы(buLang)}
+                title={tb("Verified mark and notary co-signing are still being connected")}
+                description={tb("Leave your address — we will send one email when they can be ordered. Nothing is charged today.")}
+                promise=""
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Certificate Registry ── */}

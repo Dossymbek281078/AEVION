@@ -36,6 +36,13 @@ describe("консилиум на /en", () => {
     expect(JSON.parse(dispatch.body).lang, "сервер не знает язык страницы").toBe("en");
   });
 
+  test("противоречие на en читается при одном и нескольких агентах — без глагола с числом (30.10.2026)", () => {
+    const фраза = (кто: string[], против: string[]) => `${кто.join(", ")} ${tm("en", "утверждает")}, ${против.join(", ")} ${tm("en", "отрицает")}`;
+    expect(фраза(["Analyst"], ["Skeptic"])).toBe("Analyst — yes, Skeptic — no");
+    expect(фраза(["Analyst", "Practitioner"], ["Skeptic"])).toBe("Analyst, Practitioner — yes, Skeptic — no");
+    expect(фраза(["Analyst"], ["Skeptic"])).not.toMatch(/assert it|deny it/);
+  });
+
   test("подписи под отчётом переведены на en и kk, а русский остаётся исходником", () => {
     for (const ключ of ["схожесть", "Чек · вызовов", "ответили", "не ответили", "подписан"]) {
       expect(tm("en", ключ), `${ключ} на en`).not.toMatch(/[А-Яа-яЁё]/);

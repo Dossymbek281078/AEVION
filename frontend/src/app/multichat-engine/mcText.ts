@@ -32,8 +32,9 @@ export const MC_TEXT: Record<string, Tr> = {
   "ответили": { en: "answered", kk: "жауап берді" },
   "не ответили": { en: "did not answer", kk: "жауап бермеді" },
   "подписан": { en: "signed", kk: "қол қойылған" },
-  "утверждает": { en: "assert it", kk: "растайды" },
-  "отрицает": { en: "deny it", kk: "терістейді" },
+  // en без глагола: «Analyst — yes, Skeptic — no» читается при любом числе агентов (вычитка Продукта 30.10: «Analyst assert it»).
+  "утверждает": { en: "— yes", kk: "растайды" },
+  "отрицает": { en: "— no", kk: "терістейді" },
   "проверить чек": { en: "verify receipt", kk: "чекті тексеру" },
   // 30.10.2026: скачиваемый Markdown-отчёт (buildReport) на /en был целиком с русскими заголовками.
   "Консилиум AEVION": { en: "AEVION Council", kk: "AEVION Кеңесі" },

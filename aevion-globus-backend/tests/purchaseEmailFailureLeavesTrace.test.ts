@@ -50,7 +50,7 @@ describe("отказ отправки письма о покупке остав�
     })) as never;
 
     const r = await sendEmail({
-      to: "buyer@example.com",
+      to: "buyer@mailprobe.dev",
       subject: "Доступ открыт",
       html: "<p>ok</p>",
       text: "ok",
@@ -65,7 +65,7 @@ describe("отказ отправки письма о покупке остав�
 
     const след = предупреждения.join(" | ");
     /*
-     * ⚠️ 01.09.2026: было `toContain("buyer@example.com")` — тест требовал ПОЛНЫЙ
+     * ⚠️ 01.09.2026: было `toContain("buyer@mailprobe.dev")` — тест требовал ПОЛНЫЙ
      * адрес покупателя в журнале. Соседнее окно в тот же день сделало обратное:
      * пишет только домен, чтобы адрес человека не попадал в логи.
      *
@@ -76,7 +76,7 @@ describe("отказ отправки письма о покупке остав�
      * Суть проверки НЕ ослаблена: она про то, что отказ НЕ МОЛЧИТ. Требуем
      * домен и код ответа — по ним видно и что сломалось, и у какого получателя.
      */
-    expect(след, "отказ прошёл молча — в журнале ничего").toContain("example.com");
+    expect(след, "отказ прошёл молча — в журнале ничего").toContain("mailprobe.dev");
     expect(след, "в журнале нет причины отказа").toContain("422");
     expect(mockCapture, "отказ не доехал до Sentry").toHaveBeenCalled();
   });
@@ -91,7 +91,7 @@ describe("отказ отправки письма о покупке остав�
     })) as never;
 
     const r = await sendEmail({
-      to: "buyer@example.com",
+      to: "buyer@mailprobe.dev",
       subject: "Доступ открыт",
       html: "<p>ok</p>",
       text: "ok",

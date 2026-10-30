@@ -90,7 +90,7 @@ describe("путь новичка: оставил адрес на посадоч
     const app = await mount();
     const r = await request(app)
       .post("/api/constitution/waitlist/subscribe")
-      .send({ email: "novichok-devhub@primer.test", source: "devhub" });
+      .send({ email: "novichok-devhub@primer.mailprobe.dev", source: "devhub" });
     expect([200, 201]).toContain(r.status);
     expect(r.body?.ok ?? true).not.toBe(false);
   });
@@ -100,14 +100,14 @@ describe("путь новичка: оставил адрес на посадоч
     const app = await mount();
     await request(app)
       .post("/api/constitution/waitlist/subscribe")
-      .send({ email: "novichok-2@primer.test", source: "devhub" });
+      .send({ email: "novichok-2@primer.mailprobe.dev", source: "devhub" });
 
     const letter = await waitForLetter();
     expect(letter, "письмо не ушло вовсе — человек подписался и ничего не получил").not.toBeNull();
     const all = `${letter!.body?.subject ?? ""} ${JSON.stringify(letter!.body ?? {})}`;
     expect(all).not.toMatch(/Constitution Pro/i);
     expect(all).not.toMatch(/30%/);
-    expect(letter!.body?.to?.[0]?.email).toBe("novichok-2@primer.test");
+    expect(letter!.body?.to?.[0]?.email).toBe("novichok-2@primer.mailprobe.dev");
   });
 
   test("подписчик конституции по-прежнему получает своё письмо", async () => {
@@ -118,7 +118,7 @@ describe("путь новичка: оставил адрес на посадоч
     const app = await mount();
     await request(app)
       .post("/api/constitution/waitlist/subscribe")
-      .send({ email: "novichok-3@primer.test", source: "constitution" });
+      .send({ email: "novichok-3@primer.mailprobe.dev", source: "constitution" });
 
     const letter = await waitForLetter();
     expect(letter).not.toBeNull();
@@ -132,7 +132,7 @@ describe("путь новичка: оставил адрес на посадоч
     const app = await mount();
     await request(app)
       .post("/api/constitution/waitlist/subscribe")
-      .send({ email: "novichok-4@primer.test", source: "devhub" });
+      .send({ email: "novichok-4@primer.mailprobe.dev", source: "devhub" });
     await waitForLetter();
     const toBrevo = sent.filter((s) => s.url.includes("brevo"));
     expect(toBrevo.length).toBe(1);

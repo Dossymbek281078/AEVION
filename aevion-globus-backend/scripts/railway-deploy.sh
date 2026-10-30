@@ -17,7 +17,13 @@
 #
 # Только выкатка. Ничего не удаляет, наружу в git не ходит.
 
-set -euo pipefail
+set -e
+# 30.10.2026: токен Railway берём из переменной ПОЛЬЗОВАТЕЛЯ Windows при каждом запуске, а не из окружения вкладки:
+# после смены токена окна claude, открытые раньше, несли старое значение и railway up отвечал Unauthorized.
+# Значение не печатается. Пустая переменная пользователя — оставляем окружение как есть.
+__T="$(powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('RAILWAY_API_TOKEN','User')" 2>/dev/null | tr -d '\r\n')"
+[ -n "$__T" ] && export RAILWAY_API_TOKEN="$__T"; unset __T
+uo pipefail
 
 MSG="${1:-выкатка без описания}"
 BACKEND_DIR="$(cd "$(dirname "$0")/.." && pwd)"

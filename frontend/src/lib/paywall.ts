@@ -76,8 +76,17 @@ export function isPaywallPayload(x: unknown): x is PaywallPayload {
  * HealthAI и QVenture, а перехватчик ловил только `upgrade_required`. Гость на
  * второй проверке HealthAI видел «проверка не удалась», в бюро — голый код
  * `free_quota_exceeded`; ссылки на оплату не было ни там, ни там.
+ *
+ * 🔴 30.10.2026 (окно Приложения-2·Бюро), приёмка прода 7d91f4884: гость на /qright
+ * после 3 бесплатных читал «Если подписка уже есть — войдите под почтой, которой
+ * платили», а кнопки входа в окне не было — PaywallModal рисует её только при
+ * authState "anonymous" и loginUrl, а ответ нормы их не несёт. Запрос ушёл без
+ * входа → `вход.анонимно`: окно получает кнопку входа с возвратом на ту же страницу.
  */
-export function стенаИзНормы(x: unknown): PaywallPayload | null {
+export function стенаИзНормы(
+  x: unknown,
+  вход?: { анонимно: boolean; next?: string },
+): PaywallPayload | null {
   if (!x || typeof x !== "object") return null;
   const o = x as Record<string, unknown>;
   if (o.error !== "free_quota_exceeded" || typeof o.module !== "string" || typeof o.upgradeUrl !== "string") {
@@ -90,7 +99,20 @@ export function стенаИзНормы(x: unknown): PaywallPayload | null {
     requiredTiers: ["lite", "medium", "full"],
     upgradeUrl: o.upgradeUrl,
     message: текстСтеныИзНормы(o.freePerMonth),
+    ...(вход?.анонимно
+      ? { authState: "anonymous" as const, loginUrl: `/auth?next=${encodeURIComponent(вход.next || "/")}` }
+      : {}),
   };
+}
+
+/** Ушёл ли запрос без входа (после подстановки токена в сВходом). */
+function безВхода(input: RequestInfo | URL, init?: RequestInit): boolean {
+  try {
+    if (typeof Request !== "undefined" && input instanceof Request && input.headers.has("authorization")) return false;
+    return !new Headers(init?.headers ?? undefined).has("authorization");
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -366,7 +388,12 @@ export function installPaywallInterceptor(): void {
     if (res.status !== 402 || тихо) return res;
     try {
       const body = await res.clone().json();
-      const стена = isPaywallPayload(body) ? body : стенаИзНормы(body);
+      const стена = isPaywallPayload(body)
+        ? body
+        : стенаИзНормы(body, {
+            анонимно: безВхода(вход, настройки),
+            next: window.location.pathname + window.location.search,
+          });
       if (стена) triggerPaywall(стена, userInitiated);
     } catch {
       /* not a JSON upgrade_required body — leave it to the caller */

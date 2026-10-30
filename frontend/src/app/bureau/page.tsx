@@ -5,6 +5,7 @@ import { ценаVerifiedДляВитрины } from "./verifiedPrice";
 import { verifiedCta, verifiedContactLabel } from "./verifiedCta";
 import { useI18nOptional } from "@/lib/i18n";
 import { useBureauText } from "./bureauText";
+import { useСсылкаВхода } from "../auth/loginHref";
 import { MyCertificates } from "./MyCertificates";
 import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
@@ -349,6 +350,10 @@ function BureauPageInner() {
   };
 
   const [authed, setAuthed] = useState(false);
+  // 30.10.2026: гостю на месте «Мои сертификаты» — вход с возвратом сюда (returnTo.ts читает next),
+  // метка канала сохранена (auth/loginHref.ts). До этого в main не было своей кнопки «Войти».
+  const [guest, setGuest] = useState(false);
+  const ссылкаВходаВБюро = useСсылкаВхода("/bureau");
 
   // Notarized tier waitlist.
   const [waitlistEmail, setWaitlistEmail] = useState("");
@@ -450,7 +455,12 @@ function BureauPageInner() {
     try {
       raw = localStorage.getItem(TOKEN_KEY);
     } catch {}
-    if (!raw) return;
+    if (!raw) {
+      // Гость — известно только после чтения хранилища, не на сервере: иначе блок
+      // «войдите» мигал бы и у вошедшего.
+      setGuest(true);
+      return;
+    }
     setAuthed(true);
     (async () => {
       try {
@@ -615,6 +625,22 @@ function BureauPageInner() {
           <ModulePricingChip moduleId="bureau" theme="light" />
         </div>
 
+
+        {/* ── Гостю на этом же месте: вход с возвратом в бюро (30.10.2026) ──
+            Прод 30.10, гость 390 px: вместо «Мои сертификаты» — пустота, своей кнопки «Войти»
+            в main не было (только «Auth» в навигации), а регистрация с голого /auth оставляла
+            человека на /auth. Ссылка несёт next=/bureau и метку канала. */}
+        {guest && (
+          <div data-bureau-guest-signin style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(13,148,136,0.25)", background: "linear-gradient(135deg, rgba(13,148,136,0.04), rgba(6,182,212,0.04))", padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ flex: "1 1 240px" }}>
+              <div style={{ fontSize: 15.5, fontWeight: 900, color: "#0f766e" }}>{tb("Sign in to see your certificates")}</div>
+              <div style={{ fontSize: 14.5, color: "#475569", marginTop: 4, lineHeight: 1.5 }}>{tb("Works registered with your email will appear here after you sign in.")}</div>
+            </div>
+            <Link href={ссылкаВходаВБюро} style={{ padding: "10px 18px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap" as const }}>
+              {tb("Sign in or create an account →")}
+            </Link>
+          </div>
+        )}
 
         {/* ── Мои сертификаты (только вошедшему; 20.10.2026) ── */}
         {authed && dashboard && !dashboardFailed && (

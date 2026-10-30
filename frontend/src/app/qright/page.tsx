@@ -23,6 +23,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
 import { useI18n } from "@/lib/i18n";
 import { tq } from "./qrightI18n";
+import { useСсылкаВхода } from "../auth/loginHref";
 import { ExportAllButton } from "./ExportAllButton";
 import {
   OWNER_REVOKE_REASON_CODES,
@@ -178,6 +179,8 @@ export default function QRightPage() {
   const [registryQuery, setRegistryQuery] = useState("");
   const [localSearch, setLocalSearch] = useState("");
   const [hasAuth, setHasAuth] = useState(false);
+  // Гостю на карточке результата: вход с возвратом в кабинет бюро, метка канала сохранена.
+  const ссылкаВходаВБюро = useСсылкаВхода("/bureau");
   const [revokingObj, setRevokingObj] = useState<RightObject | null>(null);
   const [revokeCode, setRevokeCode] = useState<string>("withdrawn");
   const [revokeText, setRevokeText] = useState<string>("");
@@ -1175,6 +1178,18 @@ export default function QRightPage() {
               >
                 {tq(lang, "Open the public page of this record →")}
               </a>
+              {/* 30.10.2026 (прод, гость 390 px): после защиты гость не получал ни одной подсказки
+                  «создайте аккаунт» — работа оставалась без кабинета. Ссылка ведёт на /auth?next=/bureau
+                  (returnTo.ts читает next; бюро показывает «Мои сертификаты» первым блоком), метка канала
+                  сохранена тем же keepChannel, что у остальных внутренних ссылок (auth/loginHref.ts). */}
+              {!hasAuth && (
+                <p data-qright-guest-account-hint style={{ margin: "14px auto 0", maxWidth: 560, fontSize: 13, color: "#334155", lineHeight: 1.55 }}>
+                  {tq(lang, "Create an account with this same email — the work will appear in your dashboard.")}{" "}
+                  <Link href={ссылкаВходаВБюро} style={{ color: "#0f766e", fontWeight: 800, textDecoration: "underline" }}>
+                    {tq(lang, "Create account or sign in →")}
+                  </Link>
+                </p>
+              )}
             </div>
 
             <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 20 }}>

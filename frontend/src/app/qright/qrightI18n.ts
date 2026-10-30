@@ -169,6 +169,9 @@ const RU: Record<string, string> = {
   "🛡️ Protect Another Work": "🛡️ Защитить ещё одну работу",
   "Shield Dashboard →": "Панель защиты →",
   "Export JSON": "Экспорт JSON",
+  // подсказка гостю на карточке результата (30.10.2026)
+  "Create an account with this same email — the work will appear in your dashboard.": "Создайте аккаунт на эту же почту — работа появится в вашем кабинете.",
+  "Create account or sign in →": "Создать аккаунт или войти →",
   // реестр
   "Sign in to see your works": "Войдите, чтобы увидеть свои работы",
   "Search by title (≥ 2 chars)…": "Поиск по названию (от 2 знаков)…",
@@ -374,6 +377,8 @@ const KK: Record<string, string> = {
   "🛡️ Protect Another Work": "🛡️ Тағы бір жұмысты қорғау",
   "Shield Dashboard →": "Shield панелі →",
   "Export JSON": "JSON экспорттау",
+  "Create an account with this same email — the work will appear in your dashboard.": "Осы электрондық поштамен аккаунт жасаңыз — жұмыс сіздің кабинетіңізде көрінеді.",
+  "Create account or sign in →": "Аккаунт жасау немесе кіру →",
   "Sign in to see your works": "Жұмыстарыңызды көру үшін кіріңіз",
   "Search by title (≥ 2 chars)…": "Атауы бойынша іздеу (≥ 2 таңба)…",
   "Filter loaded results by title…": "Жүктелген нәтижелерді атауы бойынша сүзу…",

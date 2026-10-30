@@ -159,14 +159,16 @@ describe("Бюро: пометка тарифа Notarized идёт от реес
 // обещала проверку паспорта партнёром. Тот же класс, что у нотариусов, только
 // на платном тарифе.
 
-function stubHealth(kyc: unknown, notaries: unknown[] = []) {
+// 30.10.2026: третий аргумент — касса. Витрина продаёт платные уровни только при
+// kyc И payment = live (tiersSellable); умолчание «stub» — как на проде 30.10.
+function stubHealth(kyc: unknown, notaries: unknown[] = [], payment: unknown = "stub") {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       const u = String(url);
       if (u.includes("/api/bureau/health")) {
         if (kyc === "network-error") throw new Error("ECONNRESET");
-        return { ok: true, status: 200, json: async () => ({ status: "ok", kyc }) };
+        return { ok: true, status: 200, json: async () => ({ status: "ok", kyc, payment }) };
       }
       if (u.includes("/api/bureau/notaries")) {
         return { ok: true, status: 200, json: async () => ({ notaries }) };
@@ -252,7 +254,7 @@ describe("тариф Verified называет состояние проверк
 // что адрес живой и отвечает 200.
 describe("кнопка тарифа Verified ведёт дальше, а не на саму себя", () => {
   test("href не равен текущей странице", async () => {
-    stubHealth("live");
+    stubHealth("live", [], "live");
     renderPage();
     const label = await screen.findByText(/Pick a cert to upgrade|Upgrade a cert/i);
     const href = label.closest("a")?.getAttribute("href") || "";
@@ -261,12 +263,25 @@ describe("кнопка тарифа Verified ведёт дальше, а не н
   });
 
   test("ведёт в реестр — туда, где обновление действительно начинается", async () => {
-    stubHealth("live");
+    stubHealth("live", [], "live");
     renderPage();
     const label = await screen.findByText(/Pick a cert to upgrade|Upgrade a cert/i);
     const href = label.closest("a")?.getAttribute("href") || "";
     expect(href).toMatch(/registry/i);
     // И якорь, на который она ссылается, на странице существует.
     expect(document.querySelector("#registry"), "якорь #registry не найден").not.toBeNull();
+  });
+
+  // 30.10.2026 (решение Оркестратора): пока kyc или payment — заглушка, кнопки
+  // «выбрать сертификат» на витрине НЕТ вовсе; вместо неё честная строка, и она
+  // тоже ведёт дальше — к форме раннего доступа на этой же странице.
+  test("при заглушке kyc/payment призыва нет, а честная строка ведёт к форме, которая существует", async () => {
+    stubHealth("stub", [], "stub");
+    renderPage();
+    const note = await screen.findByText(/Verified mark is still being connected/i);
+    expect(screen.queryByText(/Pick a cert to upgrade|Upgrade a cert/i)).toBeNull();
+    const href = note.closest("a")?.getAttribute("href") || "";
+    expect(href).toBe("#tiers-waitlist");
+    expect(document.querySelector("#tiers-waitlist input[type=\"email\"]"), "форма раннего доступа не найдена").not.toBeNull();
   });
 });

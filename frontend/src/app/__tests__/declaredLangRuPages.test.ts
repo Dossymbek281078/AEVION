@@ -42,6 +42,13 @@ const RU_PAGES: Array<[string, string]> = (() => {
         if (segs.length === 0 && (e.name === "api" || e.name === "__tests__")) continue;
         walk(join(dir, e.name), [...segs, e.name]);
       } else if (e.name === "page.tsx" || e.name === "_client.tsx") {
+        // 30.10.2026: /auth говорит словарём auth.* (ru/en/kk). Умолчание первого
+        // кадра — ru (auth/layout.tsx: кука → Accept-Language → ru), <main lang={…}>
+        // идёт за языком, но русского ТЕКСТА в файле больше нет — он в словаре, и
+        // проверка «>400 русских букв в файле» к ней неприменима. Её держат
+        // рендер-сторожа auth/__tests__/pervyKadrNaYazykeGostya (первый кадр ru) и
+        // angliyskiyEkranBezKirillitsy (en без кириллицы), плюс authPageIsRussian.
+        if (segs.join("/") === "auth") continue;
         const src = readFileSync(join(dir, e.name), "utf8");
         if (src.includes('lang="ru"')) out.push(["/" + segs.join("/"), join(dir, e.name)]);
       }

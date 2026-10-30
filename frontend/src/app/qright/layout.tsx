@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { serverLang } from "@/lib/serverLang";
+import { ServerLangProvider } from "@/lib/serverLangContext";
 import { AutoTranslate } from "@/components/AutoTranslate";
 
 const SITE = getSiteUrl();
+// 30.10.2026 (решение Оркестратора): первый кадр /qright — на языке запроса.
+// Прод 043aa4cc7 без JS отдавал русскому гостю «Protect Your Work». Кука и
+// Accept-Language читаются на каждый запрос (serverLang) — маршрут рисуется
+// динамически, как /auth; умолчание ru (денежная страница основного канала).
+export const dynamic = "force-dynamic";
 // 13.09.2026: явная ссылка на og.svg убрана. Она перебивала файловое
 // соглашение Next (opengraph-image.tsx рядом) и подставляла SVG с СЫРОГО
 // домена Railway, а SVG как превью не рисует ни одна крупная площадка —
@@ -64,7 +71,8 @@ const breadcrumbJsonLd = {
   ],
 };
 
-export default function QRightLayout({ children }: { children: React.ReactNode }) {
+export default async function QRightLayout({ children }: { children: React.ReactNode }) {
+  const lang = await serverLang("ru");
   return (
     <>
       <script
@@ -79,7 +87,9 @@ export default function QRightLayout({ children }: { children: React.ReactNode }
           re-enable a live observer scoped here — async-loaded registry records,
           verification results and error toasts translate into all 11 languages
           when the user switches via the app-shell pill. Mirrors build/layout. */}
-      <AutoTranslate observe>{children}</AutoTranslate>
+      <AutoTranslate observe>
+        <ServerLangProvider lang={lang}>{children}</ServerLangProvider>
+      </AutoTranslate>
     </>
   );
 }

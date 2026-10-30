@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { launchHasPassed, PLATFORM_LAUNCH_HUMAN } from "../launchDate";
 import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { QR_BUSY } from "./busyUi";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -21,8 +22,9 @@ import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ, ценаСПериодом } from "../bureau/verifiedPrice";
 import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
-import { useI18n } from "@/lib/i18n";
 import { tq } from "./qrightI18n";
+import { useСсылкаВхода } from "../auth/loginHref";
+import { quotaOfferText } from "./quotaOffer";
 import { ExportAllButton } from "./ExportAllButton";
 import {
   OWNER_REVOKE_REASON_CODES,
@@ -50,6 +52,8 @@ type CertificateData = {
   email?: string | null;
   location?: string | null;
   contentHash: string;
+  /** SHA-256 приложенного файла (бэк с 30.10 отдаёт; старый бэк поля не шлёт — тогда берём своё). */
+  fileHash?: string | null;
   signatureHmac: string;
   signatureEd25519: string;
   shieldId: string;
@@ -131,10 +135,15 @@ const KIND_OPTIONS = [
 type Step = "form" | "processing" | "done";
 
 export default function QRightPage() {
-  const qrLang = useI18nOptional()?.lang ?? "en";
+  const qrI18n = useI18nOptional();
+  // 30.10.2026: до langReady провайдер держит "en" — прод без JS отдавал русскому гостю
+  // «Protect Your Work». Пока язык не определён, берём язык, выбранный сервером в
+  // qright/layout.tsx (кука → Accept-Language → ru); без макета — прежнее "en".
+  const lang = языкКадра(qrI18n, useServerLang());
+  const qrLang = lang;
   const QR = QR_BUSY[qrLang] ?? QR_BUSY.en;
   const { showToast } = useToast();
-  const { lang, t } = useI18n();
+  const t = qrI18n?.t ?? ((k: string) => k);
   const TOKEN_KEY = "aevion_auth_token_v1";
 
   const [step, setStep] = useState<Step>("form");
@@ -178,6 +187,8 @@ export default function QRightPage() {
   const [registryQuery, setRegistryQuery] = useState("");
   const [localSearch, setLocalSearch] = useState("");
   const [hasAuth, setHasAuth] = useState(false);
+  // Гостю на карточке результата: вход с возвратом в кабинет бюро, метка канала сохранена.
+  const ссылкаВходаВБюро = useСсылкаВхода("/bureau");
   const [revokingObj, setRevokingObj] = useState<RightObject | null>(null);
   const [revokeCode, setRevokeCode] = useState<string>("withdrawn");
   const [revokeText, setRevokeText] = useState<string>("");
@@ -846,8 +857,8 @@ export default function QRightPage() {
             <span style={{ display: "flex", flexDirection: "column" }}>
               <span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.06em" }}>{tq(lang, "Live registry")}</span>
               <span style={{ fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
-                <strong style={{ color: "#0d9488" }}>{transparency.registered.toLocaleString()}</strong> registered ·{" "}
-                <strong>{transparency.active.toLocaleString()}</strong> active
+                <strong style={{ color: "#0d9488" }}>{transparency.registered.toLocaleString()}</strong> {tq(lang, "registered")} ·{" "}
+                <strong>{transparency.active.toLocaleString()}</strong> {tq(lang, "active")}
                 {transparency.revoked > 0 && (
                   <>
                     {" · "}
@@ -1124,8 +1135,9 @@ export default function QRightPage() {
               )}
               {quotaOffer && (
                 <div data-testid="quota-offer" role="status" style={{ fontSize: 13.5, lineHeight: 1.5, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)", color: "#0f172a" }}>
-                  <b>Free registrations this month are used up ({quotaOffer.used} of {quotaOffer.freePerMonth}).</b>{" "}
-                  The AEVION Planet plan removes the limit and opens every app — from ${planetFromPerMonth()}/mo on the 12-month term, ${planetPricePerMonth("lite")}/mo with no term.{" "}
+                  {/* 30.10.2026: текст по языку страницы и без «4 of 3» — см. quotaOffer.ts */}
+                  <b>{quotaOfferText(lang, quotaOffer, { from: planetFromPerMonth(), month: planetPricePerMonth("lite") }).headline}</b>{" "}
+                  {quotaOfferText(lang, quotaOffer, { from: planetFromPerMonth(), month: planetPricePerMonth("lite") }).body}{" "}
                   <a href={PRICING_TERMS} style={{ color: "#0d9488", fontWeight: 800 }}>{tq(lang, "See plans →")}</a>
                 </div>
               )}
@@ -1175,6 +1187,18 @@ export default function QRightPage() {
               >
                 {tq(lang, "Open the public page of this record →")}
               </a>
+              {/* 30.10.2026 (прод, гость 390 px): после защиты гость не получал ни одной подсказки
+                  «создайте аккаунт» — работа оставалась без кабинета. Ссылка ведёт на /auth?next=/bureau
+                  (returnTo.ts читает next; бюро показывает «Мои сертификаты» первым блоком), метка канала
+                  сохранена тем же keepChannel, что у остальных внутренних ссылок (auth/loginHref.ts). */}
+              {!hasAuth && (
+                <p data-qright-guest-account-hint style={{ margin: "14px auto 0", maxWidth: 560, fontSize: 13, color: "#334155", lineHeight: 1.55 }}>
+                  {tq(lang, "Create an account with this same email — the work will appear in your dashboard.")}{" "}
+                  <Link href={ссылкаВходаВБюро} style={{ color: "#0f766e", fontWeight: 800, textDecoration: "underline" }}>
+                    {tq(lang, "Create account or sign in →")}
+                  </Link>
+                </p>
+              )}
             </div>
 
             <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 20 }}>
@@ -1211,6 +1235,12 @@ export default function QRightPage() {
                 <div style={{ display: "grid", gap: 8 }}>
                   {[
                     { label: tq(lang, "Content Hash (SHA-256)"), value: result.certificate.contentHash },
+                    // 30.10.2026: отпечаток приложенного файла показываем на карточке — витрина
+                    // обещает «сохраним рядом с сертификатом», а карточка его не показывала.
+                    // Из ответа бэка, а на старом бэке — тот, что посчитали в браузере.
+                    ...((result.certificate.fileHash ?? fileHash)
+                      ? [{ label: tq(lang, "File Hash (SHA-256)"), value: String(result.certificate.fileHash ?? fileHash) }]
+                      : []),
                     { label: tq(lang, "HMAC Signature"), value: result.certificate.signatureHmac },
                     { label: tq(lang, "Ed25519 Signature"), value: result.certificate.signatureEd25519 },
                     { label: tq(lang, "Quantum Shield ID"), value: result.certificate.shieldId },
@@ -1388,7 +1418,7 @@ export default function QRightPage() {
                   style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
                   title={tq(lang, "Upgrade to Verified — adds real-name attestation by AEVION Bureau")}
                 >
-                  {tq(lang, "⭐ Upgrade to Verified")} ({ценаСПериодом(ценаПроверкиЦенты)})
+                  {tq(lang, "⭐ Upgrade to Verified")} ({ценаСПериодом(ценаПроверкиЦенты, lang)})
                 </Link>
               )}
               <Link
@@ -1418,7 +1448,7 @@ export default function QRightPage() {
             onClick={() => { setShowRegistry(!showRegistry); if (!showRegistry && items.length === 0) loadRegistry(); }}
             style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}
           >
-            <span>{showRegistry ? "▼" : "▶"}</span> View QRight Registry ({items.length || "..."})
+            <span>{showRegistry ? "▼" : "▶"}</span> {tq(lang, "View QRight Registry")} ({items.length || "..."})
           </button>
           {/* Все записи аккаунта одним архивом — видна только вошедшему (сама проверяет вход). */}
           <ExportAllButton
@@ -1871,6 +1901,7 @@ export default function QRightPage() {
           }}
           label={tq(lang, "QRight Constitution")}
           size="sm"
+          lang={lang === "ru" || lang === "kk" ? lang : "en"}
         />
         <div style={{ flex: 1, minWidth: 240 }}>
           <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.5, marginBottom: 8 }}>

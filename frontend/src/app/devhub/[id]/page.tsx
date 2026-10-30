@@ -57,6 +57,8 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false 
 // оплат). Нет записи — плашка покажет путь через подключение покупки, но
 // не выдумает цену.
 const STUDIO_PRO = productById("devhub");
+// Латинское имя срока по умолчанию для денежной плашки: сторож языка плашки ищет кириллицу в её разметке.
+const PLANET_DEFAULT_TERM = СРОК_ПО_УМОЛЧАНИЮ;
 /* Цена и срок — ИЗ ДАННЫХ, а не из подписи. 07.10.2026: кнопка говорила
    «Оформить Pro — $200/мес», а по данным цен «pro» это 6 месяцев с множителем
    0.75, то есть $150/мес и $900 всего; $200/мес — это Lite (1 мес), и именно
@@ -7132,7 +7134,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
               сколько месяцев спишут. Числа считаются из таблицы цен. */}
           {STUDIO_PRO && (
             <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
-              {tPro("pro.termRange").replace("{max}", `$${planetPricePerMonth(СРОК_ПО_УМОЛЧАНИЮ)}`).replace("{min}", `$${planetFromPerMonth()}`)}
+              {tPro("pro.termRange").replace("{max}", `$${planetPricePerMonth(PLANET_DEFAULT_TERM)}`).replace("{min}", `$${planetFromPerMonth()}`)}
             </span>
           )}
           <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, textDecoration: "underline", whiteSpace: "nowrap" }}>

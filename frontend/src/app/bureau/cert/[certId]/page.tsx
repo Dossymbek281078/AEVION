@@ -6,6 +6,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { getApiBase } from "@/lib/apiBase";
 import { getServerLang } from "@/lib/i18n-server";
+import { tCert } from "./certText";
 import { verifiedCta, verifiedContactLabel, type KycModeKnown } from "../../verifiedCta";
 
 export const dynamic = "force-dynamic";
@@ -201,8 +202,8 @@ export default async function BureauCertPage({ params }: Props) {
       <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "48px 16px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <div style={{ ...card, color: "#b91c1c", borderColor: "rgba(185,28,28,0.2)" }}>
-            <div style={{ fontWeight: 800, marginBottom: 4 }}>Could not load certificate</div>
-            <div style={{ fontSize: 13 }}>The Bureau API did not respond. Try again in a moment.</div>
+            <div style={{ fontWeight: 800, marginBottom: 4 }}>{tCert(lang, "Could not load certificate")}</div>
+            <div style={{ fontSize: 13 }}>{tCert(lang, "The Bureau API did not respond. Try again in a moment.")}</div>
           </div>
         </div>
       </main>
@@ -268,7 +269,7 @@ export default async function BureauCertPage({ params }: Props) {
       <div style={{ maxWidth: 760, margin: "0 auto", display: "grid", gap: 16 }}>
         <nav style={{ fontSize: 12, color: "#64748b" }}>
           <Link href="/bureau" style={{ color: "#0d9488", textDecoration: "none", fontWeight: 700 }}>
-            ← AEVION Bureau
+            {tCert(lang, "← AEVION Bureau")}
           </Link>
         </nav>
 
@@ -286,7 +287,7 @@ export default async function BureauCertPage({ params }: Props) {
               marginBottom: 12,
             }}
           >
-            {theme.label}
+            {tCert(lang, theme.label)}
           </div>
           {подпись && (
             /* Честная строка о подписи: демо-подпись названа своим именем там,
@@ -296,45 +297,45 @@ export default async function BureauCertPage({ params }: Props) {
             </div>
           )}
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900, color: "#0f172a" }}>
-            {data.title || `Certificate ${certId.slice(0, 12)}`}
+            {data.title || `${tCert(lang, "Certificate")} ${certId.slice(0, 12)}`}
           </h1>
           {data.kind && (
             <div style={{ marginTop: 6, fontSize: 13, color: "#475569" }}>
-              {KIND_LABELS[data.kind] || data.kind}
+              {tCert(lang, KIND_LABELS[data.kind] || data.kind)}
             </div>
           )}
         </div>
 
         <div style={card}>
-          <div style={dt}>Certificate ID</div>
+          <div style={dt}>{tCert(lang, "Certificate ID")}</div>
           <p style={{ ...dd, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 }}>
             {certId}
           </p>
 
-          <div style={dt}>Verification</div>
+          <div style={dt}>{tCert(lang, "Verification")}</div>
           <p style={dd}>
             {isVerified ? (
               <>
-                <strong>{data.verifiedName || "Verified author"}</strong>
+                <strong>{data.verifiedName || tCert(lang, "Verified author")}</strong>
                 {verifiedAt && (
-                  <span style={{ color: "#64748b" }}> · since {verifiedAt}</span>
+                  <span style={{ color: "#64748b" }}> · {tCert(lang, "since")} {verifiedAt}</span>
                 )}
               </>
             ) : isRevoked ? (
-              <span style={{ color: "#b91c1c" }}>This certificate's verification has been revoked.</span>
+              <span style={{ color: "#b91c1c" }}>{tCert(lang, "This certificate's verification has been revoked.")}</span>
             ) : (
-              <span style={{ color: "#64748b" }}>Author identity has not been verified.</span>
+              <span style={{ color: "#64748b" }}>{tCert(lang, "Author identity has not been verified.")}</span>
             )}
           </p>
 
           {protectedAt && (
             <>
-              <div style={dt}>Protected on</div>
+              <div style={dt}>{tCert(lang, "Protected on")}</div>
               <p style={dd}>{protectedAt}</p>
             </>
           )}
 
-          <div style={dt}>Public badge</div>
+          <div style={dt}>{tCert(lang, "Public badge")}</div>
           <div style={{ marginTop: 4, marginBottom: 14 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={badgeUrl} alt="AEVION Bureau badge" style={{ height: 22 }} />
@@ -353,7 +354,7 @@ export default async function BureauCertPage({ params }: Props) {
                 borderRadius: 8,
               }}
             >
-              Embed badge →
+              {tCert(lang, "Embed badge →")}
             </Link>
             {!isVerified && !isRevoked && cta.kind === "contact" && (
               <Link
@@ -386,7 +387,7 @@ export default async function BureauCertPage({ params }: Props) {
                   borderRadius: 8,
                 }}
               >
-                Upgrade to Verified →
+                {tCert(lang, "Upgrade to Verified →")}
               </Link>
             )}
             {data.verificationLevel === "verified" && !isRevoked && (
@@ -402,7 +403,7 @@ export default async function BureauCertPage({ params }: Props) {
                   borderRadius: 8,
                 }}
               >
-                Request Notarization →
+                {tCert(lang, "Request Notarization →")}
               </Link>
             )}
             <a
@@ -419,7 +420,7 @@ export default async function BureauCertPage({ params }: Props) {
                 borderRadius: 8,
               }}
             >
-              Embed JSON ↗
+              {tCert(lang, "Embed JSON ↗")}
             </a>
             <a
               href={rssUrl}

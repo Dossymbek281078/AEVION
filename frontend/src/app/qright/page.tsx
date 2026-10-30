@@ -850,8 +850,8 @@ export default function QRightPage() {
             <span style={{ display: "flex", flexDirection: "column" }}>
               <span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.06em" }}>{tq(lang, "Live registry")}</span>
               <span style={{ fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
-                <strong style={{ color: "#0d9488" }}>{transparency.registered.toLocaleString()}</strong> registered ·{" "}
-                <strong>{transparency.active.toLocaleString()}</strong> active
+                <strong style={{ color: "#0d9488" }}>{transparency.registered.toLocaleString()}</strong> {tq(lang, "registered")} ·{" "}
+                <strong>{transparency.active.toLocaleString()}</strong> {tq(lang, "active")}
                 {transparency.revoked > 0 && (
                   <>
                     {" · "}
@@ -1435,7 +1435,7 @@ export default function QRightPage() {
             onClick={() => { setShowRegistry(!showRegistry); if (!showRegistry && items.length === 0) loadRegistry(); }}
             style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}
           >
-            <span>{showRegistry ? "▼" : "▶"}</span> View QRight Registry ({items.length || "..."})
+            <span>{showRegistry ? "▼" : "▶"}</span> {tq(lang, "View QRight Registry")} ({items.length || "..."})
           </button>
           {/* Все записи аккаунта одним архивом — видна только вошедшему (сама проверяет вход). */}
           <ExportAllButton
@@ -1888,6 +1888,7 @@ export default function QRightPage() {
           }}
           label={tq(lang, "QRight Constitution")}
           size="sm"
+          lang={lang === "ru" || lang === "kk" ? lang : "en"}
         />
         <div style={{ flex: 1, minWidth: 240 }}>
           <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.5, marginBottom: 8 }}>

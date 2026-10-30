@@ -931,7 +931,7 @@ function BureauPageInner() {
             ].map((tier) => (
               <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: tier.name === "Notarized" ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
+                  <span translate="no" className="notranslate" style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
                   <span style={{ fontSize: 13, fontWeight: 800, color: tier.badgeColor }}>{tier.badge}</span>
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>{tier.price}</div>

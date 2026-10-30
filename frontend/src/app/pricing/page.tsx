@@ -14,6 +14,7 @@ import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { channelFrom, keepChannel, withChannel } from "@/lib/products";
+import { сКассойПартнёра } from "@/lib/lsAffiliate";
 import { track } from "@/lib/track";
 import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
 import { usePricingT, termUnitKey } from "@/lib/pricingI18n";
@@ -448,7 +449,7 @@ export default function PricingPage() {
         // набор через Gumroad, а таблица тарифов идёт через сессию и метку
         // теряла. Получатели готовы оба: вебхук LemonSqueezy читает
         // custom_data.channel, вебхук Gumroad — url_params[channel].
-        window.location.href = withChannel(j.url, channel, "pricing");
+        window.location.href = сКассойПартнёра(withChannel(j.url, channel, "pricing"));
       } else {
         console.error("[checkout] no url returned", j);
         setCheckoutNotice(t("pricing.home.notice.checkoutError"));

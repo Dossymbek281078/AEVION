@@ -206,9 +206,23 @@ export function middleware(req: NextRequest) {
     return ответ;
   }
 
-  return NextResponse.next();
+  // Путь запроса — серверному выбору языка (lib/serverLang.ts читает
+  // x-aevion-pathname). Серверные компоненты пути не видят, а страницы со
+  // своим английским адресом (/en/devhub, /en/shop, /en/go — см. englishPages)
+  // сюда ДОХОДЯТ без редиректа: без заголовка serverLang решал по куке и
+  // Accept-Language и отдавал русскому браузеру русский первый кадр на /en/…
+  // (находка Продукта 30.10.2026; /en/devhub закрывали жёстким lang="en").
+  // Для остальных /en/… работает редирект выше: он ставит куку en.
+  return NextResponse.next({ request: { headers: сПутём(req, pathname) } });
 
   return битыйАдрес();
+}
+
+/** Заголовки запроса с путём для serverLang — чистая функция, её проверяет тест. */
+export function сПутём(req: { headers: Headers }, pathname: string): Headers {
+  const headers = new Headers(req.headers);
+  headers.set("x-aevion-pathname", pathname);
+  return headers;
 }
 
 /**

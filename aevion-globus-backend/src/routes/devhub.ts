@@ -3919,7 +3919,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
   const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
   if (!project) return;
   const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
-  if (!prompt || typeof prompt !== "string") {
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt is required" });
   }
   let images: ChatImage[] | undefined;
@@ -4126,7 +4126,7 @@ devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), 
   const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
   if (!project) return;
   const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
-  if (!prompt || typeof prompt !== "string") {
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt is required" });
   }
   let images: ChatImage[] | undefined;
@@ -4772,7 +4772,7 @@ devhubRouter.post("/projects/:id/collaborators", async (req, res) => {
     return res.status(403).json({ error: "Studio Pro required to add collaborators", upgrade: true });
   }
   const { userId: rawInput, role } = req.body || {};
-  if (!rawInput || typeof rawInput !== "string") {
+  if (!rawInput || typeof rawInput !== "string" || !rawInput.trim()) {
     return res.status(400).json({ error: "userId or email is required" });
   }
   const validRoles = ["editor", "viewer"];
@@ -5118,7 +5118,7 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
   if (sharedGitHubWhyNot) return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
   const { title, body: prBody, branch: branchInput } = req.body || {};
-  if (!title || typeof title !== "string") {
+  if (!title || typeof title !== "string" || !title.trim()) {
     return res.status(400).json({ error: "title is required" });
   }
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
@@ -5489,7 +5489,7 @@ devhubRouter.put("/projects/:id/env", async (req, res) => {
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
   const { key, value } = req.body || {};
-  if (!key || typeof key !== "string") return res.status(400).json({ error: "key is required" });
+  if (!key || typeof key !== "string" || !key.trim()) return res.status(400).json({ error: "key is required" });
   project.envVars[String(key)] = String(value ?? "");
   project.updatedAt = now();
   let storageFallback = false;
@@ -5534,7 +5534,7 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
   const { domain } = req.body || {};
-  if (!domain || typeof domain !== "string") return res.status(400).json({ error: "domain is required" });
+  if (!domain || typeof domain !== "string" || !domain.trim()) return res.status(400).json({ error: "domain is required" });
   // Basic domain validation
   const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/;
   if (!domainRegex.test(domain.trim())) {
@@ -5725,7 +5725,7 @@ devhubRouter.post("/snippets", dhCreateLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const { title, content, language, tags } = req.body || {};
-  if (!title || typeof title !== "string") return res.status(400).json({ error: "title is required" });
+  if (!title || typeof title !== "string" || !title.trim()) return res.status(400).json({ error: "title is required" });
   if (typeof content !== "string") return res.status(400).json({ error: "content must be a string" });
   const normTags = Array.isArray(tags)
     ? tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean).slice(0, 10)

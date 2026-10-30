@@ -103,14 +103,28 @@ export function стенаИзНормы(x: unknown): PaywallPayload | null {
  * PaywallModal такие тексты заменяет общей фразой про покупки. Здесь — правда о
  * пределе без адресов (кнопки окна и так ведут к тарифам и входу), на языке страницы.
  */
+export function языкСтены(): "ru" | "en" | "kk" {
+  if (typeof document === "undefined") return "ru";
+  const l = document.documentElement?.lang || "";
+  if (/^en/i.test(l)) return "en";
+  if (/^(kk|kz)/i.test(l)) return "kk";
+  return "ru";
+}
+
 function текстСтеныИзНормы(freePerMonth: unknown): string {
   const норма = Number(freePerMonth);
   const естьНорма = Number.isFinite(норма) && норма > 0;
-  const en = typeof document !== "undefined" && /^en\b/i.test(document.documentElement?.lang || "");
-  if (en) {
+  const lang = языкСтены();
+  if (lang === "en") {
     return (
       (естьНорма ? `Your ${норма} free actions this month are used up. ` : "Your free actions this month are used up. ") +
       "If you already have a subscription, sign in with the email you paid with. Otherwise a plan removes the limit."
+    );
+  }
+  if (lang === "kk") {
+    return (
+      (естьНорма ? `Осы айдағы ${норма} тегін әрекет таусылды. ` : "Осы айдағы тегін әрекеттер таусылды. ") +
+      "Жазылымыңыз болса — төлеген поштаңызбен кіріңіз. Болмаса — жоспар шектеуді алып тастайды."
     );
   }
   return (
@@ -255,20 +269,22 @@ export function tierLabel(t: CanonicalTier): string {
  * Поэтому требование переводится в человеческую фразу, а не в ярлык тарифа.
  * Подпись ТЕКУЩЕГО плана (tierLabel) остаётся как была: там «Free» верно.
  */
-export function требуемоеСловами(tiers: CanonicalTier[]): string {
+export function требуемоеСловами(tiers: CanonicalTier[], lang: "ru" | "en" | "kk" = "ru"): string {
   const платные = tiers.filter((t) => t !== "free");
   // Только free в списке — платить не за что; прежний контракт (пустая строка)
   // сохранён: его закрепил существующий тест, и он поймал мою ошибку.
   if (!платные.length) return "";
   // 19.10.2026, один план (слово основателя): открывает план «AEVION Планета» на любом сроке.
   // «от Lite» — прежняя лестница тарифов, её больше нет на витрине; цена — из лесенки плана.
+  if (платные.includes("full") && lang === "en") return `the “AEVION Planet” plan, any term — from $${planetFromPerMonth()}/mo with a 12-month commitment (billed monthly), $${planetPricePerMonth("lite")}/mo with no commitment`;
+  if (платные.includes("full") && lang === "kk") return `«AEVION Планета» жоспары, кез келген мерзім — жылдық міндеттемемен айына $${planetFromPerMonth()}-ден (ай сайын есептен шығару), мерзімсіз айына $${planetPricePerMonth("lite")}`;
   if (платные.includes("full")) return `план «AEVION Планета», любой срок — от $${planetFromPerMonth()}/мес при обязательстве на год (списание ежемесячно), $${planetPricePerMonth("lite")}/мес без срока`;
   return платные.map(tierLabel).join(" / ");
 }
 
 /** Pretty tier list for display. С 08.10.2026 — человеческая фраза, см. выше. */
-export function formatTiers(tiers: CanonicalTier[]): string {
-  return требуемоеСловами(tiers);
+export function formatTiers(tiers: CanonicalTier[], lang: "ru" | "en" | "kk" = "ru"): string {
+  return требуемоеСловами(tiers, lang);
 }
 
 /* ───── Global fetch interceptor → window event ─────────────────────────────

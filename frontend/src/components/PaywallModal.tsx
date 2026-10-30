@@ -7,14 +7,62 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useI18nOptional } from "@/lib/i18n";
 import {
   PAYWALL_EVENT,
   installPaywallInterceptor,
   formatTiers,
+  языкСтены,
   type PaywallEventDetail,
 } from "@/lib/paywall";
 
+type Яз = "ru" | "en" | "kk";
+
+const СТРОКИ: Record<Яз, {
+  dialog: string; close: string; title: string; anonHint: string; noPurchase: string;
+  opens: (tiers: string) => string; chip: string; login: string; pricing: string; later: string;
+}> = {
+  ru: {
+    dialog: "Требуется обновление тарифа",
+    close: "Закрыть",
+    title: "Доступно на платном тарифе",
+    anonHint: "Если вы уже оплатили — войдите под почтой, которой платили, и доступ откроется. Если ещё нет — этот раздел входит в план «AEVION Планета».",
+    noPurchase: "На этом аккаунте покупки нет. Если вы оплачивали другим адресом — войдите под ним. Если ещё не оформляли — этот раздел входит в план «AEVION Планета».",
+    opens: (tiers) => `Этот раздел открывает ${tiers}. Оформите план, чтобы продолжить.`,
+    chip: "Открывает:",
+    login: "Войти под почтой оплаты",
+    pricing: "Перейти к тарифам",
+    later: "Позже",
+  },
+  en: {
+    dialog: "Paid plan required",
+    close: "Close",
+    title: "Available on a paid plan",
+    anonHint: "If you already paid, sign in with the email you paid with and access opens. If not yet, this section is part of the “AEVION Planet” plan.",
+    noPurchase: "There is no purchase on this account. If you paid with another email, sign in with it. If not yet, this section is part of the “AEVION Planet” plan.",
+    opens: (tiers) => `This section is opened by ${tiers}. Get a plan to continue.`,
+    chip: "Opens with:",
+    login: "Sign in with the payment email",
+    pricing: "Go to pricing",
+    later: "Later",
+  },
+  kk: {
+    dialog: "Ақылы жоспар қажет",
+    close: "Жабу",
+    title: "Ақылы жоспарда қолжетімді",
+    anonHint: "Төлеген болсаңыз — төлеген поштаңызбен кіріңіз, қолжетімділік ашылады. Әлі болмаса — бұл бөлім «AEVION Планета» жоспарына кіреді.",
+    noPurchase: "Бұл аккаунтта сатып алу жоқ. Басқа поштамен төлеген болсаңыз — сонымен кіріңіз. Әлі рәсімдемесеңіз — бұл бөлім «AEVION Планета» жоспарына кіреді.",
+    opens: (tiers) => `Бұл бөлімді ${tiers} ашады. Жалғастыру үшін жоспар рәсімдеңіз.`,
+    chip: "Ашады:",
+    login: "Төлем поштасымен кіру",
+    pricing: "Тарифтерге өту",
+    later: "Кейінірек",
+  },
+};
+
 export function PaywallModal() {
+  const i18n = useI18nOptional();
+  const lang: Яз = i18n?.lang === "en" || i18n?.lang === "kk" || i18n?.lang === "ru" ? i18n.lang : языкСтены();
   const [info, setInfo] = useState<PaywallEventDetail | null>(null);
   // Модули, стену которых пользователь уже закрыл в этой загрузке страницы.
   const dismissed = useRef<Set<string>>(new Set());
@@ -51,7 +99,7 @@ export function PaywallModal() {
 
   if (!info) return null;
 
-  const tiers = formatTiers(info.requiredTiers);
+  const tiers = formatTiers(info.requiredTiers, lang);
   // Не вошёл → первичная кнопка «войти под почтой оплаты» (см. ниже).
   const anonymous = info.authState === "anonymous";
   // Ответ 402 пишется и для API-клиентов: в нём адреса входа и тарифов и
@@ -62,16 +110,16 @@ export function PaywallModal() {
   const message = info.message && !сАдресами
     ? info.message
     : info.message && anonymous
-      ? "Если вы уже оплатили — войдите под почтой, которой платили, и доступ откроется. Если ещё нет — этот раздел входит в план «AEVION Планета»."
+      ? СТРОКИ[lang].anonHint
       : info.message
-        ? "На этом аккаунте покупки нет. Если вы оплачивали другим адресом — войдите под ним. Если ещё не оформляли — этот раздел входит в план «AEVION Планета»."
-        : `Этот раздел открывает ${tiers}. Оформите план, чтобы продолжить.`;
+        ? СТРОКИ[lang].noPurchase
+        : СТРОКИ[lang].opens(tiers);
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Требуется обновление тарифа"
+      aria-label={СТРОКИ[lang].dialog}
       onClick={close}
       style={{
         position: "fixed",
@@ -101,7 +149,7 @@ export function PaywallModal() {
       >
         <button
           onClick={close}
-          aria-label="Закрыть"
+          aria-label={СТРОКИ[lang].close}
           style={{
             position: "absolute",
             top: 14,
@@ -140,7 +188,7 @@ export function PaywallModal() {
         </div>
 
         <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 800, lineHeight: 1.25 }}>
-          Доступно на платном тарифе
+          {СТРОКИ[lang].title}
         </h2>
 
         <p style={{ margin: "0 0 6px", fontSize: 14.5, lineHeight: 1.5, color: "rgba(226,232,240,0.92)" }}>
@@ -162,7 +210,7 @@ export function PaywallModal() {
             color: "#e9d5ff",
           }}
         >
-          Открывает: {tiers}
+          {СТРОКИ[lang].chip} {tiers}
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -186,7 +234,7 @@ export function PaywallModal() {
                 boxShadow: "0 8px 24px rgba(129,140,248,0.4)",
               }}
             >
-              Войти под почтой оплаты
+              {СТРОКИ[lang].login}
             </a>
           ) : null}
           <a
@@ -210,7 +258,7 @@ export function PaywallModal() {
               boxShadow: anonymous && info.loginUrl ? "none" : "0 8px 24px rgba(129,140,248,0.4)",
             }}
           >
-            Перейти к тарифам
+            {СТРОКИ[lang].pricing}
           </a>
           <button
             onClick={close}
@@ -225,7 +273,7 @@ export function PaywallModal() {
               border: "1px solid rgba(148,163,184,0.35)",
             }}
           >
-            Позже
+            {СТРОКИ[lang].later}
           </button>
         </div>
       </div>

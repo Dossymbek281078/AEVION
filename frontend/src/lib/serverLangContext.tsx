@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 import type { Lang } from "./i18n-data";
 import { useI18nOptional } from "./i18n";
+import { ServerFrameTextProvider } from "./serverFrameText";
 
 /**
  * Язык первого кадра, выбранный СЕРВЕРОМ (lib/serverLang.ts), — для клиентских
@@ -26,10 +27,26 @@ const Ctx = createContext<Lang | null>(null);
  * маркер в сыром HTML, по которому прод проверяется curl'ом (/bureau рисуется
  * целиком на клиенте, h1 в SSR у него нет — виден только этот маркер).
  */
-export function ServerLangProvider({ lang, children }: { lang: Lang; children: React.ReactNode }) {
+export function ServerLangProvider({
+  lang,
+  frameStrings,
+  children,
+}: {
+  lang: Lang;
+  /** Строки t() первого кадра (lib/serverFrameStrings.ts) — для страниц, говорящих словарём I18nProvider. */
+  frameStrings?: Record<string, string>;
+  children: React.ReactNode;
+}) {
+  const тело = <ОбёрткаЯзыка серверный={lang}>{children}</ОбёрткаЯзыка>;
   return (
     <Ctx.Provider value={lang}>
-      <ОбёрткаЯзыка серверный={lang}>{children}</ОбёрткаЯзыка>
+      {frameStrings ? (
+        <ServerFrameTextProvider lang={lang} strings={frameStrings}>
+          {тело}
+        </ServerFrameTextProvider>
+      ) : (
+        тело
+      )}
     </Ctx.Provider>
   );
 }

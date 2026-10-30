@@ -7,6 +7,8 @@ import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
 import { BuyLink } from "@/components/BuyLink";
 import { useI18n } from "@/lib/i18n";
+import { useFrameT } from "@/lib/serverFrameText";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { getAuthToken } from "@/lib/auth";
 import { HOME_CARDS, moduleLang, moduleTitle, buyTitle } from "@/data/moduleNames";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
@@ -98,7 +100,11 @@ export default function HomePage() {
   // То есть русский гость пять секунд читал английский заголовок, когда
   // остальная страница уже была русской. Литерал переводит слой перевода, и
   // до заголовка он доходит последним; словарь отдаёт строку сразу.
-  const { t, lang } = useI18n();
+  // 30.10.2026 (замер Приложений, прод 4f71ad70f, ru-RU): сырой HTML главной — английский h1, русский через ~6 с.
+  // Пока провайдер не определил язык (langReady), язык кадра и строки t() — серверные (app/page.tsx).
+  const i18n = useI18n();
+  const lang = языкКадра(i18n, useServerLang());
+  const t = useFrameT();
   const L = moduleLang(lang);
   // 21.10.2026: подписи из data/homeTexts — под translate="no" только на своём языке (ru/en/kk);
   // на прочих их по-прежнему доводит живой переводчик.

@@ -54,6 +54,7 @@ import {
 import { тарифИзАдреса } from "./tarifIzAdresa";
 import { useI18n } from "@/lib/i18n";
 import { useServerLang, языкКадра } from "@/lib/serverLangContext";
+import { useFrameT } from "@/lib/serverFrameText";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -245,7 +246,8 @@ const ЧТО_ПЛАТНО: Record<string, string> = {
 export default function PricingPage() {
   const tp = usePricingT();
   const i18n = useI18n();
-  const { t } = i18n;
+  // 30.10.2026: t() до langReady — серверные строки pricing.home.* (pricing/layout.tsx), не английский запас.
+  const t = useFrameT();
   // 30.10.2026: язык кадра — серверный, пока провайдер не определил свой (см. usePricingT).
   const lang = языкКадра(i18n, useServerLang());
   const heroVariant = useABVariant("hero");

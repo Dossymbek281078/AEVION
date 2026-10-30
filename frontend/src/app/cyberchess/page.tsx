@@ -35,6 +35,10 @@ const NEOBYCHNYH_VARIANTOV = VARIANTS.filter((v) => v.id !== "standard").length;
 import { knownUserId } from "./tournaments/playerIdentity";
 import { readDisplayName } from "./displayName";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
+// Мат/пат — по правилам, не «mate 0 → 0» (разбор: тест matuyushchiyKhodNeZevok). Здесь, а не в moveQuality: храповик импортов.
+const MAT_CP=10000;
+const matVCp=(m:number,c:number):number=>m>0?MAT_CP-m:m<0?-MAT_CP-m:c;
+const ocenkaKonca=(fen:string):{cp:number;mate:number}|null=>{try{const c=new Chess(fen);if(c.isCheckmate())return{cp:c.turn()==="w"?-MAT_CP:MAT_CP,mate:0};if(c.isDraw())return{cp:0,mate:0}}catch{}return null};
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import AevionProjectsBanner from "./AevionProjectsBanner";
@@ -4342,6 +4346,7 @@ export default function CyberChessPage(){
     const evalAt=(fen:string,depth:number):Promise<{cp:number;mate:number}>=>{
       return new Promise(res=>{
         const turn=fen.split(" ")[1];
+        const kon=ocenkaKonca(fen);if(kon){res(kon);return;}
         let lastCp=0,lastMate=0;
         let done=false;
         const timeout=setTimeout(()=>{if(!done){done=true;res({cp:lastCp,mate:lastMate})}},8000);
@@ -7172,7 +7177,8 @@ export default function CyberChessPage(){
         // ожидания, и ход всё равно получит ярлык.
         const otvet=(v:{cp:number;mate:number;best?:string})=>{if(!gotovo){gotovo=true;clearTimeout(storozh);res(v)}};
         const storozh=setTimeout(()=>otvet({cp:lastCp,mate:lastMate}),8000);
-        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},(b)=>otvet({cp:lastCp,mate:lastMate,best:b}));
+        const kon=ocenkaKonca(fen);if(kon){otvet(kon);return;}
+        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastMate=m*sign;lastCp=matVCp(lastMate,c*sign)},(b)=>otvet({cp:lastCp,mate:lastMate,best:b}));
       });
       if(i>0){
         // Evaluate quality of move played that led to this position

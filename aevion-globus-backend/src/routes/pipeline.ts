@@ -862,6 +862,9 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     email: authorEmail || null,
     location: [city, country].filter(Boolean).join(", ") || null,
     contentHash,
+    // Отпечаток приложенного файла — в ответе, чтобы карточка результата
+    // показала его из того же источника, что /verify и пакет (null = файла не было).
+    fileHash: safeFileHash,
     signatureHmac,
     signatureEd25519: signatureEd25519.slice(0, 64) + "...",
     publicKey: publicKeySpkiHex.slice(0, 32) + "...",
@@ -2323,7 +2326,16 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
         label: pdfContentHashLabel(pdfHashVerdict, new Date().toISOString()),
         value: cert.contentHash,
       },
-      { label: "HMAC-SHA256 SIGNATURE", value: cert.signatureHmac },
+      // Отпечаток файла — только если автор его прикладывал: пустое поле
+      // читалось бы как «файла не было» или «отпечаток потерян». Честно про
+      // охват: fileHash не входит в contentHash, подписи и якорь — это запись
+      // AEVION, а не подписанное утверждение (см. proofs.fileHash в пакете).
+      ...(cert.fileHash
+        ? [{
+            label: "FILE HASH (SHA-256 of the original file bytes; recorded, not covered by the signatures above)",
+            value: String(cert.fileHash),
+          }]
+        : []),
       // Якорь в биткойне печатается ВСЕГДА, включая случай «его нет»: молчание
       // читалось бы как «есть, просто не написали», а для сертификатов до
       // появления якорения это неправда навсегда. Разбор — в самой функции.
@@ -2977,11 +2989,30 @@ async function buildCertificateBundle(cert: any, exportedAt: string = new Date()
       location:
         [cert.city, cert.country].filter(Boolean).join(", ") || null,
       contentHash: cert.contentHash,
+      // Отпечаток приложенного файла (SHA-256 сырых байтов, считан в браузере
+      // автора). null — автор файл не прикладывал; поле есть всегда, чтобы
+      // «файла не было» и «мы его потеряли» различались.
+      fileHash: cert.fileHash ? String(cert.fileHash) : null,
       algorithm: cert.algorithm,
       protectedAt: cert.protectedAt,
       status: cert.status,
     },
     proofs: {
+      // Отпечаток файла НЕ входит в contentHash, подписи и якорь OpenTimestamps:
+      // это запись AEVION о том, какой файл автор держал при регистрации.
+      // Молчать об этом нельзя — поле рядом с подписями прочитали бы как
+      // подписанное. covered: false говорит проверяющему правду.
+      fileHash: cert.fileHash
+        ? {
+            algo: "SHA-256",
+            value: String(cert.fileHash),
+            covered: false,
+            note:
+              "SHA-256 of the original file bytes, computed in the author's browser at protect time and recorded by AEVION. " +
+              "It is NOT covered by proofs.contentHash, the Ed25519/HMAC signatures or the OpenTimestamps proof — those commit to the certificate fields only. " +
+              "Verify it by hashing the file you hold and comparing; its binding to this certificate rests on AEVION's record (also shown at /verify/<id>).",
+          }
+        : null,
       contentHash: {
         algo: "SHA-256",
         value: cert.contentHash,
@@ -3076,6 +3107,7 @@ async function buildCertificateBundle(cert: any, exportedAt: string = new Date()
         "4. If proofs.authorCosign is present, verify its signature using publicKeyBase64 over the UTF-8 bytes of proofs.contentHash.value (the hex string itself).",
         "5. If proofs.openTimestamps.proofBase64 is present, decode and run any OT client (https://opentimestamps.org) against it; the protected file is the raw bytes of proofs.contentHash.value as a hex string. A bitcoinBlockHeight >= 1 means the timestamp is locked to a real Bitcoin block.",
         "6. Do not rely on the status field for the anchor: we write it. What proves the timestamp is the .ots proof itself — it must commit to this contentHash and carry a Bitcoin attestation, which any OpenTimestamps client will tell you. When it does, the certificate's existence at that block is anchored independently of AEVION, IPFS, or any other party.",
+        "7. If proofs.fileHash is present, compute SHA-256 of the file you hold and compare with proofs.fileHash.value. Match = this is the exact file the author held at protect time, as recorded by AEVION. Note the limit: fileHash is NOT covered by contentHash, the signatures or the .ots proof (covered: false), so this step relies on AEVION's record, not on cryptography alone.",
       ],
       independence: [
         "AEVION's Ed25519 signature can be verified with any Ed25519 library — we are not in the trust path.",

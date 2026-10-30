@@ -76,7 +76,7 @@ describe("счётчик писем и тревога", () => {
     const { __emailCounter, __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     expect(__emailCounter().count).toBe(0);
-    await sendWaitlistConfirm("kto@primer.test", "devhub");
+    await sendWaitlistConfirm("kto@primer.mailprobe.dev", "devhub");
     expect(__emailCounter().count, "отправка прошла, а счётчик не сдвинулся — он не подключён").toBe(1);
   });
 
@@ -85,7 +85,7 @@ describe("счётчик писем и тревога", () => {
     const { __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (let i = 0; i < 21; i++) await sendWaitlistConfirm(`k${i}@primer.test`, "devhub");
+    for (let i = 0; i < 21; i++) await sendWaitlistConfirm(`k${i}@primer.mailprobe.dev`, "devhub");
     const quota = warn.mock.calls.filter((c) => String(c[0]).includes("из 30"));
     expect(quota.length, "тревоги о квоте нет вовсе").toBeGreaterThanOrEqual(1);
     // 2/3 от 30 = 20; на 21 отправке порог 27 (9/10) ещё не достигнут.
@@ -98,7 +98,7 @@ describe("счётчик писем и тревога", () => {
     const { __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (let i = 0; i < 5; i++) await sendWaitlistConfirm(`m${i}@primer.test`, "devhub");
+    for (let i = 0; i < 5; i++) await sendWaitlistConfirm(`m${i}@primer.mailprobe.dev`, "devhub");
     expect(warn.mock.calls.filter((c) => String(c[0]).includes("из 30")).length).toBe(0);
     warn.mockRestore();
   });
@@ -113,7 +113,7 @@ describe("счётчик писем и тревога", () => {
     app.use("/api/constitution/waitlist", constitutionWaitlistRouter);
     await request(app)
       .post("/api/constitution/waitlist/subscribe")
-      .send({ email: "skvoz@primer.test", source: "devhub" });
+      .send({ email: "skvoz@primer.mailprobe.dev", source: "devhub" });
     const started = Date.now();
     while (__emailCounter().count === 0 && Date.now() - started < 3000) {
       await new Promise((r) => setTimeout(r, 25));
@@ -141,7 +141,7 @@ describe("тревога не называет одного поставщика
     const { __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (let i = 0; i < 21; i++) await sendWaitlistConfirm(`b${i}@primer.test`, "devhub");
+    for (let i = 0; i < 21; i++) await sendWaitlistConfirm(`b${i}@primer.mailprobe.dev`, "devhub");
     const quota = warn.mock.calls.map((c) => String(c[0])).filter((s) => s.includes("из 30"));
     expect(quota.length, "тревога не сработала — проверять нечего").toBe(1);
     for (const brand of ["Brevo", "Resend", "SendinBlue", "Sendinblue"]) {
@@ -174,7 +174,7 @@ describe("охват счётчика: письма DevHub идут в ту же
     const r = await request(app)
       .post("/api/devhub/media/email")
       .set("X-Forwarded-For", "10.9.9.9")
-      .send({ to: "kto@primer.test", subject: "тема", htmlBody: "<p>тело</p>" });
+      .send({ to: "kto@primer.mailprobe.dev", subject: "тема", htmlBody: "<p>тело</p>" });
     // Транспорт подменён в beforeEach — наружу ничего не ушло.
     expect([200, 201], `ручка ответила ${r.status}: ${JSON.stringify(r.body).slice(0, 120)}`).toContain(r.status);
     expect(__emailCounter().count, "письмо DevHub не попало в общую квоту").toBe(1);
@@ -215,7 +215,7 @@ describe("охват: второй письменный путь DevHub тоже
     const r = await request(app)
       .post("/api/devhub/media/email-template-send")
       .set("X-Forwarded-For", "10.9.9.11")
-      .send({ templateId: 7, to: "kto@primer.test", params: { name: "Кто" } });
+      .send({ templateId: 7, to: "kto@primer.mailprobe.dev", params: { name: "Кто" } });
     expect([200, 201], `ручка ответила ${r.status}: ${JSON.stringify(r.body).slice(0, 120)}`).toContain(r.status);
     expect(__emailCounter().count, "письмо по шаблону не попало в общую квоту").toBe(1);
   });
@@ -233,7 +233,7 @@ describe("тревога называет себя предупреждение�
     const { __resetEmailCounter } = await import("../src/lib/brevoQuota");
     __resetEmailCounter();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (let i = 0; i < 21; i++) await sendWaitlistConfirm(`w${i}@primer.test`, "devhub");
+    for (let i = 0; i < 21; i++) await sendWaitlistConfirm(`w${i}@primer.mailprobe.dev`, "devhub");
     const quota = warn.mock.calls.map((c) => String(c[0])).filter((s) => s.includes("из 30"));
     expect(quota.length).toBe(1);
     expect(quota[0], "тревога не говорит, что это не авария").toMatch(/не авария/i);

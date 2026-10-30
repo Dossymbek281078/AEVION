@@ -12,6 +12,8 @@
  */
 
 import { degraded } from "./degradedResponse";
+import { адресНаТестовомДомене } from "./reservedEmailDomain";
+import { записатьПропуск } from "./build/emailOutcomes";
 import { noteEmailSent } from "./brevoQuota";
 import { unsubscribeUrl, unsubContact } from "./waitlistUnsubToken";
 
@@ -41,7 +43,13 @@ export async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise
   error?: string;
   degraded?: boolean;
   degradedReason?: string;
+  skipped?: string;
 }> {
+  if (payload.to.length > 0 && payload.to.every((x) => адресНаТестовомДомене(x.email))) {
+    console.info("[Brevo/skipped] reserved domain — провайдер не вызывался");
+    записатьПропуск();
+    return { ok: true, skipped: "reserved domain" };
+  }
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) {
     console.warn("[Brevo] BREVO_API_KEY not set — email not sent");

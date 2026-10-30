@@ -32,7 +32,7 @@ async function загрузитьСКлючом() {
 }
 
 const письмо = {
-  to: "buyer@example.com",
+  to: "buyer@mailprobe.dev",
   subject: "AEVION — доступ",
   html: "<p>ok</p>",
   text: "ok",

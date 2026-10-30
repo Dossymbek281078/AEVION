@@ -47,22 +47,22 @@ describe("Brevo отказал — письмо уходит запасным к
 
   test("лист ожидания: Brevo 401 → письмо всё равно отправлено", async () => {
     BrevoОтвечает(401, { message: "Key not found" });
-    const ушло = await sendWaitlistConfirm("human@example.com", "landing");
+    const ушло = await sendWaitlistConfirm("human@mailprobe.dev", "landing");
     expect(ушло, "подтверждение подписки потеряно при живом запасном канале").toBe(true);
     expect(запасной).toHaveBeenCalledTimes(1);
-    expect(запасной.mock.calls[0][0]).toBe("human@example.com");
+    expect(запасной.mock.calls[0][0]).toBe("human@mailprobe.dev");
   });
 
   test("заявка агентства: Brevo 401 → уведомление всё равно отправлено", async () => {
     BrevoОтвечает(401, { message: "Key not found" });
-    const ушло = await sendAgencyLeadNotice({ contact: "buyer@example.com", message: "хочу купить" });
+    const ушло = await sendAgencyLeadNotice({ contact: "buyer@mailprobe.dev", message: "хочу купить" });
     expect(ушло).toBe(true);
     expect(запасной).toHaveBeenCalledTimes(1);
   });
 
   test("расписка заявителю: Brevo 401 → письмо всё равно отправлено", async () => {
     BrevoОтвечает(401, { message: "Key not found" });
-    const ушло = await sendAgencyLeadReceipt({ contact: "buyer@example.com", message: "хочу купить" });
+    const ушло = await sendAgencyLeadReceipt({ contact: "buyer@mailprobe.dev", message: "хочу купить" });
     expect(ушло).toBe(true);
     expect(запасной).toHaveBeenCalledTimes(1);
   });
@@ -70,12 +70,12 @@ describe("Brevo отказал — письмо уходит запасным к
   test("оба канала легли — честное false, а не тихий успех", async () => {
     BrevoОтвечает(401, { message: "Key not found" });
     запасной.mockResolvedValue(false);
-    expect(await sendWaitlistConfirm("human@example.com")).toBe(false);
+    expect(await sendWaitlistConfirm("human@mailprobe.dev")).toBe(false);
   });
 
   test("Brevo работает — запасной канал НЕ зовём (иначе письмо уйдёт дважды)", async () => {
     BrevoОтвечает(201, { messageId: "<ok@brevo>" });
-    const ушло = await sendWaitlistConfirm("human@example.com");
+    const ушло = await sendWaitlistConfirm("human@mailprobe.dev");
     expect(ушло).toBe(true);
     expect(запасной, "запасной канал вызван при исправном Brevo — человек получит два письма").not.toHaveBeenCalled();
   });
@@ -89,7 +89,7 @@ describe("Brevo отказал — письмо уходит запасным к
     console.warn = (...a: unknown[]) => { записи.push(a.join(" ")); };
     try {
       BrevoОтвечает(401, { message: "Key not found" });
-      await sendWaitlistConfirm("human@example.com");
+      await sendWaitlistConfirm("human@mailprobe.dev");
     } finally {
       console.error = былОшибки; console.warn = былПредупр;
     }

@@ -273,14 +273,17 @@ function guessVisitorLangEarly(): Lang {
     const изАдреса = языкИзАдреса(window.location.pathname);
     if (изАдреса) return изАдреса;
   } catch {}
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (isLang(saved)) return saved;
-  } catch {}
+  // Кука раньше хранилища — тот же порядок, что в предзагрузке словаря
+  // (dictPreloadScript, 07.10.2026): переадресация /kk/… и /en/… ставит куку на
+  // сервере, а до localStorage сервер не дотягивается.
   try {
     const m = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]*)`));
     const fromCookie = m ? decodeURIComponent(m[1]) : null;
     if (isLang(fromCookie)) return fromCookie;
+  } catch {}
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (isLang(saved)) return saved;
   } catch {}
   return detectBrowserLang();
 }
@@ -356,14 +359,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       setLangReady(true);
       return;
     }
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (isLang(saved)) {
-        setLangState(saved);
-        setLangReady(true);
-        return;
-      }
-    } catch {}
+    // 🔴 30.10.2026: КУКА РАНЬШЕ ХРАНИЛИЩА и здесь. Замер на проде f2db0ee93:
+    // localStorage=en от прошлого /en/, переход по /kk/multichat-engine → 308 с
+    // aevion_lang_v1=kk, а страница английская — хранилище перебивало свежую
+    // куку. Обычно они равны (setLang пишет оба), расходятся ровно тогда, когда
+    // куку поставил сервер; значит, она и есть последний выбор.
     // Кука — РАВНОПРАВНЫЙ источник выбора, а не только зеркало для SSR.
     // Живой замер 06.09.2026: пре-гидрационный скрипт корневого макета
     // честно ставил lang=ru из куки (след data-lang-src=cookie оставался),
@@ -379,6 +379,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       if (isLang(fromCookie)) {
         setLangState(fromCookie);
         try { localStorage.setItem(STORAGE_KEY, fromCookie); } catch {}
+        setLangReady(true);
+        return;
+      }
+    } catch {}
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (isLang(saved)) {
+        setLangState(saved);
         setLangReady(true);
         return;
       }

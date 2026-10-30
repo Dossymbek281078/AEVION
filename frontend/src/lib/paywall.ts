@@ -89,8 +89,34 @@ export function стенаИзНормы(x: unknown): PaywallPayload | null {
     plan: "free",
     requiredTiers: ["lite", "medium", "full"],
     upgradeUrl: o.upgradeUrl,
-    message: typeof o.message === "string" ? o.message : "Бесплатная норма на этот месяц исчерпана.",
+    message: текстСтеныИзНормы(o.freePerMonth),
   };
+}
+
+/**
+ * Текст стены по норме — свой, а не `message` сервера.
+ *
+ * 🔴 30.10.2026 (окно Приложения-2·Бюро), кадр прода 043aa4cc7, гость на /qright,
+ * 4-я регистрация: окно показало «На этом аккаунте покупки нет. Если вы оплачивали
+ * другим адресом — войдите под ним» — про 3 бесплатных в месяц ни слова. Текст
+ * сервера («…оформить: https://aevion.app/pricing») содержит сырой адрес, и
+ * PaywallModal такие тексты заменяет общей фразой про покупки. Здесь — правда о
+ * пределе без адресов (кнопки окна и так ведут к тарифам и входу), на языке страницы.
+ */
+function текстСтеныИзНормы(freePerMonth: unknown): string {
+  const норма = Number(freePerMonth);
+  const естьНорма = Number.isFinite(норма) && норма > 0;
+  const en = typeof document !== "undefined" && /^en\b/i.test(document.documentElement?.lang || "");
+  if (en) {
+    return (
+      (естьНорма ? `Your ${норма} free actions this month are used up. ` : "Your free actions this month are used up. ") +
+      "If you already have a subscription, sign in with the email you paid with. Otherwise a plan removes the limit."
+    );
+  }
+  return (
+    (естьНорма ? `Бесплатных действий в этом месяце: ${норма} — исчерпаны. ` : "Бесплатные действия в этом месяце исчерпаны. ") +
+    "Если подписка уже есть — войдите под почтой, которой платили. Если нет — план снимает предел."
+  );
 }
 
 /**

@@ -7,6 +7,8 @@
  * разногласий — «analyst: 2 · skeptic: 8».
  */
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import { render } from "@testing-library/react";
 import { разметкаОтвета, имяАгента, сИменами } from "../CouncilConsole";
 
@@ -65,5 +67,19 @@ describe("имя агента", () => {
     expect(имяАгента("skeptic")).toBe("Скептик");
     expect(имяАгента("practic")).toBe("Практик");
     expect(имяАгента("x-agent")).toBe("x-agent");
+  });
+
+  it("на /en роли названы по-английски, на ru/kk — как прежде; неизвестный id остаётся как есть (30.10.2026)", () => {
+    expect(имяАгента("analyst", "en")).toBe("Analyst");
+    expect(имяАгента("skeptic", "en")).toBe("Skeptic");
+    expect(имяАгента("practic", "en")).toBe("Practitioner");
+    expect(имяАгента("x-agent", "en")).toBe("x-agent");
+    expect(имяАгента("analyst", "ru")).toBe("Аналитик");
+    expect(имяАгента("analyst", "kk")).toBe("Аналитик");
+    expect(сИменами("Check the number — analyst: 200 vs practic: 30", "en")).toBe("Check the number — Analyst: 200 vs Practitioner: 30");
+  });
+  it("роль, уходящая на сервер, русская как была: промпт агента не менялся", () => {
+    const src = fs.readFileSync(path.join(__dirname, "..", "CouncilConsole.tsx"), "utf8");
+    expect(src).toContain("role: \"Аналитик — только факты и цифры, без оценок\"");
   });
 });

@@ -82,15 +82,23 @@ const PANEL = [
 /** Имя агента для человека: роль из PANEL, а не внутренний id. 20.10.2026 (путь гостя
  *  на проде): в блоке разногласий печаталось «analyst: 2 · skeptic: 8» посреди русского
  *  экрана — карточки ответов уже звали agentTitle, а разногласия — нет. */
-export function имяАгента(id: string): string {
-  return agentTitle(PANEL.find((a) => a.id === id)?.role, id);
+export function имяАгента(id: string, lang?: string): string {
+  return названиеАгента(PANEL.find((a) => a.id === id)?.role, id, lang);
+}
+
+/** Подписи ролей на экране /en (решение Оркестратора 30.10.2026). На сервер уходит прежняя русская роль из PANEL —
+ *  промпт агента не меняется, переводится только то, что видит человек. */
+const ИМЕНА_НА_ENGLISH: Record<string, string> = { analyst: "Analyst", skeptic: "Skeptic", practic: "Practitioner" };
+
+export function названиеАгента(role: string | undefined, id: string, lang?: string): string {
+  return (lang === "en" ? ИМЕНА_НА_ENGLISH[id] : undefined) || agentTitle(role, id);
 }
 
 /** Текст проверки собирает сервер (services/multichat/dissent.ts) — с id агентов:
  *  «Сверить число с источником — analyst: 200 против practic: 30». Замер 20.10 на проде.
  *  Подставляем имена ролей там, где текст видит человек (экран и скачиваемый отчёт). */
-export function сИменами(text: string): string {
-  return PANEL.reduce((t, a) => t.replace(new RegExp(`\\b${a.id}\\b`, "g"), имяАгента(a.id)), text);
+export function сИменами(text: string, lang?: string): string {
+  return PANEL.reduce((t, a) => t.replace(new RegExp(`\\b${a.id}\\b`, "g"), имяАгента(a.id, lang)), text);
 }
 
 /**
@@ -176,7 +184,8 @@ function buildReport(
   results: AgentResult[],
   dissent: Dissent | null,
   receipt: SignedReceipt | null,
-  isExample: boolean
+  isExample: boolean,
+  lang?: string
 ): string {
   const L: string[] = [];
   L.push("# Консилиум AEVION", "");
@@ -195,7 +204,7 @@ function buildReport(
     if (dissent.contradictions?.length) {
       L.push("### Прямое противоречие", "");
       for (const c of dissent.contradictions) {
-        L.push(`- «${c.word}»: ${c.affirms.map(имяАгента).join(", ")} утверждает, ${c.denies.map(имяАгента).join(", ")} отрицает`);
+        L.push(`- «${c.word}»: ${c.affirms.map((x) => имяАгента(x, lang)).join(", ")} утверждает, ${c.denies.map((x) => имяАгента(x, lang)).join(", ")} отрицает`);
       }
       L.push("");
     }
@@ -203,7 +212,7 @@ function buildReport(
     if (dissent.numericConflicts.length) {
       L.push("### Расхождения в числах", "");
       for (const c of dissent.numericConflicts) {
-        L.push(`- ${c.values.map((v) => `${имяАгента(v.agentId)}: ${v.raw}`).join(" против ")} (разброс ${c.spread})`);
+        L.push(`- ${c.values.map((v) => `${имяАгента(v.agentId, lang)}: ${v.raw}`).join(" против ")} (разброс ${c.spread})`);
         L.push(`  - контекст: «${c.context}»`);
       }
       L.push("");
@@ -211,7 +220,7 @@ function buildReport(
 
     if (dissent.checks?.length) {
       L.push("### Что проверить", "", "Порядок — по проверяемости: сверху то, что закрывается за минуту.", "");
-      dissent.checks.forEach((c, i) => L.push(`${i + 1}. ${сИменами(c.text)}`));
+      dissent.checks.forEach((c, i) => L.push(`${i + 1}. ${сИменами(c.text, lang)}`));
       L.push("");
     }
   }
@@ -220,7 +229,7 @@ function buildReport(
   for (const r of results) {
     // Роль и человеческая причина: отчёт уходит коллеге, и «rate_limit_exceeded
     // ... per IP» в нём читается как вина отправителя.
-    L.push(`### ${agentTitle(r.role, r.agentId)}${r.provider ? ` · ${r.provider}` : ""}`, "");
+    L.push(`### ${названиеАгента(r.role, r.agentId, lang)}${r.provider ? ` · ${r.provider}` : ""}`, "");
     if (r.ok) {
       L.push(String(r.reply || "").trim(), "");
     } else {
@@ -548,7 +557,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                   <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0", color: T.text }}>
                     <span style={{ color: T.bad, fontWeight: 600 }}>«{c.word}»</span>
                     <span style={{ color: T.textDim }}>
-                      {" "}— {c.affirms.map(имяАгента).join(", ")} утверждает, {c.denies.map(имяАгента).join(", ")} отрицает
+                      {" "}— {c.affirms.map((x) => имяАгента(x, mcLang)).join(", ")} {tm(mcLang, "утверждает")}, {c.denies.map((x) => имяАгента(x, mcLang)).join(", ")} {tm(mcLang, "отрицает")}
                     </span>
                   </li>
                 ))}
@@ -565,7 +574,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                 {dissent.numericConflicts.slice(0, 5).map((c, i) => (
                   <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0" }}>
                     <span style={{ color: T.text }}>
-                      {c.values.map((v) => `${имяАгента(v.agentId)}: ${v.raw}`).join("  ·  ")}
+                      {c.values.map((v) => `${имяАгента(v.agentId, mcLang)}: ${v.raw}`).join("  ·  ")}
                     </span>
                     <span style={{ marginLeft: 8, fontSize: 12, color: T.textFaded }}>«{разметкаОтвета(c.context)}»</span>
                   </li>
@@ -577,7 +586,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.outlier && (
             <p style={{ fontSize: 14, color: T.textDim, margin: "14px 0 0" }}>
               <span style={{ color: T.textFaded }}>{tm(mcLang, "Особняком:")} </span>
-              <span style={{ color: T.warn }}>{имяАгента(dissent.outlier.agentId)}</span>
+              <span style={{ color: T.warn }}>{имяАгента(dissent.outlier.agentId, mcLang)}</span>
               <span style={{ fontSize: 12, color: T.textFaded }}>
                 {" "}— его ответ дальше всех от остальных. Это не «неправ», это «прочитать первым».
               </span>
@@ -587,7 +596,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.hedges.length > 0 && (
             <p style={{ fontSize: 14, color: T.textDim, margin: "8px 0 0" }}>
               <span style={{ color: T.textFaded }}>{tm(mcLang, "Осторожность и отказы:")} </span>
-              {dissent.hedges.map((h) => `${имяАгента(h.agentId)} (${h.kind === "failed" ? tm(mcLang, "не ответил") : h.note})`).join(", ")}
+              {dissent.hedges.map((h) => `${имяАгента(h.agentId, mcLang)} (${h.kind === "failed" ? tm(mcLang, "не ответил") : h.note})`).join(", ")}
             </p>
           )}
 
@@ -602,7 +611,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
               <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 7 }}>
                 {dissent.checks.map((c, i) => (
                   <li key={i} style={{ fontSize: 14, color: T.textDim, lineHeight: 1.55 }}>
-                    {разметкаОтвета(сИменами(c.text))}
+                    {разметкаОтвета(сИменами(c.text, mcLang))}
                   </li>
                 ))}
               </ol>
@@ -659,7 +668,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             onClick={() =>
               download(
                 `aevion-consilium-${(receipt?.hash || "example").slice(0, 12)}.md`,
-                buildReport(prompt, results, dissent, receipt, isExample),
+                buildReport(prompt, results, dissent, receipt, isExample, mcLang),
                 "text/markdown;charset=utf-8"
               )
             }
@@ -680,7 +689,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", borderBottom: `1px solid ${T.surfaceSoft}`, paddingBottom: 6 }}>
                 {/* Роль, а не внутренний id: «analyst» в русском интерфейсе выглядит
                     утечкой кода, а роль сервер и так присылает в ответе. */}
-                <h4 style={{ fontSize: 15, margin: 0, color: T.text }}>{agentTitle(r.role, r.agentId)}</h4>
+                <h4 style={{ fontSize: 15, margin: 0, color: T.text }}>{названиеАгента(r.role, r.agentId, mcLang)}</h4>
                 <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded }}>
                   {r.provider || "—"}
                 </span>

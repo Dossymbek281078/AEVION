@@ -1605,7 +1605,7 @@ export default function QSignPage() {
         </div>
 
         {/* ─── Recent signatures feed ─── */}
-        <MoiPodpisi token={token} />
+        <MoiPodpisi />
         {recent && recent.items.length > 0 ? (
           <div style={{ marginTop: 24, ...card }}>
             <div

@@ -10,12 +10,18 @@
  */
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthToken } from "@/lib/auth";
 import { useQsignT } from "./i18n";
 
 type Запись = { event: "sign" | "revoke"; signatureId: string; at: string | null; publicUrl: string };
 
-export function MoiPodpisi({ token }: { token: string }) {
+// Токен — ТОЛЬКО из хранилища входа, не из поля «Токен доступа» на странице:
+// поле правится руками, и на каждое нажатие уходил бы запрос с неполным
+// токеном → 401 → красная ошибка (вычитка Продукта 30.10). Читаем один раз.
+export function MoiPodpisi() {
   const t = useQsignT();
+  const [token, setToken] = useState("");
+  useEffect(() => { setToken(getAuthToken() ?? ""); }, []);
   const [записи, setЗаписи] = useState<Запись[] | null>(null);
   const [ошибка, setОшибка] = useState(false);
 

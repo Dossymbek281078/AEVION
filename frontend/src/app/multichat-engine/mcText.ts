@@ -32,6 +32,8 @@ export const MC_TEXT: Record<string, Tr> = {
   "ответили": { en: "answered", kk: "жауап берді" },
   "не ответили": { en: "did not answer", kk: "жауап бермеді" },
   "подписан": { en: "signed", kk: "қол қойылған" },
+  "утверждает": { en: "assert it", kk: "растайды" },
+  "отрицает": { en: "deny it", kk: "терістейді" },
   "проверить чек": { en: "verify receipt", kk: "чекті тексеру" },
   "Месячной квоты бесплатного тарифа не хватит на консилиум. Откройте тариф — ссылка ниже.": { en: "The free plan's monthly quota is not enough for a council. Open a plan — link below.", kk: "Тегін тарифтің айлық квотасы консилиумға жетпейді. Тарифті ашыңыз — сілтеме төменде." },
   "Открыть тариф →": { en: "Open a plan →", kk: "Тарифті ашу →" },

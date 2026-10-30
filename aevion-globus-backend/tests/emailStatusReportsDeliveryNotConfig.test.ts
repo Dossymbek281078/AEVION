@@ -49,7 +49,7 @@ describe("состояние почты говорит про доставку",
       json: async () => ({ message: "The aevion.app domain is not verified" }),
     }));
     const m = await import("../src/routes/provisioning");
-    const r = await m.sendEmail({ to: "kto@to.example", subject: "тема", html: "<p/>", text: "т" } as never);
+    const r = await m.sendEmail({ to: "kto@to.mailprobe.dev", subject: "тема", html: "<p/>", text: "т" } as never);
 
     expect(r.ok, "отказ поставщика выдан за успех").toBe(false);
     const s = m.emailSenderStatus();
@@ -67,7 +67,7 @@ describe("состояние почты говорит про доставку",
       json: async () => ({ id: "msg_1" }),
     }));
     const m = await import("../src/routes/provisioning");
-    await m.sendEmail({ to: "kto@to.example", subject: "тема", html: "<p/>", text: "т" } as never);
+    await m.sendEmail({ to: "kto@to.mailprobe.dev", subject: "тема", html: "<p/>", text: "т" } as never);
     const s = m.emailSenderStatus();
     expect(s.lastSend?.ok).toBe(true);
     expect(s.lastSendMeaning).toContain("прошла");
@@ -79,12 +79,12 @@ describe("состояние почты говорит про доставку",
     vi.stubGlobal("fetch", async () => ({
       ok: false,
       status: 422,
-      json: async () => ({ message: "recipient kto@to.example rejected" }),
+      json: async () => ({ message: "recipient kto@to.mailprobe.dev rejected" }),
     }));
     const m = await import("../src/routes/provisioning");
-    await m.sendEmail({ to: "kto@to.example", subject: "тема", html: "<p/>", text: "т" } as never);
+    await m.sendEmail({ to: "kto@to.mailprobe.dev", subject: "тема", html: "<p/>", text: "т" } as never);
     const текст = JSON.stringify(m.emailSenderStatus());
-    expect(текст, "адрес получателя утёк в публичное состояние").not.toContain("kto@to.example");
+    expect(текст, "адрес получателя утёк в публичное состояние").not.toContain("kto@to.mailprobe.dev");
     expect(текст, "текст ошибки поставщика утёк — в нём бывает адрес").not.toContain("rejected");
   });
 });

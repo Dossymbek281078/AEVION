@@ -24,7 +24,7 @@ describe("provisioning.sendEmail считается в общем учёте п�
     const { sendEmail } = await import("../src/routes/provisioning");
     const { статусОтправки } = await import("../src/lib/build/emailOutcomes");
     const до = статусОтправки().отправлено;
-    const r = await sendEmail({ to: "smoke-prilozh@example.com", subject: "t", html: "<p>t</p>", text: "t" } as never);
+    const r = await sendEmail({ to: "smoke-prilozh@mailprobe.dev", subject: "t", html: "<p>t</p>", text: "t" } as never);
     expect(r.ok).toBe(true);
     expect(r.mode).toBe("real");
     expect(статусОтправки().отправлено).toBe(до + 1);
@@ -36,7 +36,7 @@ describe("provisioning.sendEmail считается в общем учёте п�
     const { sendEmail } = await import("../src/routes/provisioning");
     const { статусОтправки } = await import("../src/lib/build/emailOutcomes");
     const до = статусОтправки();
-    const r = await sendEmail({ to: "smoke-prilozh@example.com", subject: "t", html: "<p>t</p>", text: "t" } as never);
+    const r = await sendEmail({ to: "smoke-prilozh@mailprobe.dev", subject: "t", html: "<p>t</p>", text: "t" } as never);
     expect(r.ok).toBe(false);
     expect(статусОтправки().неудач).toBe(до.неудач + 1);
     expect(статусОтправки().отправлено).toBe(до.отправлено);

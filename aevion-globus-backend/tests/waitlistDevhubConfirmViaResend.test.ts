@@ -38,11 +38,11 @@ describe("waitlist DevHub: Resend, не Brevo, и счётчик healthz", () =>
   it("source=devhub: письмо через Resend (text+html), Brevo не вызван", async () => {
     подменитьСеть();
         const { sendWaitlistConfirm } = await import("../src/lib/constitutionBrevo");
-    const ok = await sendWaitlistConfirm("probe-produkt+x@example.com", "devhub");
+    const ok = await sendWaitlistConfirm("probe-produkt+x@mailprobe.dev", "devhub");
     expect(ok).toBe(true);
     expect(бревo).toHaveLength(0);
     expect(резенд).toHaveLength(1);
-    expect(резенд[0].to).toBe("probe-produkt+x@example.com");
+    expect(резенд[0].to).toBe("probe-produkt+x@mailprobe.dev");
     expect(резенд[0].subject).toContain("DevHub Studio");
     expect(резенд[0].html.length).toBeGreaterThan(0);
     expect(резенд[0].text).toContain("Отписаться");
@@ -52,7 +52,7 @@ describe("waitlist DevHub: Resend, не Brevo, и счётчик healthz", () =>
   it("не-DevHub источник по-прежнему идёт через Brevo", async () => {
     подменитьСеть();
         const { sendWaitlistConfirm } = await import("../src/lib/constitutionBrevo");
-    expect(await sendWaitlistConfirm("probe-produkt+y@example.com", "go")).toBe(true);
+    expect(await sendWaitlistConfirm("probe-produkt+y@mailprobe.dev", "go")).toBe(true);
     expect(резенд).toHaveLength(0);
     expect(бревo).toHaveLength(1);
   });
@@ -64,7 +64,7 @@ describe("waitlist DevHub: Resend, не Brevo, и счётчик healthz", () =>
       return new Response(JSON.stringify({ messageId: "<b2>" }), { status: 201 });
     }));
     const { sendWaitlistConfirm } = await import("../src/lib/constitutionBrevo");
-    expect(await sendWaitlistConfirm("probe-produkt+z@example.com", "devhub")).toBe(true);
+    expect(await sendWaitlistConfirm("probe-produkt+z@mailprobe.dev", "devhub")).toBe(true);
     expect(бревo).toHaveLength(1);
   });
 });

@@ -41,7 +41,7 @@ async function загрузить() {
 }
 
 const ПОКУПКА = {
-  email: "buyer@example.com",
+  email: "buyer@mailprobe.dev",
   tierId: "medium" as const,
   amountUsd: 59,
 };
@@ -87,8 +87,8 @@ describe("оплаченная покупка без письма оставля
     expect(строка).toContain("medium");
     expect(строка).toContain("domain is not verified");
     // Приватность: домен есть, адрес целиком нет.
-    expect(строка).toContain("@example.com");
-    expect(строка).not.toContain("buyer@example.com");
+    expect(строка).toContain("@mailprobe.dev");
+    expect(строка).not.toContain("buyer@mailprobe.dev");
   });
 
   test("событие для Sentry несёт ПОКУПКУ, а не только письмо", async () => {
@@ -108,7 +108,7 @@ describe("оплаченная покупка без письма оставля
     expect(сОплатой[0].tierId).toBe("medium");
     expect(String(сОплатой[0].сообщение)).toContain("оплачено");
     // Адрес целиком не уходит и в Sentry — только домен.
-    expect(JSON.stringify(сОплатой[0])).not.toContain("buyer@example.com");
+    expect(JSON.stringify(сОплатой[0])).not.toContain("buyer@mailprobe.dev");
   });
 
   test("режим заглушки НЕ заводит событие: это настройка, а не происшествие", async () => {

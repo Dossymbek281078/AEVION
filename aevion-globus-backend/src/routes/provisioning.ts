@@ -19,7 +19,8 @@ import { projects } from "../data/projects";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
 import { rateLimit } from "../lib/rateLimit";
-import { записатьИсход as записатьИсходОбщий } from "../lib/build/emailOutcomes";
+import { записатьИсход as записатьИсходОбщий, записатьПропуск } from "../lib/build/emailOutcomes";
+import { адресНаТестовомДомене } from "../lib/reservedEmailDomain";
 
 const capture = makeServiceCapture("provisioning");
 
@@ -602,7 +603,12 @@ export function emailSenderStatus(): {
   };
 }
 
-export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; mode: "real" | "stub"; id?: string; error?: string; degraded?: boolean; degradedReason?: string }> {
+export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; mode: "real" | "stub"; id?: string; error?: string; degraded?: boolean; degradedReason?: string; skipped?: string }> {
+  if (адресНаТестовомДомене(payload.to)) {
+    console.info("[email/skipped] reserved domain — провайдер не вызывался");
+    записатьПропуск();
+    return { ok: true, mode: RESEND_KEY ? "real" : "stub", skipped: "reserved domain" };
+  }
   if (!RESEND_KEY) {
     console.log(`[email/STUB] To: ${payload.to} | Subject: ${payload.subject}`);
     return { ok: true, mode: "stub" };

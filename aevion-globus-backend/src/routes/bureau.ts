@@ -637,17 +637,20 @@ function slugify(name: string): string {
 
 async function resolveUser(
   req: Request,
-): Promise<{ userId: string | null; name: string | null; email: string | null }> {
+): Promise<{ userId: string | null; name: string | null; email: string | null; tokenEmail: string | null }> {
   const auth = verifyBearerOptional(req);
-  if (!auth) return { userId: null, name: null, email: null };
+  if (!auth) return { userId: null, name: null, email: null, tokenEmail: null };
   await ensureUsersTable(pool);
   const u = await pool.query(
     `SELECT "id","name","email" FROM "AEVIONUser" WHERE "id"=$1`,
     [auth.sub],
   );
   const row = u.rows?.[0];
-  if (!row) return { userId: null, name: null, email: null };
-  return { userId: row.id, name: row.name, email: row.email };
+  if (!row) return { userId: null, name: null, email: null, tokenEmail: null };
+  // tokenEmail — почта из самого токена (payload.email): тот же источник, которым
+  // /api/qright/objects?mine=1 и /api/pipeline/certificates/export.zip
+  // подбирают записи гостя без ownerUserId (см. /dashboard ниже).
+  return { userId: row.id, name: row.name, email: row.email, tokenEmail: auth.email ?? null };
 }
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -1300,15 +1303,26 @@ bureauRouter.get("/dashboard", async (req, res) => {
     if (!user.userId) {
       return res.status(401).json({ error: "authentication required" });
     }
+    /*
+     * 🔴 Замер на проде 30.10.2026: гость регистрирует работу на /qright с почтой,
+     * затем заводит аккаунт на ту же почту — /api/qright/objects?mine=1 отдаёт 1,
+     * export.zip отдаёт запись, а этот кабинет показывал certificates: 0. Выборка
+     * шла только по ownerUserId, а у гостевой записи он NULL. Правило владельца —
+     * ТО ЖЕ, что в qright.ts (/objects?mine=1) и pipeline.ts (export.zip):
+     * ownerUserId = sub токена, либо запись без ownerUserId с ownerEmail = почта
+     * токена. Таблицы BureauVerification/BureauTrustEdge ниже колонки ownerEmail
+     * не имеют — к ним правило не относится.
+     */
     const { rows: certs } = await pool.query(
       `SELECT c."id", c."title", c."kind", c."contentHash", c."protectedAt",
               c."authorVerificationLevel", c."authorVerifiedAt", c."authorVerifiedName"
          FROM "IPCertificate" c
          JOIN "QRightObject" o ON o."id" = c."objectId"
-        WHERE o."ownerUserId" = $1
+        WHERE (o."ownerUserId" = $1)
+           OR (o."ownerUserId" IS NULL AND o."ownerEmail" = $2)
         ORDER BY c."protectedAt" DESC
         LIMIT 200`,
-      [user.userId],
+      [user.userId, user.tokenEmail],
     );
     const { rows: verifications } = await pool.query(
       `SELECT "id","kycStatus","paymentStatus","createdAt","completedAt"

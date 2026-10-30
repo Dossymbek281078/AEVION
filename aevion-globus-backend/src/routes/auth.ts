@@ -9,6 +9,7 @@ import { rememberIssuedUser, bumpTokenVersion } from "../lib/tokenVersion";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { resolveMailLang } from "../lib/mailLang";
 import { sendEmailVerify } from "../lib/constitutionBrevo";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import {
@@ -1081,6 +1082,8 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
           // «Подтвердите email — AEVION QBuild» от «AEVION QPayNet».
           brand: "AEVION",
           tokenId: id,
+          // Язык письма: тело `lang` → Accept-Language → ru.
+          lang: resolveMailLang((req.body as { lang?: unknown } | undefined)?.lang, req.headers["accept-language"]),
         })
       : await sendEmailVerify(user.email, verifyUrl);
 

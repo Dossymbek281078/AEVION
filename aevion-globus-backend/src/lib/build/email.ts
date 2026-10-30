@@ -173,10 +173,16 @@ export async function send(to: string, subject: string, html: string, бренд
 // тема «Подтвердите email — AEVION QBuild». Два чужих имени в одном письме.
 // 13.10.2026: умолчание возвращено модулю — шесть писем найма зовут layout без бренда, и это их имя;
 // платформенные письма (подтверждение, сброс) называют платформу ЯВНО вторым аргументом.
-function layout(body: string, brand = "AEVION QBuild"): string {
+const LAYOUT_FOOT: Record<"ru" | "en" | "kk", (b: string) => string> = {
+  ru: (b) => `Это автоматическое уведомление от ${b}. Не отвечайте на это письмо.`,
+  en: (b) => `This is an automated message from ${b}. Please do not reply to it.`,
+  kk: (b) => `Бұл ${b} жүйесінің автоматты хабарламасы. Бұл хатқа жауап бермеңіз.`,
+};
+
+function layout(body: string, brand = "AEVION QBuild", lang: "ru" | "en" | "kk" = "ru"): string {
   return `
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="${lang}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#0f172a; color:#e2e8f0; margin:0; padding:24px; }
@@ -191,7 +197,7 @@ function layout(body: string, brand = "AEVION QBuild"): string {
 <body><div class="card">
   <div class="logo">${brand}</div>
   ${body}
-  <p class="muted">Это автоматическое уведомление от ${brand}. Не отвечайте на это письмо.</p>
+  <p class="muted">${LAYOUT_FOOT[lang](brand)}</p>
 </div></body></html>`;
 }
 
@@ -331,6 +337,12 @@ export function sendTrialTaskApproved(opts: {
 
 // ── Auth emails ──────────────────────────────────────────────────────
 
+const VERIFY_TEXT = {
+  ru: { subject: "Подтвердите email", h: "Подтвердите ваш email", hi: "Привет", lead: "Для активации аккаунта нажмите кнопку ниже.", valid: "Ссылка действует 24 часа.", btn: "Подтвердить email", copy: "Если кнопка не работает, скопируйте ссылку:", ignore: "Если вы не регистрировались — проигнорируйте это письмо." },
+  en: { subject: "Confirm your email", h: "Confirm your email", hi: "Hi", lead: "Click the button below to activate your account.", valid: "The link is valid for 24 hours.", btn: "Confirm email", copy: "If the button does not work, copy the link:", ignore: "If you did not sign up, just ignore this email." },
+  kk: { subject: "Email мекенжайыңызды растаңыз", h: "Email мекенжайыңызды растаңыз", hi: "Сәлем", lead: "Аккаунтты іске қосу үшін төмендегі батырманы басыңыз.", valid: "Сілтеме 24 сағат жарамды.", btn: "Email растау", copy: "Батырма істемесе, сілтемені көшіріп алыңыз:", ignore: "Егер тіркелмеген болсаңыз, бұл хатты елемеңіз." },
+} as const;
+
 export async function sendVerificationEmail(opts: {
   to: string;
   name: string;
@@ -342,23 +354,27 @@ export async function sendVerificationEmail(opts: {
    *  подтверждение у человека, который открыл письмо на телефоне и не вошёл:
    *  секрет хранится bcrypt-хешем, найти его по значению нельзя. */
   tokenId?: string;
+  /** Язык письма; без него — ru (прежнее поведение). */
+  lang?: "ru" | "en" | "kk";
 }): Promise<boolean> {
   const brand = opts.brand || "AEVION QBuild";
+  const lang = opts.lang ?? "ru";
+  const T = VERIFY_TEXT[lang];
   const idPart = opts.tokenId ? `&id=${encodeURIComponent(opts.tokenId)}` : "";
   const link = `${BASE}/build/verify-email?token=${encodeURIComponent(opts.token)}${idPart}`;
   return send(
     opts.to,
-    `Подтвердите email — ${brand}`,
+    `${T.subject} — ${brand}`,
     layout(`
-      <h2>Подтвердите ваш email</h2>
-      <p>Привет, <strong>${opts.name}</strong>! Для активации аккаунта нажмите кнопку ниже.</p>
-      <p>Ссылка действует 24 часа.</p>
-      <a class="btn" href="${link}">Подтвердить email</a>
+      <h2>${T.h}</h2>
+      <p>${T.hi}, <strong>${opts.name}</strong>! ${T.lead}</p>
+      <p>${T.valid}</p>
+      <a class="btn" href="${link}">${T.btn}</a>
       <p style="margin-top:24px;font-size:12px;color:#64748b">
-        Если кнопка не работает, скопируйте ссылку:<br>${link}
+        ${T.copy}<br>${link}
       </p>
-      <p style="font-size:12px;color:#64748b">Если вы не регистрировались — проигнорируйте это письмо.</p>
-    `, brand),
+      <p style="font-size:12px;color:#64748b">${T.ignore}</p>
+    `, brand, lang),
     // Имя В ОТПРАВИТЕЛЕ то же, что в теле: иначе человек видит одно имя в
     // списке писем и другое внутри — ровно то расхождение, из-за которого
     // письмо о пароле читалось как фишинг (12.10.2026).

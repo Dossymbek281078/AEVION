@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { языкИзЗаголовка } from "../layout";
@@ -16,6 +16,10 @@ import { языкИзАдреса } from "../../../lib/i18n";
  *     человек делится ссылкой, а соцсети и поисковик берут русский заголовок;
  *   • /en/devhub/launch отвечал 404 — потерянный посетитель без следа в учёте.
  */
+// 30.10.2026: /en/devhub теперь несёт конструктор из /devhub первым блоком (он клиентский и
+// требует роутер). Эта проверка — про ссылки ПОСАДОЧНОЙ, поэтому конструктор здесь заглушка;
+// его собственная отрисовка проверена в en/devhub/__tests__/enDevhubIsTheConstructor.test.tsx.
+vi.mock("../page", () => ({ default: () => null }));
 const i18n = readFileSync(join(__dirname, "..", "..", "..", "lib", "i18n.tsx"), "utf8");
 
 describe("адрес сильнее сохранённого выбора языка", () => {

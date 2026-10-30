@@ -39,6 +39,15 @@ describe("страница успеха: подсказка про вход с �
     expect(platform).toBeLessThan(openApp);
   });
 
+  // 30.10.2026: DevHub продаётся только «Планетой», то есть его покупатель возвращается
+  // с appId="platform". Гостю DevHub вход не нужен — нужен /devhub/link, и он обязан
+  // быть в ветке платформы, а не только в ветке appId === "devhub".
+  it("платформенная подписка: рядом со входом — шаг «Подключить покупку в DevHub»", () => {
+    const at = page.indexOf('t("pricing.checkoutSuccess.nextLoginPlatform"');
+    const ветка = page.slice(at, page.indexOf(": []", at));
+    expect(ветка).toContain('t("pricing.checkoutSuccess.nextDevhubLink"), href: "/devhub/link"');
+  });
+
   it("ключ nextLoginPlatform есть во всех трёх словарях", () => {
     for (const l of ["ru", "en", "kk"]) {
       const m = dict(l).match(/"pricing\.checkoutSuccess\.nextLoginPlatform": "([^"]+)"/);

@@ -17,9 +17,14 @@ import { I18nProvider } from "@/lib/i18n";
 import ModulePricingChip from "../ModulePricingChip";
 import { planetFromPerMonth } from "@/lib/termPricing";
 import { FREE_ACTIONS_PER_MONTH } from "@/lib/freeActionQuota";
-import { interpolate } from "@/lib/i18n-data";
-import kk from "@/lib/i18n-lang/kk";
-import ru from "@/lib/i18n-lang/ru";
+// Словари — только через localeSource (сторож app/__tests__/localeParity.guard: одна точка
+// правки); i18n-data оттуда же не импортируем — тот же сторож ищет этот импорт в тестах.
+import { allTranslations } from "../../app/__tests__/localeSource";
+
+const kk = allTranslations().kk;
+const ru = allTranslations().ru;
+const interpolate = (s: string, vars: Record<string, string | number>): string =>
+  Object.entries(vars).reduce((r, [k, v]) => r.split(`{${k}}`).join(String(v)), s);
 
 vi.mock("@/lib/apiBase", () => ({ apiUrl: (p: string) => p }));
 

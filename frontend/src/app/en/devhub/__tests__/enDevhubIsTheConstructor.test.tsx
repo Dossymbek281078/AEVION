@@ -48,6 +48,13 @@ async function кадр(c?: string) {
 }
 
 describe("/en/devhub", () => {
+  it("🔴 ссылки в цены несут язык: на /en/devhub нет /pricing без lang=en (приёмка прода 7d91f4884, 30.10)", async () => {
+    const div = await кадр("probe-x");
+    const вЦены = [...div.querySelectorAll("a")].map((a) => a.getAttribute("href") ?? "").filter((h) => h.startsWith("/pricing"));
+    expect(вЦены.length).toBeGreaterThan(0);
+    expect(вЦены.filter((h) => !h.includes("lang=en"))).toEqual([]);
+  });
+
   it("🔴 язык кадра — en (макет задаёт его сам, без заголовков)", async () => {
     const div = await кадр("probe-x");
     expect(div.querySelector("[data-server-lang]")?.getAttribute("data-server-lang")).toBe("en");

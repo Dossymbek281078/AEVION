@@ -107,16 +107,16 @@ type Vkladka = (typeof VKLADKI)[number];
  * VKLADKI и не добавите подпись — проверка типов не пройдёт. Запасной ветки
  * здесь нет намеренно: она превращает недосмотр в тихую утечку имени.
  */
-const PODPIS_VKLADKI: Record<Vkladka, string> = {
-  chat: "Генерация ИИ",
-  visual: "🖱️ Правка на экране",
-  agent: "🤖 Агент",
-  templates: "Шаблоны",
+const PODPIS_VKLADKI: Record<Vkladka, DevhubKey | "GitHub"> = {
+  chat: "proj.tab.chat",
+  visual: "proj.tab.visual",
+  agent: "proj.tab.agent",
+  templates: "proj.tab.templates",
   github: "GitHub",
-  media: "Медиа",
-  env: "Переменные",
-  deployments: "Выкатки",
-  settings: "Настройки",
+  media: "proj.tab.media",
+  env: "proj.tab.env",
+  deployments: "proj.tab.deployments",
+  settings: "proj.tab.settings",
 };
 
 // Гостевой EN-путь генерации: эти строки визитёр видит ДО и СРАЗУ ПОСЛЕ
@@ -4225,7 +4225,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
             </div>
           )}
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Файлы</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>{tPro("proj.files")}</span>
             <div style={{ display: "flex", gap: 4 }}>
               <input ref={zipInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: "none" }} onChange={onZipInputChange} />
               <button
@@ -4285,7 +4285,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
           <div style={{ flex: 1, overflowY: "auto" }}>
             {files.length === 0 ? (
               <div style={{ padding: 16, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
-                Файлов пока нет.<br />Попросите ИИ сгенерировать код или создайте файл.
+                {tPro("proj.noFiles1")}<br />{tPro("proj.noFiles2")}
               </div>
             ) : (
               files.map((f) => {
@@ -4514,7 +4514,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                     borderBottom: activeTab === tab ? "2px solid #0d9488" : "2px solid transparent",
                   }}
                 >
-                  {PODPIS_VKLADKI[tab]}
+                  {PODPIS_VKLADKI[tab] === "GitHub" ? "GitHub" : tPro(PODPIS_VKLADKI[tab])}
                 </button>
               ))}
             </div>
@@ -4667,7 +4667,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                       onClick={() => setShowPlanner((s) => !s)}
                       style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#0f172a", padding: 0 }}
                     >
-                      {showPlanner ? "▾" : "▸"} Есть только замысел? Сначала спланируйте
+                      {showPlanner ? "▾" : "▸"} {tPro("proj.planner")}
                     </button>
                     {showPlanner && (
                       <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -4842,7 +4842,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         cursor: undoing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {undoing ? GL.busyUndo : "↩ Отменить последнюю правку ИИ"}
+                      {undoing ? GL.busyUndo : tPro("proj.undoAi")}
                     </button>
                     <button
                       onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
@@ -5066,7 +5066,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         cursor: undoing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {undoing ? GL.busyUndo : "↩ Отменить последнюю правку ИИ"}
+                      {undoing ? GL.busyUndo : tPro("proj.undoAi")}
                     </button>
                   )}
                 </div>
@@ -5078,8 +5078,8 @@ if (/Месячная норма исчерпана|Месячный лимит[
                   {templates.length === 0 && (
                     <div style={{ padding: "14px 16px", border: "1px dashed #e2e8f0", borderRadius: 10, fontSize: 13, color: "#64748b" }}>
                       {templatesLoadFailed
-                        ? "Шаблоны не загрузились — обновите страницу или зайдите через минуту."
-                        : "Загружаем шаблоны…"}
+                        ? tPro("proj.tplFailed")
+                        : tPro("proj.tplLoading")}
                     </div>
                   )}
                   {templates.map((t) => (
@@ -5508,7 +5508,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         : sub === "translate" ? "DeepL"
                         : sub === "bulk" ? "Bulk i18n"
                         : sub === "email" ? "Email"
-                        : sub === "templates" ? "Шаблоны"
+                        : sub === "templates" ? tPro("proj.tab.templates")
                         : sub === "builder" ? "Tpl Builder"
                         : sub === "sms" ? "SMS"
                         : sub === "whatsapp" ? "WhatsApp"

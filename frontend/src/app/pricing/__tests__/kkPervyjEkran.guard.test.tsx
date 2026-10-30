@@ -67,7 +67,7 @@ describe("/pricing на kk", () => {
 
   it("словарь kk: каждый ключ есть в en, значения не равны русским", () => {
     // Слова, одинаковые в русском и казахском (или не переводимые): не ошибка.
-    const ТЕ_ЖЕ = new Set(["newsletter.placeholder"]); // 31.10: Модуль/Калькулятор/ТАРИФ переведены
+    const ТЕ_ЖЕ = new Set(["newsletter.placeholder", "modules.colModule"]); // 31.10: Калькулятор/ТАРИФ переведены; «Модуль» — то же слово по-казахски
     for (const [k, v] of Object.entries(kkDict)) {
       expect(PRICING_DICT.en[k], `ключ ${k} есть в kk, но нет в en`).toBeTruthy();
       if (!ТЕ_ЖЕ.has(k)) expect(v, `ключ ${k} в kk совпал с русским`).not.toBe(PRICING_DICT.ru[k]);

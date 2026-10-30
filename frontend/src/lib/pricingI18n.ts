@@ -1036,7 +1036,8 @@ export const kkDict: Record<string, string> = {
   "testimonials.subtitle": "AEVION-дағы нақты командалар. Барлық дәйексөз авторлардың рұқсатымен жарияланған.",
   "modules.title": "Барлық модульдер",
   "modules.subtitle": `AEVION-ның ${MODULE_NODES} өнімі. Барлығы кез келген ақылы тарифке кіреді; ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} қосымша жеке де сатылады.`,
-  "modules.colModule": "Бөлім",
+  // «Модуль» — казахское заимствование, на этом же экране «Барлық модульдер»; «Бөлім» давал смесь терминов.
+  "modules.colModule": "Модуль",
   "modules.colDescription": "Сипаттама",
   "modules.colStatus": "Мәртебе",
   "modules.colAddon": "Жеке, айына бастап",

@@ -52,6 +52,8 @@ type CertificateData = {
   email?: string | null;
   location?: string | null;
   contentHash: string;
+  /** SHA-256 приложенного файла (бэк с 30.10 отдаёт; старый бэк поля не шлёт — тогда берём своё). */
+  fileHash?: string | null;
   signatureHmac: string;
   signatureEd25519: string;
   shieldId: string;
@@ -1233,6 +1235,12 @@ export default function QRightPage() {
                 <div style={{ display: "grid", gap: 8 }}>
                   {[
                     { label: tq(lang, "Content Hash (SHA-256)"), value: result.certificate.contentHash },
+                    // 30.10.2026: отпечаток приложенного файла показываем на карточке — витрина
+                    // обещает «сохраним рядом с сертификатом», а карточка его не показывала.
+                    // Из ответа бэка, а на старом бэке — тот, что посчитали в браузере.
+                    ...((result.certificate.fileHash ?? fileHash)
+                      ? [{ label: tq(lang, "File Hash (SHA-256)"), value: String(result.certificate.fileHash ?? fileHash) }]
+                      : []),
                     { label: tq(lang, "HMAC Signature"), value: result.certificate.signatureHmac },
                     { label: tq(lang, "Ed25519 Signature"), value: result.certificate.signatureEd25519 },
                     { label: tq(lang, "Quantum Shield ID"), value: result.certificate.shieldId },

@@ -44,7 +44,7 @@ async function writeOrThrow(input: string, init?: RequestInit): Promise<Response
     throw new Error(
       // Модульный помощник — хука здесь нет; язык честно читается из атрибута,
       // который ставит I18nProvider (вне браузера/провайдера — русский).
-      devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`,
+      devhubServerError(body?.error, fill(tlModule().saveHttp, { status: r.status }),
         typeof document === "undefined" ? "ru" : document.documentElement.lang || "ru"),
     );
   }
@@ -461,6 +461,121 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     importedMemory: "Файлы импортированы, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.",
     imgPermanent: "Картинка загружена на постоянный адрес",
     imgTooBig: "Картинка слишком большая (не больше 5 МБ)",
+    saveHttp: "Не удалось сохранить — сервер ответил {status}",
+    serverReplied: "сервер ответил {status}",
+    noServer: "нет связи с сервером",
+    noLink: "нет связи",
+    genInterrupted: "Генерация прервалась",
+    genStopped: "Генерация остановлена. Сервер мог успеть доделать её — если файлы появятся, их видно в списке слева.",
+    genFail: "Генерация не удалась",
+    undoFail: "Отменить не удалось",
+    restoreFail: "Восстановить не удалось",
+    planFail: "Не удалось составить план",
+    previewBuildFail: "Превью не собралось",
+    saveFail: "Сохранить не удалось",
+    imgCreateFail: "Не удалось создать картинку",
+    dbDesignFail: "Не удалось спроектировать базу",
+    dbProvisionFail: "Не удалось выделить ресурсы",
+    aiEditFail: "Правка ИИ не удалась",
+    syncFail: "Синхронизация не удалась",
+    deployFail: "Выкатка не удалась",
+    actionFail: "Не удалось выполнить действие",
+    failShort: "Не удалось",
+    branchesLoadFail: "Не удалось загрузить список веток",
+    branchesRefreshed: "Список веток обновлён",
+    recheckFail: "Не удалось перепроверить",
+    pagesPublishFail: "Не удалось опубликовать на Cloudflare Pages",
+    pagesPublishFail2: "Публикация на Cloudflare Pages не удалась",
+    vercelFail: "Выкатка на Vercel не удалась",
+    sendFail: "Не удалось отправить",
+    payLinkFail: "Не удалось создать ссылку на оплату",
+    gumroadFail: "Не удалось создать оплату Gumroad",
+    musicFail: "Не удалось сочинить музыку",
+    domainFail: "Не удалось настроить домен",
+    stepFail: "Шаг не выполнен",
+    streamCut: "Поток оборвался",
+    scenarioFail: "Сценарий не выполнился",
+    paramsObj: "параметры должны быть объектом JSON",
+    trFail: "Не удалось перевести",
+    tplLoadFail: "Не удалось загрузить шаблоны",
+    needRecipient: "нужен адрес получателя",
+    paramsJson: "параметры должны быть в формате JSON",
+    bulkFail: "Пакетный перевод не удался",
+    tplNeedFields: "нужны имя, тема и HTML-текст письма",
+    tplCreateFail: "Не удалось создать шаблон",
+    importFail: "Импорт не удался",
+    zipTooBig: "архив слишком большой (максимум 50 МБ)",
+    previewNoOpen: "Превью не открылось",
+    cfUploadFail: "Загрузка в Cloudflare не удалась",
+    uploadFail: "Загрузка не удалась",
+    needSample: "сначала выберите образец звука",
+    sampleReady: "Образец готов — послушайте ниже и сохраните, если нравится",
+    sampleFirst: "Сначала образец — нажмите «🎧 Послушать голос», послушайте и сохраните",
+    cloneFail: "Не удалось клонировать голос",
+    sttFail: "Не удалось расшифровать запись",
+    driveFail: "Не удалось найти в Google Drive",
+    ttsFail: "Озвучка не удалась",
+    videoNeedPrompt: "Сначала опишите, что нужно",
+    videoFail: "Не удалось создать видео",
+    videoTimeout: "Не дождались ответа за 2 минуты",
+    generating: "генерирую...",
+    threeDNeedUrl: "Вставьте ссылку на картинку",
+    threeDFail: "Не удалось сгенерировать 3D",
+    timeoutRetry: "Таймаут — попробуйте ещё раз",
+    modelNoLink: "Модель готова, но ссылка не распознана",
+    imgSavedEmbedded: "Картинка создана и сохранена (встроена прямо в страницу)",
+    imgSaved: "Картинка создана и сохранена",
+    dbCreatedSchema: "База создана, схема применена",
+    dbCreated: "База создана",
+    aiEditApplied: "Правка ИИ применена — превью обновлено (↩ Отменить ниже, если получилось не то)",
+    aiEditSource: "Правка ИИ внесена в исходники — выкатите заново, чтобы увидеть её здесь (↩ Отменить ниже, если получилось не то)",
+    synced: "Синхронизировано",
+    logLost: "⚠ Связь с журналом оборвалась. Сборка продолжается на сервере — обновите страницу или загляните во вкладку «Выкатки» через минуту.",
+    costUnverifiedTier: "Готово, но расход не удалось сверить: счётчик тарифа может отстать.",
+    reasonNoRights: "проект не найден или нет прав на правку",
+    lastAiEdit: "последняя правка ИИ",
+    reasonUnknown: "причина неизвестна",
+    saveFailPath: "{path} НЕ сохранён — {reason}",
+    notSavedReason: "Не сохранено: {reason}",
+    copyDownloaded: "Копия {name} скачана",
+    fileCreateHttp: "Не удалось создать файл — сервер ответил {status}",
+    fileNotDeleted: "Файл НЕ удалён — {reason}",
+    envNotSaved: "Переменная НЕ сохранена — {reason}",
+    envNotRemoved: "Переменная НЕ удалена — {reason}",
+    settingsNotSaved: "Настройки НЕ сохранены — {reason}",
+    accessNotRevoked: "Доступ НЕ отозван — {reason}",
+    renameCancelled: "Переименование отменено — копия не создалась ({status}); файл на месте",
+    renameOldRemains: "Копия создана как {target}, но старый файл не удалился ({status}) — оба на месте",
+    provenanceFail: "Происхождение не зафиксировано: {reason}. Код сгенерирован и сохранён.",
+    undoneLabel: "Отменено: {label}",
+    restoredTo: "Вернулись к: {label} (шагов назад: {steps})",
+    savedUpdated: "Сохранено — обновлён {path}",
+    addedTo: "Добавлено в {path}",
+    dbReadyApplied: "База готова — схема {schema} создана, таблицы из db/schema.sql применены, DATABASE_URL сохранён в переменных окружения.",
+    dbReadyNoSql: "База готова — схема {schema} создана. Файла db/schema.sql пока нет, поэтому таблицы не созданы.",
+    tplApplied: "Шаблон применён — файлов: {n}",
+    collabNotAdded: "Соавтор НЕ добавлен — сервер ответил {status}",
+    collabAdded: "Соавтор добавлен ({role})",
+    pushedPartial: "⚠ Отправлено {sent} из {total} файлов. {reason}",
+    pushedOk: "Отправлено файлов: {n}. Репозиторий: {url}",
+    urlServes: "Адрес отвечает — выкатка живая: {url}",
+    urlSilent: "{url} пока не отвечает",
+    mailSent: "Письмо отправлено на {to}",
+    smsSent: "SMS отправлено (сегментов: {n}, ref {ref})",
+    waSent: "WhatsApp отправлен (сообщение {id})",
+    trFileDone: "Переведено в {path} ({bytes} байт)",
+    tplSent: "Отправлен шаблон №{id} (сообщение {msg})",
+    bulkMemory: "Переведено {ok} из {total}, но база была недоступна: результат пока в памяти и может пропасть при перезапуске. Сохраните копию.",
+    bulkDone: "Переведено {ok} из {total}",
+    bulkNone: "Ни один из {total} переводов не удался",
+    tplCreated: "Создан шаблон №{id} — «{name}»",
+    zipImported: "Из {name} импортировано файлов: {n}",
+    sampleHttp: "Не удалось получить пример — сервер ответил {status}",
+    driveImported: "Импортирован {path} ({bytes} байт)",
+    ttsHttp: "Не удалось озвучить — сервер ответил {status}",
+    sfxHttp: "Не удалось создать звук — сервер ответил {status}",
+    musicHttp: "Не удалось создать музыку — сервер ответил {status}",
+    agentCut: "Прогон оборвался: отчитались {done} из {total} шагов. Остальные могли не выполниться.",
   },
   en: {
     listRefreshFail: "Could not refresh the file list — showing the previous one",
@@ -502,6 +617,121 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     importedMemory: "Files imported, but the database was unavailable: the result lives in memory for now and may vanish on restart.",
     imgPermanent: "The image was uploaded to a permanent address",
     imgTooBig: "The image is too large (5 MB max)",
+    saveHttp: "Could not save — the server replied {status}",
+    serverReplied: "the server replied {status}",
+    noServer: "no connection to the server",
+    noLink: "no connection",
+    genInterrupted: "Generation was interrupted",
+    genStopped: "Generation stopped. The server may have finished it — if files appear, you will see them in the list on the left.",
+    genFail: "Generation failed",
+    undoFail: "Could not undo",
+    restoreFail: "Could not restore",
+    planFail: "Could not draw up a plan",
+    previewBuildFail: "The preview did not build",
+    saveFail: "Could not save",
+    imgCreateFail: "Could not create the image",
+    dbDesignFail: "Could not design the database",
+    dbProvisionFail: "Could not provision the resources",
+    aiEditFail: "The AI edit failed",
+    syncFail: "Sync failed",
+    deployFail: "The deploy failed",
+    actionFail: "Could not complete the action",
+    failShort: "Failed",
+    branchesLoadFail: "Could not load the branch list",
+    branchesRefreshed: "The branch list is updated",
+    recheckFail: "Could not re-check",
+    pagesPublishFail: "Could not publish to Cloudflare Pages",
+    pagesPublishFail2: "Publishing to Cloudflare Pages failed",
+    vercelFail: "The Vercel deploy failed",
+    sendFail: "Could not send",
+    payLinkFail: "Could not create the payment link",
+    gumroadFail: "Could not create the Gumroad payment",
+    musicFail: "Could not compose the music",
+    domainFail: "Could not set up the domain",
+    stepFail: "Step not completed",
+    streamCut: "The stream was cut off",
+    scenarioFail: "The scenario did not run",
+    paramsObj: "params must be a JSON object",
+    trFail: "Could not translate",
+    tplLoadFail: "Could not load the templates",
+    needRecipient: "a recipient address is required",
+    paramsJson: "params must be valid JSON",
+    bulkFail: "Batch translation failed",
+    tplNeedFields: "a name, a subject and the HTML body of the email are required",
+    tplCreateFail: "Could not create the template",
+    importFail: "Import failed",
+    zipTooBig: "the archive is too large (50 MB maximum)",
+    previewNoOpen: "The preview did not open",
+    cfUploadFail: "Upload to Cloudflare failed",
+    uploadFail: "Upload failed",
+    needSample: "choose a sound sample first",
+    sampleReady: "The sample is ready — listen below and save it if you like it",
+    sampleFirst: "Sample first — press “🎧 Listen to the voice”, listen and save it",
+    cloneFail: "Could not clone the voice",
+    sttFail: "Could not transcribe the recording",
+    driveFail: "Could not search Google Drive",
+    ttsFail: "The voice-over failed",
+    videoNeedPrompt: "Describe what you need first",
+    videoFail: "Could not create the video",
+    videoTimeout: "No answer within 2 minutes",
+    generating: "generating…",
+    threeDNeedUrl: "Paste the image link",
+    threeDFail: "Could not generate the 3D model",
+    timeoutRetry: "Timed out — please try again",
+    modelNoLink: "The model is ready, but the link was not recognised",
+    imgSavedEmbedded: "The image is created and saved (embedded right into the page)",
+    imgSaved: "The image is created and saved",
+    dbCreatedSchema: "The database is created and the schema applied",
+    dbCreated: "The database is created",
+    aiEditApplied: "The AI edit is applied — the preview is updated (↩ Undo below if it is not what you wanted)",
+    aiEditSource: "The AI edit is in the source — deploy again to see it here (↩ Undo below if it is not what you wanted)",
+    synced: "Synced",
+    logLost: "⚠ The connection to the log was lost. The build continues on the server — refresh the page or check the “Deploys” tab in a minute.",
+    costUnverifiedTier: "Done, but the spend could not be verified: the plan counter may lag.",
+    reasonNoRights: "the project was not found or you have no edit rights",
+    lastAiEdit: "the last AI edit",
+    reasonUnknown: "reason unknown",
+    saveFailPath: "{path} was NOT saved — {reason}",
+    notSavedReason: "Not saved: {reason}",
+    copyDownloaded: "A copy of {name} is downloaded",
+    fileCreateHttp: "Could not create the file — the server replied {status}",
+    fileNotDeleted: "The file was NOT deleted — {reason}",
+    envNotSaved: "The variable was NOT saved — {reason}",
+    envNotRemoved: "The variable was NOT removed — {reason}",
+    settingsNotSaved: "The settings were NOT saved — {reason}",
+    accessNotRevoked: "Access was NOT revoked — {reason}",
+    renameCancelled: "Rename cancelled — the copy was not created ({status}); the file is where it was",
+    renameOldRemains: "The copy is created as {target}, but the old file was not removed ({status}) — both are in place",
+    provenanceFail: "Provenance was not recorded: {reason}. The code is generated and saved.",
+    undoneLabel: "Undone: {label}",
+    restoredTo: "Restored to: {label} (steps back: {steps})",
+    savedUpdated: "Saved — {path} is updated",
+    addedTo: "Added to {path}",
+    dbReadyApplied: "The database is ready — schema {schema} is created, the tables from db/schema.sql are applied, DATABASE_URL is saved to Env Vars.",
+    dbReadyNoSql: "The database is ready — schema {schema} is created. There is no db/schema.sql yet, so no tables were made.",
+    tplApplied: "The template is applied — files: {n}",
+    collabNotAdded: "The collaborator was NOT added — the server replied {status}",
+    collabAdded: "Collaborator added ({role})",
+    pushedPartial: "⚠ Pushed {sent} of {total} files. {reason}",
+    pushedOk: "Files pushed: {n}. Repository: {url}",
+    urlServes: "The address responds — the deploy is live: {url}",
+    urlSilent: "{url} is not responding yet",
+    mailSent: "The email is sent to {to}",
+    smsSent: "SMS sent (segments: {n}, ref {ref})",
+    waSent: "WhatsApp sent (message {id})",
+    trFileDone: "Translated into {path} ({bytes} bytes)",
+    tplSent: "Template no. {id} sent (message {msg})",
+    bulkMemory: "Translated {ok} of {total}, but the database was unavailable: the result is in memory only and may be lost on restart. Save a copy.",
+    bulkDone: "Translated {ok} of {total}",
+    bulkNone: "None of the {total} translations succeeded",
+    tplCreated: "Template no. {id} created — “{name}”",
+    zipImported: "Files imported from {name}: {n}",
+    sampleHttp: "Could not get the sample — the server replied {status}",
+    driveImported: "Imported {path} ({bytes} bytes)",
+    ttsHttp: "Could not voice it — the server replied {status}",
+    sfxHttp: "Could not create the sound — the server replied {status}",
+    musicHttp: "Could not create the music — the server replied {status}",
+    agentCut: "The run was cut off: {done} of {total} steps reported. The rest may not have run.",
   },
   kk: {
     listRefreshFail: "Файлдар тізімін жаңарту мүмкін болмады — алдыңғысы көрсетілген",
@@ -543,8 +773,134 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     importedMemory: "Файлдар импортталды, бірақ дерекқор қолжетімсіз болды: нәтиже әзірге жадта және қайта іске қосқанда жоғалуы мүмкін.",
     imgPermanent: "Сурет тұрақты мекенжайға жүктелді",
     imgTooBig: "Сурет тым үлкен (5 МБ-тан аспау керек)",
+    saveHttp: "Сақтау мүмкін болмады — сервер {status} деп жауап берді",
+    serverReplied: "сервер {status} деп жауап берді",
+    noServer: "серверге қосылу жоқ",
+    noLink: "байланыс жоқ",
+    genInterrupted: "Генерация үзілді",
+    genStopped: "Генерация тоқтатылды. Сервер оны аяқтап үлгеруі мүмкін — файлдар пайда болса, сол жақтағы тізімде көрінеді.",
+    genFail: "Генерация сәтсіз аяқталды",
+    undoFail: "Болдырмау мүмкін болмады",
+    restoreFail: "Қалпына келтіру мүмкін болмады",
+    planFail: "Жоспар құру мүмкін болмады",
+    previewBuildFail: "Алдын ала қарау құрастырылмады",
+    saveFail: "Сақтау мүмкін болмады",
+    imgCreateFail: "Сурет жасау мүмкін болмады",
+    dbDesignFail: "Дерекқорды жобалау мүмкін болмады",
+    dbProvisionFail: "Ресурстарды бөлу мүмкін болмады",
+    aiEditFail: "ЖИ түзетуі сәтсіз аяқталды",
+    syncFail: "Синхрондау сәтсіз аяқталды",
+    deployFail: "Шығару сәтсіз аяқталды",
+    actionFail: "Әрекетті орындау мүмкін болмады",
+    failShort: "Сәтсіз",
+    branchesLoadFail: "Тармақтар тізімін жүктеу мүмкін болмады",
+    branchesRefreshed: "Тармақтар тізімі жаңартылды",
+    recheckFail: "Қайта тексеру мүмкін болмады",
+    pagesPublishFail: "Cloudflare Pages-ке жариялау мүмкін болмады",
+    pagesPublishFail2: "Cloudflare Pages-ке жариялау сәтсіз аяқталды",
+    vercelFail: "Vercel-ге шығару сәтсіз аяқталды",
+    sendFail: "Жіберу мүмкін болмады",
+    payLinkFail: "Төлем сілтемесін жасау мүмкін болмады",
+    gumroadFail: "Gumroad төлемін жасау мүмкін болмады",
+    musicFail: "Музыка шығару мүмкін болмады",
+    domainFail: "Доменді баптау мүмкін болмады",
+    stepFail: "Қадам орындалмады",
+    streamCut: "Ағын үзілді",
+    scenarioFail: "Сценарий орындалмады",
+    paramsObj: "параметрлер JSON нысаны болуы керек",
+    trFail: "Аудару мүмкін болмады",
+    tplLoadFail: "Үлгілерді жүктеу мүмкін болмады",
+    needRecipient: "алушының мекенжайы қажет",
+    paramsJson: "параметрлер JSON пішімінде болуы керек",
+    bulkFail: "Топтық аудару сәтсіз аяқталды",
+    tplNeedFields: "атауы, тақырыбы және хаттың HTML мәтіні қажет",
+    tplCreateFail: "Үлгі жасау мүмкін болмады",
+    importFail: "Импорт сәтсіз аяқталды",
+    zipTooBig: "мұрағат тым үлкен (ең көбі 50 МБ)",
+    previewNoOpen: "Алдын ала қарау ашылмады",
+    cfUploadFail: "Cloudflare-ге жүктеу сәтсіз аяқталды",
+    uploadFail: "Жүктеу сәтсіз аяқталды",
+    needSample: "алдымен дыбыс үлгісін таңдаңыз",
+    sampleReady: "Үлгі дайын — төменде тыңдап, ұнаса сақтаңыз",
+    sampleFirst: "Алдымен үлгі — «🎧 Дауысты тыңдау» түймесін басып, тыңдап, сақтаңыз",
+    cloneFail: "Дауысты клондау мүмкін болмады",
+    sttFail: "Жазбаны мәтінге айналдыру мүмкін болмады",
+    driveFail: "Google Drive-тан іздеу мүмкін болмады",
+    ttsFail: "Дыбыстау сәтсіз аяқталды",
+    videoNeedPrompt: "Алдымен не қажет екенін сипаттаңыз",
+    videoFail: "Бейне жасау мүмкін болмады",
+    videoTimeout: "2 минут ішінде жауап келмеді",
+    generating: "жасалуда…",
+    threeDNeedUrl: "Суретке сілтемені қойыңыз",
+    threeDFail: "3D үлгісін жасау мүмкін болмады",
+    timeoutRetry: "Күту уақыты бітті — қайталап көріңіз",
+    modelNoLink: "Үлгі дайын, бірақ сілтеме танылмады",
+    imgSavedEmbedded: "Сурет жасалып, сақталды (бетке тікелей енгізілді)",
+    imgSaved: "Сурет жасалып, сақталды",
+    dbCreatedSchema: "Дерекқор жасалды, схема қолданылды",
+    dbCreated: "Дерекқор жасалды",
+    aiEditApplied: "ЖИ түзетуі қолданылды — алдын ала қарау жаңартылды (дұрыс шықпаса, төмендегі ↩ Болдырмау)",
+    aiEditSource: "ЖИ түзетуі бастапқы кодқа енгізілді — мұнда көру үшін қайта шығарыңыз (дұрыс шықпаса, төмендегі ↩ Болдырмау)",
+    synced: "Синхрондалды",
+    logLost: "⚠ Журналмен байланыс үзілді. Құрастыру серверде жалғасып жатыр — бетті жаңартыңыз немесе бір минуттан кейін «Шығарулар» қойындысын қараңыз.",
+    costUnverifiedTier: "Дайын, бірақ шығынды салыстыру мүмкін болмады: тариф есептегіші артта қалуы мүмкін.",
+    reasonNoRights: "жоба табылмады немесе түзетуге құқық жоқ",
+    lastAiEdit: "соңғы ЖИ түзетуі",
+    reasonUnknown: "себебі белгісіз",
+    saveFailPath: "{path} сақталМАДЫ — {reason}",
+    notSavedReason: "Сақталмады: {reason}",
+    copyDownloaded: "{name} көшірмесі жүктелді",
+    fileCreateHttp: "Файл жасау мүмкін болмады — сервер {status} деп жауап берді",
+    fileNotDeleted: "Файл жойылМАДЫ — {reason}",
+    envNotSaved: "Айнымалы сақталМАДЫ — {reason}",
+    envNotRemoved: "Айнымалы жойылМАДЫ — {reason}",
+    settingsNotSaved: "Баптаулар сақталМАДЫ — {reason}",
+    accessNotRevoked: "Қолжетімділік қайтарылМАДЫ — {reason}",
+    renameCancelled: "Атауын өзгерту тоқтатылды — көшірме жасалмады ({status}); файл орнында",
+    renameOldRemains: "Көшірме {target} ретінде жасалды, бірақ ескі файл жойылмады ({status}) — екеуі де орнында",
+    provenanceFail: "Шығу тегі тіркелмеді: {reason}. Код жасалып, сақталды.",
+    undoneLabel: "Болдырылмады: {label}",
+    restoredTo: "Қайтарылды: {label} (артқа қадам: {steps})",
+    savedUpdated: "Сақталды — {path} жаңартылды",
+    addedTo: "{path} файлына қосылды",
+    dbReadyApplied: "Дерекқор дайын — {schema} схемасы жасалды, db/schema.sql кестелері қолданылды, DATABASE_URL орта айнымалыларына сақталды.",
+    dbReadyNoSql: "Дерекқор дайын — {schema} схемасы жасалды. db/schema.sql әлі жоқ, сондықтан кестелер жасалмады.",
+    tplApplied: "Үлгі қолданылды — файлдар: {n}",
+    collabNotAdded: "Серіктес қосылМАДЫ — сервер {status} деп жауап берді",
+    collabAdded: "Серіктес қосылды ({role})",
+    pushedPartial: "⚠ {total} файлдың {sent} жіберілді. {reason}",
+    pushedOk: "Жіберілген файлдар: {n}. Репозиторий: {url}",
+    urlServes: "Мекенжай жауап береді — шығару жұмыс істеп тұр: {url}",
+    urlSilent: "{url} әзірге жауап бермейді",
+    mailSent: "Хат {to} мекенжайына жіберілді",
+    smsSent: "SMS жіберілді (сегменттер: {n}, ref {ref})",
+    waSent: "WhatsApp жіберілді (хабарлама {id})",
+    trFileDone: "{path} файлына аударылды ({bytes} байт)",
+    tplSent: "№{id} үлгісі жіберілді (хабарлама {msg})",
+    bulkMemory: "{total} ішінен {ok} аударылды, бірақ дерекқор қолжетімсіз болды: нәтиже әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
+    bulkDone: "{total} ішінен {ok} аударылды",
+    bulkNone: "{total} аударманың ешқайсысы сәтті болмады",
+    tplCreated: "№{id} үлгісі жасалды — «{name}»",
+    zipImported: "{name} ішінен импортталған файлдар: {n}",
+    sampleHttp: "Үлгіні алу мүмкін болмады — сервер {status} деп жауап берді",
+    driveImported: "{path} импортталды ({bytes} байт)",
+    ttsHttp: "Дыбыстау мүмкін болмады — сервер {status} деп жауап берді",
+    sfxHttp: "Дыбыс жасау мүмкін болмады — сервер {status} деп жауап берді",
+    musicHttp: "Музыка жасау мүмкін болмады — сервер {status} деп жауап берді",
+    agentCut: "Іске қосу үзілді: {total} қадамның {done} туралы хабарланды. Қалғандары орындалмаған болуы мүмкін.",
   },
 };
+// Подстановки {name} в строках TOAST_UI. Ключи — свойства объекта, а не кавычки
+// в вызове: сторож workspaceSpeaksOneLanguage читает латинские литералы внутри
+// showToast(...) как английский текст.
+function fill(s: string, v: Record<string, string | number | null | undefined>): string {
+  return s.replace(/\{(\w+)\}/g, (_m, k: string) => String(v[k] ?? ""));
+}
+// Словарь для модульных помощников вне компонента (хука языка здесь нет).
+function tlModule(): Record<string, string> {
+  const lang = typeof document === "undefined" ? "ru" : document.documentElement.lang || "ru";
+  return TOAST_UI[lang] ?? TOAST_UI.ru;
+}
 
 // Один источник для главного компонента и подкомпонентов (Toast).
 function useAttrL(): Record<string, string> {
@@ -1634,16 +1990,16 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       if (!r.ok) {
         const reason = r.status === 404
-          ? "проект не найден или нет прав на правку"
-          : `сервер ответил ${r.status}`;
-        setSaveError(`${path} НЕ сохранён — ${reason}`);
-        showToast(`Не сохранено: ${reason}`, "error");
+          ? TL.reasonNoRights
+          : fill(TL.serverReplied, { status: r.status });
+        setSaveError(fill(TL.saveFailPath, { path, reason }));
+        showToast(fill(TL.notSavedReason, { reason }), "error");
         return;
       }
       setSaveError(null);
       setFiles((fs) => fs.map((f) => f.path === path ? { ...f, content, updatedAt: new Date().toISOString() } : f));
     } catch {
-      setSaveError(`${path} НЕ сохранён — нет связи с сервером`);
+      setSaveError(fill(TL.saveFailPath, { path, reason: TL.noServer }));
       showToast(TL.notSavedOffline, "error");
     } finally {
       setSaving(false);
@@ -1663,7 +2019,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
-    showToast(`Копия ${a.download} скачана`, "success");
+    showToast(fill(TL.copyDownloaded, { name: a.download }), "success");
   };
 
   const handleEditorChange = (value: string) => {
@@ -1705,7 +2061,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       const data = await r.json().catch(() => null);
       const newFile = data?.file;
       if (!r.ok || !newFile?.path) {
-        showToast(`Не удалось создать файл — сервер ответил ${r.status}`, "error");
+        showToast(fill(TL.fileCreateHttp, { status: r.status }), "error");
         return;
       }
       setFiles((fs) => [...fs, newFile].sort((a, b) => a.path.localeCompare(b.path)));
@@ -1744,7 +2100,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       }
     } catch (e: any) {
       // The file is still there; the tree must keep showing it.
-      showToast(`Файл НЕ удалён — ${e?.message || "нет связи"}`, "error");
+      showToast(fill(TL.fileNotDeleted, { reason: e?.message || TL.noLink }), "error");
     }
   };
 
@@ -1773,7 +2129,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         body: JSON.stringify({ content: file.content, language: file.language }),
       });
       if (!putR.ok) {
-        showToast(`Переименование отменено — копия не создалась (${putR.status}); файл на месте`, "error");
+        showToast(fill(TL.renameCancelled, { status: putR.status }), "error");
         return;
       }
       const delR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
@@ -1783,7 +2139,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json().catch(() => null);
         if (listData?.files) setFiles(listData.files);
-        showToast(`Копия создана как ${target}, но старый файл не удалился (${delR.status}) — оба на месте`, "warning");
+        showToast(fill(TL.renameOldRemains, { target, status: delR.status }), "warning");
         return;
       }
       setFiles((fs) => {
@@ -1896,13 +2252,13 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 }
               }
               else if (evt.type === "result") data = evt;
-              else if (evt.type === "error") throw new Error(serverError(evt.error, "Генерация прервалась"));
+              else if (evt.type === "error") throw new Error(serverError(evt.error, TL.genInterrupted));
             }
           }
         }
       } catch (streamErr) {
         // Отмена — решение человека, а не сбой: запасной запрос не запускаем.
-        if (genCtrl.signal.aborted) throw new Error("Генерация остановлена. Сервер мог успеть доделать её — если файлы появятся, их видно в списке слева.");
+        if (genCtrl.signal.aborted) throw new Error(TL.genStopped);
         if (streamErr instanceof Error && data === null && streamErr.message && !/fetch|network/i.test(streamErr.message)) throw streamErr;
         // Поток оборвался — уходим на обычный запрос. Человеку это НАДО сказать:
         // иначе он видит замерший индикатор и ждёт вдвое дольше, не понимая,
@@ -1918,7 +2274,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
           { onRetry: () => showToast(TL.backendRedeploy, "info") }
         );
         data = await r.json();
-        if (!r.ok) throw new Error(serverError(data.error, "Генерация не удалась"));
+        if (!r.ok) throw new Error(serverError(data.error, TL.genFail));
       }
       const newGenerated = data.files || [];
       предупредитьЕслиНеСверили(data);
@@ -1971,7 +2327,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       }
       if (stampProvenance && !data.provenance) {
         // Просили отметку, а её нет — молчать нельзя (§16). Причину несёт ответ.
-        showToast(`Происхождение не зафиксировано: ${data.provenanceError || "причина неизвестна"}. Код сгенерирован и сохранён.`, "warning");
+        showToast(fill(TL.provenanceFail, { reason: data.provenanceError || TL.reasonUnknown }), "warning");
       }
       // Data-shaped idea + no schema yet → offer to design the database with
       // the context already in hand (rules live in lib/devhubHints — tested).
@@ -2024,8 +2380,8 @@ if (/Месячная норма исчерпана|Месячный лимит[
       // Отмена во время запасного запроса приходит английским AbortError —
       // подменяем тем же честным текстом, что и при отмене стрима.
       const msg = genCtrl.signal.aborted
-        ? "Генерация остановлена. Сервер мог успеть доделать её — если файлы появятся, их видно в списке слева."
-        : (e.message || "Генерация не удалась");
+        ? TL.genStopped
+        : (e.message || TL.genFail);
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), files: [], note: msg }]);
       showToast(msg, genCtrl.signal.aborted ? "info" : "error");
     } finally {
@@ -2084,7 +2440,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate/undo`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(serverError(data.error, "Отменить не удалось"));
+      if (!r.ok) throw new Error(serverError(data.error, TL.undoFail));
       if (data.ok === false) {
         showToast(TL.nothingToUndo, "info");
         return;
@@ -2097,10 +2453,10 @@ if (/Месячная норма исчерпана|Месячный лимит[
       if (data.storage === "memory") {
         showToast(TL.undoneMemory, "error");
       } else {
-        showToast(`Отменено: ${data.label || "последняя правка ИИ"}`, "success");
+        showToast(fill(TL.undoneLabel, { label: data.label || TL.lastAiEdit }), "success");
       }
     } catch (e: any) {
-      showToast(e.message || "Отменить не удалось", "error");
+      showToast(e.message || TL.undoFail, "error");
     } finally {
       setUndoing(false);
     }
@@ -2112,7 +2468,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/checkpoints/${checkpointId}/restore`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(serverError(data.error, "Восстановить не удалось"));
+      if (!r.ok) throw new Error(serverError(data.error, TL.restoreFail));
       if (data.ok === false) {
         showToast(TL.checkpointGone, "info");
         loadCheckpointHistory();
@@ -2123,10 +2479,10 @@ if (/Месячная норма исчерпана|Месячный лимит[
       if (data.storage === "memory") {
         showToast(TL.restoredMemory, "error");
       } else {
-        showToast(`Вернулись к: ${data.restoredToLabel} (шагов назад: ${data.stepsApplied})`, "success");
+        showToast(fill(TL.restoredTo, { label: data.restoredToLabel, steps: data.stepsApplied }), "success");
       }
     } catch (e: any) {
-      showToast(e.message || "Восстановить не удалось", "error");
+      showToast(e.message || TL.restoreFail, "error");
     } finally {
       setRestoringId(null);
     }
@@ -2143,13 +2499,13 @@ if (/Месячная норма исчерпана|Месячный лимит[
         body: JSON.stringify({ idea: planIdea, ...(project ? { projectId: project.id } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(serverError(data.error, "Не удалось составить план"));
+      if (!r.ok || data.ok === false) throw new Error(serverError(data.error, TL.planFail));
       setPlan(data);
       if (data.aiGenerated === false) {
         showToast(TL.stubPlan, "warning");
       }
     } catch (e: any) {
-      showToast(e.message || "Не удалось составить план", "error");
+      showToast(e.message || TL.planFail, "error");
     } finally {
       setPlanning(false);
     }
@@ -2184,7 +2540,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       REACT_PREVIEW_OVERLAY_SCRIPT
     ).then((r) => {
       if (cancelled) return;
-      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(serverError(r.error, "Превью не собралось")); }
+      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(serverError(r.error, TL.previewBuildFail)); }
       // Та же заглушка хранилища, что и у статики: песочница одна и та же.
       else { setReactPreviewSrcdoc(vstavitZaglushkuHranilisha(r.srcdoc)); }
       setVisualEditSelected(null);
@@ -2244,13 +2600,13 @@ if (/Месячная норма исчерпана|Месячный лимит[
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: finalHtml }),
       });
-      if (!r.ok) throw new Error("Сохранить не удалось");
+      if (!r.ok) throw new Error(TL.saveFail);
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast(`Сохранено — обновлён ${visualEditHtmlPath}`, "success");
+      showToast(fill(TL.savedUpdated, { path: visualEditHtmlPath }), "success");
     } catch (e: any) {
-      showToast(e.message || "Сохранить не удалось", "error");
+      showToast(e.message || TL.saveFail, "error");
     } finally {
       setVisualEditSaving(false);
     }
@@ -2269,7 +2625,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         body: JSON.stringify({ prompt: visualEditImgPrompt.trim() }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(serverError(data.error, "Не удалось создать картинку"));
+      if (!r.ok) throw new Error(serverError(data.error, TL.imgCreateFail));
       const doc = visualEditSourceDocRef.current;
       const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
       if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
@@ -2290,12 +2646,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
       applyFileList(listData);
       showToast(
         String(data.url).startsWith("data:")
-          ? "Картинка создана и сохранена (встроена прямо в страницу)"
-          : "Картинка создана и сохранена",
+          ? TL.imgSavedEmbedded
+          : TL.imgSaved,
         "success"
       );
     } catch (e: any) {
-      showToast(e.message || "Не удалось создать картинку", "error");
+      showToast(e.message || TL.imgCreateFail, "error");
     } finally {
       setVisualEditImgBusy(false);
     }
@@ -2317,7 +2673,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         { onRetry: () => showToast(TL.backendRedeploy, "info") }
       );
       const data = await r.json();
-      if (!r.ok) throw new Error(serverError(data.error, "Не удалось спроектировать базу"));
+      if (!r.ok) throw new Error(serverError(data.error, TL.dbDesignFail));
       const changes = (data.files || []).map((gf: { path: string; language?: string; content: string }) => {
         const before = files.find((ff) => ff.path === gf.path)?.content ?? "";
         const d = diffLines(before, gf.content ?? "");
@@ -2337,7 +2693,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         setChatHistory((h) => [...h, { role: "hint", kind: "provision_db", description, at: new Date().toISOString() }]);
       }
     } catch (e: any) {
-      showToast(e.message || "Не удалось спроектировать базу", "error");
+      showToast(e.message || TL.dbDesignFail, "error");
     } finally {
       setDesigningDb(false);
     }
@@ -2362,7 +2718,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
     const next = appendSnippet(editorContent, assetSnippet(selectedFile.path, url, kind));
     setEditorContent(next);
     saveCurrentFile(selectedFile.path, next, selectedFile.language);
-    showToast(`Добавлено в ${selectedFile.path}`, "success");
+    showToast(fill(TL.addedTo, { path: selectedFile.path }), "success");
   };
 
   // Say "aevion.build" only when the server reports that capability working.
@@ -2385,7 +2741,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         { onRetry: () => showToast(TL.backendRedeploy, "info") }
       );
       const data = await r.json();
-      if (!r.ok || !data.ok) throw new Error(serverError(data.error, "Не удалось выделить ресурсы"));
+      if (!r.ok || !data.ok) throw new Error(serverError(data.error, TL.dbProvisionFail));
       setChatHistory((h) => [
         ...h.filter((m) => !(m.role === "hint" && m.kind === "provision_db")),
         {
@@ -2393,17 +2749,17 @@ if (/Месячная норма исчерпана|Месячный лимит[
           at: new Date().toISOString(),
           files: [],
           note: data.appliedSchemaSql
-            ? `База готова — схема ${data.schema} created, tables from db/schema.sql applied, DATABASE_URL saved to Env Vars.`
-            : `База готова — схема ${data.schema} created. No db/schema.sql yet, so no tables were made.`,
+            ? fill(TL.dbReadyApplied, { schema: data.schema })
+            : fill(TL.dbReadyNoSql, { schema: data.schema }),
         },
       ]);
       // Refresh the project so the Env Vars tab shows DATABASE_URL.
       const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
       const pd = await pr.json();
       setProject(pd.project);
-      showToast(data.appliedSchemaSql ? "База создана, схема применена" : "База создана", "success");
+      showToast(data.appliedSchemaSql ? TL.dbCreatedSchema : TL.dbCreated, "success");
     } catch (e: any) {
-      showToast(e.message || "Не удалось выделить ресурсы", "error");
+      showToast(e.message || TL.dbProvisionFail, "error");
     } finally {
       setProvisioningDb(false);
     }
@@ -2434,7 +2790,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         body: JSON.stringify({ prompt, stack: project.stack, ...(visualEditHtmlPath ? { targetFiles: [visualEditHtmlPath] } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(serverError(data.error, "Правка ИИ не удалась"));
+      if (!r.ok) throw new Error(serverError(data.error, TL.aiEditFail));
       if (data.aiGenerated === false) {
         showToast(TL.stubVisual, "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
@@ -2442,8 +2798,8 @@ if (/Месячная норма исчерпана|Месячный лимит[
       } else {
         showToast(
           visualEditHtmlPath
-            ? "Правка ИИ применена — превью обновлено (↩ Отменить ниже, если получилось не то)"
-            : "Правка ИИ внесена в исходники — выкатите заново, чтобы увидеть её здесь (↩ Отменить ниже, если получилось не то)",
+            ? TL.aiEditApplied
+            : TL.aiEditSource,
           "success"
         );
       }
@@ -2454,7 +2810,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       const listData = await listR.json();
       applyFileList(listData);
     } catch (e: any) {
-      showToast(e.message || "Правка ИИ не удалась", "error");
+      showToast(e.message || TL.aiEditFail, "error");
     } finally {
       setVisualEditAiBusy(false);
     }
@@ -2468,19 +2824,19 @@ if (/Месячная норма исчерпана|Месячный лимит[
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(serverError(data.error, "Синхронизация не удалась"));
+      if (!r.ok || data.ok === false) throw new Error(serverError(data.error, TL.syncFail));
       // A sync that could not read some files leaves the project part-new and
       // part-stale — and that mixture is what a later push or deploy builds
       // from. A green toast over that reads as "all of it arrived".
       showToast(
-        "Синхронизировано",
+        TL.synced,
         data.degraded ? "warning" : (data.updated?.length || data.created?.length) ? "success" : "info",
       );
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
     } catch (e: any) {
-      showToast(e.message || "Синхронизация не удалась", "error");
+      showToast(e.message || TL.syncFail, "error");
     } finally {
       setRepoPulling(false);
     }
@@ -2514,7 +2870,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       // Обрыв стрима раньше выглядел как вечная сборка: панель замирала,
       // «Live» не наступало, и человек ждал неизвестно чего. Обрыв — не
       // приговор сборке (она идёт на сервере), но молчать о нём нельзя.
-      setBuildLog((prev) => [...prev, "⚠ Связь с журналом оборвалась. Сборка продолжается на сервере — обновите страницу или загляните во вкладку «Выкатки» через минуту."]);
+      setBuildLog((prev) => [...prev, TL.logLost]);
       setBuildDone(true);
     };
   }, []);
@@ -2544,7 +2900,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(serverError(data.error, "Выкатка не удалась"));
+      if (!r.ok) throw new Error(serverError(data.error, TL.deployFail));
       const deploymentId: string = data.deploymentId;
       // Start streaming build log
       streamBuildLog(project.id, deploymentId);
@@ -2576,7 +2932,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       };
       setTimeout(poll, 5000);
     } catch (e: any) {
-      showToast(e.message || "Выкатка не удалась", "error");
+      showToast(e.message || TL.deployFail, "error");
       setDeploying(false);
     }
   };
@@ -2590,14 +2946,14 @@ if (/Месячная норма исчерпана|Месячный лимит[
         // берём его и переводим тем же помощником, что и остальные показы.
         const body = await r.json().catch(() => null);
         throw new Error(
-          serverError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+          serverError(body?.error, fill(TL.saveHttp, { status: r.status })),
         );
       }
       const data = await r.json();
       setDeployments(data.deployments || []);
       setDeploymentsLoadError(null);
     } catch (e: any) {
-      setDeploymentsLoadError(e?.message || "нет связи с сервером");
+      setDeploymentsLoadError(e?.message || TL.noServer);
     }
   }, [project]);
 
@@ -2631,14 +2987,14 @@ if (/Месячная норма исчерпана|Месячный лимит[
         // берём его и переводим тем же помощником, что и остальные показы.
         const body = await r.json().catch(() => null);
         throw new Error(
-          serverError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+          serverError(body?.error, fill(TL.saveHttp, { status: r.status })),
         );
       }
       const data = await r.json();
       setEnvList(data.env || []);
       setEnvLoadError(null);
     } catch (e: any) {
-      setEnvLoadError(e?.message || "нет связи с сервером");
+      setEnvLoadError(e?.message || TL.noServer);
     }
   }, [project]);
 
@@ -2666,7 +3022,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       } else {
         showToast(TL.envSaved, "success");
       }
-    } catch (e: any) { showToast(`Переменная НЕ сохранена — ${e?.message || "нет связи"}`, "error"); }
+    } catch (e: any) { showToast(fill(TL.envNotSaved, { reason: e?.message || TL.noLink }), "error"); }
   };
 
   const removeEnvVar = async (key: string) => {
@@ -2685,7 +3041,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       // The list is re-read either way: a variable that is still on the server
       // must reappear rather than look deleted.
       fetchEnv();
-      showToast(`Переменная НЕ удалена — ${e?.message || "нет связи"}`, "error");
+      showToast(fill(TL.envNotRemoved, { reason: e?.message || TL.noLink }), "error");
     }
   };
 
@@ -2699,17 +3055,17 @@ if (/Месячная норма исчерпана|Месячный лимит[
         body: JSON.stringify({ templateId }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(serverError(data.error, "Не удалось выполнить действие"));
+      if (!r.ok) throw new Error(serverError(data.error, TL.actionFail));
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
       if (data.storage === "memory") {
         showToast(TL.tplMemory, "error");
       } else {
-        showToast(`Шаблон применён — файлов: ${(data.files || []).length}`, "success");
+        showToast(fill(TL.tplApplied, { n: (data.files || []).length }), "success");
       }
     } catch (e: any) {
-      showToast(e.message || "Не удалось", "error");
+      showToast(e.message || TL.failShort, "error");
     } finally {
       setApplyingTemplate(null);
     }
@@ -2731,7 +3087,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       setProject((p) => p ? { ...p, name: settingsName, description: settingsDesc || null, customDomain: settingsDomain || null } : p);
       showToast(TL.settingsSaved, "success");
     } catch (e: any) {
-      showToast(`Настройки НЕ сохранены — ${e?.message || "нет связи"}`, "error");
+      showToast(fill(TL.settingsNotSaved, { reason: e?.message || TL.noLink }), "error");
     } finally {
       setSavingSettings(false);
     }
@@ -2754,12 +3110,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
         // Two lies in one line before this: a green "added" toast, and
         // `data.collaborators || []` wiping everyone already on the project
         // off the screen because a failed response carries no list.
-        showToast(`Соавтор НЕ добавлен — сервер ответил ${resp.status}`, "error");
+        showToast(fill(TL.collabNotAdded, { status: resp.status }), "error");
         return;
       }
       setProject((p) => p ? { ...p, collaborators: data.collaborators } : p);
       setSettingsCollab("");
-      showToast(`Соавтор добавлен (${collabRole})`, "success");
+      showToast(fill(TL.collabAdded, { role: collabRole }), "success");
     } catch {
       showToast(TL.collabAddFail, "error");
     }
@@ -2774,7 +3130,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
     } catch (e: any) {
       // Leave them in the list. Access is still live, and a list that hides
       // that is worse than the error.
-      showToast(`Доступ НЕ отозван — ${e?.message || "нет связи"}`, "error");
+      showToast(fill(TL.accessNotRevoked, { reason: e?.message || TL.noLink }), "error");
     }
   };
 
@@ -2811,7 +3167,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         // иначе третий показ снова окажется сырым.
         const issue = {
           errorKind: d.errorKind as string | undefined,
-          error: serverError(d.error, "Не удалось загрузить список веток"),
+          error: serverError(d.error, TL.branchesLoadFail),
         };
         setGithubIssue(issue);
         return issue;
@@ -2820,7 +3176,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       return null;
     } catch {
       setGithubBranches([]);
-      const issue = { errorKind: "unavailable", error: "Не удалось загрузить список веток" };
+      const issue = { errorKind: "unavailable", error: TL.branchesLoadFail };
       setGithubIssue(issue);
       return issue;
     }
@@ -2844,14 +3200,14 @@ if (/Месячная норма исчерпана|Месячный лимит[
         // Some files never reached the repo. Saying "pushed" here is how an
         // incomplete repo passed for a complete one — and it is the repo a
         // deploy would build from.
-        setGithubMsg(`⚠ Отправлено ${d.pushedFiles} из ${d.pushedFiles + (d.failedFiles?.length ?? 0)} файлов. ${d.degradedReason}`);
+        setGithubMsg(fill(TL.pushedPartial, { sent: d.pushedFiles, total: d.pushedFiles + (d.failedFiles?.length ?? 0), reason: d.degradedReason }));
         setGithubMsgTone("warning");
         showToast(TL.repoPartial, "warning");
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();
         await fetchGithubBranches();
       } else if (d.ok) {
-        setGithubMsg(`Отправлено файлов: ${d.pushedFiles}. Репозиторий: ${d.repoUrl}`);
+        setGithubMsg(fill(TL.pushedOk, { n: d.pushedFiles, url: d.repoUrl }));
         setGithubMsgTone("success");
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();
@@ -2889,7 +3245,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       await fetchGithubStatus();
       const issue = await fetchGithubBranches();
       // Reporting "updated" after a refusal is the same lie one layer up.
-      setGithubMsg(issue ? issue.error : "Список веток обновлён");
+      setGithubMsg(issue ? issue.error : TL.branchesRefreshed);
       setGithubMsgTone(issue ? (issue.errorKind === "unavailable" || issue.errorKind === "rate_limit" ? "warning" : "error") : "success");
     } finally {
       setGithubSyncing(false);
@@ -2909,8 +3265,8 @@ if (/Месячная норма исчерпана|Месячный лимит[
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deployments/${deployId}/recheck`), { method: "POST" });
       const d = await r.json();
-      if (!r.ok) throw new Error(serverError(d.error, "Не удалось перепроверить"));
-      showToast(d.serves ? `Адрес отвечает — выкатка живая: ${d.deployUrl}` : `${d.deployUrl} пока не отвечает`, d.serves ? "success" : "warning");
+      if (!r.ok) throw new Error(serverError(d.error, TL.recheckFail));
+      showToast(d.serves ? fill(TL.urlServes, { url: d.deployUrl }) : fill(TL.urlSilent, { url: d.deployUrl }), d.serves ? "success" : "warning");
       fetchDeployments();
       if (d.serves) {
         const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
@@ -2918,7 +3274,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         setProject(pd.project);
       }
     } catch (e: any) {
-      showToast(e?.message || "Не удалось перепроверить", "error");
+      showToast(e?.message || TL.recheckFail, "error");
     } finally {
       setRecheckingId(null);
     }
@@ -2936,7 +3292,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
       const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(serverError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
+      if (!r.ok || !d.ok) throw new Error(serverError(d.error, TL.pagesPublishFail));
       setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl, domainReady: !!d.domainReady });
       // Верхняя «Выкатить» оставляла человека в текущей вкладке: адрес с кнопкой
       // «Открыть» жил во «Выкатках» и не был виден (замер 20.10, см. withLinks).
@@ -2993,7 +3349,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       };
       setTimeout(pollPages, 5000);
     } catch (e: any) {
-      showToast(e?.message || "Публикация на Cloudflare Pages не удалась", "error");
+      showToast(e?.message || TL.pagesPublishFail2, "error");
     } finally {
       setPagesDeploying(false);
     }
@@ -3013,7 +3369,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/vercel`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        throw new Error(serverError(d.error, "Выкатка на Vercel не удалась"));
+        throw new Error(serverError(d.error, TL.vercelFail));
       }
       showToast(`Vercel: ${d.deployUrl}`, "success");
       setTimeout(async () => {
@@ -3022,7 +3378,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         setProject(pd.project);
       }, 6000);
     } catch (e: any) {
-      showToast(e?.message || "Выкатка на Vercel не удалась", "error");
+      showToast(e?.message || TL.vercelFail, "error");
     } finally {
       setVercelDeploying(false);
     }
@@ -3042,12 +3398,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
+        setEmailMsg({ ok: false, text: serverError(d.error, TL.sendFail) });
       } else if (d.degraded) {
         setEmailMsg({ ok: true, degraded: true, text: `Sent to ${emailTo}, but Brevo didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
       } else {
-        setEmailMsg({ ok: true, text: `Письмо отправлено на ${emailTo}` });
+        setEmailMsg({ ok: true, text: fill(TL.mailSent, { to: emailTo }) });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
       }
     } catch (e: any) {
@@ -3087,7 +3443,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(serverError(d.error, "Не удалось создать ссылку на оплату"));
+        setPayError(serverError(d.error, TL.payLinkFail));
       } else {
         setPayResult({ url: d.url });
       }
@@ -3114,7 +3470,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(serverError(d.error, "Не удалось создать оплату Gumroad"));
+        setPayError(serverError(d.error, TL.gumroadFail));
       } else {
         setPayResult({ url: d.url });
       }
@@ -3145,7 +3501,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setImgError(serverError(d.error, "Не удалось создать картинку"));
+        setImgError(serverError(d.error, TL.imgCreateFail));
       } else {
         setImgResult({ url: d.url, revisedPrompt: d.revisedPrompt });
               // Сервер помечает ответ, когда РАЗРЕШИЛ трату, не сумев
@@ -3155,13 +3511,13 @@ if (/Месячная норма исчерпана|Месячный лимит[
               // (замер 29.08.2026: сервер ставит, фронт читает 0 раз).
               if (d.creditUnverified) {
                 showToast(
-                  "Готово, но расход не удалось сверить: счётчик тарифа может отстать.",
+                  TL.costUnverifiedTier,
                   "warning",
                 );
               }
       }
     } catch (e: any) {
-      setImgError(e?.message || "Не удалось создать картинку");
+      setImgError(e?.message || TL.imgCreateFail);
     } finally {
       setImgLoading(false);
     }
@@ -3186,7 +3542,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(serverError(d?.error, `Не удалось создать звук — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, fill(TL.sfxHttp, { status: r.status })));
       }
       const blob = await r.blob();
       setSfxUrl(URL.createObjectURL(blob));
@@ -3220,12 +3576,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(serverError(d?.error, `Не удалось создать музыку — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, fill(TL.musicHttp, { status: r.status })));
       }
       const blob = await r.blob();
       setMusicUrl(URL.createObjectURL(blob));
     } catch (e: any) {
-      setMusicError(e?.message || "Не удалось сочинить музыку");
+      setMusicError(e?.message || TL.musicFail);
     } finally {
       setMusicLoading(false);
     }
@@ -3241,7 +3597,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/setup`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDomainSetupMsg({ ok: false, text: serverError(d.error, "Не удалось настроить домен") });
+        setDomainSetupMsg({ ok: false, text: serverError(d.error, TL.domainFail) });
       } else {
         setDomainSetupMsg({ ok: true, text: `✓ ${d.domain} → ${d.url}` });
         setProject((p) => p ? { ...p, customDomain: d.domain } : p);
@@ -3318,7 +3674,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 const step = agentSteps[evt.index];
                 accumulated.push({
                   step: evt.index, type: step?.type || "unknown",
-                  ok: !!evt.ok, output: evt.output, error: evt.error ? serverError(evt.error, "Шаг не выполнен") : evt.error, savedAs: evt.savedAs,
+                  ok: !!evt.ok, output: evt.output, error: evt.error ? serverError(evt.error, TL.stepFail) : evt.error, savedAs: evt.savedAs,
                 });
                 setAgentResults([...accumulated]);
               } else if (evt.type === "complete") {
@@ -3333,7 +3689,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         }
         if (!completed) {
           showToast(
-            `Прогон оборвался: отчитались ${accumulated.length} из ${agentSteps.length} шагов. Остальные могли не выполниться.`,
+            fill(TL.agentCut, { done: accumulated.length, total: agentSteps.length }),
             "error",
           );
         }
@@ -3341,7 +3697,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         const listData = await listR.json();
         applyFileList(listData);
       } catch (e: any) {
-        showToast(e?.message || "Поток оборвался", "error");
+        showToast(e?.message || TL.streamCut, "error");
       } finally {
         setAgentRunning(false);
         setAgentLiveStep(null);
@@ -3357,7 +3713,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         body: JSON.stringify({ steps: agentSteps }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(serverError(d.error, "Сценарий не выполнился"));
+      if (!r.ok) throw new Error(serverError(d.error, TL.scenarioFail));
       setAgentResults(d.results || []);
       setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -3365,7 +3721,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       applyFileList(listData);
       showToast(agentToastText(d.successCount, d.totalSteps), d.successCount === d.totalSteps ? "success" : "error");
     } catch (e: any) {
-      showToast(e?.message || "Сценарий не выполнился", "error");
+      showToast(e?.message || TL.scenarioFail, "error");
     } finally {
       setAgentRunning(false);
     }
@@ -3389,12 +3745,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSmsMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
+        setSmsMsg({ ok: false, text: serverError(d.error, TL.sendFail) });
       } else if (d.degraded) {
         setSmsMsg({ ok: true, degraded: true, text: `Brevo accepted the SMS, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setSmsRecipient(""); setSmsContent("");
       } else {
-        setSmsMsg({ ok: true, text: `SMS отправлено (${d.smsCount} segment${d.smsCount === 1 ? "" : "s"}, ref ${d.reference})` });
+        setSmsMsg({ ok: true, text: fill(TL.smsSent, { n: d.smsCount, ref: d.reference }) });
         setSmsRecipient(""); setSmsContent("");
       }
     } catch (e: any) {
@@ -3414,7 +3770,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       let params: any = undefined;
       if (waParams.trim()) {
         try { params = JSON.parse(waParams); } catch {
-          setWaMsg({ ok: false, text: "параметры должны быть объектом JSON" });
+          setWaMsg({ ok: false, text: TL.paramsObj });
           setWaLoading(false);
           return;
         }
@@ -3430,12 +3786,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setWaMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
+        setWaMsg({ ok: false, text: serverError(d.error, TL.sendFail) });
       } else if (d.degraded) {
         setWaMsg({ ok: true, degraded: true, text: `Brevo accepted the WhatsApp message, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
       } else {
-        setWaMsg({ ok: true, text: `WhatsApp отправлен (сообщение ${d.messageId})` });
+        setWaMsg({ ok: true, text: fill(TL.waSent, { id: d.messageId }) });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
       }
     } catch (e: any) {
@@ -3473,7 +3829,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrError(serverError(d.error, "Не удалось перевести"));
+        setTrError(serverError(d.error, TL.trFail));
       } else {
         setTrResult({ text: d.text, detectedSource: d.detectedSource });
             предупредитьЕслиНеСверили(d);
@@ -3497,9 +3853,9 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrFileMsg({ ok: false, text: serverError(d.error, "Не удалось перевести") });
+        setTrFileMsg({ ok: false, text: serverError(d.error, TL.trFail) });
       } else {
-        setTrFileMsg({ ok: true, text: `Переведено в ${d.path} (${d.bytes} bytes)` });
+        setTrFileMsg({ ok: true, text: fill(TL.trFileDone, { path: d.path, bytes: d.bytes }) });
             предупредитьЕслиНеСверили(d);
         // Reload file tree
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -3522,7 +3878,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       const r = await fetch(apiUrl("/api/devhub/media/email-templates?limit=50"), { cache: "no-store" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailTemplatesError(serverError(d.error, "Не удалось загрузить шаблоны"));
+        setEmailTemplatesError(serverError(d.error, TL.tplLoadFail));
         setEmailTemplates([]);
       } else {
         setEmailTemplates(d.templates || []);
@@ -3542,7 +3898,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
 
   const sendByTemplate = async (templateId: number) => {
     if (!tplSendTo.trim()) {
-      setTplSendMsg({ ok: false, text: "нужен адрес получателя" });
+      setTplSendMsg({ ok: false, text: TL.needRecipient });
       return;
     }
     setTplSendingId(templateId);
@@ -3551,7 +3907,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       let params: any = undefined;
       if (tplSendParams.trim()) {
         try { params = JSON.parse(tplSendParams); } catch {
-          setTplSendMsg({ ok: false, text: "параметры должны быть в формате JSON" });
+          setTplSendMsg({ ok: false, text: TL.paramsJson });
           setTplSendingId(null);
           return;
         }
@@ -3563,9 +3919,9 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplSendMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
+        setTplSendMsg({ ok: false, text: serverError(d.error, TL.sendFail) });
       } else {
-        setTplSendMsg({ ok: true, text: `Отправлен шаблон №${templateId} (msg ${d.messageId})` });
+        setTplSendMsg({ ok: true, text: fill(TL.tplSent, { id: templateId, msg: d.messageId }) });
       }
     } catch (e: any) {
       setTplSendMsg({ ok: false, text: e?.message || "Send failed" });
@@ -3601,7 +3957,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(serverError(d.error, "Пакетный перевод не удался"), "error");
+        showToast(serverError(d.error, TL.bulkFail), "error");
         return;
       }
       // У каждой строки результата свой текст ошибки от сервера, и он
@@ -3609,7 +3965,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
         // в разметке легко забыть, а сюда всё приходит одним местом.
       setBulkResults(
         (d.results || []).map((row: { error?: string }) =>
-          row?.error ? { ...row, error: serverError(row.error, "Не удалось перевести") } : row,
+          row?.error ? { ...row, error: serverError(row.error, TL.trFail) } : row,
         ),
       );
       setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
@@ -3618,16 +3974,16 @@ if (/Месячная норма исчерпана|Месячный лимит[
         // Перевод платный: результат в памяти исчезнет при перезапуске, а деньги
         // уже потрачены. Молчать тут дороже всего.
         if (d.storage === "memory") {
-          showToast(`Переведено ${d.successCount} из ${d.total}, но база была недоступна: результат пока в памяти и может пропасть при перезапуске. Сохраните копию.`, "error");
+          showToast(fill(TL.bulkMemory, { ok: d.successCount, total: d.total }), "error");
         } else {
-          showToast(`Переведено ${d.successCount} из ${d.total}`, "success");
+          showToast(fill(TL.bulkDone, { ok: d.successCount, total: d.total }), "success");
         }
         await fetchProject();
       } else {
-        showToast(`Ни один из ${d.total} переводов не удался`, "error");
+        showToast(fill(TL.bulkNone, { total: d.total }), "error");
       }
     } catch (e: any) {
-      showToast(e?.message || "Пакетный перевод не удался", "error");
+      showToast(e?.message || TL.bulkFail, "error");
     } finally {
       setBulkLoading(false);
     }
@@ -3652,7 +4008,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
 
   const createEmailTemplate = async () => {
     if (!tplBuilderName.trim() || !tplBuilderSubject.trim() || !tplBuilderHtml.trim()) {
-      setTplBuilderMsg({ ok: false, text: "нужны имя, тема и HTML-текст письма" });
+      setTplBuilderMsg({ ok: false, text: TL.tplNeedFields });
       return;
     }
     setTplBuilderLoading(true);
@@ -3671,10 +4027,10 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplBuilderMsg({ ok: false, text: serverError(d.error, "Не удалось создать шаблон") });
+        setTplBuilderMsg({ ok: false, text: serverError(d.error, TL.tplCreateFail) });
         return;
       }
-      setTplBuilderMsg({ ok: true, text: `Создан шаблон №${d.id} — "${d.name}"` });
+      setTplBuilderMsg({ ok: true, text: fill(TL.tplCreated, { id: d.id, name: d.name }) });
       // Refresh templates list if user already opened it
       if (emailTemplates.length > 0) await loadEmailTemplates();
     } catch (e: any) {
@@ -3689,7 +4045,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
   const importZipFile = async (file: File) => {
     if (!project) return;
     if (file.size > 50 * 1024 * 1024) {
-      setZipResult({ ok: false, text: "архив слишком большой (максимум 50 МБ)" });
+      setZipResult({ ok: false, text: TL.zipTooBig });
       return;
     }
     setZipImporting(true);
@@ -3711,7 +4067,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok) {
-        setZipResult({ ok: false, text: serverError(d.error, "Импорт не удался") });
+        setZipResult({ ok: false, text: serverError(d.error, TL.importFail) });
         return;
       }
       setZipResult({
@@ -3721,11 +4077,11 @@ if (/Месячная норма исчерпана|Месячный лимит[
       if (d.storage === "memory") {
         showToast(TL.importedMemory, "error");
       } else {
-        showToast(`Из ${file.name} импортировано файлов: ${d.importedCount}`, "success");
+        showToast(fill(TL.zipImported, { name: file.name, n: d.importedCount }), "success");
       }
       await fetchProject();
     } catch (e: any) {
-      setZipResult({ ok: false, text: e?.message || "Импорт не удался" });
+      setZipResult({ ok: false, text: e?.message || TL.importFail });
     } finally {
       setZipImporting(false);
       if (zipInputRef.current) zipInputRef.current.value = "";
@@ -3789,7 +4145,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(serverError(d?.error, `Не удалось получить пример — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, fill(TL.sampleHttp, { status: r.status })));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -3797,7 +4153,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       audio.onended = () => URL.revokeObjectURL(url);
       await audio.play();
     } catch (e: any) {
-      showToast(e?.message || "Превью не открылось", "error");
+      showToast(e?.message || TL.previewNoOpen, "error");
     } finally {
       setTimeout(() => setPreviewingVoice(null), 2500);
     }
@@ -3816,13 +4172,13 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(serverError(d.error, "Загрузка в Cloudflare не удалась"), "error");
+        showToast(serverError(d.error, TL.cfUploadFail), "error");
       } else {
         setCfImgPermanentUrl(d.url);
         showToast(TL.imgPermanent, "success");
       }
     } catch (e: any) {
-      showToast(e?.message || "Загрузка не удалась", "error");
+      showToast(e?.message || TL.uploadFail, "error");
     } finally {
       setCfImgUploading(false);
     }
@@ -3859,7 +4215,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
 
   const previewClonedVoice = async () => {
     if (!voiceCloneFile) {
-      setVoiceCloneMsg({ ok: false, text: "сначала выберите образец звука" });
+      setVoiceCloneMsg({ ok: false, text: TL.needSample });
       return;
     }
     setVoicePreviewLoading(true);
@@ -3879,16 +4235,16 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        setVoiceCloneMsg({ ok: false, text: serverError(d.error, "Превью не открылось") });
+        setVoiceCloneMsg({ ok: false, text: serverError(d.error, TL.previewNoOpen) });
         return;
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       setVoicePreviewUrl(url);
       setVoicePreviewOk(true);
-      setVoiceCloneMsg({ ok: true, text: "Образец готов — послушайте ниже и сохраните, если нравится" });
+      setVoiceCloneMsg({ ok: true, text: TL.sampleReady });
     } catch (e: any) {
-      setVoiceCloneMsg({ ok: false, text: e?.message || "Превью не открылось" });
+      setVoiceCloneMsg({ ok: false, text: e?.message || TL.previewNoOpen });
     } finally {
       setVoicePreviewLoading(false);
     }
@@ -3897,7 +4253,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
   const cloneVoice = async () => {
     if (!voiceCloneName.trim() || !voiceCloneFile) return;
     if (!voicePreviewOk) {
-      setVoiceCloneMsg({ ok: false, text: "Сначала образец — нажмите «🎧 Послушать голос», послушайте и сохраните" });
+      setVoiceCloneMsg({ ok: false, text: TL.sampleFirst });
       return;
     }
     setVoiceCloneLoading(true);
@@ -3917,7 +4273,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setVoiceCloneMsg({ ok: false, text: serverError(d.error, "Не удалось клонировать голос") });
+        setVoiceCloneMsg({ ok: false, text: serverError(d.error, TL.cloneFail) });
       } else {
         setVoiceCloneMsg({ ok: true, text: `Voice cloned: ${d.voiceId}${d.requiresVerification ? " (verification required)" : ""}` });
         setVoiceCloneName(""); setVoiceCloneDesc(""); setVoiceCloneFile(null);
@@ -3952,7 +4308,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSttError(serverError(d.error, "Не удалось расшифровать запись"));
+        setSttError(serverError(d.error, TL.sttFail));
       } else {
         setSttResult({ text: d.text, language: d.language, confidence: d.confidence });
             предупредитьЕслиНеСверили(d);
@@ -3977,7 +4333,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDriveError(serverError(d.error, "Не удалось найти в Google Drive"));
+        setDriveError(serverError(d.error, TL.driveFail));
         setDriveFiles([]);
       } else {
         setDriveFiles(d.files || []);
@@ -4000,15 +4356,15 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(serverError(d.error, "Импорт не удался"), "error");
+        showToast(serverError(d.error, TL.importFail), "error");
       } else {
-        showToast(`Импортирован ${d.path} (${d.bytes} байт)`, "success");
+        showToast(fill(TL.driveImported, { path: d.path, bytes: d.bytes }), "success");
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
         applyFileList(listData);
       }
     } catch (e: any) {
-      showToast(e?.message || "Импорт не удался", "error");
+      showToast(e?.message || TL.importFail, "error");
     } finally {
       setDriveImporting(null);
     }
@@ -4033,13 +4389,13 @@ if (/Месячная норма исчерпана|Месячный лимит[
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(serverError(d?.error, `Не удалось озвучить — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, fill(TL.ttsHttp, { status: r.status })));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       setMediaTtsUrl(url);
     } catch (e: any) {
-      setMediaTtsError(e?.message || "Озвучка не удалась");
+      setMediaTtsError(e?.message || TL.ttsFail);
     } finally {
       setMediaTtsLoading(false);
     }
@@ -5573,7 +5929,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         </div>
                         <button
                           onClick={async () => {
-                            if (!videoPrompt.trim()) { setVideoError("Сначала опишите, что нужно"); return; }
+                            if (!videoPrompt.trim()) { setVideoError(TL.videoNeedPrompt); return; }
                             if (isCapabilityBlocked(caps, "video")) {
                               setVideoError(capabilityHint(caps, "video", uiLang));
                               return;
@@ -5586,12 +5942,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
                                 body: JSON.stringify({ prompt: videoPrompt, model: videoModel, duration: Number(videoDuration) }),
                               });
                               const d = await r.json();
-                              if (!d.ok) { setVideoError(serverError(d.error, "Не удалось создать видео")); setVideoLoading(false); return; }
+                              if (!d.ok) { setVideoError(serverError(d.error, TL.videoFail)); setVideoLoading(false); return; }
                               setVideoPredictionId(d.predictionId);
                               setVideoStatus("generating...");
                               // Poll for completion
                               const pollFn = async (id: string, attempts = 0) => {
-                                if (attempts > 120) { setVideoError("Не дождались ответа за 2 минуты"); setVideoLoading(false); return; }
+                                if (attempts > 120) { setVideoError(TL.videoTimeout); setVideoLoading(false); return; }
                                 const sr = await fetch(apiUrl(`/api/devhub/media/video/status/${id}`));
                                 const sd = await sr.json();
                                 setVideoStatus(sd.status);
@@ -5600,25 +5956,25 @@ if (/Месячная норма исчерпана|Месячный лимит[
                     // Та же пометка, что у картинки: трату разрешили,
                     // не сумев прочитать расход.
                     showToast(
-                      "Готово, но расход не удалось сверить: счётчик тарифа может отстать.",
+                      TL.costUnverifiedTier,
                       "warning",
                     );
                   }
                                   setVideoUrl(sd.videoUrl); setVideoLoading(false);
                                 } else if (sd.status === "failed") {
-                                  setVideoError(serverError(sd.error, "Генерация не удалась")); setVideoLoading(false);
+                                  setVideoError(serverError(sd.error, TL.genFail)); setVideoLoading(false);
                                 } else {
                                   setTimeout(() => pollFn(id, attempts + 1), 3000);
                                 }
                               };
                               setTimeout(() => pollFn(d.predictionId), 4000);
-                            } catch (e: any) { setVideoError(e.message || "Не удалось"); setVideoLoading(false); }
+                            } catch (e: any) { setVideoError(e.message || TL.failShort); setVideoLoading(false); }
                           }}
                           disabled={videoLoading || !videoPrompt.trim()}
                           title={capabilityHint(caps, "video", uiLang)}
                           style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                         >
-                          {videoLoading ? `${videoStatus || "генерирую..."}` : "Сделать видео"}
+                          {videoLoading ? `${videoStatus || TL.generating}` : "Сделать видео"}
                         </button>
                       </div>
                       {videoError && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px 12px", borderRadius: 7, fontSize: 13 }}>{videoError}</div>}
@@ -5673,7 +6029,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                       </div>
                       <button
                         onClick={async () => {
-                          if (!threeDImageUrl.trim()) { setThreeDError("Вставьте ссылку на картинку"); return; }
+                          if (!threeDImageUrl.trim()) { setThreeDError(TL.threeDNeedUrl); return; }
                           if (isCapabilityBlocked(caps, "3d")) { setThreeDError(capabilityHint(caps, "3d", uiLang)); return; }
                           setThreeDLoading(true); setThreeDError(null); setThreeDUrl(null); setThreeDStatus("starting");
                           try {
@@ -5685,34 +6041,34 @@ if (/Месячная норма исчерпана|Месячный лимит[
                             const d = await r.json();
                             if (!r.ok || !d.ok) {
                               // 402 means the provider has no balance — say that, not "failed".
-                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (serverError(d.error, "Не удалось сгенерировать 3D")));
+                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (serverError(d.error, TL.threeDFail)));
                               setThreeDLoading(false);
                               return;
                             }
-                            setThreeDStatus("generating…");
+                            setThreeDStatus(TL.generating);
                             const poll = async (id: string, attempts = 0) => {
-                              if (attempts > 100) { setThreeDError("Таймаут — попробуйте ещё раз"); setThreeDLoading(false); return; }
+                              if (attempts > 100) { setThreeDError(TL.timeoutRetry); setThreeDLoading(false); return; }
                               const sr = await fetch(apiUrl(`/api/devhub/media/video/status/${id}`));
                               const sd = await sr.json();
                               setThreeDStatus(sd.status);
                               if (sd.status === "succeeded") {
                                 const url = sd.videoUrl || sd.output?.model_file || (Array.isArray(sd.output) ? sd.output[0] : sd.output);
-                                if (typeof url === "string") { setThreeDUrl(url); } else { setThreeDError("Модель готова, но ссылка не распознана"); }
+                                if (typeof url === "string") { setThreeDUrl(url); } else { setThreeDError(TL.modelNoLink); }
                                 setThreeDLoading(false);
                               } else if (sd.status === "failed") {
-                                setThreeDError(serverError(sd.error, "Генерация не удалась")); setThreeDLoading(false);
+                                setThreeDError(serverError(sd.error, TL.genFail)); setThreeDLoading(false);
                               } else {
                                 setTimeout(() => poll(id, attempts + 1), 3000);
                               }
                             };
                             setTimeout(() => poll(d.predictionId), 4000);
-                          } catch (e: any) { setThreeDError(e.message || "Не удалось"); setThreeDLoading(false); }
+                          } catch (e: any) { setThreeDError(e.message || TL.failShort); setThreeDLoading(false); }
                         }}
                         disabled={threeDLoading || !threeDImageUrl.trim()}
                         title={capabilityHint(caps, "3d", uiLang)}
                         style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "3d") ? 0.45 : 1 }}
                       >
-                        {threeDLoading ? (threeDStatus || "generating…") : "Сделать 3D-модель"}
+                        {threeDLoading ? (threeDStatus || TL.generating) : "Сделать 3D-модель"}
                       </button>
                       {threeDError && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px 12px", borderRadius: 7, fontSize: 13, wordBreak: "break-word" }}>{threeDError}</div>}
                       {threeDUrl && (

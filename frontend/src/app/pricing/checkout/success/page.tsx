@@ -547,7 +547,14 @@ function SuccessInner() {
                 // поэтому вход ведёт в каталог модулей /apps (проверен 200 на проде
                 // 05.10.2026), а текст говорит, что в тарифе теперь открыто всё.
                 : appId === "platform"
-                ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextLoginPlatform"), href: `/auth?next=${encodeURIComponent("/apps")}` }]
+                ? [
+                    { icon: "🔑", text: t("pricing.checkoutSuccess.nextLoginPlatform"), href: `/auth?next=${encodeURIComponent("/apps")}` },
+                    // 30.10.2026: DevHub с 19.10 продаётся только «Планетой», и
+                    // первый ждущий покупатель — гость DevHub без аккаунта (кнопка
+                    // под живым сайтом ведёт сюда через /pricing). Вход ему не
+                    // нужен: покупку связывают с браузером по почте (/devhub/link).
+                    { icon: "🛠", text: t("pricing.checkoutSuccess.nextDevhubLink"), href: "/devhub/link" },
+                  ]
                 : []),
               {
                 icon: "🚀",

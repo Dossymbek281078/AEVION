@@ -19,7 +19,8 @@ describe("путь к кассе CyberChess всегда на экране", () 
     expect(page).toContain('const ccBuyProduct=productById("cyberchess");');
     expect(page).toContain('const ccBuyLabel=(ccBuyProduct?.format||"").replace(/^приложение · /,"")||"купить";');
     // метка канала — после отрисовки, как в ModulePricingChip
-    expect(page).toContain('sCcBuyHref(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()))');
+    // 30.10.2026: + язык посетителя (sYazykom), иначе /kk/cyberchess вёл на русские цены
+    expect(page).toContain('sCcBuyHref(sYazykom(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()),cc.locale))');
   });
   it("шапка ≥769: ссылка в кассу рядом с «Помощь»", () => {
     expect(page).toContain('{vwPx>=769&&<a href={ccBuyHref} data-cc-buy="header"');

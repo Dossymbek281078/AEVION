@@ -11,6 +11,14 @@
 // воспроизводима. Судья-модель поверх спора стоил бы ещё один вызов на каждый
 // вопрос и добавил бы собственную ошибку — здесь это не нужно.
 
+/** Язык текстов карты разногласий. Русский — канон (по нему считается хеш чека), английский — для /en. */
+export type DissentLang = "ru" | "en";
+
+/** Любое значение из запроса → поддержанный язык; незнакомое и казахский — русский (понятнее английского для kk). */
+export function dissentLang(v: unknown): DissentLang {
+  return typeof v === "string" && v.trim().toLowerCase().startsWith("en") ? "en" : "ru";
+}
+
 export type AgentAnswer = {
   agentId: string;
   role?: string;
@@ -470,8 +478,9 @@ const MAX_CHECKS = 5;
  *
  *  Считается из уже готовой карты, без единого вызова модели — то есть остаётся
  *  бесплатным и воспроизводимым, как и она сама. */
-export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
+export function buildChecklist(map: Omit<DissentMap, "checks">, lang: DissentLang = "ru"): Check[] {
   const out: Check[] = [];
+  const en = lang === "en";
 
   for (const c of map.numericConflicts) {
     // Значения СНАЧАЛА группируются, и только разные группы противопоставляются.
@@ -486,11 +495,13 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
       if (list) list.push(v.agentId); else groups.set(key, [v.agentId]);
     }
     const names = (ids: string[]) =>
-      ids.length <= 1 ? ids.join("") : `${ids.slice(0, -1).join(", ")} и ${ids[ids.length - 1]}`;
-    const spread = [...groups.entries()].map(([raw, ids]) => `${names(ids)}: ${raw}`).join(" против ");
+      ids.length <= 1 ? ids.join("") : `${ids.slice(0, -1).join(", ")} ${en ? "and" : "и"} ${ids[ids.length - 1]}`;
+    const spread = [...groups.entries()].map(([raw, ids]) => `${names(ids)}: ${raw}`).join(en ? " vs " : " против ");
     out.push({
       kind: "number",
-      text: `Сверить число с источником — ${spread}. Контекст: «${c.context}»`,
+      text: en
+        ? `Check the number against the source — ${spread}. Context: «${c.context}»`
+        : `Сверить число с источником — ${spread}. Контекст: «${c.context}»`,
       agents: c.values.map((v) => v.agentId),
       weight: 3,
     });
@@ -501,7 +512,9 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
   for (const c of map.contradictions) {
     out.push({
       kind: "contradiction",
-      text: `Агенты прямо противоречат друг другу по «${c.word}»: ${c.affirms.join(", ")} утверждает, ${c.denies.join(", ")} отрицает. Прочитать оба ответа рядом.`,
+      text: en
+        ? `Agents directly contradict each other on «${c.word}»: ${c.affirms.join(", ")} assert it, ${c.denies.join(", ")} deny it. Read both answers side by side.`
+        : `Агенты прямо противоречат друг другу по «${c.word}»: ${c.affirms.join(", ")} утверждает, ${c.denies.join(", ")} отрицает. Прочитать оба ответа рядом.`,
       agents: [...c.affirms, ...c.denies],
       weight: 3,
     });
@@ -512,13 +525,17 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
       h.kind === "failed"
         ? {
             kind: "failure",
-            text: `Агент ${h.agentId} не ответил — картина неполная. Перезапустить или исключить его из выводов.`,
+            text: en
+              ? `Agent ${h.agentId} did not answer — the picture is incomplete. Rerun it or exclude it from the conclusions.`
+              : `Агент ${h.agentId} не ответил — картина неполная. Перезапустить или исключить его из выводов.`,
             agents: [h.agentId],
             weight: 3,
           }
         : {
             kind: "hedge",
-            text: `Агент ${h.agentId} сам отметил неуверенность («${h.note}») — не опирайтесь на эту часть без проверки.`,
+            text: en
+              ? `Agent ${h.agentId} itself flagged uncertainty («${h.note}») — do not rely on this part without checking.`
+              : `Агент ${h.agentId} сам отметил неуверенность («${h.note}») — не опирайтесь на эту часть без проверки.`,
             agents: [h.agentId],
             weight: 2,
           }
@@ -528,7 +545,9 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
   if (map.outlier) {
     out.push({
       kind: "outlier",
-      text: `Прочитать первым ответ агента ${map.outlier.agentId}: он дальше всех от остальных. Это не значит «неправ» — значит, он увидел что-то своё.`,
+      text: en
+        ? `Read agent ${map.outlier.agentId}’s answer first: it is the furthest from the others. That does not mean “wrong” — it means it saw something of its own.`
+        : `Прочитать первым ответ агента ${map.outlier.agentId}: он дальше всех от остальных. Это не значит «неправ» — значит, он увидел что-то своё.`,
       agents: [map.outlier.agentId],
       weight: 1,
     });
@@ -539,7 +558,9 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
   if (!out.length && map.verdict === "consensus") {
     out.push({
       kind: "consensus",
-      text: "Агенты сошлись — проверьте общую посылку: модели учились на пересекающихся данных и ошибаются одинаково.",
+      text: en
+        ? "Agents agree — check the shared premise: the models were trained on overlapping data and err alike."
+        : "Агенты сошлись — проверьте общую посылку: модели учились на пересекающихся данных и ошибаются одинаково.",
       agents: [],
       weight: 1,
     });
@@ -552,7 +573,7 @@ export function buildChecklist(map: Omit<DissentMap, "checks">): Check[] {
  *  выше — агенты пересказывают одно и то же, ниже — говорят о разном. */
 const AGREEMENT_THRESHOLD = 0.45;
 
-export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
+export function buildDissentMap(answers: AgentAnswer[], lang: DissentLang = "ru"): DissentMap {
   const list = answers || [];
   const good = list.filter((a) => a.ok && a.reply && a.reply.trim().length > 0);
 
@@ -617,16 +638,18 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
         : "split";
 
   const parts = [
-    conflicts.length ? `${conflicts.length} числовых` : "",
-    opposed.length ? `прямое отрицание по «${opposed.map((c) => c.word).join("», «")}»` : "",
+    conflicts.length ? (lang === "en" ? `${conflicts.length} numeric` : `${conflicts.length} числовых`) : "",
+    opposed.length ? (lang === "en" ? `direct negation on «${opposed.map((c) => c.word).join("», «")}»` : `прямое отрицание по «${opposed.map((c) => c.word).join("», «")}»`) : "",
   ].filter(Boolean);
 
   const note =
     verdict === "insufficient"
-      ? `Содержательных ответов ${good.length} — сравнивать не с чем.`
+      ? (lang === "en" ? `Substantive answers: ${good.length} — nothing to compare.` : `Содержательных ответов ${good.length} — сравнивать не с чем.`)
       : verdict === "consensus"
-        ? `Агенты сходятся (${agreement}). Совпадение не доказывает правоту: модели ошибаются похоже.`
-        : `Расхождение${parts.length ? `, включая ${parts.join(" и ")}` : ""}. Смотреть в первую очередь сюда.`;
+        ? (lang === "en" ? `Agents converge (${agreement}). Agreement does not prove correctness: the models err alike.` : `Агенты сходятся (${agreement}). Совпадение не доказывает правоту: модели ошибаются похоже.`)
+        : lang === "en"
+          ? `Disagreement${parts.length ? `, including ${parts.join(" and ")}` : ""}. Look here first.`
+          : `Расхождение${parts.length ? `, включая ${parts.join(" и ")}` : ""}. Смотреть в первую очередь сюда.`;
 
   const base = {
     agents: list.length,
@@ -641,5 +664,5 @@ export function buildDissentMap(answers: AgentAnswer[]): DissentMap {
     note,
   };
 
-  return { ...base, checks: buildChecklist(base) };
+  return { ...base, checks: buildChecklist(base, lang) };
 }

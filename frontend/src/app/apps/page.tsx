@@ -14,7 +14,6 @@ import {
   TERM_MONTHS,
   TERM_NAME,
   TERM_TIERS,
-  fromPricePerMonth,
   termPricePerMonth,
   termTotal,
   STANDALONE_APPS,
@@ -605,11 +604,11 @@ export default function AppsPage() {
                             <span style={{ fontSize: 13, color: "#64748b" }}>/yr</span>
                           </>
                         ) : app.term ? (
+                          // 19.10.2026: цены модулей отменены — отдельно не продаётся ничего, кроме шахмат;
+                          // гостю называем цену плана, а не прежнюю цену модуля.
                           <>
-                            <span style={{ fontSize: 13, color: "#64748b" }}>from </span>
-                            <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>
-                              ${fromPricePerMonth(app.price)}
-                            </span>
+                            <span style={{ fontSize: 13, color: "#64748b" }}>Included in Planet · from </span>
+                            <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>${planetFromPerMonth()}</span>
                             <span style={{ fontSize: 13, color: "#64748b" }}>/mo</span>
                           </>
                         ) : app.price > 0 ? (

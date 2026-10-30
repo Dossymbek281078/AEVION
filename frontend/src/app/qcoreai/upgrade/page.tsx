@@ -5,8 +5,8 @@ import { activatable } from "@/lib/activatable";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { PageTracking } from "@/components/PageTracking";
-import { PRICING_APP, PRICING_TERMS } from "@/lib/products";
-import { PLANET_BASE_MONTHLY, fromPricePerMonth, standaloneApp, planetFromPerMonth } from "@/lib/termPricing";
+import { PRICING_TERMS } from "@/lib/products";
+import { PLANET_BASE_MONTHLY, standaloneApp, planetFromPerMonth } from "@/lib/termPricing";
 
 // ⚠️ 15.09.2026 — новая ценовая политика (слово основателя). Карточки «Pro $19/mo»
 // и «Enterprise $99/mo» с переключателем «помесячно / за год» сняты: помесячной и
@@ -242,8 +242,8 @@ export default function QCoreUpgradePage() {
           {MULTICHAT ? (
             <p style={{ textAlign: "center", color: "#475569", fontSize: 14, margin: "0 0 20px" }}>
               Need only the model council?{" "}
-              <a href={PRICING_APP(MULTICHAT.slug)} style={{ color: "#0d9488", fontWeight: 700 }}>
-                {MULTICHAT.name} on its own — from ${fromPricePerMonth(MULTICHAT.baseMonthly)}/mo →
+              <a href={PRICING_TERMS} style={{ color: "#0d9488", fontWeight: 700 }}>
+                {MULTICHAT.name} is included in the Planet plan — from ${planetFromPerMonth()}/mo →
               </a>
             </p>
           ) : null}

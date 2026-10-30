@@ -24,6 +24,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { channelNow, postNow } from "@/lib/channelNow";
 import { getDeviceId } from "@/lib/aevApi";
 import { anchorBadge, ANCHOR_TONE_COLORS } from "./anchorBadge";
+import { demoRecordAuthor, demoRecordTitle } from "./demoRecords";
 
 type Certificate = {
   id: string;
@@ -1193,8 +1194,8 @@ function BureauPageInner() {
                         <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 13, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{tb(KIND_LABELS[cert.kind] || cert.kind)}</span>
                         <span style={{ fontSize: 15, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
                       </div>
-                      <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{cert.title}</div>
-                      <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>{tb("by")} {tb(cert.author)}{cert.location ? ` · ${cert.location}` : ""}</div>
+                      <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{demoRecordTitle(cert.title, buLang)}</div>
+                      <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>{tb("by")} {tb(demoRecordAuthor(cert.author, buLang))}{cert.location ? ` · ${cert.location}` : ""}</div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                       {cert.verificationLevel === "verified" ? (

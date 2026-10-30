@@ -54,14 +54,18 @@ const TABLE: Record<string, Record<string, UsdPer1M>> = {
     "grok-3-mini": { input: 0.3, output: 0.5 },
   },
   // ── Free fleet: no per-token cost to the user ──────────────────────────
+  // Список — справочник цен для панели расходов (старые вызовы в журнале
+  // должны показывать «Free», а не «—»), поэтому снятые слуги НЕ удалены, а
+  // помечены. Живая — только google/gemma-4-31b-it:free. Выбор слуг для
+  // ответа этот список не делает (его читает getModelPrice).
   openrouter: freeModels(
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "openai/gpt-oss-120b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
+    "meta-llama/llama-3.3-70b-instruct:free", // снят 30.10.2026
+    "openai/gpt-oss-120b:free", // снят 30.10.2026
+    "qwen/qwen3-next-80b-a3b-instruct:free", // снят 30.10.2026
+    "nvidia/nemotron-3-super-120b-a12b:free", // снят 30.10.2026 (404)
     "google/gemma-4-31b-it:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free",
-    "qwen/qwen3-coder:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free", // снят 30.10.2026
+    "qwen/qwen3-coder:free", // снят 30.10.2026
   ),
   groq: freeModels(
     "llama-3.3-70b-versatile",

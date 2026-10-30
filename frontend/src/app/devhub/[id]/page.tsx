@@ -981,6 +981,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // отрисовываться без него. Поймал сторож devhubWorkspaceRenderedTextIsRussian.
   const tPro = (key: DevhubKey) => tDevhub(uiLang, key);
   const TL = TOAST_UI[uiLang] ?? TOAST_UI.ru;
+  const agentToastText = (ok: number, total: number) => tPro("proj.agentToast").replace("{ok}", String(ok)).replace("{total}", String(total));
   const serverError = useDevhubServerError();
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -3325,7 +3326,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 setAgentSummary({
                   totalSteps: evt.totalSteps, successCount: evt.successCount, failureCount: evt.failureCount,
                 });
-                showToast(`Агент: удалось шагов ${evt.successCount} из ${evt.totalSteps}`, evt.failureCount === 0 ? "success" : "error");
+                showToast(agentToastText(evt.successCount, evt.totalSteps), evt.failureCount === 0 ? "success" : "error");
               }
             } catch { /* tolerate bad events */ }
           }
@@ -3362,7 +3363,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast(`Агент: удалось шагов ${d.successCount} из ${d.totalSteps}`, d.successCount === d.totalSteps ? "success" : "error");
+      showToast(agentToastText(d.successCount, d.totalSteps), d.successCount === d.totalSteps ? "success" : "error");
     } catch (e: any) {
       showToast(e?.message || "Сценарий не выполнился", "error");
     } finally {
@@ -4118,7 +4119,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
           )}
           {project.deployUrl && (
             <a href={fixDoubledScheme(project.deployUrl)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
-              Открыть живой сайт
+              {tPro("proj.openLive")}
             </a>
           )}
           <button
@@ -4272,7 +4273,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
           )}
           <label style={{ padding: "4px 14px 6px", fontSize: 10, color: "#94a3b8", display: "flex", alignItems: "center", gap: 4 }}>
             <input type="checkbox" checked={zipOverwrite} onChange={(e) => setZipOverwrite(e.target.checked)} style={{ width: 11, height: 11 }} />
-            ZIP: заменять существующие
+            {tPro("proj.zipOverwrite")}
           </label>
 
           {showNewFile && (
@@ -4784,7 +4785,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                       title={AL.attachShot}
                       style={{ padding: "6px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, cursor: "pointer", color: "#475569", fontWeight: 600 }}
                     >
-                      📎 Снимок экрана
+                      {tPro("proj.attachShot")}
                     </button>
                     {aiImage && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, fontSize: 12, color: "#0f766e" }}>
@@ -4816,7 +4817,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         try { localStorage.setItem("devhub_provenance", e.target.checked ? "1" : "0"); } catch { /* приватное окно */ }
                       }}
                     />
-                    Фиксировать происхождение (QRight)
+                    {tPro("proj.provStamp")}
                   </label>
                   {generating && genStage && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
@@ -4838,7 +4839,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         onClick={() => genAbortRef.current?.abort()}
                         style={{ padding: "3px 10px", background: "#fff", border: "1px solid #fca5a5", borderRadius: 6, fontSize: 11.5, color: "#b91c1c", cursor: "pointer", whiteSpace: "nowrap" }}
                       >
-                        Остановить
+                        {tPro("proj.stop")}
                       </button>
                     </div>
                   )}
@@ -4863,7 +4864,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: "pointer",
                       }}
                     >
-                      {showHistory ? "▾" : "▸"} История
+                      {showHistory ? "▾" : "▸"} {tPro("proj.history")}
                     </button>
                   </div>
                   {showHistory && (
@@ -4909,7 +4910,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                     </div>
                   ) : !visualEditSelected ? (
                     <div style={{ fontSize: 13, color: "#64748b" }}>
-                      Нажмите на любой текст в превью выше, чтобы выбрать его и поправить на месте.
+                      {tPro("proj.visualPickHint")}
                     </div>
                   ) : (
                     <>
@@ -5166,7 +5167,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                       <span style={{ fontSize: 18 }}>☁️</span>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 800, color: "#9a3412" }}>Cloudflare Pages</div>
-                        <div style={{ fontSize: 11, color: "#c2410c" }}>Бесплатно · SSL сам · мировой CDN{domainCapabilityWorks ? " · aevion.app domain included" : " · публичный адрес *.pages.dev"}</div>
+                        <div style={{ fontSize: 11, color: "#c2410c" }}>{tPro("proj.cfFree")}{domainCapabilityWorks ? " · aevion.app domain included" : tPro("proj.cfAddrPagesDev")}</div>
                       </div>
                     </div>
 
@@ -5246,12 +5247,12 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         cursor: pagesDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {pagesDeploying ? GL.busyPublish : project?.deployUrl?.includes("pages.dev") ? "🔄 Опубликовать заново" : "🚀 Опубликовать на Cloudflare Pages"}
+                      {pagesDeploying ? GL.busyPublish : project?.deployUrl?.includes("pages.dev") ? tPro("proj.cfRepublish") : tPro("proj.cfPublish")}
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
                       {domainCapabilityWorks
-                        ? <>Свой поддомен выдаётся, только если DNS его подтвердит; иначе адрес будет на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>
-                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.app</code> пока не подтверждён — адрес будет на *.pages.dev</>}
+                        ? <span>{tPro("proj.cfSubLead")}<code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>{"*.pages.dev"}</code>{"."}</span>
+                        : <>{tPro("proj.cfDomLead")}<code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.app</code>{tPro("proj.cfDomTail")}</>}
                     </div>
                   </div>
 
@@ -5289,9 +5290,9 @@ if (/Месячная норма исчерпана|Месячный лимит[
                   {deployments.length > 0 && (
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>ИСТОРИЯ</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>{tPro("proj.depHistoryCaps")}</span>
                         <Link href={`/devhub/${id}/deploy`} style={{ fontSize: 11, color: "#0d9488", textDecoration: "underline" }}>
-                          Вся история и журналы сборки →
+                          {tPro("proj.depAll")}
                         </Link>
                       </div>
                       {deployments.map((d) => {
@@ -5299,7 +5300,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         return (
                           <div key={d.id} style={{ padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 6 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ padding: "2px 7px", borderRadius: 5, background: dStatusStyle.bg, color: dStatusStyle.fg, fontSize: 11, fontWeight: 600 }}>{d.status === "live" ? "живой" : d.status === "failed" ? "не удался" : "собирается"}</span>
+                              <span style={{ padding: "2px 7px", borderRadius: 5, background: dStatusStyle.bg, color: dStatusStyle.fg, fontSize: 11, fontWeight: 600 }}>{d.status === "live" ? tPro("proj.depLive") : d.status === "failed" ? tPro("proj.depFailed") : tPro("proj.depBuilding")}</span>
                               <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(d.triggeredAt).toLocaleString()}</span>
                             </div>
                             {d.deployUrl && (
@@ -5313,7 +5314,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                                 onClick={() => recheckDeployment(d.id)}
                                 disabled={recheckingId === d.id}
                                 style={{ marginTop: 6, padding: "4px 10px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                                {recheckingId === d.id ? "Проверяю…" : "Проверить ещё раз"}
+                                {recheckingId === d.id ? tPro("proj.depRechecking") : tPro("proj.depRecheck")}
                               </button>
                             )}
                           </div>

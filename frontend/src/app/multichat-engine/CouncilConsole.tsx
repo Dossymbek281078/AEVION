@@ -250,7 +250,7 @@ const MC_UI: Record<string, {
   askAria: string; askPh: string; busyAsk: string;
   // 23.10.2026: строка остатка гостя, стена и подпись «3 агента» были русским литералом и на en/kk
   // показывались по-русски (замер yazyk-devhub.mjs: одна и та же строка не на языке у en и kk).
-  guestLeft: (n: number) => string; guestOut: string; independent: string;
+  guestLeft: (n: number) => string; guestOut: string; guestOutLink: string; independent: string;
 }> = {
   // busyAsk — класс «busy-ярлык быстрее доводчика» (назначение 07.09,
   // рецепт №2 как у GEN_UI.busy*): ярлык живёт секунды и первым видит
@@ -259,14 +259,17 @@ const MC_UI: Record<string, {
   ru: { askAria: "Вопрос совету", askPh: "Например: стоит ли запускать платный тариф до первой продажи?", busyAsk: "Агенты отвечают…",
     guestLeft: (n) => `Бесплатно без входа: осталось ${n} ${n === 1 ? "запрос" : "запроса"}. Дальше — вход по почте.`,
     guestOut: "Бесплатные запросы на сегодня кончились — войдите по почте, и норма продолжится.",
+    guestOutLink: "войдите по почте",
     independent: "3 агента · 3 вызова · ответы независимы" },
   en: { askAria: "Question for the council", askPh: "For example: should we launch a paid tier before the first sale?", busyAsk: "Agents are answering…",
     guestLeft: (n) => `Free without signing in: ${n} ${n === 1 ? "request" : "requests"} left. Then sign in by email.`,
     guestOut: "Free requests for today are used up — sign in by email and the allowance continues.",
+    guestOutLink: "sign in by email",
     independent: "3 agents · 3 calls · independent answers" },
   kk: { askAria: "Кеңеске сұрақ", askPh: "Мысалы: алғашқы сатылымға дейін ақылы тарифті іске қосу керек пе?", busyAsk: "Агенттер жауап беруде…",
     guestLeft: (n) => `Кірусіз тегін: ${n} сұрау қалды. Әрі қарай — пошта арқылы кіру.`,
     guestOut: "Бүгінгі тегін сұраулар таусылды — пошта арқылы кіріңіз, норма жалғасады.",
+    guestOutLink: "пошта арқылы кіріңіз",
     independent: "3 агент · 3 шақыру · жауаптар тәуелсіз" },
 };
 
@@ -368,7 +371,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${conv.id}/dispatch`), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...заголовкиУстройства(), ...getAuthHeaders() },
-        body: JSON.stringify({ prompt: q, agents: PANEL }),
+        body: JSON.stringify({ prompt: q, agents: PANEL, lang: mcLang }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -412,7 +415,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       const r = await fetch(apiUrl("/api/multichat/dissent/preview"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: EXAMPLE_ANSWERS }),
+        body: JSON.stringify({ answers: EXAMPLE_ANSWERS, lang: mcLang }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || `сервер ответил ${r.status}`);
@@ -484,7 +487,20 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {authed === false
             ? гостьМожет
               ? MC.guestLeft(свободно ?? 0)
-              : MC.guestOut
+              : (() => {
+                  // Стена без выхода (замер 30.10: «войдите по почте» — просто текст при выключенной кнопке):
+                  // сама фраза — ссылка на /auth, после входа человек возвращается сюда.
+                  const [до, после] = MC.guestOut.split(MC.guestOutLink);
+                  return (
+                    <>
+                      {до}
+                      <a href="/auth?next=/multichat-engine" data-mc-signin="guest-out" style={{ color: T.accent, fontWeight: 700 }}>
+                        {MC.guestOutLink}
+                      </a>
+                      {после}
+                    </>
+                  );
+                })()
             : MC.independent}
           </span>
       </div>
@@ -512,7 +528,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             </h3>
             {dissent.agreement != null && (
               <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: T.textFaded }}>
-                схожесть {dissent.agreement}
+                {tm(mcLang, "схожесть")} {dissent.agreement}
               </span>
             )}
             <span style={{ fontSize: 12, color: T.textMute }}>{dissent.note}</span>
@@ -603,12 +619,12 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       {receipt && (
         <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, fontSize: 12, color: T.textFaded }}>
           <span>
-            Чек · вызовов {receipt.receipt.cost.calls}, ответили {receipt.receipt.cost.answered}
-            {receipt.receipt.cost.failed > 0 ? `, не ответили ${receipt.receipt.cost.failed}` : ""}
+            {tm(mcLang, "Чек · вызовов")} {receipt.receipt.cost.calls}, {tm(mcLang, "ответили")} {receipt.receipt.cost.answered}
+            {receipt.receipt.cost.failed > 0 ? `, ${tm(mcLang, "не ответили")} ${receipt.receipt.cost.failed}` : ""}
           </span>
           <span style={{ fontFamily: "ui-monospace, monospace" }}>sha256 {receipt.hash.slice(0, 16)}…</span>
           <span style={{ color: receipt.signature ? T.accent : T.warn }}>
-            {receipt.signature ? `подписан (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
+            {receipt.signature ? `${tm(mcLang, "подписан")} (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
           </span>
           <button
             onClick={() =>

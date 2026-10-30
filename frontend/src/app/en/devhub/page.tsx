@@ -4,6 +4,7 @@ import { PageTracking } from "@/components/PageTracking";
 import { productById, fromPerMonthOf, channelFrom, channelFromRef, withChannel, keepChannel } from "@/lib/products";
 import { englishHref } from "@/lib/englishPages";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
+import DevHubConstructor from "../../devhub/page";
 
 /* Предел бесплатных выкаток. Число ДУБЛИРУЕТ бэкенд (TIER_LIMITS.free.deploy), и
    это осознанный второй ответ: посадочная статическая, ручку состояния на ней
@@ -70,7 +71,12 @@ export default async function EnDevhubPage({
   // 19.10.2026: one AEVION Planet plan — DevHub is not sold on its own; money on this page leads to the plan.
   const devhub = productById("aevion-planet");
 
+  // 30.10.2026: конструктор — первым блоком (тот же компонент, что на /devhub, язык en
+  // из layout.tsx); посадочная с листом ожидания — вторым, ниже. Метка ?c= в конструкторе
+  // читается им самим из адреса, а ссылки посадочной несут её через channel.
   return (
+    <>
+    <DevHubConstructor />
     <main style={styles.page}>
       <PageTracking page="en-devhub" />
       <div style={styles.wrap}>
@@ -255,6 +261,7 @@ export default async function EnDevhubPage({
         </footer>
       </div>
     </main>
+    </>
   );
 }
 

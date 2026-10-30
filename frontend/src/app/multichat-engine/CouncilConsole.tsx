@@ -371,7 +371,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${conv.id}/dispatch`), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...заголовкиУстройства(), ...getAuthHeaders() },
-        body: JSON.stringify({ prompt: q, agents: PANEL }),
+        body: JSON.stringify({ prompt: q, agents: PANEL, lang: mcLang }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -415,7 +415,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       const r = await fetch(apiUrl("/api/multichat/dissent/preview"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: EXAMPLE_ANSWERS }),
+        body: JSON.stringify({ answers: EXAMPLE_ANSWERS, lang: mcLang }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || `сервер ответил ${r.status}`);
@@ -528,7 +528,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             </h3>
             {dissent.agreement != null && (
               <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: T.textFaded }}>
-                схожесть {dissent.agreement}
+                {tm(mcLang, "схожесть")} {dissent.agreement}
               </span>
             )}
             <span style={{ fontSize: 12, color: T.textMute }}>{dissent.note}</span>
@@ -619,12 +619,12 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       {receipt && (
         <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, fontSize: 12, color: T.textFaded }}>
           <span>
-            Чек · вызовов {receipt.receipt.cost.calls}, ответили {receipt.receipt.cost.answered}
-            {receipt.receipt.cost.failed > 0 ? `, не ответили ${receipt.receipt.cost.failed}` : ""}
+            {tm(mcLang, "Чек · вызовов")} {receipt.receipt.cost.calls}, {tm(mcLang, "ответили")} {receipt.receipt.cost.answered}
+            {receipt.receipt.cost.failed > 0 ? `, ${tm(mcLang, "не ответили")} ${receipt.receipt.cost.failed}` : ""}
           </span>
           <span style={{ fontFamily: "ui-monospace, monospace" }}>sha256 {receipt.hash.slice(0, 16)}…</span>
           <span style={{ color: receipt.signature ? T.accent : T.warn }}>
-            {receipt.signature ? `подписан (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
+            {receipt.signature ? `${tm(mcLang, "подписан")} (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
           </span>
           <button
             onClick={() =>

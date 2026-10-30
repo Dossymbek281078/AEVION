@@ -22,23 +22,34 @@
 // Поэтому возвращаются две строки — `human` для глаза и `technical` для мелкого
 // шрифта рядом, чтобы отчёт об ошибке от пользователя оставался полезным.
 
+import { tm } from "./mcText";
+
 export type AgentFailure = {
-  /** Понятная причина по-русски. */
+  /** Понятная причина на языке страницы (исходник — русский; без lang — русский). */
   human: string;
   /** Исходная строка сервера, если она добавляет что-то к human. */
   technical: string | null;
 };
 
-/** Сколько ждать, если сервер сказал. */
-export function retryHint(retryAfterSec: unknown): string {
+/**
+ * Сколько ждать, если сервер сказал. 30.10.2026: lang — язык страницы; без него, как раньше, русский
+ * (замер на проде 4f71ad70f: на /en отказ агента и «Повторите через…» оставались русскими).
+ */
+export function retryHint(retryAfterSec: unknown, lang?: string): string {
   const n = typeof retryAfterSec === "number" && Number.isFinite(retryAfterSec) ? Math.ceil(retryAfterSec) : null;
   if (n === null || n <= 0) return "";
-  if (n < 60) return ` Повторите через ${n} с.`;
+  const en = lang === "en";
+  if (n < 60) return en ? ` Try again in ${n} s.` : ` ${tm(lang ?? "ru", "Повторите через")} ${n} ${tm(lang ?? "ru", "с.")}`;
   const min = Math.ceil(n / 60);
-  return ` Повторите через ${min} мин.`;
+  return en ? ` Try again in ${min} min.` : ` ${tm(lang ?? "ru", "Повторите через")} ${min} ${tm(lang ?? "ru", "мин.")}`;
 }
 
-export function agentFailure(raw: unknown): AgentFailure {
+export function agentFailure(raw: unknown, lang?: string): AgentFailure {
+  const f = причинаПоРусски(raw);
+  return lang && lang !== "ru" ? { ...f, human: tm(lang, f.human) } : f;
+}
+
+function причинаПоРусски(raw: unknown): AgentFailure {
   const s = typeof raw === "string" ? raw.trim() : "";
   if (!s) return { human: "Агент не ответил.", technical: null };
   const low = s.toLowerCase();

@@ -273,8 +273,8 @@ export function buildReport(
     if (r.ok) {
       L.push(String(r.reply || "").trim(), "");
     } else {
-      const f = agentFailure(r.error);
-      L.push(`_${t("Не ответил:")} ${t(f.human)}_${f.technical ? ` (${f.technical})` : ""}`, "");
+      const f = agentFailure(r.error, lang);
+      L.push(`_${t("Не ответил:")} ${f.human}_${f.technical ? ` (${f.technical})` : ""}`, "");
     }
   }
 
@@ -430,8 +430,8 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           setTarifUrl(typeof d.upgradeUrl === "string" ? d.upgradeUrl : "/pricing?app=multichat-engine");
           throw new Error(tm(mcLang, "Месячной квоты бесплатного тарифа не хватит на консилиум. Откройте тариф — ссылка ниже."));
         }
-        const f = agentFailure(d?.error || `upstream ${r.status}`);
-        throw new Error(f.human + retryHint(d?.retryAfterSec));
+        const f = agentFailure(d?.error || `upstream ${r.status}`, mcLang);
+        throw new Error(f.human + retryHint(d?.retryAfterSec, mcLang));
       }
       setResults(d.results || []);
       setDissent(d.dissent || null);
@@ -743,10 +743,10 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                   // Причина по-русски, исходная строка сервера мелким рядом:
                   // прятать её нельзя, иначе отчёт человека об ошибке бесполезен.
                   <span style={{ color: T.bad }}>
-                    {agentFailure(r.error).human}
-                    {agentFailure(r.error).technical && (
+                    {agentFailure(r.error, mcLang).human}
+                    {agentFailure(r.error, mcLang).technical && (
                       <span style={{ display: "block", marginTop: 6, fontSize: 11, color: T.textFaded }}>
-                        {agentFailure(r.error).technical}
+                        {agentFailure(r.error, mcLang).technical}
                       </span>
                     )}
                   </span>

@@ -178,7 +178,10 @@ export default function RootLayout({
           https://docs.lemonsqueezy.com/help/affiliates-for-merchants/getting-referrals
         */}
         <script dangerouslySetInnerHTML={{ __html: `window.lemonSqueezyAffiliateConfig = { store: ${JSON.stringify(LS_STORE_SLUG)} };` }} />
-        <script src={LS_AFFILIATE_SCRIPT} defer />
+        {/* 30.10.2026: crossOrigin обязателен — сайт отдаёт COEP require-corp (next.config.ts), и без CORS-режима
+            браузер блокирует чужой скрипт (ERR_BLOCKED_BY_RESPONSE); lmsqueezy отдаёт ACAO:* — в режиме anonymous проходит.
+            Нашёл Мультичат на проде 043aa4cc7: партнёрские заходы не ставили cookie ls_aff_ref. */}
+        <script src={LS_AFFILIATE_SCRIPT} defer crossOrigin="anonymous" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

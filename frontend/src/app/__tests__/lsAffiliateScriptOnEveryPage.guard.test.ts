@@ -23,7 +23,7 @@ describe("партнёрский скрипт Lemon Squeezy стоит на вс
     const l = read("app", "layout.tsx");
     expect(l).toContain("lemonSqueezyAffiliateConfig");
     expect(l).toMatch(/store:\s*\$\{JSON\.stringify\(LS_STORE_SLUG\)\}/);
-    expect(l).toMatch(/<script src=\{LS_AFFILIATE_SCRIPT\} defer \/>/);
+    expect(l).toMatch(/<script src=\{LS_AFFILIATE_SCRIPT\} defer crossOrigin="anonymous" \/>/); // 30.10.2026: без crossOrigin COEP require-corp блокирует скрипт (прод 043aa4cc7)
   });
 
   it("страница цен оборачивает адрес кассы", () => {

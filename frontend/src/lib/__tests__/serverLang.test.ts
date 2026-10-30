@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  * заголовка; путь /en/… → en (когда путь известен).
  */
 
-const фальшивые = { cookie: null as string | null, acceptLanguage: null as string | null, pathname: null as string | null, бросать: false };
+const фальшивые = { cookie: null as string | null, acceptLanguage: null as string | null, pathname: null as string | null, search: null as string | null, бросать: false };
 
 vi.mock("next/headers", () => ({
   cookies: async () => {
@@ -17,7 +17,9 @@ vi.mock("next/headers", () => ({
     if (фальшивые.бросать) throw new Error("вне запроса");
     return {
       get: (name: string) =>
-        name === "accept-language" ? фальшивые.acceptLanguage : name === "x-aevion-pathname" ? фальшивые.pathname : null,
+        name === "accept-language" ? фальшивые.acceptLanguage
+          : name === "x-aevion-pathname" ? фальшивые.pathname
+          : name === "x-aevion-search" ? фальшивые.search : null,
     };
   },
 }));
@@ -29,6 +31,7 @@ beforeEach(() => {
   фальшивые.cookie = null;
   фальшивые.acceptLanguage = null;
   фальшивые.pathname = null;
+  фальшивые.search = null;
   фальшивые.бросать = false;
 });
 
@@ -72,6 +75,34 @@ describe("языкПоЗапросу — чистый выбор", () => {
   });
 });
 
+describe("языкПоЗапросу — тот же порядок, что у клиента (lib/i18n.tsx)", () => {
+  it("🔴 первый тег, чужой язык → en, как detectBrowserLang (не ru и не второй тег)", () => {
+    expect(языкПоЗапросу({ acceptLanguage: "uk-UA,uk;q=0.9,ru;q=0.8" })).toBe("en");
+  });
+  it("🔴 ?lang=kk важнее куки ru", () => {
+    expect(языкПоЗапросу({ search: "?lang=kk", cookie: "ru", acceptLanguage: "en" })).toBe("kk");
+    expect(языкПоЗапросу({ search: "lang=kk" })).toBe("kk");
+  });
+  it("?lang= важнее пути; мусор в ?lang= — не язык", () => {
+    expect(языкПоЗапросу({ search: "?lang=ru", pathname: "/en/x" })).toBe("ru");
+    expect(языкПоЗапросу({ search: "?lang=zz", cookie: "kk" })).toBe("kk");
+  });
+  it("🔴 метка рассылки ?c=mail-* → en при куке ru; другая метка языка не задаёт", () => {
+    expect(языкПоЗапросу({ search: "?c=mail-ai1", cookie: "ru" })).toBe("en");
+    expect(языкПоЗапросу({ search: "?c=yt", cookie: "ru" })).toBe("ru");
+  });
+  it("🔴 путь /en/… → en даже при куке ru", () => {
+    expect(языкПоЗапросу({ pathname: "/en/devhub", cookie: "ru" })).toBe("en");
+  });
+  it("🔴 без заголовков вовсе → ru; кука ru + Accept en → ru", () => {
+    expect(языкПоЗапросу({})).toBe("ru");
+    expect(языкПоЗапросу({ cookie: "ru", acceptLanguage: "en-US,en;q=0.9" })).toBe("ru");
+  });
+  it("/proof — en, как у клиента", () => {
+    expect(языкПоЗапросу({ pathname: "/proof", cookie: "ru" })).toBe("en");
+  });
+});
+
 describe("serverLang — чтение cookies()/headers() Next", () => {
   it("🔴 без заголовков и куки — ru", async () => {
     expect(await serverLang()).toBe("ru");
@@ -92,6 +123,12 @@ describe("serverLang — чтение cookies()/headers() Next", () => {
     фальшивые.pathname = "/en/auth";
     фальшивые.cookie = "ru";
     expect(await serverLang()).toBe("en");
+  });
+
+  it("🔴 строка запроса из заголовка x-aevion-search: ?lang=kk при куке ru → kk", async () => {
+    фальшивые.search = "?lang=kk";
+    фальшивые.cookie = "ru";
+    expect(await serverLang()).toBe("kk");
   });
 
   it("вне запроса (cookies()/headers() бросают) — умолчание, а не ошибка", async () => {

@@ -31,14 +31,30 @@ describe("?lang=en на русском адресе со своей англий
   it("правило общее для списка: /go → /en/go", () => {
     expect(f("/go", "?lang=en")).toBe("/en/go");
   });
-  it("в middleware() вызов стоит после языковойРедирект и до NextResponse.next()", () => {
+  it("в middleware() вызов стоит после языковойРедирект и до NextResponse.next(…)", () => {
     const src = readFileSync(join(__dirname, "..", "middleware.ts"), "utf-8");
     const тело = src.slice(src.indexOf("export function middleware("));
     const a = тело.indexOf("языковойРедирект(");
     const b = тело.indexOf("редиректПоПараметруЯзыка(");
-    const c = тело.indexOf("NextResponse.next()");
+    const c = тело.indexOf("NextResponse.next(");
     expect(a).toBeGreaterThan(-1);
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
+  });
+});
+
+import { заголовкиДляЯзыка } from "../middleware";
+describe("заголовки для серверного выбора языка", () => {
+  it("путь и строка запроса ставятся, присланные клиентом x-aevion-* перезаписываются", () => {
+    const исходные = new Headers({ "accept-language": "en", "x-aevion-pathname": "/en/spoof", "x-aevion-search": "?lang=zh" });
+    const h = заголовкиДляЯзыка(исходные, "/auth", "?lang=kk");
+    expect(h.get("x-aevion-pathname")).toBe("/auth");
+    expect(h.get("x-aevion-search")).toBe("?lang=kk");
+    expect(h.get("accept-language")).toBe("en");
+    expect(исходные.get("x-aevion-search")).toBe("?lang=zh"); // исходные не мутируются
+  });
+  it("middleware отдаёт их через NextResponse.next({ request: { headers } })", () => {
+    const src = readFileSync(join(process.cwd(), "src/middleware.ts"), "utf8");
+    expect(src).toMatch(/NextResponse\.next\(\{\s*request: \{ headers: заголовкиДляЯзыка\(/);
   });
 });

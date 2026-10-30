@@ -62,6 +62,38 @@ describe("перехватчик: 402 по норме поднимает окн�
     window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
   });
 
+  // 30.10.2026, приёмка прода 7d91f4884: гость читал «войдите под почтой оплаты», а кнопки входа не было.
+  it("🔴 гость без входа: в окне кнопка входа с возвратом на ту же страницу", async () => {
+    window.localStorage.removeItem("aevion_auth_token_v1");
+    window.history.replaceState(null, "", "/qright?lang=en&c=x");
+    window.fetch = vi.fn().mockResolvedValue(ответ(402, { ...НОРМА_402, module: "qright" }));
+    installPaywallInterceptor();
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    await window.fetch("/api-backend/api/pipeline/protect", { method: "POST" });
+    const evt = handler.mock.calls[0][0] as CustomEvent<PaywallPayload>;
+    expect(evt.detail.authState).toBe("anonymous");
+    expect(evt.detail.loginUrl).toBe("/auth?next=%2Fqright%3Flang%3Den%26c%3Dx");
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+  });
+
+  it("КОНТРОЛЬ: вошедший (токен подставлен) кнопки входа не получает", async () => {
+    window.localStorage.setItem("aevion_auth_token_v1", "t-smoke");
+    try {
+      window.fetch = vi.fn().mockResolvedValue(ответ(402, НОРМА_402));
+      installPaywallInterceptor();
+      const handler = vi.fn();
+      window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+      await window.fetch("/api-backend/api/healthai/check");
+      const evt = handler.mock.calls[0][0] as CustomEvent<PaywallPayload>;
+      expect(evt.detail.authState).toBeUndefined();
+      expect(evt.detail.loginUrl).toBeUndefined();
+      window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+    } finally {
+      window.localStorage.removeItem("aevion_auth_token_v1");
+    }
+  });
+
   it("КОНТРОЛЬ: 402 с чужим кодом окна не поднимает", async () => {
     window.fetch = vi.fn().mockResolvedValue(ответ(402, { error: "card_declined" }));
     installPaywallInterceptor();

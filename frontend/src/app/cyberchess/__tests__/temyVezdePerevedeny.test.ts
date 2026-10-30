@@ -30,7 +30,7 @@ describe("тема задачи переведена во всех местах 
     // Пять мест вывода: карточка задачи, список задач, всплывающая подсказка,
     // фильтр по темам, кнопки слабых тем. Станет меньше — что-то откатили.
     const s = KOD();
-    const zovov = (s.match(/temaZadachiRu\(/g) || []).length;
+    const zovov = (s.match(/\btema(?:ZadachiRu)?\(/g) || []).length;
     expect(zovov).toBeGreaterThanOrEqual(5);
   });
 

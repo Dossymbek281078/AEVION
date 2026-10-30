@@ -2442,12 +2442,20 @@ export default function CyberChessPage(){
   // Тексты окна «Настройки» на трёх языках — отдельный чанк, грузится при первом открытии
   // (24.10.2026: в i18n.ts они раздували модули первого экрана на 18 КБ).
   const[setText,sSetText]=useState<Record<string,Record<string,string>>|null>(null);
+  const[zt,sZt]=useState<typeof import("./zadachiText")|null>(null);
   useEffect(()=>{if(!showSettings||setText)return;
     import("./settingsText").then(m=>sSetText(m.SETTINGS_TEXT)).catch(e=>{console.error("[CyberChess] тексты настроек не загрузились",e);sShowSettings(false);showToast(cc.t("attr.settings")+": "+(cc.locale==="en"?"failed to load, try again":cc.locale==="kk"?"жүктелмеді, қайталаңыз":"не загрузились, попробуйте ещё раз"),"error")});
   },[showSettings,setText]);
   const st=(k:string)=>setText?.[cc.locale]?.[k]??setText?.ru?.[k]??k;
   // Названия вариантов (фоны, темы, звуки, декор): en/kk из settingsText, ru — само поле данных
   const pn=(k:string,ru:string)=>cc.locale==="ru"?ru:(setText?.[cc.locale]?.[k]??ru);
+  // Вкладка «Задачи» на en/kk: тексты и названия тем — лениво (zadachiText.ts), на ru не грузятся вовсе.
+  useEffect(()=>{
+    if(cc.locale==="ru"||zt||!(tab==="puzzles"||pzCurrent))return;
+    import("./zadachiText").then(m=>sZt(m)).catch(e=>{console.error("[CyberChess] тексты вкладки «Задачи» не загрузились — остаётся русский",e)});
+  },[cc.locale,tab,pzCurrent,zt]);
+  const pt=(src:string)=>cc.locale==="ru"||!zt?src:(zt.ZADACHI_TEXT[src]?.[cc.locale==="kk"?"kk":"en"]??src);
+  const tema=(th:string)=>zt?zt.temaNaYazyke(th,cc.locale):temaZadachiRu(th);
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
   // «⚙ Ещё» — overflow-меню шапки. Свернули микро-зоны Инструменты/Навигация (настройки,
   // музыка, фулскрин, раскладка, язык, экосистема) в одно меню, чтобы в шапке остались
@@ -4646,9 +4654,9 @@ export default function CyberChessPage(){
         }else{
           // After 2 wrong tries on this puzzle, reveal the expected best move as a hint.
           if(pzWrongTriesRef.current.n>=2){
-            showToast(`✗ Неверно. Лучший ход: ${pzCurrent.sol[0]}`,"error");
+            showToast(`✗ ${pt("Неверно. Лучший ход:")} ${pzCurrent.sol[0]}`,"error");
           }else{
-            showToast(`✗ Неверно. Попробуй ещё или посмотри ответ`,"error");
+            showToast(`✗ ${pt("Неверно. Попробуй ещё или посмотри ответ")}`,"error");
           }
         }
         return false;
@@ -6704,7 +6712,7 @@ export default function CyberChessPage(){
     if(!srvDaily){showToast("Задача дня ещё грузится…","info");return}
     const pz=normalizePuzzle({id:srvDaily.id,fen:srvDaily.fen,sol:srvDaily.sol,name:srvDaily.theme,r:srvDaily.rating,theme:srvDaily.theme}) as typeof PUZZLES[number];
     if(!postavitZadachuNaDosku(pz,{dnevnaya:true}))return;
-    showToast(`☀ Задача дня · ${pz.r}`,"info");
+    showToast(`${pt("☀ Задача дня")} · ${pz.r}`,"info");
     track({type:"daily_open",source:"cyberchess/daily",meta:{surface,day:srvDaily.day}});
   };
   /* ── Ссылка на КОНКРЕТНУЮ задачу: /cyberchess?puzzle=<id> ──
@@ -12239,7 +12247,7 @@ export default function CyberChessPage(){
                   </span>}
                   {/* Фишки без повторов и без того, что уже сказано заголовком: у банка фаза часто равна теме
                       («Эндшпиль · Эндшпиль · Эндшпиль» на проде 23.09), а «Мат в 1» дублировал pzTitle. */}
-                  {[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme),matovVResheniyi(pzCurrent)?`Мат в ${matovVResheniyi(pzCurrent)}`:""]
+                  {[zt?zt.fazaNaYazyke(pzCurrent.phase,cc.locale):fazaRu(pzCurrent.phase),tema(pzCurrent.theme),matovVResheniyi(pzCurrent)?cc.t("pz.mateIn").replace("{n}",String(matovVResheniyi(pzCurrent))):""]
                     .filter((t,i,a)=>t&&a.indexOf(t)===i&&t!==pzTitle.replace(/^[⚪⚫]\s*/,""))
                     .map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
                 </div>
@@ -12271,7 +12279,7 @@ export default function CyberChessPage(){
                   return <div style={{marginBottom:10}}>
                     <div style={{fontSize:15,fontWeight:900,color:"#065f46",padding:"10px 14px",borderRadius:8,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:"1px solid #6ee7b7",display:"flex",alignItems:"center",gap:8,animation:"cc-turn-flash 0.6s ease-out"}}>
                       <span style={{fontSize:20}}>✅</span>
-                      <span>{pzMode==="rush"&&rushStreak>=3?`Серия ${rushStreak}! 🔥`:pzMode==="rush"?"Верно! 🎯":isMate?`Мат в ${matovVResheniyi(pzCurrent) ?? pzCurrent.mateIn}! Отлично!`:"Верно! Отличный ход"}</span>
+                      <span>{pzMode==="rush"&&rushStreak>=3?`${pt("Серия")} ${rushStreak}! 🔥`:pzMode==="rush"?pt("Верно! 🎯"):isMate?`${cc.t("pz.mateIn").replace("{n}",String(matovVResheniyi(pzCurrent) ?? pzCurrent.mateIn))}! ${pt("Отлично!")}`:pt("Верно! Отличный ход")}</span>
                       {(pzMode==="timed3"||pzMode==="timed5"||pzMode==="rush"||pzMode==="custom")&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#059669"}}>+3с ⏱</span>}
                     </div>
                     {/* Объяснение тактического мотива — ключевое отличие от простого «верно/неверно» */}
@@ -12280,8 +12288,8 @@ export default function CyberChessPage(){
                       <div style={{lineHeight:1.55,fontWeight:600}}>{motif[1].desc}</div>
                     </div>}
                     {isMate&&pzMode==="learn"&&!motif&&<div style={{marginTop:6,padding:"9px 12px",borderRadius:8,background:"linear-gradient(135deg,#fff1f2,#fce7f3)",border:"1px solid #fda4af",fontSize:12,color:"#881337"}}>
-                      <div style={{fontWeight:900,marginBottom:3}}>♟ Матовая комбинация</div>
-                      <div style={{lineHeight:1.55,fontWeight:600}}>Король соперника загнан в угол — при точной игре матовый финал неизбежен. Запомни характер позиции!</div>
+                      <div style={{fontWeight:900,marginBottom:3}}>♟ {pt("Матовая комбинация")}</div>
+                      <div style={{lineHeight:1.55,fontWeight:600}}>{pt("Король соперника загнан в угол — при точной игре матовый финал неизбежен. Запомни характер позиции!")}</div>
                     </div>}
                   </div>;
                 })()}
@@ -12293,7 +12301,7 @@ export default function CyberChessPage(){
                   display:"flex",alignItems:"center",gap:8
                 }}>
                   <span style={{fontSize:18}}>❌</span>
-                  <span>{pzMode==="rush"?"Неверно! Стрик сброшен":"Неверно. Попробуй ещё"}</span>
+                  <span>{pzMode==="rush"?pt("Неверно! Стрик сброшен"):pt("Неверно. Попробуй ещё")}</span>
                   {pzMode==="rush"&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:T.danger}}>−5с ⏱</span>}
                 </div>}
                 {/* After 2 wrong tries (non-timed/non-rush retry modes) reveal the expected best move as a hint */}
@@ -12302,23 +12310,23 @@ export default function CyberChessPage(){
                   padding:"9px 14px",marginBottom:10,borderRadius:8,
                   background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fde68a"
-                }}>💡 Подсказка — лучший ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{hodPoRusski(pzCurrent.fen,pzCurrent.sol[0])}</span></div>}
+                }}>💡 {pt("Подсказка — лучший ход:")} <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{(zt?zt.hodNaYazyke(pzCurrent.fen,pzCurrent.sol[0],cc.locale):hodPoRusski(pzCurrent.fen,pzCurrent.sol[0]))}</span></div>}
                 {pzAttempt==="shown"&&<div style={{
                   fontSize:13,fontWeight:800,color:"#78350f",
                   padding:"10px 14px",marginBottom:10,borderRadius:8,
                   background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fde68a"
-                }}>💡 Правильный ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{hodPoRusski(pzCurrent.fen,pzCurrent.sol[0])}</span></div>}
+                }}>💡 {pt("Правильный ход:")} <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{(zt?zt.hodNaYazyke(pzCurrent.fen,pzCurrent.sol[0],cc.locale):hodPoRusski(pzCurrent.fen,pzCurrent.sol[0]))}</span></div>}
                 {/* Actions */}
                 <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
-                  <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ Следующая</Btn>
+                  <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ {pt("Следующая")}</Btn>
                   <Btn size="md" variant="secondary" onClick={randomPz} title={cc.t("attr.random")}>🎲</Btn>
                   <Btn size="md" variant="secondary" onClick={()=>pzFileInputRef.current?.click()} title={cc.t("attr.load_fen_pgn_position")}>📂</Btn>
                   <input ref={pzFileInputRef} type="file" accept=".fen,.pgn,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)loadPzFile(f);e.target.value="";}}/>
-                  {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>Заново</Btn>}
-                  {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title={cc.t("attr.play_the_solution_on_the")}>Решение</Btn>}
+                  {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>{pt("Заново")}</Btn>}
+                  {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title={cc.t("attr.play_the_solution_on_the")}>{pt("Решение")}</Btn>}
                   {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown");
-                    soobschitOPodskazke(pzCurrent,pzWrongTriesRef.current.fen===pzCurrent?.fen?pzWrongTriesRef.current.n:0)}}>Подсказка · 5</Btn>}
+                    soobschitOPodskazke(pzCurrent,pzWrongTriesRef.current.fen===pzCurrent?.fen?pzWrongTriesRef.current.n:0)}}>{pt("Подсказка · 5")}</Btn>}
                   {/* 🔴 ВХОД К ТРЕНЕРУ ПРЯМО ОТСЮДА. Во вкладке «Задачи» кнопки коуча
                       не было вовсе: панель тренера живёт в своей вкладке, и человек,
                       застрявший на задаче, не мог спросить о НЕЙ. А это ровно тот
@@ -12329,12 +12337,12 @@ export default function CyberChessPage(){
                     setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);
                     sPCol(g.turn());sFlip(g.turn()==="b");
                     sCoachAIEnabled(true);sEditorMode(false);sSetup(false);sTab("coach");
-                    showToast("Позиция задачи у тренера — спрашивай","success");
+                    showToast(pt("Позиция задачи у тренера — спрашивай"),"success");
                   }} title={cc.t("coach.askAboutPuzzle")}>{cc.t("pz.askCoach")}</Btn>}
                 </div>
                 {/* Подсказка по хоткеям — discoverability клавиш пазла */}
                 <div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap",fontSize:10,color:T.dim,fontWeight:700}}>
-                  {[["H","подсказка"],["N / →","следующий"],["R","заново"]].map(([k,d])=>(
+                  {[["H",pt("подсказка")],["N / →",pt("следующий")],["R",pt("заново")]].map(([k,d])=>(
                     <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4}}>
                       <kbd style={{padding:"1px 5px",borderRadius:4,border:`1px solid ${T.border}`,background:T.surface,fontFamily:"ui-monospace,monospace",fontSize:10,fontWeight:800,color:T.text}}>{k}</kbd>
                       {d}
@@ -12342,29 +12350,29 @@ export default function CyberChessPage(){
                   ))}
                 </div>
               </div>
-            </div>:<div style={{padding:"24px",textAlign:"center",color:T.dim,fontSize:14,background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}>Выбери задачу из списка ниже ↓</div>}
+            </div>:<div style={{padding:"24px",textAlign:"center",color:T.dim,fontSize:14,background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}>{pt("Выбери задачу из списка ниже ↓")}</div>}
 
             {/* ── Stats strip ── */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))",gap:SPACE[2]}}>
               <Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",borderColor:"#a7f3d0",textAlign:"center"}}>
                 <div style={{fontSize:20,fontWeight:900,color:CC.brand,lineHeight:1}}>{pzSolvedCount}</div>
-                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Решено</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>{pt("Решено")}</div>
               </Card>
               <Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fef2f2,#fff1f2)",borderColor:"#fecaca",textAlign:"center"}}>
                 <div style={{fontSize:20,fontWeight:900,color:CC.danger,lineHeight:1}}>{pzFailedCount}</div>
-                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Ошибок</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>{pt("Ошибок")}</div>
               </Card>
               <Card padding={SPACE[2]} tone="surface3" style={{textAlign:"center"}}>
                 <div style={{fontSize:20,fontWeight:900,color:CC.text,lineHeight:1}}>{fPz.length}</div>
-                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>В фильтре</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>{pt("В фильтре")}</div>
               </Card>
               {rushBest>0&&<Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",borderColor:"#fcd34d",textAlign:"center"}}>
                 <div style={{fontSize:20,fontWeight:900,color:"#78350f",lineHeight:1}}>{rushBest}</div>
-                <div style={{fontSize:10,color:"#92400e",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Лучший результат</div>
+                <div style={{fontSize:10,color:"#92400e",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>{pt("Лучший результат")}</div>
               </Card>}
               {pzStreak.best>0&&<Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fff7ed,#ffedd5)",borderColor:"#fdba74",textAlign:"center"}}>
                 <div style={{fontSize:20,fontWeight:900,color:"#c2410c",lineHeight:1}}>🔥{pzStreak.best}</div>
-                <div style={{fontSize:10,color:"#9a3412",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Рекорд серии</div>
+                <div style={{fontSize:10,color:"#9a3412",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>{pt("Рекорд серии")}</div>
               </Card>}
             </div>
 
@@ -12377,11 +12385,11 @@ export default function CyberChessPage(){
                 .slice(0,3);
               if(weak.length===0)return null;
               return <div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#fef9c3,#fef3c7)",border:"1px solid #fde68a",fontSize:11}}>
-                <div style={{fontWeight:900,color:"#92400e",marginBottom:5}}>⚠ Тренируй слабые темы:</div>
+                <div style={{fontWeight:900,color:"#92400e",marginBottom:5}}>⚠ {pt("Тренируй слабые темы:")}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {weak.map(w=><button key={w.th} onClick={()=>{sPzFilterTheme(w.th);sPzI(0);sPzCategory("all")}}
                     style={{padding:"3px 9px",borderRadius:999,border:"1px solid #fbbf24",background:pzFilterTheme===w.th?"#fbbf24":"#fffbeb",color:pzFilterTheme===w.th?"#fff":"#92400e",fontWeight:800,cursor:"pointer",fontSize:10}}>
-                    {temaZadachiRu(w.th)} · {w.wr}% ({w.total})
+                    {tema(w.th)} · {w.wr}% ({w.total})
                   </button>)}
                 </div>
               </div>;
@@ -12435,9 +12443,9 @@ export default function CyberChessPage(){
               };
               return <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
                 <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:11,fontWeight:800,color:T.dim,letterSpacing:"0.06em",textTransform:"uppercase" as const}}>🏷 Темы · топ {top.length} из {themeCounts.size}</span>
+                  <span style={{fontSize:11,fontWeight:800,color:T.dim,letterSpacing:"0.06em",textTransform:"uppercase" as const}}>🏷 {pt("Темы")} · {pt("топ")} {top.length} {pt("из")} {themeCounts.size}</span>
                   {pzFilterTheme!=="all"&&<button onClick={()=>{sPzFilterTheme("all");sPzI(0)}}
-                    style={{fontSize:10,padding:"3px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontWeight:700,cursor:"pointer"}}>× очистить</button>}
+                    style={{fontSize:10,padding:"3px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontWeight:700,cursor:"pointer"}}>{pt("× очистить")}</button>}
                 </div>
                 <div style={{padding:"8px",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:6}}>
                   {top.map(([th,cnt])=>{
@@ -12446,7 +12454,7 @@ export default function CyberChessPage(){
                     const meta=(Object.prototype.hasOwnProperty.call(THEME_META,th)?THEME_META[th]:null)||{emoji:"♟",color:T.text};
                     const active=pzFilterTheme===th;
                     return <button key={th} onClick={()=>{sPzFilterTheme(active?"all":th);sPzI(0);sPzCategory("all");sPzFilterGoal("all");sPzFilterMate(0);sPzFilterPhase("all")}}
-                      title={`${temaZadachiRu(th)} · ${cnt} задач`}
+                      title={`${tema(th)} · ${cnt} ${pt("задач")}`}
                       style={{
                         padding:"10px 8px",borderRadius:8,
                         border:active?`2px solid ${meta.color}`:`1px solid ${T.border}`,
@@ -12457,7 +12465,7 @@ export default function CyberChessPage(){
                         transition:`all ${MOTION.fast} ${MOTION.ease}`
                       }}>
                       <span style={{fontSize:18}}>{meta.emoji}</span>
-                      <span style={{fontSize:11,fontWeight:800,lineHeight:1.2,textAlign:"center"}}>{temaZadachiRu(th)}</span>
+                      <span style={{fontSize:11,fontWeight:800,lineHeight:1.2,textAlign:"center"}}>{tema(th)}</span>
                       <span style={{fontSize:9,color:T.dim,fontWeight:800}}>{cnt}</span>
                     </button>;
                   })}
@@ -12468,19 +12476,19 @@ export default function CyberChessPage(){
             {/* ── Category Selector ── */}
             <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
               <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb"}}>
-                <span style={{fontSize:11,fontWeight:800,color:T.dim,letterSpacing:"0.06em",textTransform:"uppercase" as const}}>📂 Категория</span>
+                <span style={{fontSize:11,fontWeight:800,color:T.dim,letterSpacing:"0.06em",textTransform:"uppercase" as const}}>📂 {pt("Категория")}</span>
               </div>
               <div style={{padding:"8px",display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>
                 {([
-                  ["all","🎲 Все задачи",T.text],
-                  ["tactics","⚡ Тактика",T.blue],
-                  ["mate1","♔ Мат в 1",T.accent],
-                  ["mate2","♔ Мат в 2",T.accent],
-                  ["mate3","♔ Мат в 3",T.accent],
-                  ["mate4plus","♔ Мат 4+",T.accent],
-                  ["opening","📖 Дебют",T.purple],
-                  ["middlegame","⚔️ Миттельшпиль",T.purple],
-                  ["endgame","🏁 Эндшпиль",T.purple],
+                  ["all",`🎲 ${pt("Все задачи")}`,T.text],
+                  ["tactics",`⚡ ${pt("Тактика")}`,T.blue],
+                  ["mate1",`♔ ${cc.t("pz.mateIn").replace("{n}","1")}`,T.accent],
+                  ["mate2",`♔ ${cc.t("pz.mateIn").replace("{n}","2")}`,T.accent],
+                  ["mate3",`♔ ${cc.t("pz.mateIn").replace("{n}","3")}`,T.accent],
+                  ["mate4plus",`♔ ${pt("Мат 4+")}`,T.accent],
+                  ["opening",`📖 ${pt("Дебют")}`,T.purple],
+                  ["middlegame",`⚔️ ${pt("Миттельшпиль")}`,T.purple],
+                  ["endgame",`🏁 ${pt("Эндшпиль")}`,T.purple],
                 ] as const).map(([cat,label,color])=>{
                   // Count puzzles in this category
                   const cnt=PUZZLES.filter(p=>{
@@ -12515,48 +12523,48 @@ export default function CyberChessPage(){
             {/* ── Collapsible Filters ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
               <button onClick={()=>sPzFiltersExpanded(!pzFiltersExpanded)} style={{width:"100%",padding:"10px 14px",border:"none",background:pzFiltersExpanded?"#f9fafb":"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",borderBottom:pzFiltersExpanded?`1px solid ${T.border}`:"none"}}>
-                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>🔍 Фильтры</span>
+                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>🔍 {pt("Фильтры")}</span>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {(pzFilterGoal!=="all"||pzFilterPhase!=="all"||pzFilterSide!=="all"||pzFilterTheme!=="all"||pzFilterMate!==0)&&<span style={{fontSize:11,padding:"2px 7px",borderRadius:4,background:T.blue,color:"#fff",fontWeight:800}}>активны</span>}
+                  {(pzFilterGoal!=="all"||pzFilterPhase!=="all"||pzFilterSide!=="all"||pzFilterTheme!=="all"||pzFilterMate!==0)&&<span style={{fontSize:11,padding:"2px 7px",borderRadius:4,background:T.blue,color:"#fff",fontWeight:800}}>{pt("активны")}</span>}
                   <span style={{fontSize:13,color:T.dim,transform:pzFiltersExpanded?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
                 </div>
               </button>
               {pzFiltersExpanded&&<div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Цель</div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pt("Цель")}</div>
                   <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {[["all","Все"],["Mate","Мат"],["Best move","Лучший ход"]].map(([g,l])=>
+                    {[["all",pt("Все")],["Mate",pt("Мат")],["Best move",cc.t("pz.bestMoveShort")]].map(([g,l])=>
                       <button key={g} onClick={()=>{sPzFilterGoal(g);if(g!=="Mate")sPzFilterMate(0);sPzI(0)}} style={{padding:"5px 12px",borderRadius:6,border:"none",background:pzFilterGoal===g?T.accent:"#f3f4f6",color:pzFilterGoal===g?"#fff":T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
                     {pzFilterGoal==="Mate"&&[1,2,3,4,5].map(n=>
-                      <button key={n} onClick={()=>{sPzFilterMate(pzFilterMate===n?0:n);sPzI(0)}} title={`Мат в ${n}`} style={{padding:"5px 10px",borderRadius:6,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"monospace"}}>M{n}</button>)}
+                      <button key={n} onClick={()=>{sPzFilterMate(pzFilterMate===n?0:n);sPzI(0)}} title={cc.t("pz.mateIn").replace("{n}",String(n))} style={{padding:"5px 10px",borderRadius:6,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"monospace"}}>M{n}</button>)}
                   </div>
                 </div>
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Фаза</div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pt("Фаза")}</div>
                   <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {[["all","Все"],["Opening","Дебют"],["Middlegame","Миттельшпиль"],["Endgame","Эндшпиль"]].map(([ph,l])=>
+                    {[["all",pt("Все")],["Opening",pt("Дебют")],["Middlegame",pt("Миттельшпиль")],["Endgame",pt("Эндшпиль")]].map(([ph,l])=>
                       <button key={ph} onClick={()=>{sPzFilterPhase(ph);sPzI(0)}} style={{padding:"5px 12px",borderRadius:6,border:"none",background:pzFilterPhase===ph?T.blue:"#f3f4f6",color:pzFilterPhase===ph?"#fff":T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
                   </div>
                 </div>
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Сторона</div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pt("Сторона")}</div>
                   <div style={{display:"flex",gap:4}}>
-                    {[["all","Все"],["w","⚪ Белые"],["b","⚫ Чёрные"]].map(([s,l])=>
+                    {[["all",pt("Все")],["w",`⚪ ${pt("Белые")}`],["b",`⚫ ${pt("Чёрные")}`]].map(([s,l])=>
                       <button key={s} onClick={()=>{sPzFilterSide(s);sPzI(0)}} style={{flex:1,padding:"5px",borderRadius:6,border:"none",background:pzFilterSide===s?"#1e293b":"#f3f4f6",color:pzFilterSide===s?"#fff":T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
                   </div>
                 </div>
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Тема</div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pt("Тема")}</div>
                   <select aria-label={cc.t("attr.puzzle_theme")} value={pzFilterTheme} onChange={e=>{sPzFilterTheme(e.target.value);sPzI(0)}} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,color:T.text,cursor:"pointer",fontWeight:600}}>
-                    <option value="all">Все темы</option>
-                    {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{temaZadachiRu(th)}</option>)}
+                    <option value="all">{pt("Все темы")}</option>
+                    {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{tema(th)}</option>)}
                   </select>
                 </div>
                 {/* Difficulty level filter — 4 levels */}
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Уровень сложности</div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pt("Уровень сложности")}</div>
                   <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {([["all","Все"],[0,900,"Beginner"],[900,1400,"Intermediate"],[1400,1800,"Advanced"],[1800,3000,"Expert"]] as const).map((entry,i)=>{
+                    {([["all",pt("Все")],[0,900,"Beginner"],[900,1400,"Intermediate"],[1400,1800,"Advanced"],[1800,3000,"Expert"]] as const).map((entry,i)=>{
                       const isAll=entry[0]==="all";
                       const label=isAll?entry[1]:entry[2] as string;
                       const active=isAll?(pzFilterRating[0]===0&&pzFilterRating[1]===3000):(pzFilterRating[0]===(entry[0] as number)&&pzFilterRating[1]===(entry[1] as number));
@@ -12575,18 +12583,18 @@ export default function CyberChessPage(){
                       sPzFilterRating([lo,hi]);sPzI(0);pzAutoTuned.current=true;
                       showToast(`Задачи под твой уровень ${adaptivePzRating} (${lo}–${hi})${pzStreak.cur>0?` · серия +${Math.min(300,pzStreak.cur*40)}`:""}`,"info");
                     }} title={`Адаптивная цель: рейтинг ${rat}${pzStreak.cur>0?` + серия ${pzStreak.cur} (+${Math.min(300,pzStreak.cur*40)})`:""}`} style={{padding:"4px 9px",borderRadius:6,border:"1px solid #7c3aed",background:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#7c3aed":"transparent",color:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#fff":"#7c3aed",fontSize:11,fontWeight:800,cursor:"pointer"}}>
-                      ⚡ Мой уровень {adaptivePzRating}{pzStreak.cur>0?` 🔥${pzStreak.cur}`:""}
+                      ⚡ {pt("Мой уровень")} {adaptivePzRating}{pzStreak.cur>0?` 🔥${pzStreak.cur}`:""}
                     </button>
                   </div>
                 </div>
-                {(pzFilterGoal!=="all"||pzFilterPhase!=="all"||pzFilterSide!=="all"||pzFilterTheme!=="all"||pzFilterMate!==0||pzFilterRating[0]!==0||pzFilterRating[1]!==3000)&&<button onClick={()=>{sPzFilterGoal("all");sPzFilterPhase("all");sPzFilterSide("all");sPzFilterTheme("all");sPzFilterMate(0);sPzFilterRating([0,3000]);sPzI(0);}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.danger}`,background:"#fff",color:T.danger,fontSize:12,fontWeight:700,cursor:"pointer",alignSelf:"flex-start"}}>✕ Сбросить</button>}
+                {(pzFilterGoal!=="all"||pzFilterPhase!=="all"||pzFilterSide!=="all"||pzFilterTheme!=="all"||pzFilterMate!==0||pzFilterRating[0]!==0||pzFilterRating[1]!==3000)&&<button onClick={()=>{sPzFilterGoal("all");sPzFilterPhase("all");sPzFilterSide("all");sPzFilterTheme("all");sPzFilterMate(0);sPzFilterRating([0,3000]);sPzI(0);}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.danger}`,background:"#fff",color:T.danger,fontSize:12,fontWeight:700,cursor:"pointer",alignSelf:"flex-start"}}>✕ {pt("Сбросить")}</button>}
               </div>}
             </div>
 
             {/* ── Puzzle List (collapsible) ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
               <div role="button" tabIndex={0} onClick={()=>sPuzzleListOpen(!puzzleListOpen)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();sPuzzleListOpen(!puzzleListOpen)}}} style={{width:"100%",padding:"10px 14px",borderBottom:puzzleListOpen?`1px solid ${T.border}`:"none",background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📋 Список задач ({fPz.length}/{PUZZLES.length})</span>
+                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📋 {pt("Список задач")} ({fPz.length}/{PUZZLES.length})</span>
                 <span style={{fontSize:11,color:T.dim,fontWeight:700,transform:puzzleListOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
               </div>
               {puzzleListOpen&&<>
@@ -12599,21 +12607,21 @@ export default function CyberChessPage(){
                     задач глотают ошибку молча, так что снаружи различить
                     можно только здесь. */}
                 {PUZZLES.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13}}>
-                    <div style={{fontWeight:700,marginBottom:6}}>Задачи не загрузились</div>
-                    <div style={{fontSize:12,opacity:0.85}}>Это не фильтр — банк не ответил. Обновите страницу; если повторится, напишите нам.</div>
-                  </div>:fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
+                    <div style={{fontWeight:700,marginBottom:6}}>{pt("Задачи не загрузились")}</div>
+                    <div style={{fontSize:12,opacity:0.85}}>{pt("Это не фильтр — банк не ответил. Обновите страницу; если повторится, напишите нам.")}</div>
+                  </div>:fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>{pt("Нет задач по фильтру")}</div>:
                 fPz.slice(0,100).map((pz,i)=>{
                   // Build readable name: "Мат в 2 · f5+ Kxf5 · Эндшпиль"
                   const goalLabel=imyaPoResheniyu(pz,cc.locale)||(pz.goal==="Mate"?cc.t("pz.mateIn").replace("{n}",String(pz.mateIn||1)):cc.t("pz.bestMoveShort")); // по ходам, а не по тегу
-                  const sideLabel=solverSide(pz)==="w"?"⚪ Белые":"⚫ Чёрные";
-                  const phaseLabel=pz.phase==="Opening"?"📖 Дебют":pz.phase==="Middlegame"?"⚔️ Миттельшп.":pz.phase==="Endgame"?"🏁 Эндшп.":"";
+                  const sideLabel=solverSide(pz)==="w"?`⚪ ${pt("Белые")}`:`⚫ ${pt("Чёрные")}`;
+                  const phaseLabel=pz.phase==="Opening"?`📖 ${pt("Дебют")}`:pz.phase==="Middlegame"?`⚔️ ${pt("Миттельшп.")}`:pz.phase==="Endgame"?`🏁 ${pt("Эндшп.")}`:"";
                   return(<button key={i} onClick={()=>ldPz(i)} style={{width:"100%",padding:"14px 16px",border:"none",borderBottom:i<Math.min(fPz.length,100)-1?`1px solid ${T.border}`:"none",background:pzI===i?"rgba(124,58,237,0.06)":"#fff",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,borderLeft:pzI===i?`4px solid ${T.purple}`:"4px solid transparent"}}>
                     <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:15,fontWeight:pzI===i?900:700,color:pzI===i?T.purple:T.text,marginBottom:4}}>#{i+1} · {goalLabel}</div>
                       <div style={{fontSize:12,color:T.dim,display:"flex",gap:10,flexWrap:"wrap"}}>
                         <span>{sideLabel}</span>
                         {phaseLabel&&<span>{phaseLabel}</span>}
-                        {pz.theme&&<span style={{color:T.blue,fontWeight:600}}>{temaZadachiRu(pz.theme)}</span>}
+                        {pz.theme&&<span style={{color:T.blue,fontWeight:600}}>{tema(pz.theme)}</span>}
                       </div>
                     </div>
                     <span style={{fontSize:16,fontWeight:900,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger,padding:"6px 14px",borderRadius:7,background:pz.r<600?"#d1fae5":pz.r<1200?"#dbeafe":pz.r<1800?"#ede9fe":"#fee2e2",minWidth:68,textAlign:"center",flexShrink:0}}>{pz.r}</span>

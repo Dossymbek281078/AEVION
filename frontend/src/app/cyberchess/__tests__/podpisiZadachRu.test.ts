@@ -55,9 +55,10 @@ describe("подписи задач по-русски", () => {
     expect(s.length).toBeGreaterThan(100000);
     // 23.09.2026: к фишкам добавился «Мат в N» и дедупликация, поэтому массив длиннее —
     // проверяем СМЫСЛ: фаза и тема идут через переводчики, сырые значения на экран не попадают.
-    expect(s).toContain("[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme),");
+    expect(s).toContain("fazaRu(pzCurrent.phase),tema(pzCurrent.theme),");
+    expect(s).toContain("const tema=(th:string)=>zt?zt.temaNaYazyke(th,cc.locale):temaZadachiRu(th);");
     expect(s).not.toContain("[pzCurrent.phase,pzCurrent.theme]");
     expect(s).not.toMatch(/\{pzCurrent\.phase\}|\{pzCurrent\.theme\}/);
-    expect(s).toContain("{temaZadachiRu(pz.theme)}");
+    expect(s).toContain("{tema(pz.theme)}");
   });
 });

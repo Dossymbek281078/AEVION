@@ -16,8 +16,9 @@
  * строке, не только в тесте: сторож должен быть не слабее того, кто примет
  * значение дальше (покупатель читает цену).
  *
- * Для языков без перевода (kk) поведение прежнее — русский текст бэкенда.
+ * Казахский — pricingLocalizeKk.ts (30.10.2026). Для языков без перевода поведение прежнее.
  */
+import { tierKk, notesKk, promoKk, badgeKk, trustNumberKk } from "./pricingLocalizeKk";
 
 type TierLike = {
   id: string;
@@ -269,6 +270,7 @@ export function translateBackendText(ru: string): string | null {
 }
 
 export function localizeTier<T extends TierLike>(tier: T, lang: string): T {
+  if (lang === "kk") return tierKk(tier);
   if (!isEnglish(lang)) return tier;
   const en = TIER_EN[tier.id];
   return {
@@ -280,16 +282,19 @@ export function localizeTier<T extends TierLike>(tier: T, lang: string): T {
 }
 
 export function localizeNotes(notes: string[], lang: string): string[] {
+  if (lang === "kk") return notesKk(notes);
   if (!isEnglish(lang)) return notes;
   return notes.map((n) => pick(n, NOTES_EN[n]));
 }
 
 export function localizePromoDescription(description: string, lang: string): string {
+  if (lang === "kk") return promoKk(description);
   if (!isEnglish(lang)) return description;
   return pick(description, PROMO_EN[description]);
 }
 
 export function localizeTrustBadge<T extends { id: string; label: string; status?: string }>(b: T, lang: string): T {
+  if (lang === "kk") return badgeKk(b);
   if (!isEnglish(lang)) return b;
   const status = b.status != null ? pick(b.status, BADGE_STATUS_EN[b.status]) : b.status;
   return { ...b, label: pick(b.label, BADGE_LABEL_EN[b.id]), status };
@@ -301,6 +306,7 @@ export function localizeModuleOneLiner(moduleId: string, oneLiner: string, lang:
 }
 
 export function localizeTrustNumber<T extends { label: string; hint?: string }>(n: T, lang: string): T {
+  if (lang === "kk") return trustNumberKk(n);
   if (!isEnglish(lang)) return n;
   const en = TRUST_NUMBER_EN[n.label];
   if (!en) return n;

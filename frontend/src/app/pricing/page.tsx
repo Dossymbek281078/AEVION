@@ -3244,8 +3244,8 @@ export default function PricingPage() {
       <section style={{ margin: "28px auto 0", maxWidth: 760, textAlign: "left" }}>
         <AskAi
           module="pricing"
-          title="Ask about plans"
-          placeholder="e.g. What's the difference between Lite and Full?"
+          title={tp("ask.title")}
+          placeholder={tp("ask.placeholder")}
         />
       </section>
     </ProductPageShell>

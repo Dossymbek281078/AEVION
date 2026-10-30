@@ -28,12 +28,14 @@ describe("/pricing на en: промо и знаки соответствия п
     expect(статусы.filter((s) => !BADGE_STATUS_EN[s])).toEqual([]);
   });
 
-  it("знак «Хранение в РК» на en — без кириллицы; на ru и kk — как с бэкенда", () => {
+  it("знак «Хранение в РК» на en — без кириллицы; на ru — как с бэкенда, на kk — по-казахски (30.10.2026)", () => {
     const b = { id: "kz-152", label: "Хранение в РК", status: "локализацию данных в РК не предоставляем" };
     const en = localizeTrustBadge(b, "en");
     expect(`${en.label} ${en.status}`).not.toMatch(/[А-Яа-яЁё]/);
     expect(localizeTrustBadge(b, "ru")).toEqual(b);
-    expect(localizeTrustBadge(b, "kk")).toEqual(b);
+    const kk = localizeTrustBadge(b, "kk");
+    expect(kk.label).toBe("Деректерді Қазақстанда сақтау");
+    expect(kk.status).toBe("деректерді ҚР-да локализациялауды ұсынбаймыз");
   });
 
   it("изменился статус на бэкенде — показывается русский, а не устаревший перевод", () => {

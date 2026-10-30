@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { useDevhubT } from "../i18n";
@@ -23,6 +23,13 @@ export default function DevHubLinkPage() {
   const [note, setNote] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [confirmState, setConfirmState] = useState<"none" | "working" | "done" | "failed">("none");
+  // 30.10.2026: подтверждение ОДИН раз на пару id+token. Эффект ниже зависит от
+  // confirm → t, и когда язык страницы догружался (en → ru), он срабатывал второй
+  // раз (замер прода: два POST link-confirm на одну загрузку). На настоящей ссылке
+  // первый вызов подключал покупку, второй получал «уже использована» и перетирал
+  // экран отказом — заплативший видел «Ссылка не подошла».
+  const подтверждено = useRef<string | null>(null);
+  const успех = useRef(false);
 
   const confirm = useCallback(async (id: string, token: string) => {
     setConfirmState("working");
@@ -37,6 +44,7 @@ export default function DevHubLinkPage() {
       // бросает на 400 и 503, и безусловное «готово» здесь было бы ложью,
       // выглядящей как успех.
       if (r.ok && j?.ok) {
+        успех.current = true;
         setConfirmState("done");
         /*
          * ⚠️ 31.08.2026: «сохранено» и «сохранено НАДЁЖНО» — разные вещи.
@@ -55,13 +63,15 @@ export default function DevHubLinkPage() {
         // с английским интерфейсом читал русскую фразу в момент подключения
         // оплаченной покупки. Смысл словарной строки тот же — сверено дословно.
         setNote(вПамяти ? t("link.confirmedButMemory") : t("link.confirmed"));
-      } else {
+      } else if (!успех.current) {
         setConfirmState("failed");
         setNote(r.status === 429 ? t("link.tooOften") : t("link.confirmFailed"));
       }
     } catch {
-      setConfirmState("failed");
-      setNote(t("link.confirmFailed"));
+      if (!успех.current) {
+        setConfirmState("failed");
+        setNote(t("link.confirmFailed"));
+      }
     }
   }, [t]);
 
@@ -72,7 +82,11 @@ export default function DevHubLinkPage() {
     const p = new URLSearchParams(window.location.search);
     const id = p.get("id");
     const token = p.get("token");
-    if (id && token) void confirm(id, token);
+    if (!id || !token) return;
+    const ключ = id + "|" + token;
+    if (подтверждено.current === ключ) return;
+    подтверждено.current = ключ;
+    void confirm(id, token);
   }, [confirm]);
 
   async function request(e: React.FormEvent) {

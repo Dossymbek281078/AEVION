@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { меткаЗаходаДляЗаписи } from "@/lib/channelNow";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 import { TERM_TIERS, TERM_NAME, type TermTier } from "@/lib/termPricing";
@@ -132,6 +133,8 @@ function ContactInner() {
           seats: form.seats,
           message: form.message || undefined,
           source: темаИзАдреса ? `pricing/contact:${темаИзАдреса}` : "pricing/contact",
+          // Метка канала (?c=mail-pb340) — тот же источник, что у записи DevHub.
+          channel: меткаЗаходаДляЗаписи() ?? undefined,
         }),
       });
       const j = await r.json();

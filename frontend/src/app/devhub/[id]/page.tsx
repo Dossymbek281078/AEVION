@@ -997,6 +997,23 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // максимальной готовности заплатить не имел куда нажать. Плашка не исчезает
   // сама и несёт кассу; заполняется перехватом в showToast.
   const [upgradeNudge, setUpgradeNudge] = useState<string | null>(null);
+  // 🔴 30.10.2026: платная ступень В ПОТОКЕ после живого сайта. Замер прода
+  // f2db0ee93 (390, чистый браузер): идея → сайт → «Выкатить» → живой адрес, и
+  // ни цены, ни кнопки оплаты — плашка выше появлялась только при исчерпанной
+  // квоте. Тариф — тем же запросом с Bearer, что на /devhub (урок 19.10).
+  const [тарифСтудии, setТарифСтудии] = useState<string | null>(null);
+  const [пределВыкладок, setПределВыкладок] = useState<number | null>(null);
+  useEffect(() => {
+    const токен = getAuthToken();
+    fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store", headers: токен ? { Authorization: "Bearer " + токен } : {} })
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d?.tier === "string") setТарифСтудии(d.tier);
+        const n = d?.usage?.deploy?.limit;
+        if (typeof n === "number" && n > 0) setПределВыкладок(n);
+      })
+      .catch(() => { /* тариф неизвестен — ступень всё равно показываем, как баннер на /devhub */ });
+  }, []);
 
   // AI Chat state
   const [activeTab, setActiveTab] = useState<"chat" | "visual" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
@@ -5172,6 +5189,33 @@ if (/Месячная норма исчерпана|Месячный лимит[
                             {pagesResult?.domainReady ? `https://${project.customDomain} — ${GL.siteLive}` : GL.domainConnecting.replace("{domain}", `https://${project.customDomain}`)}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Платная ступень сразу под живым адресом: здесь у гостя есть
+                        причина платить — на его сайте уже стоит значок AEVION
+                        (lib/aevionBadge.ts на бэке ставит его только бесплатным). */}
+                    {(pagesResult?.liveUrl || pagesResult?.pagesUrl || project?.deployUrl?.includes("pages.dev")) &&
+                      тарифСтудии !== "pro" && тарифСтудии !== "enterprise" && STUDIO_PRO && (
+                      <div data-devhub-pro-after-live style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 8, background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)", color: "#fff" }}>
+                        <div style={{ fontSize: 12, lineHeight: 1.45, marginBottom: 8 }}>
+                          {tPro("pro.afterLive").replace("{n}", String(пределВыкладок ?? 10))}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <a
+                            href={PLANET_TERMS_LIST}
+                            onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub-after-live", meta: { processor: "lemonsqueezy" } })}
+                            style={{ padding: "7px 14px", background: "#fff", color: "#0d9488", borderRadius: 8, fontWeight: 800, fontSize: 13, textDecoration: "none", whiteSpace: "nowrap" }}
+                          >
+                            {tPro("pro.upgrade")} — {tPro("pro.fromPrice").replace("{p}", `$${planetFromPerMonth()}`)}
+                          </a>
+                          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
+                            {tPro("pro.termRange").replace("{max}", `$${pricePerMonth(STUDIO_PRO)}`).replace("{min}", `$${planetFromPerMonth()}`)}
+                          </span>
+                          <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, textDecoration: "underline" }}>
+                            {tPro("pro.linkPurchase")}
+                          </Link>
+                        </div>
                       </div>
                     )}
 

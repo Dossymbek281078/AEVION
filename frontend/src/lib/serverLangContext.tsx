@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { Lang } from "./i18n-data";
+import { useI18nOptional } from "./i18n";
 
 /**
  * Язык первого кадра, выбранный СЕРВЕРОМ (lib/serverLang.ts), — для клиентских
@@ -21,17 +22,29 @@ const Ctx = createContext<Lang | null>(null);
 
 /**
  * Обёртка без собственной геометрии (display: contents): lang — ближайшее
- * объявление языка для читалки и переводчика браузера, data-server-lang —
+ * объявление языка для читалки и переводчика браузера (язык кадра), data-server-lang —
  * маркер в сыром HTML, по которому прод проверяется curl'ом (/bureau рисуется
  * целиком на клиенте, h1 в SSR у него нет — виден только этот маркер).
  */
 export function ServerLangProvider({ lang, children }: { lang: Lang; children: React.ReactNode }) {
   return (
     <Ctx.Provider value={lang}>
-      <div lang={lang} data-server-lang={lang} style={{ display: "contents" }}>
-        {children}
-      </div>
+      <ОбёрткаЯзыка серверный={lang}>{children}</ОбёрткаЯзыка>
     </Ctx.Provider>
+  );
+}
+
+/**
+ * 31.10.2026: lang берётся из языка КАДРА, а не навсегда из серверного: после смены
+ * языка в клиенте атрибут иначе устаревал (читалка и переводчик браузера читали старый).
+ * data-server-lang остаётся серверным — по нему curl-приёмка проверяет сырой HTML.
+ */
+function ОбёрткаЯзыка({ серверный, children }: { серверный: Lang; children: React.ReactNode }) {
+  const язык = языкКадра(useI18nOptional(), серверный, серверный);
+  return (
+    <div lang={язык} data-server-lang={серверный} style={{ display: "contents" }}>
+      {children}
+    </div>
   );
 }
 

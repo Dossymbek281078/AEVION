@@ -21,7 +21,8 @@
  * читателя, но перед запуском 10.09 его стоит вычитать.
  */
 import { useCallback } from "react";
-import { useI18n } from "@/lib/i18n";
+import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 
 type Key = keyof typeof EN;
 
@@ -560,6 +561,10 @@ export const DEVHUB_KEYS = Object.keys(EN) as Key[];
 export const DEVHUB_DICT = DICT;
 
 export function useDevhubT() {
-  const { lang } = useI18n();
+// 30.10.2026 (замер Науки): I18nProvider до langReady держит "en", и русский гость
+// из соцсети видел английский первый кадр. Пока язык не определён, берём язык,
+// выбранный сервером в макете маршрута (кука → Accept-Language → ru); без макета
+// (тест одиночного компонента) — прежнее поведение.
+  const lang = языкКадра(useI18nOptional(), useServerLang());
   return useCallback((key: Key) => tDevhub(lang, key), [lang]);
 }

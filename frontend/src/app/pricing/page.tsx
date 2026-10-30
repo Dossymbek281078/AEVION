@@ -53,6 +53,7 @@ import {
 } from "@/lib/termPricing";
 import { тарифИзАдреса } from "./tarifIzAdresa";
 import { useI18n } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -243,7 +244,10 @@ const ЧТО_ПЛАТНО: Record<string, string> = {
 
 export default function PricingPage() {
   const tp = usePricingT();
-  const { t, lang } = useI18n();
+  const i18n = useI18n();
+  const { t } = i18n;
+  // 30.10.2026: язык кадра — серверный, пока провайдер не определил свой (см. usePricingT).
+  const lang = языкКадра(i18n, useServerLang());
   const heroVariant = useABVariant("hero");
   const heroPrefix = heroVariant === "A" ? "" : `${heroVariant}.`;
   const tierCardsVariant = useABVariant("tierCards");

@@ -6,6 +6,7 @@ import { разметкаПриложений, оплачиваемыеПрил�
 import { getServerLang } from "@/lib/i18n-server";
 import { serverLang } from "@/lib/serverLang";
 import { ServerLangProvider } from "@/lib/serverLangContext";
+import { строкиКадра, КЛЮЧИ_ЦЕН } from "@/lib/serverFrameStrings";
 import { isEnglish } from "@/lib/pricingLocalize";
 import { moduleTitle } from "@/data/moduleNames";
 
@@ -68,7 +69,7 @@ export default async function PricingLayout({ children }: { children: React.Reac
   const lang = await getServerLang();
   const langFrame = await serverLang("ru");
   return (
-    <ServerLangProvider lang={langFrame}>
+    <ServerLangProvider lang={langFrame} frameStrings={строкиКадра(langFrame, КЛЮЧИ_ЦЕН)}>
       {товары ? (
         <script
           type="application/ld+json"

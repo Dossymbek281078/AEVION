@@ -54,7 +54,7 @@ describe("макет /pricing решает язык на сервере (сто�
   it("🔴 layout.tsx зовёт serverLang, оборачивает в ServerLangProvider и рисуется на каждый запрос", () => {
     const макет = readFileSync(join(process.cwd(), "src/app/pricing/layout.tsx"), "utf8");
     expect(макет).toContain('await serverLang("ru")');
-    expect(макет).toContain("<ServerLangProvider lang={langFrame}>");
+    expect(макет).toContain("<ServerLangProvider lang={langFrame} frameStrings={строкиКадра(langFrame, КЛЮЧИ_ЦЕН)}>");
     expect(макет).toContain('export const dynamic = "force-dynamic"');
   });
 });

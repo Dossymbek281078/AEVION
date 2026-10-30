@@ -3,10 +3,8 @@
 // flashing English while the client provider hydrates.
 //
 // How locale is resolved (first match wins):
-//   1. cookie `aevion_lang_v1` (set by the client I18nProvider when the user
-//      picks a language in the UI)
-//   2. Accept-Language header (kk/kz → kk, ru → ru, otherwise en)
-//   3. fallback "en"
+//   ?lang= / ?c=mail-* → path prefix → cookie `aevion_lang_v1` → first tag of
+//   Accept-Language (unsupported → en) → fallback "en". See lib/serverLang.ts.
 //
 // The cookie is written by client setLang() — once the user clicks a language
 // switcher anywhere in the app, every subsequent SSR render serves their
@@ -20,14 +18,14 @@
 //     return <h1>{t("awards.h1")}</h1>;
 //   }
 
-import { cookies, headers } from "next/headers";
 // Import from the pure data module — NOT from "./i18n", which is a "use client"
 // boundary. Importing translations through that boundary returns an opaque
 // client-reference stub on the server, which made tServer() throw
 // "Cannot read properties of undefined (reading <key>)" for every SSR page
 // that wasn't a static route (observed on /globus, /qbuild, /qtradeoffline,
 // /aevion-ip-bureau, /awards on Vercel 2026-05-03).
-import { LANGS, LANG_COOKIE, interpolate, type Lang } from "./i18n-data";
+import { interpolate, type Lang } from "./i18n-data";
+import { serverLang } from "./serverLang";
 // The server renders whichever language the visitor asked for, so it takes all
 // of them. This import is what keeps i18n-all.ts out of the client bundle —
 // nothing a client component imports may reach it.
@@ -35,50 +33,15 @@ import { translations } from "./i18n-all";
 
 export type { Lang } from "./i18n-data";
 
-function isLang(x: unknown): x is Lang {
-  return typeof x === "string" && (LANGS as readonly string[]).includes(x);
-}
-
-function parseAcceptLanguage(al: string): Lang | null {
-  const lower = al.toLowerCase();
-  const parts = lower.split(",");
-  for (const part of parts) {
-    const tag = part.trim().split(";")[0]?.trim();
-    if (!tag) continue;
-    if (tag.startsWith("kk") || tag.startsWith("kz")) return "kk";
-    if (tag.startsWith("ru")) return "ru";
-    if (tag.startsWith("de")) return "de";
-    if (tag.startsWith("fr")) return "fr";
-    if (tag.startsWith("es")) return "es";
-    if (tag.startsWith("zh")) return "zh";
-    if (tag.startsWith("ja")) return "ja";
-    if (tag.startsWith("ar")) return "ar";
-    if (tag.startsWith("pt")) return "pt";
-    if (tag.startsWith("tr")) return "tr";
-    if (tag.startsWith("en")) return "en";
-  }
-  return null;
-}
-
+/**
+ * Язык SSR для страниц, у которых английский — родной. Правила выбора те же, что у
+ * клиента и у serverLang(): ?lang= -> ?c=mail-* -> путь -> кука -> ПЕРВЫЙ тег
+ * Accept-Language (чужой -> en). Отличие одно: без заголовка умолчание "en"
+ * (у serverLang — "ru"). ?lang= и путь приезжают заголовками x-aevion-search /
+ * x-aevion-pathname, которые ставит middleware.
+ */
 export async function getServerLang(): Promise<Lang> {
-  try {
-    const c = await cookies();
-    const v = c.get(LANG_COOKIE)?.value;
-    if (isLang(v)) return v;
-  } catch {
-    /* ignore — cookies() can throw outside a request scope */
-  }
-
-  try {
-    const h = await headers();
-    const al = h.get("accept-language") || "";
-    const fromHeader = parseAcceptLanguage(al);
-    if (fromHeader) return fromHeader;
-  } catch {
-    /* ignore */
-  }
-
-  return "en";
+  return serverLang("en");
 }
 
 export function tServer(

@@ -8,6 +8,7 @@ import { PaywallScreen } from "@/components/PaywallScreen";
 import { apiUrl } from "@/lib/apiBase";
 import { apiFetchOrPaywall, PaywallError, type PaywallPayload } from "@/lib/paywall";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { useQMediaT } from "./i18n";
 
 type Track = {
   id: string;
@@ -34,6 +35,8 @@ function fmtTime(s: number) {
 }
 
 export default function QMediaPage() {
+  const { t, tn, label, num } = useQMediaT();
+  const tr = t; // в списках треков имя t занято самим треком
   const [tracks, setTracks] = useState<Track[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [recos, setRecos] = useState<Track[]>([]);
@@ -160,17 +163,17 @@ export default function QMediaPage() {
   };
 
   const features = [
-    { icon: "🎵", title: "Music", desc: "Stream and create music with AI", href: "/qmedia/music", color: "#0d9488" },
-    { icon: "🎬", title: "Videos", desc: "Watch and share videos", href: "/qmedia/videos", color: "#7c3aed" },
-    { icon: "🎨", title: "Creative", desc: "AI lyrics, titles, color palettes", href: "/qmedia/creative", color: "#d97706" },
-    { icon: "📻", title: "Live", desc: "Coming soon", href: "#", color: "#94a3b8", disabled: true },
+    { icon: "🎵", id: "music", name: t("hub.music.title"), desc: t("hub.music.desc"), href: "/qmedia/music", color: "#0d9488" },
+    { icon: "🎬", id: "videos", name: t("hub.videos.title"), desc: t("hub.videos.desc"), href: "/qmedia/videos", color: "#7c3aed" },
+    { icon: "🎨", id: "creative", name: t("hub.creative.title"), desc: t("hub.creative.desc"), href: "/qmedia/creative", color: "#d97706" },
+    { icon: "📻", id: "live", name: t("hub.live.title"), desc: t("hub.live.desc"), href: "#", color: "#94a3b8", disabled: true },
   ];
 
   const progressPct = useMemo(() => (duration > 0 ? (current / duration) * 100 : 0), [current, duration]);
   const recoListSrc = recos.length > 0 ? recos : tracks;
 
   if (paywall) {
-    return <PaywallScreen payload={paywall} backHref="/modules" backLabel="← Модули" />;
+    return <PaywallScreen payload={paywall} backHref="/modules" backLabel={t("common.backModules")} />;
   }
 
   return (
@@ -179,7 +182,7 @@ export default function QMediaPage() {
       <ProductPageShell>
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", margin: "0 0 6px" }}>🎵 QMedia</h1>
-          <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Music, video and creative tools — all in one place.</p>
+          <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>{t("hub.tagline")}</p>
           <div style={{ marginTop: 12 }}>
             <ModulePricingChip moduleId="qmedia" />
           </div>
@@ -187,12 +190,12 @@ export default function QMediaPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 32 }}>
           {features.map((f) => (
-            <Link key={f.title} href={f.href} style={{ textDecoration: "none", pointerEvents: f.disabled ? "none" : "auto" }}>
+            <Link key={f.id} href={f.href} style={{ textDecoration: "none", pointerEvents: f.disabled ? "none" : "auto" }}>
               <div style={{ padding: 20, borderRadius: 14, border: `1px solid ${f.color}33`, background: "#fff", opacity: f.disabled ? 0.5 : 1, cursor: f.disabled ? "default" : "pointer" }}>
                 <div style={{ fontSize: 32, marginBottom: 10 }}>{f.icon}</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: f.color, marginBottom: 4 }}>{f.title}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: f.color, marginBottom: 4 }}>{f.name}</div>
                 <div style={{ fontSize: 12, color: "#64748b" }}>{f.desc}</div>
-                {!f.disabled && <div style={{ marginTop: 12, fontSize: 12, fontWeight: 700, color: f.color }}>Open →</div>}
+                {!f.disabled && <div style={{ marginTop: 12, fontSize: 12, fontWeight: 700, color: f.color }}>{t("hub.open")}</div>}
               </div>
             </Link>
           ))}
@@ -203,14 +206,14 @@ export default function QMediaPage() {
           <div style={{ marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10, gap: 12, flexWrap: "wrap" }}>
               <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", margin: 0 }}>
-                {recoMode === "personal" ? "✨ For you" : "🔥 Popular tracks"}
+                {recoMode === "personal" ? t("hub.forYou") : t("hub.popular")}
               </h2>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 {recoMode === "personal" && recoTags.length > 0 && recoTags.map((tag) => (
                   <span key={tag} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 999, background: "#0d948822", color: "#0d9488", fontWeight: 700, textTransform: "lowercase" }}>{tag}</span>
                 ))}
                 {recoMode === "popular" && (
-                  <span style={{ fontSize: 10, color: "#94a3b8" }}>Sign in to personalise</span>
+                  <span style={{ fontSize: 10, color: "#94a3b8" }}>{t("hub.signInPersonal")}</span>
                 )}
               </div>
             </div>
@@ -237,7 +240,7 @@ export default function QMediaPage() {
                     <span style={{ fontSize: 18 }}>{isActive && playing ? "⏸" : "▶"}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? "#0d9488" : "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
-                      <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist || "Unknown"} · {t.genre}</div>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist || tr("common.unknown")} · {label("genre", t.genre)}</div>
                     </div>
                     <span style={{ fontSize: 11, color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>▶ {t.playCount}</span>
                     <span style={{ fontSize: 11, color: "#94a3b8", fontVariantNumeric: "tabular-nums", width: 38, textAlign: "right" }}>{fmtTime(t.duration)}</span>
@@ -251,11 +254,11 @@ export default function QMediaPage() {
         {/* Trending genres */}
         {trendingGenres.length > 0 && (
           <div style={{ marginBottom: 28 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>📈 Trending genres</h2>
+            <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>{t("hub.trending")}</h2>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {trendingGenres.map((g) => (
                 <span key={g.genre} style={{ padding: "6px 12px", borderRadius: 999, background: "#7c3aed11", color: "#7c3aed", fontSize: 12, fontWeight: 700, border: "1px solid #7c3aed33" }}>
-                  {g.genre} <span style={{ color: "#94a3b8", fontWeight: 500 }}>· {g.plays}</span>
+                  {label("genre", g.genre)} <span style={{ color: "#94a3b8", fontWeight: 500 }}>· {num(g.plays)}</span>
                 </span>
               ))}
             </div>
@@ -265,7 +268,7 @@ export default function QMediaPage() {
         {/* Popular tracks (kept distinct from recommendations) */}
         {tracks.length > 0 && (
           <div style={{ marginBottom: 24 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>🎵 Most played</h2>
+            <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>{t("hub.mostPlayed")}</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {tracks.map((t) => {
                 const isActive = active?.id === t.id;
@@ -288,7 +291,7 @@ export default function QMediaPage() {
                     <span style={{ fontSize: 20 }}>{isActive && playing ? "⏸" : "🎵"}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? "#0d9488" : "#0f172a" }}>{t.title}</div>
-                      <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist || "Unknown"} · {t.genre}</div>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist || tr("common.unknown")} · {label("genre", t.genre)}</div>
                     </div>
                     <span style={{ fontSize: 11, color: "#94a3b8" }}>▶ {t.playCount}</span>
                   </button>
@@ -300,14 +303,14 @@ export default function QMediaPage() {
 
         {videos.length > 0 && (
           <div style={{ marginBottom: active ? 120 : 24 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>🎬 Popular videos</h2>
+            <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>{t("hub.popularVideos")}</h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
               {videos.map((v) => (
                 <div key={v.id} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                   <div style={{ height: 100, background: "linear-gradient(135deg, #0d9488, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🎬</div>
                   <div style={{ padding: "8px 10px" }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{v.title}</div>
-                    <div style={{ fontSize: 10, color: "#94a3b8" }}>{v.viewCount} views</div>
+                    <div style={{ fontSize: 10, color: "#94a3b8" }}>{tn("hub.views", v.viewCount)}</div>
                   </div>
                 </div>
               ))}
@@ -342,14 +345,14 @@ export default function QMediaPage() {
               <div style={{ width: 44, height: 44, borderRadius: 8, background: "linear-gradient(135deg, #0d9488, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>🎵</div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{active.title}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{active.artist || "Unknown"} · {active.genre}</div>
+                <div style={{ fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{active.artist || t("common.unknown")} · {label("genre", active.genre)}</div>
               </div>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={goPrev} title="Previous" style={btnIcon}>⏮</button>
-              <button onClick={togglePlay} title={playing ? "Pause" : "Play"} style={{ ...btnIcon, width: 42, height: 42, background: "#0d9488", color: "#fff", fontSize: 18 }}>{playing ? "⏸" : "▶"}</button>
-              <button onClick={goNext} title="Next" style={btnIcon}>⏭</button>
+              <button onClick={goPrev} title={t("player.prev")} style={btnIcon}>⏮</button>
+              <button onClick={togglePlay} title={playing ? t("player.pause") : t("player.play")} style={{ ...btnIcon, width: 42, height: 42, background: "#0d9488", color: "#fff", fontSize: 18 }}>{playing ? "⏸" : "▶"}</button>
+              <button onClick={goNext} title={t("player.next")} style={btnIcon}>⏭</button>
             </div>
 
             <div style={{ flex: "2 1 320px", display: "flex", alignItems: "center", gap: 10, minWidth: 220 }}>
@@ -361,15 +364,15 @@ export default function QMediaPage() {
                 step={0.1}
                 value={progressPct}
                 onChange={onSeek}
-                aria-label="Seek"
+                aria-label={t("player.seek")}
                 style={{ flex: 1, accentColor: "#0d9488", cursor: "pointer" }}
               />
               <span style={{ fontSize: 11, color: "#94a3b8", fontVariantNumeric: "tabular-nums", width: 38 }}>{fmtTime(duration)}</span>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={cycleSpeed} title="Playback speed" style={{ ...btnIcon, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{speed}x</button>
-              <span title="Volume" style={{ fontSize: 14 }}>{volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}</span>
+              <button onClick={cycleSpeed} title={t("player.speed")} style={{ ...btnIcon, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{speed}x</button>
+              <span title={t("player.volume")} style={{ fontSize: 14 }}>{volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}</span>
               <input
                 type="range"
                 min={0}
@@ -377,7 +380,7 @@ export default function QMediaPage() {
                 step={0.01}
                 value={volume}
                 onChange={(e) => setVolume(Number(e.target.value))}
-                aria-label="Volume"
+                aria-label={t("player.volume")}
                 style={{ width: 80, accentColor: "#0d9488", cursor: "pointer" }}
               />
             </div>

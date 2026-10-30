@@ -19,6 +19,8 @@ import { человеческаяДата } from "./tournamentDate";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tournamentUserId, tournamentDisplayName } from "./playerIdentity";
 import Link from "next/link";
+import { useCcI18n } from "../i18n";
+import { tt } from "./tournamentsText";
 
 const T = {
   bg: "#0a0e1a",
@@ -132,6 +134,7 @@ type FormatFilter = "all" | Format;
 type SortKey = "fill" | "startsAt" | "prize";
 
 export default function TournamentsHubPage() {
+  const { locale: L } = useCcI18n();
   const [tcFilter, setTcFilter] = useState<TcFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [formatFilter, setFormatFilter] = useState<FormatFilter>("all");
@@ -226,7 +229,7 @@ export default function TournamentsHubPage() {
           href="/cyberchess"
           style={{ color: T.dim, textDecoration: "none", fontSize: 14 }}
         >
-          ← к шахматам
+          {tt(L, "← к шахматам")}
         </Link>
       </div>
 
@@ -245,7 +248,7 @@ export default function TournamentsHubPage() {
             }}
           >
             <span>🏆</span>
-            <span>Турниры AEVION</span>
+            <span>{tt(L, "Турниры AEVION")}</span>
           </h1>
           <button
             onClick={() => setCreateOpen(true)}
@@ -262,19 +265,18 @@ export default function TournamentsHubPage() {
               whiteSpace: "nowrap",
             }}
           >
-            ＋ Создать турнир
+            {tt(L, "＋ Создать турнир")}
           </button>
         </div>
         <p style={{ color: T.dim, marginTop: 8, fontSize: 14 }}>
-          На вылет, швейцарская система или круговой — создай свой турнир или регистрируйся в чужой.
+          {tt(L, "На вылет, швейцарская система или круговой — создай свой турнир или регистрируйся в чужой.")}
         </p>
         {loading && (
-          <div style={{ color: T.faint, marginTop: 8, fontSize: 12 }}>Загружаем список...</div>
+          <div style={{ color: T.faint, marginTop: 8, fontSize: 12 }}>{tt(L, "Загружаем список...")}</div>
         )}
         {errorMsg && (
           <div style={{ color: T.orange, marginTop: 8, fontSize: 12 }}>
-            Турниры сейчас не загрузились — ниже показан ПРИМЕР того, как
-            выглядит список. Обновите страницу через минуту.
+            {tt(L, "Турниры сейчас не загрузились — ниже показан ПРИМЕР того, как выглядит список. Обновите страницу через минуту.")}
           </div>
         )}
       </header>
@@ -303,13 +305,13 @@ export default function TournamentsHubPage() {
           alignItems: "center",
         }}
       >
-        <FilterGroup label="Формат">
+        <FilterGroup label={tt(L, "Формат")}>
           {(["all", "single_elimination", "swiss", "round_robin"] as const).map((v) => (
             <PillButton
               key={v}
               active={formatFilter === v}
               onClick={() => setFormatFilter(v)}
-              label={
+              label={tt(L,
                 v === "all"
                   ? "Все"
                   : v === "single_elimination"
@@ -317,18 +319,18 @@ export default function TournamentsHubPage() {
                   : v === "swiss"
                   ? "Швейцарская"
                   : "Круговой"
-              }
+              )}
             />
           ))}
         </FilterGroup>
 
-        <FilterGroup label="Контроль времени">
+        <FilterGroup label={tt(L, "Контроль времени")}>
           {(["all", "blitz", "rapid", "classic"] as const).map((v) => (
             <PillButton
               key={v}
               active={tcFilter === v}
               onClick={() => setTcFilter(v)}
-              label={
+              label={tt(L,
                 v === "all"
                   ? "Все"
                   : v === "blitz"
@@ -336,18 +338,18 @@ export default function TournamentsHubPage() {
                   : v === "rapid"
                   ? "Рапид"
                   : "Классика"
-              }
+              )}
             />
           ))}
         </FilterGroup>
 
-        <FilterGroup label="Статус">
+        <FilterGroup label={tt(L, "Статус")}>
           {(["all", "upcoming", "live", "finished"] as const).map((v) => (
             <PillButton
               key={v}
               active={statusFilter === v}
               onClick={() => setStatusFilter(v)}
-              label={
+              label={tt(L,
                 v === "all"
                   ? "Все"
                   : v === "upcoming"
@@ -355,20 +357,20 @@ export default function TournamentsHubPage() {
                   : v === "live"
                   ? "Live"
                   : "Завершён"
-              }
+              )}
             />
           ))}
         </FilterGroup>
 
-        <FilterGroup label="Игроки">
+        <FilterGroup label={tt(L, "Игроки")}>
           <PillButton
             active={realPlayersOnly}
             onClick={() => setRealPlayersOnly((v) => !v)}
-            label={realPlayersOnly ? "⚡ только реальные" : "Все игроки"}
+            label={realPlayersOnly ? tt(L, "⚡ только реальные") : tt(L, "Все игроки")}
           />
         </FilterGroup>
 
-        <FilterGroup label="Сортировать">
+        <FilterGroup label={tt(L, "Сортировать")}>
           {(
             [
               ["startsAt", "По дате"],
@@ -380,26 +382,26 @@ export default function TournamentsHubPage() {
               key={key}
               active={sortKey === key}
               onClick={() => setSortKey(key)}
-              label={label}
+              label={tt(L, label)}
             />
           ))}
         </FilterGroup>
 
-        <FilterGroup label="ELO диапазон">
-          <input aria-label="ELO минимум"
+        <FilterGroup label={tt(L, "ELO диапазон")}>
+          <input aria-label={tt(L, "ELO минимум")}
             type="number"
             value={eloMin}
             onChange={(e) => setEloMin(Number(e.target.value) || 0)}
             style={inputStyle}
-            placeholder="от"
+            placeholder={tt(L, "от")}
           />
           <span style={{ color: T.dim }}>—</span>
-          <input aria-label="ELO максимум"
+          <input aria-label={tt(L, "ELO максимум")}
             type="number"
             value={eloMax}
             onChange={(e) => setEloMax(Number(e.target.value) || 0)}
             style={inputStyle}
-            placeholder="до"
+            placeholder={tt(L, "до")}
           />
         </FilterGroup>
       </section>
@@ -429,8 +431,8 @@ export default function TournamentsHubPage() {
             }}
           >
             {tournaments.length === 0
-              ? "Турниров пока нет — создайте первый."
-              : "Турниры под текущие фильтры не найдены."}
+              ? tt(L, "Турниров пока нет — создайте первый.")
+              : tt(L, "Турниры под текущие фильтры не найдены.")}
           </div>
         )}
         {filtered.map((t) => (
@@ -501,13 +503,13 @@ const inputStyle: React.CSSProperties = {
   width: 70,
 };
 
-function formatLabel(f: Format, t: Tournament): string {
-  if (f === "single_elimination") return "На вылет";
+function formatLabel(f: Format, t: Tournament, L: string): string {
+  if (f === "single_elimination") return tt(L, "На вылет");
   if (f === "swiss") {
     const rounds = t.swissRounds ?? 5;
-    return `Швейцарская · ${rounds} туров`;
+    return tt(L, "Швейцарская · {n} туров").replace("{n}", String(rounds));
   }
-  return "Круговой";
+  return tt(L, "Круговой");
 }
 
 function formatColor(f: Format): string {
@@ -517,18 +519,19 @@ function formatColor(f: Format): string {
 }
 
 function TournamentCard({ t }: { t: Tournament }) {
+  const { locale: L } = useCcI18n();
   const [hovered, setHovered] = useState(false);
   const [standings, setStandings] = useState<StandingRow[] | null>(null);
   const [standingsLoading, setStandingsLoading] = useState(false);
 
   const tcLabel =
-    t.timeControl === "blitz" ? "Блиц" : t.timeControl === "rapid" ? "Рапид" : "Классика";
+    t.timeControl === "blitz" ? tt(L, "Блиц") : t.timeControl === "rapid" ? tt(L, "Рапид") : tt(L, "Классика");
   const tcColor =
     t.timeControl === "blitz" ? T.orange : t.timeControl === "rapid" ? T.blue : T.purple;
   const statusColor =
     t.status === "live" ? T.red : t.status === "upcoming" ? T.accent : T.faint;
   const statusLabel =
-    t.status === "live" ? "LIVE" : t.status === "upcoming" ? "Скоро" : "Завершён";
+    t.status === "live" ? "LIVE" : t.status === "upcoming" ? tt(L, "Скоро") : tt(L, "Завершён");
   const isLive = t.status === "live";
 
   const full = t.players >= t.maxPlayers;
@@ -579,7 +582,7 @@ function TournamentCard({ t }: { t: Tournament }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div style={{ minWidth: 0 }}>
           <h3 style={{ margin: 0, fontSize: 17, color: T.text, overflowWrap: "anywhere" }}>{t.title}</h3>
-          <div style={{ marginTop: 4, fontSize: 12, color: T.dim }}>{человеческаяДата(t.startsAt)}</div>
+          <div style={{ marginTop: 4, fontSize: 12, color: T.dim }}>{человеческаяДата(t.startsAt, L)}</div>
         </div>
         <span
           style={{
@@ -612,13 +615,13 @@ function TournamentCard({ t }: { t: Tournament }) {
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <Tag color={formatColor(t.format)}>{formatLabel(t.format, t)}</Tag>
+        <Tag color={formatColor(t.format)}>{formatLabel(t.format, t, L)}</Tag>
         <Tag color={tcColor}>{tcLabel}</Tag>
         <Tag color={T.dim}>
           ELO {t.eloMin}–{t.eloMax}
         </Tag>
         <Tag color={full ? T.red : T.accent}>
-          {t.players}/{t.maxPlayers} игроков
+          {t.players}/{t.maxPlayers} {tt(L, "игроков")}
         </Tag>
         {/* Признак — ПРОИСХОЖДЕНИЕ, а не внутренний флаг realPlayers.
             Пометка обязана быть НА образце, а не только на настоящем: рядом с
@@ -633,9 +636,9 @@ function TournamentCard({ t }: { t: Tournament }) {
             фикстуры описывает её содержимое, а не происхождение; спрашивать
             надо у сервера, откуда запись. */}
         {t.origin === 'seed' ? (
-          <Tag color={T.dim}>образец</Tag>
+          <Tag color={T.dim}>{tt(L, "образец")}</Tag>
         ) : t.realPlayers ? (
-          <Tag color={T.yellow}>⚡ real players</Tag>
+          <Tag color={T.yellow}>{tt(L, "⚡ real players")}</Tag>
         ) : null}
       </div>
 
@@ -659,11 +662,11 @@ function TournamentCard({ t }: { t: Tournament }) {
               marginBottom: 6,
             }}
           >
-            Топ-5 · {t.format === "swiss" ? "коэффициент Бухгольца" : "круговой"}
+            {tt(L, "Топ-5")} · {t.format === "swiss" ? tt(L, "коэффициент Бухгольца") : tt(L, "круговой")}
           </div>
-          {standingsLoading && <div style={{ color: T.dim }}>Загрузка...</div>}
+          {standingsLoading && <div style={{ color: T.dim }}>{tt(L, "Загрузка...")}</div>}
           {!standingsLoading && (!standings || standings.length === 0) && (
-            <div style={{ color: T.faint }}>Данных пока нет</div>
+            <div style={{ color: T.faint }}>{tt(L, "Данных пока нет")}</div>
           )}
           {!standingsLoading && standings && standings.length > 0 && (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -702,7 +705,7 @@ function TournamentCard({ t }: { t: Tournament }) {
         }}
       >
         <span style={{ fontSize: 14, color: T.yellow, fontWeight: 700 }}>
-          💎 {t.prizeChessy.toLocaleString("ru-RU")} Chessy
+          💎 {t.prizeChessy.toLocaleString(L === "en" ? "en-US" : "ru-RU")} Chessy
           {t.origin === "user" && t.prizeChessy > 0 && (
             // Турнир может завести кто угодно, без входа, и приз он объявляет
             // сам — до десяти миллионов. Платит призы только подписанный
@@ -710,7 +713,7 @@ function TournamentCard({ t }: { t: Tournament }) {
             // выглядит как обязательство площадки, да ещё и рядом с самой
             // сильной подписью «настоящие игроки».
             <span style={{ fontSize: 11.5, fontWeight: 400, color: T.dim, marginLeft: 6 }}>
-              объявлен создателем
+              {tt(L, "объявлен создателем")}
             </span>
           )}
         </span>
@@ -728,14 +731,14 @@ function TournamentCard({ t }: { t: Tournament }) {
               fontWeight: 600,
             }}
           >
-            Подробнее
+            {tt(L, "Подробнее")}
           </Link>
           {t.status === "live" ? (
             <Link
               href="/cyberchess/spectator"
               style={{ ...btnPrimary(T.blue), textDecoration: "none", display: "inline-block" }}
             >
-              Смотреть
+              {tt(L, "Смотреть")}
             </Link>
           ) : t.status === "upcoming" ? (
             <button
@@ -760,15 +763,14 @@ function TournamentCard({ t }: { t: Tournament }) {
                   );
                   const data = await r.json();
                   if (data?.ok) {
-                    alert(`Вы записаны на «${t.title}». Номер участника: ${data.ticketId}`);
+                    alert(tt(L, "Вы записаны на «{t}». Номер участника: {n}").replace("{t}", String(t.title)).replace("{n}", String(data.ticketId)));
                   } else {
                     // Человеку — человеческое; код ошибки уходит в консоль.
                     // Раньше здесь было «Error: <код>»: слово чужого языка и
                     // строка, которая ничего не говорит тому, кто её прочтёт.
                     console.warn("[tournaments] регистрация отклонена:", data?.error);
                     alert(
-                      `Не удалось записаться на «${t.title}». ` +
-                        `Попробуйте ещё раз — если не выйдет, напишите нам.`,
+                      tt(L, "Не удалось записаться на «{t}». Попробуйте ещё раз — если не выйдет, напишите нам.").replace("{t}", String(t.title)),
                     );
                   }
                 } catch {
@@ -779,18 +781,17 @@ function TournamentCard({ t }: { t: Tournament }) {
                      списке участников. Молчание было бы лучше этого, а правда
                      лучше молчания. */
                   alert(
-                    `Не удалось зарегистрироваться на «${t.title}»: нет связи с сервером. ` +
-                      `Вы НЕ записаны — попробуйте ещё раз.`,
+                    tt(L, "Не удалось зарегистрироваться на «{t}»: нет связи с сервером. Вы НЕ записаны — попробуйте ещё раз.").replace("{t}", String(t.title)),
                   );
                 }
               }}
               style={btnPrimary(full ? T.faint : T.accent)}
             >
-              {full ? "Заполнен" : "Register"}
+              {full ? tt(L, "Заполнен") : tt(L, "Register")}
             </button>
           ) : (
             <button disabled style={btnPrimary(T.faint)}>
-              Завершён
+              {tt(L, "Завершён")}
             </button>
           )}
         </div>
@@ -840,6 +841,7 @@ function CreateTournamentModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const { locale: L } = useCcI18n();
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState<Format>("single_elimination");
   const [timeControl, setTimeControl] = useState<TimeControl>("blitz");
@@ -875,7 +877,7 @@ function CreateTournamentModal({
 
   const submit = async () => {
     if (title.trim().length < 3) {
-      setErr("Название минимум 3 символа");
+      setErr(tt(L, "Название минимум 3 символа"));
       return;
     }
     setBusy(true);
@@ -915,7 +917,7 @@ function CreateTournamentModal({
       }
       onCreated();
     } catch (e) {
-      setErr((e as Error).message || "Не удалось создать турнир");
+      setErr((e as Error).message || tt(L, "Не удалось создать турнир"));
     } finally {
       setBusy(false);
     }
@@ -950,56 +952,56 @@ function CreateTournamentModal({
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <h2 style={{ margin: 0, fontSize: 22, color: T.text }}>＋ Новый турнир</h2>
+          <h2 style={{ margin: 0, fontSize: 22, color: T.text }}>{tt(L, "＋ Новый турнир")}</h2>
           <button
             onClick={onClose}
             style={{ background: "none", border: "none", color: T.faint, fontSize: 20, cursor: "pointer" }}
-            aria-label="Закрыть"
+            aria-label={tt(L, "Закрыть")}
           >
             ✕
           </button>
         </div>
         <p style={{ color: T.dim, fontSize: 13, marginTop: 0, marginBottom: 18 }}>
-          Твой турнир появится в списке и будет открыт для регистрации других игроков.
+          {tt(L, "Твой турнир появится в списке и будет открыт для регистрации других игроков.")}
         </p>
 
         <div style={{ marginBottom: 14 }}>
-          <label htmlFor="t-name" style={labelStyle}>Название</label>
+          <label htmlFor="t-name" style={labelStyle}>{tt(L, "Название")}</label>
           <input id="t-name"
             style={inputStyle}
             value={title}
             maxLength={80}
-            placeholder="Напр. Пятничный блиц"
+            placeholder={tt(L, "Напр. Пятничный блиц")}
             onChange={(e) => setTitle(e.target.value)}
           />
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
           <div>
-            <label htmlFor="t-format" style={labelStyle}>Формат</label>
+            <label htmlFor="t-format" style={labelStyle}>{tt(L, "Формат")}</label>
             <select id="t-format" style={inputStyle} value={format} onChange={(e) => setFormat(e.target.value as Format)}>
-              <option value="single_elimination">На вылет</option>
-              <option value="swiss">Швейцарка</option>
-              <option value="round_robin">Круговой</option>
+              <option value="single_elimination">{tt(L, "На вылет")}</option>
+              <option value="swiss">{tt(L, "Швейцарка")}</option>
+              <option value="round_robin">{tt(L, "Круговой")}</option>
             </select>
           </div>
           <div>
-            <label htmlFor="t-tc" style={labelStyle}>Контроль времени</label>
+            <label htmlFor="t-tc" style={labelStyle}>{tt(L, "Контроль времени")}</label>
             <select id="t-tc"
               style={inputStyle}
               value={timeControl}
               onChange={(e) => setTimeControl(e.target.value as TimeControl)}
             >
-              <option value="blitz">Блиц</option>
-              <option value="rapid">Рапид</option>
-              <option value="classic">Классика</option>
+              <option value="blitz">{tt(L, "Блиц")}</option>
+              <option value="rapid">{tt(L, "Рапид")}</option>
+              <option value="classic">{tt(L, "Классика")}</option>
             </select>
           </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
           <div>
-            <label htmlFor="t-players" style={labelStyle}>Игроков</label>
+            <label htmlFor="t-players" style={labelStyle}>{tt(L, "Игроков")}</label>
             <input id="t-players"
               type="number"
               style={inputStyle}
@@ -1010,7 +1012,7 @@ function CreateTournamentModal({
             />
           </div>
           <div>
-            <label htmlFor="t-elo-min" style={labelStyle}>ELO мин</label>
+            <label htmlFor="t-elo-min" style={labelStyle}>{tt(L, "ELO мин")}</label>
             <input id="t-elo-min"
               type="number"
               style={inputStyle}
@@ -1021,7 +1023,7 @@ function CreateTournamentModal({
             />
           </div>
           <div>
-            <label htmlFor="t-elo-max" style={labelStyle}>ELO макс</label>
+            <label htmlFor="t-elo-max" style={labelStyle}>{tt(L, "ELO макс")}</label>
             <input id="t-elo-max"
               type="number"
               style={inputStyle}
@@ -1035,7 +1037,7 @@ function CreateTournamentModal({
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
           <div>
-            <label htmlFor="t-prize" style={labelStyle}>Приз (Chessy)</label>
+            <label htmlFor="t-prize" style={labelStyle}>{tt(L, "Приз (Chessy)")}</label>
             <input id="t-prize"
               type="number"
               style={inputStyle}
@@ -1045,7 +1047,7 @@ function CreateTournamentModal({
             />
           </div>
           <div>
-            <label htmlFor="t-start" style={labelStyle}>Старт (необязательно)</label>
+            <label htmlFor="t-start" style={labelStyle}>{tt(L, "Старт (необязательно)")}</label>
             <input id="t-start"
               type="datetime-local"
               style={inputStyle}
@@ -1056,12 +1058,12 @@ function CreateTournamentModal({
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <label htmlFor="t-desc" style={labelStyle}>Описание (необязательно)</label>
+          <label htmlFor="t-desc" style={labelStyle}>{tt(L, "Описание (необязательно)")}</label>
           <textarea id="t-desc"
             style={{ ...inputStyle, minHeight: 60, resize: "vertical" }}
             value={description}
             maxLength={300}
-            placeholder="Пара слов о турнире"
+            placeholder={tt(L, "Пара слов о турнире")}
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
@@ -1084,7 +1086,7 @@ function CreateTournamentModal({
               cursor: "pointer",
             }}
           >
-            Отмена
+            {tt(L, "Отмена")}
           </button>
           <button
             onClick={submit}
@@ -1100,7 +1102,7 @@ function CreateTournamentModal({
               cursor: busy ? "wait" : "pointer",
             }}
           >
-            {busy ? "Создаём…" : "Создать турнир"}
+            {busy ? tt(L, "Создаём…") : tt(L, "Создать турнир")}
           </button>
         </div>
       </div>

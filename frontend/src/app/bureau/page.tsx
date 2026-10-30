@@ -2,9 +2,12 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { ценаVerifiedДляВитрины } from "./verifiedPrice";
-import { verifiedCta, verifiedContactLabel } from "./verifiedCta";
+import { verifiedCta, verifiedContactLabel, tiersSellable } from "./verifiedCta";
+import { WaitlistCapture, языкФормы } from "@/components/WaitlistCapture";
 import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { useBureauText } from "./bureauText";
+import { useСсылкаВхода } from "../auth/loginHref";
 import { MyCertificates } from "./MyCertificates";
 import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
@@ -21,6 +24,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { channelNow, postNow } from "@/lib/channelNow";
 import { getDeviceId } from "@/lib/aevApi";
 import { anchorBadge, ANCHOR_TONE_COLORS } from "./anchorBadge";
+import { demoRecordAuthor, demoRecordTitle } from "./demoRecords";
 
 type Certificate = {
   id: string;
@@ -201,7 +205,10 @@ export function DataBuyerNotice() {
 
 function BureauPageInner() {
   const buI18n = useI18nOptional();
-  const buLang = buI18n?.lang ?? "en";
+  // 30.10.2026: до langReady провайдер держит "en" — первый кадр шёл по-английски и для
+  // русского гостя. Пока язык не определён, берём язык, выбранный сервером в
+  // bureau/layout.tsx (кука → Accept-Language → ru); без макета — прежнее "en".
+  const buLang = языкКадра(buI18n, useServerLang());
   const buT = buI18n?.t ?? ((k: string) => k);
   // 24.10.2026: перевод остальной страницы (не только первого экрана) — bureauText.ts
   const tb = useBureauText(buLang);
@@ -228,6 +235,10 @@ function BureauPageInner() {
   // обещает и не пугает. Пока бэкенд с ручкой не выкачен, так и будет.
   const [notaryCount, setNotaryCount] = useState<number | null>(null);
   const [kycMode, setKycMode] = useState<"live" | "stub" | null>(null);
+  // Касса платных уровней — тоже из /api/bureau/health (`payment`). Витрина
+  // продаёт Verified и Notarized только когда ОБА барьера живые (tiersSellable);
+  // замер прода 30.10.2026: kyc и payment — "stub".
+  const [paymentMode, setPaymentMode] = useState<"live" | "stub" | null>(null);
   // Чем НА САМОМ ДЕЛЕ подписывает нотариус. Без ключа подпись — HMAC на
   // ПУБЛИЧНОМ ключе нотариуса, то есть пересчитать её может кто угодно; код
   // честно зовёт это "demo-hmac-sha256". Значок тарифа шёл только от
@@ -257,12 +268,23 @@ function BureauPageInner() {
         if (!alive || !d) return;
         const v = d?.kyc;
         setKycMode(v === "live" || v === "stub" ? v : null);
+        const p = d?.payment;
+        setPaymentMode(p === "live" || p === "stub" ? p : null);
         const sig = d?.notarySignature;
         setNotarySig(sig === "ed25519" || sig === "demo" ? sig : null);
       })
       .catch(() => { /* оставляем null: своя неудача — не «настроено» */ });
     return () => { alive = false; };
   }, []);
+
+  // Витрина продаёт платные уровни только при живых kyc И payment; незнание
+  // (health не ответил) — тоже «не готово». Решение Оркестратора 30.10.2026.
+  const sellable = tiersSellable(kycMode, paymentMode);
+  // Цена нотариальной соподписи называется только когда её можно купить;
+  // до этого — честное «появится, когда откроется».
+  const notarizedPrice = sellable
+    ? { price: tb("From $89 / cert") }
+    : { price: tb("price appears when notary co-signing opens") };
 
   // Чем закончилась загрузка панели вошедшего человека. Три исхода, а не два:
   // «идёт», «загрузилось», «не удалось» — и последний обязан быть виден.
@@ -349,6 +371,10 @@ function BureauPageInner() {
   };
 
   const [authed, setAuthed] = useState(false);
+  // 30.10.2026: гостю на месте «Мои сертификаты» — вход с возвратом сюда (returnTo.ts читает next),
+  // метка канала сохранена (auth/loginHref.ts). До этого в main не было своей кнопки «Войти».
+  const [guest, setGuest] = useState(false);
+  const ссылкаВходаВБюро = useСсылкаВхода("/bureau");
 
   // Notarized tier waitlist.
   const [waitlistEmail, setWaitlistEmail] = useState("");
@@ -450,7 +476,12 @@ function BureauPageInner() {
     try {
       raw = localStorage.getItem(TOKEN_KEY);
     } catch {}
-    if (!raw) return;
+    if (!raw) {
+      // Гость — известно только после чтения хранилища, не на сервере: иначе блок
+      // «войдите» мигал бы и у вошедшего.
+      setGuest(true);
+      return;
+    }
     setAuthed(true);
     (async () => {
       try {
@@ -616,6 +647,22 @@ function BureauPageInner() {
         </div>
 
 
+        {/* ── Гостю на этом же месте: вход с возвратом в бюро (30.10.2026) ──
+            Прод 30.10, гость 390 px: вместо «Мои сертификаты» — пустота, своей кнопки «Войти»
+            в main не было (только «Auth» в навигации), а регистрация с голого /auth оставляла
+            человека на /auth. Ссылка несёт next=/bureau и метку канала. */}
+        {guest && (
+          <div data-bureau-guest-signin style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(13,148,136,0.25)", background: "linear-gradient(135deg, rgba(13,148,136,0.04), rgba(6,182,212,0.04))", padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ flex: "1 1 240px" }}>
+              <div style={{ fontSize: 15.5, fontWeight: 900, color: "#0f766e" }}>{tb("Sign in to see your certificates")}</div>
+              <div style={{ fontSize: 14.5, color: "#475569", marginTop: 4, lineHeight: 1.5 }}>{tb("Works registered with your email will appear here after you sign in.")}</div>
+            </div>
+            <Link href={ссылкаВходаВБюро} style={{ padding: "10px 18px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap" as const }}>
+              {tb("Sign in or create an account →")}
+            </Link>
+          </div>
+        )}
+
         {/* ── Мои сертификаты (только вошедшему; 20.10.2026) ── */}
         {authed && dashboard && !dashboardFailed && (
           <MyCertificates certificates={dashboard.certificates} t={buT} lang={buLang} />
@@ -737,7 +784,7 @@ function BureauPageInner() {
             { value: stats.total, label: tb("Certificates Issued"), color: "#0d9488" },
             { value: stats.totalVerifications, label: tb("Total Verifications"), color: "#3b82f6" },
             { value: LEGAL_FRAMEWORKS.length, label: tb("Legal Frameworks"), color: "#8b5cf6" },
-            { value: "3-Layer", label: tb("Cryptographic Protection"), color: "#f59e0b" },
+            { value: tb("3-Layer"), label: tb("Cryptographic Protection"), color: "#f59e0b" },
           ].map((s) => (
             <div key={s.label} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", textAlign: "center" }}>
               <div style={{ fontSize: 24, fontWeight: 900, color: s.color }}>{s.value}</div>
@@ -783,6 +830,7 @@ function BureauPageInner() {
                 badge: tb("✓ active"),
                 badgeColor: "#059669",
                 cta: { label: tb("Protect work"), href: "/qright" },
+                waitNote: null,
               },
               {
                 name: "Verified",
@@ -832,11 +880,14 @@ function BureauPageInner() {
                 // единственная кнопка платного тарифа не делала ничего видимого.
                 // Ведёт в реестр: обновление начинается с выбора сертификата,
                 // и у каждой карточки там есть своя кнопка «Upgrade to Verified».
-                cta: { label: tb("Pick a cert to upgrade"), href: "#registry" },
+                // 30.10.2026: призыв — только когда уровень можно купить (kyc И payment
+                // живые); при заглушке вместо него — честная строка и форма раннего доступа.
+                cta: sellable ? { label: tb("Pick a cert to upgrade"), href: "#registry" } : null,
+                waitNote: sellable ? null : tb("The Verified mark is still being connected — leave your address and we will write when it opens."),
               },
               {
                 name: "Notarized",
-                price: tb("From $89 / cert"),
+                ...notarizedPrice,
                 // Обещание переписано вместе со значком (28.08). Прежний текст утверждал
 // готовый результат — «apostille-ready document admissible in EAEU courts» —
 // у тарифа, исполнить который сегодня некому. Допустимость в конкретном суде
@@ -880,11 +931,12 @@ function BureauPageInner() {
                     : tb("▲ by request"),
                 badgeColor: "#7c3aed",
                 cta: { label: tb("View Notary Registry"), href: "/bureau/notaries" },
+                waitNote: sellable ? null : tb("Notary co-signing is still being connected — leave your address and we will write when it opens."),
               },
             ].map((tier) => (
               <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: tier.name === "Notarized" ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
+                  <span translate="no" className="notranslate" style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
                   <span style={{ fontSize: 13, fontWeight: 800, color: tier.badgeColor }}>{tier.badge}</span>
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>{tier.price}</div>
@@ -894,7 +946,12 @@ function BureauPageInner() {
                     {tier.cta.label}
                   </Link>
                 )}
-                {tier.name === "Notarized" && (
+                {tier.waitNote && (
+                  <Link href="#tiers-waitlist" data-tier-wait={tier.name} style={{ marginTop: 6, padding: "8px 12px", borderRadius: 8, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.1)", fontSize: 14, color: "#334155", fontWeight: 600, textAlign: "center" as const, textDecoration: "none", lineHeight: 1.45 }}>
+                    {tier.waitNote}
+                  </Link>
+                )}
+                {tier.name === "Notarized" && sellable && (
                   <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", fontSize: 15, color: "#7c3aed", fontWeight: 700, textAlign: "center" as const }}>
                     {tb("Upgrade your Verified cert — select a notary and submit a request.")}
                   </div>
@@ -902,6 +959,20 @@ function BureauPageInner() {
               </div>
             ))}
           </div>
+          {/* Пока kyc/payment — заглушка: вместо продажи — форма раннего доступа
+              (тот же компонент, что на /qright «Написать, когда откроется отметка Verified»). */}
+          {!sellable && (
+            <div id="tiers-waitlist" style={{ marginTop: 14, maxWidth: 640, scrollMarginTop: 80 }}>
+              <WaitlistCapture
+                source="bureau-tiers"
+                tone="light"
+                lang={языкФормы(buLang)}
+                title={tb("Verified mark and notary co-signing are still being connected")}
+                description={tb("Leave your address — we will send one email when they can be ordered. Nothing is charged today.")}
+                promise=""
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Certificate Registry ── */}
@@ -1113,17 +1184,20 @@ function BureauPageInner() {
             <div style={{ display: "grid", gap: 12 }}>
               {filteredCerts.map((cert) => (
                 <div key={cert.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff" }}>
+                  {/* 27.10.2026: на 390 px (ru) карточки растягивали сетку до 395 px и страница ездила
+                      вбок (замер mobile-fit на проде 9a21fceb8: документ 415). Левый блок без minWidth:0
+                      требовал ширину самого длинного слова заголовка + nowrap-плашки справа. */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
-                    <div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                    <div style={{ minWidth: 0, flex: "1 1 auto", overflowWrap: "anywhere" as const }}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4, flexWrap: "wrap" as const }}>
                         <span style={{ fontSize: 16 }}>{KIND_ICONS[cert.kind] || "📦"}</span>
                         <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 13, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{tb(KIND_LABELS[cert.kind] || cert.kind)}</span>
                         <span style={{ fontSize: 15, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
                       </div>
-                      <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{cert.title}</div>
-                      <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
+                      <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{demoRecordTitle(cert.title, buLang)}</div>
+                      <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>{tb("by")} {tb(demoRecordAuthor(cert.author, buLang))}{cert.location ? ` · ${cert.location}` : ""}</div>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
+                    <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                       {cert.verificationLevel === "verified" ? (
                         <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(13,148,136,0.15))", color: "#065f46", whiteSpace: "nowrap" as const, border: "1px solid rgba(16,185,129,0.3)" }}>
                           {tb("✓ VERIFIED AUTHOR")}
@@ -1134,7 +1208,7 @@ function BureauPageInner() {
                       {(() => {
                         // Состояние якоря в биткойне — главный козырь продукта,
                         // и до 28.08.2026 его не было видно в реестре вовсе.
-                        const b = anchorBadge(cert.bitcoinAnchor);
+                        const b = anchorBadge(cert.bitcoinAnchor, buLang);
                         if (!b) return null;
                         const c = ANCHOR_TONE_COLORS[b.tone];
                         return (

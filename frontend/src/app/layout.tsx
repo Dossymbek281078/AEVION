@@ -6,6 +6,7 @@ import { MODULE_NODES } from "@/data/pitchFacts";
 import "./globals.css";
 import { DevHubGuestIdentity } from "@/components/DevHubGuestIdentity";
 import { BUILD_STAMP } from "@/lib/buildStamp";
+import { LS_AFFILIATE_SCRIPT, LS_STORE_SLUG } from "@/lib/lsAffiliate";
 import { скриптПредзагрузкиСловаря } from "@/lib/dictPreloadScript";
 
 /*
@@ -170,6 +171,17 @@ export default function RootLayout({
         */}
         <script dangerouslySetInnerHTML={{ __html: "try{var S=0,D=document.documentElement;try{var P=(location.pathname||'').split('/')[1]||'',p=P.length===2?P.toLowerCase():'';if(p==='ru'||p==='kk'||p==='en'){D.lang=p;S=1;if(D.setAttribute)D.setAttribute('data-lang-src','path')}}catch(e){}if(!S){var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var q=c[i].split('=');if(q[0]==='aevion_lang_v1'){var l=decodeURIComponent(q[1]||'');if(l==='ru'||l==='kk'||l==='en'){D.lang=l;if(D.setAttribute)D.setAttribute('data-lang-src','cookie')}break}}}}catch(e){}" }} />
         <script dangerouslySetInnerHTML={{ __html: скриптПредзагрузкиСловаря(BUILD_STAMP.commit) }} />
+        {/*
+          30.10.2026: процент партнёру Lemon Squeezy засчитывается только при их
+          скрипте на сайте; 25 писем партнёрам ведут на /pricing. Скрипт по ?aff=
+          регистрирует клик и сам дописывает aff_ref в ссылки на кассу LS.
+          https://docs.lemonsqueezy.com/help/affiliates-for-merchants/getting-referrals
+        */}
+        <script dangerouslySetInnerHTML={{ __html: `window.lemonSqueezyAffiliateConfig = { store: ${JSON.stringify(LS_STORE_SLUG)} };` }} />
+        {/* 30.10.2026: crossOrigin обязателен — сайт отдаёт COEP require-corp (next.config.ts), и без CORS-режима
+            браузер блокирует чужой скрипт (ERR_BLOCKED_BY_RESPONSE); lmsqueezy отдаёт ACAO:* — в режиме anonymous проходит.
+            Нашёл Мультичат на проде 043aa4cc7: партнёрские заходы не ставили cookie ls_aff_ref. */}
+        <script src={LS_AFFILIATE_SCRIPT} defer crossOrigin="anonymous" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

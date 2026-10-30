@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasOwnEnglishPage } from "@/lib/englishPages";
+import { englishVersionFor, hasOwnEnglishPage } from "@/lib/englishPages";
 import type { NextRequest } from "next/server";
 
 /**
@@ -106,7 +106,12 @@ export function английскийРедирект(pathname: string | null | u
  */
 const СВОИ_СТРАНИЦЫ_ЯЗЫКА: Record<string, (путь: string) => boolean> = {
   ru: (п) => п.startsWith("/ru/verify/"),
-  kk: (п) => п === "/kk/cyberchess" || п.startsWith("/kk/cyberchess/"),
+  // Только то, что лежит в src/app/kk. ЗАМЕР 24.10.2026 (curl по проду 7b16f03ce):
+  // правило «всё под /kk/cyberchess/» оставляло без переадресации 12 вложенных
+  // экранов шахмат (/kk/cyberchess/daily, /training, /tournaments…) — своих
+  // страниц под /kk у них нет, и казахский пользователь получал 404.
+  // Сверку правила с файлами держит ruKkPrefixRedirect.test.ts.
+  kk: (п) => п === "/kk/cyberchess",
 };
 
 export function языковойРедирект(
@@ -122,6 +127,38 @@ export function языковойРедирект(
   return { цель: "/" + части.slice(1).join("/"), язык };
 }
 
+/**
+ * Русский адрес со своей английской страницей + ?lang=en → английский адрес.
+ *
+ * ЗАМЕР 29.10.2026 (curl по проду): /cyberchess?lang=en отдавал РУССКИЕ
+ * title/description/og:title, как и /cyberchess без параметра. Английская мета
+ * живёт в layout страницы /en/cyberchess; сама /cyberchess — клиентский
+ * компонент, метаданные у неё в layout, и параметр языка там не читается.
+ * Краулер превью ссылки параметр языка клиентской странице не передаёт, поэтому
+ * ссылка с ?lang=en показывала русскую карточку.
+ *
+ * Лечение: если у адреса есть своя английская страница (englishVersionFor), то
+ * ?lang=en → 308 на неё. Остальные параметры (метка канала ?c=) сохраняются,
+ * сам lang убирается. Адрес уже под /en не трогаем — петли нет.
+ */
+export function редиректПоПараметруЯзыка(
+  pathname: string | null | undefined,
+  search: string | null | undefined,
+): string | null {
+  const параметры = new URLSearchParams(String(search ?? ""));
+  if ((параметры.get("lang") ?? "").toLowerCase() !== "en") return null;
+
+  const части = String(pathname ?? "").split("/").filter(Boolean);
+  if (части.length > 0 && части[0].toLowerCase() === "en") return null;
+
+  const цель = englishVersionFor(pathname);
+  if (!цель) return null;
+
+  параметры.delete("lang");
+  const хвост = параметры.toString();
+  return хвост ? цель + "?" + хвост : цель;
+}
+
 function битыйАдрес(): NextResponse {
   // Тело намеренно короткое и без разметки: это ответ роботу, а не человеку.
   // Имён внутренних систем здесь быть не должно (feedback_error_text_leaks_infrastructure).
@@ -134,6 +171,18 @@ function битыйАдрес(): NextResponse {
       "cache-control": "public, max-age=3600",
     },
   });
+}
+
+/**
+ * Заголовки запроса для серверного выбора языка (lib/serverLang.ts): макет не видит
+ * ни пути, ни строки запроса. Свои значения ВСЕГДА перезаписывают присланные
+ * клиентом — иначе язык можно было бы подменить заголовком.
+ */
+export function заголовкиДляЯзыка(исходные: Headers, pathname: string, search: string): Headers {
+  const h = new Headers(исходные);
+  h.set("x-aevion-pathname", pathname);
+  h.set("x-aevion-search", search);
+  return h;
 }
 
 export function middleware(req: NextRequest) {
@@ -162,9 +211,16 @@ export function middleware(req: NextRequest) {
     return ответ;
   }
 
-  return NextResponse.next();
+  const поПараметру = редиректПоПараметруЯзыка(pathname, req.nextUrl.search);
+  if (поПараметру) {
+    const ответ = NextResponse.redirect(new URL(поПараметру, req.url), 308);
+    ответ.cookies.set("aevion_lang_v1", "en", { path: "/", maxAge: 60 * 60 * 24 * 365 });
+    return ответ;
+  }
 
-  return битыйАдрес();
+  return NextResponse.next({
+    request: { headers: заголовкиДляЯзыка(req.headers, pathname, req.nextUrl.search) },
+  });
 }
 
 /**

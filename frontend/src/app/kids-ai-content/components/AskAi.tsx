@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import React, { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -146,6 +147,7 @@ export default function AskAi({ lessonId, lang }: Props) {
         <span>Спроси AI-помощника</span>
       </div>
 
+      <AiBadge />
       {messages.map((m, i) => (
         <div key={i} style={messageStyle(m.role)}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>

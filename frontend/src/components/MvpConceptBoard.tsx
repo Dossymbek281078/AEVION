@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18nOptional } from "@/lib/i18n";
+
+// 24.10.2026: рамка ленты стоит на 17 страницах и на /en, /kk говорила по-русски.
+// ⚠️ kk — черновой перевод, нужна вычитка носителя
+const COPY = {
+  ru: { fill: "Заполните", share: "＋ Поделиться", sending: "Отправляем…", send: "Отправить", latest: "Последние", loading: "Загрузка…", empty: "Пока пусто. Стань первым, кто поделится.", untitled: "(без названия)" },
+  en: { fill: "Please fill in", share: "＋ Share", sending: "Sending…", send: "Send", latest: "Latest", loading: "Loading…", empty: "Nothing here yet. Be the first to share.", untitled: "(untitled)" },
+  kk: { fill: "Толтырыңыз", share: "＋ Бөлісу", sending: "Жіберілуде…", send: "Жіберу", latest: "Соңғылары", loading: "Жүктелуде…", empty: "Әзірге бос. Бірінші болып бөлісіңіз.", untitled: "(атаусыз)" },
+} as const;
 
 type Item = {
   id: string;
@@ -83,6 +92,8 @@ export default function MvpConceptBoard({
   sectionHint,
   accent = "emerald",
 }: MvpConceptBoardProps) {
+  const i18nC = useI18nOptional();
+  const c = COPY[i18nC?.lang === "en" ? "en" : i18nC?.lang === "kk" ? "kk" : "ru"];
   const colors = ACCENTS[accent];
   const [items, setItems] = useState<Item[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -146,7 +157,7 @@ export default function MvpConceptBoard({
         .filter((f) => f.required !== false && !draft[f.key]?.trim())
         .map((f) => f.label);
       if (missing.length > 0) {
-        setErr(`Заполните: ${missing.join(", ")}`);
+        setErr(`${c.fill}: ${missing.join(", ")}`);
         return;
       }
       setSubmitting(true);
@@ -211,7 +222,7 @@ export default function MvpConceptBoard({
           onSubmit={submit}
           className={`rounded-2xl border border-slate-800 ${colors.bg} p-5 ring-1 ${colors.ring}`}
         >
-          <h3 className={`mb-3 text-sm font-semibold ${colors.text}`}>＋ Поделиться</h3>
+          <h3 className={`mb-3 text-sm font-semibold ${colors.text}`}>{c.share}</h3>
           <div className="space-y-2.5">
             {fields.map((f) => (
               <div key={f.key}>
@@ -259,22 +270,22 @@ export default function MvpConceptBoard({
             disabled={submitting}
             className={`mt-3 w-full rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${colors.btn}`}
           >
-            {submitting ? "Отправляем…" : "Отправить"}
+            {submitting ? c.sending : c.send}
           </button>
         </form>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-          <h3 className="mb-3 text-sm font-semibold text-slate-200">Последние</h3>
+          <h3 className="mb-3 text-sm font-semibold text-slate-200">{c.latest}</h3>
           {loading && items.length === 0 ? (
-            <p className="text-xs text-slate-500">Загрузка…</p>
+            <p className="text-xs text-slate-500">{c.loading}</p>
           ) : items.length === 0 ? (
             <p className="text-xs text-slate-500">
-              Пока пусто. Стань первым, кто поделится.
+              {c.empty}
             </p>
           ) : (
             <ul className="space-y-2.5">
               {items.map((it) => {
-                const title = String(it.payload[titleField] ?? "(без названия)");
+                const title = String(it.payload[titleField] ?? c.untitled);
                 const summary = summaryField
                   ? String(it.payload[summaryField] ?? "")
                   : "";

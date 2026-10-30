@@ -2,7 +2,7 @@
 
 import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
-import { PRICING_TERMS, keepChannel, withChannel } from "@/lib/products";
+import { PRICING_TERMS, PRICING_TIERS_LIST, keepChannel, withChannel } from "@/lib/products";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById, MODULES } from "@/lib/products";
@@ -14,7 +14,6 @@ import {
   TERM_MONTHS,
   TERM_NAME,
   TERM_TIERS,
-  fromPricePerMonth,
   termPricePerMonth,
   termTotal,
   STANDALONE_APPS,
@@ -324,7 +323,10 @@ const PLANET_FROM = planetFromPerMonth();
  * было цены). Всё остальное без товара в каталоге — прежние платные модули:
  * отдельно их больше не продают, они входят в подписку AEVION.
  */
-const FREE_APP_IDS = new Set(["qcoreai", "tiktok-publisher"]);
+// 27.10.2026: smeta (тренажёр) — бесплатный: бэкенд его не закрывает (index.ts «Deliberately NOT gated»),
+// в PAYWALL_MODULES прода его нет; «In the subscription» обещало платное, которого нет. Та же правка на
+// самой странице (smeta-trainer/components/FreeChip.tsx).
+const FREE_APP_IDS = new Set(["qcoreai", "tiktok-publisher", "smeta"]);
 
 export default function AppsPage() {
   // Метка канала для ссылок в кассу. Витрина модулей — клиентская
@@ -422,8 +424,9 @@ export default function AppsPage() {
                 ))}
               </div>
               <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 16 }}>
-                The ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps bought separately: ${RACK_RATE} for one month. The whole planet:
-                ${PLANET_BASE_MONTHLY} for one month, or ${PLANET_FROM}/mo on a 12-month term.
+                {/* 30.10.2026: цены модулей отменены (19.10) — сумма «по отдельности» называла то, что не продаётся. */}
+                All these apps come with the Planet plan: ${PLANET_BASE_MONTHLY} for one month, or ${PLANET_FROM}/mo on a
+                12-month term.
               </p>
             </div>
 
@@ -602,11 +605,11 @@ export default function AppsPage() {
                             <span style={{ fontSize: 13, color: "#64748b" }}>/yr</span>
                           </>
                         ) : app.term ? (
+                          // 19.10.2026: цены модулей отменены — отдельно не продаётся ничего, кроме шахмат;
+                          // гостю называем цену плана, а не прежнюю цену модуля.
                           <>
-                            <span style={{ fontSize: 13, color: "#64748b" }}>from </span>
-                            <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>
-                              ${fromPricePerMonth(app.price)}
-                            </span>
+                            <span style={{ fontSize: 13, color: "#64748b" }}>Included in Planet · from </span>
+                            <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>${planetFromPerMonth()}</span>
                             <span style={{ fontSize: 13, color: "#64748b" }}>/mo</span>
                           </>
                         ) : app.price > 0 ? (
@@ -622,7 +625,9 @@ export default function AppsPage() {
                       </div>
                       {app.checkoutUrl && app.term ? (
                         <a
-                          href={keepChannel(app.checkoutUrl, channel)}
+                          // 30.10.2026: модуль на срок отдельно не продаётся — кнопка ведёт к выбору срока Планеты (#tiers),
+                          // а не в /pricing?app=…#apps (там раздел одних шахмат).
+                          href={keepChannel(PRICING_TIERS_LIST, channel)}
                           aria-label={`Выбрать срок: ${app.name}`}
                           onClick={() =>
                             track({

@@ -7,12 +7,16 @@ import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
 import { BuyLink } from "@/components/BuyLink";
 import { useI18n } from "@/lib/i18n";
+import { useFrameT } from "@/lib/serverFrameText";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { getAuthToken } from "@/lib/auth";
 import { HOME_CARDS, moduleLang, moduleTitle, buyTitle } from "@/data/moduleNames";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import { homeText } from "@/data/homeTexts";
 import { INVEST_CARDS, INVEST_HEAD } from "@/data/homeInvest";
 import { channelNow, сыраяМеткаКанала } from "@/lib/channelNow";
+import { withChannel } from "@/lib/products";
+import { track } from "@/lib/track";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
 import dynamic from "next/dynamic";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
@@ -96,11 +100,17 @@ export default function HomePage() {
   // То есть русский гость пять секунд читал английский заголовок, когда
   // остальная страница уже была русской. Литерал переводит слой перевода, и
   // до заголовка он доходит последним; словарь отдаёт строку сразу.
-  const { t, lang } = useI18n();
+  // 30.10.2026 (замер Приложений, прод 4f71ad70f, ru-RU): сырой HTML главной — английский h1, русский через ~6 с.
+  // Пока провайдер не определил язык (langReady), язык кадра и строки t() — серверные (app/page.tsx).
+  const i18n = useI18n();
+  const lang = языкКадра(i18n, useServerLang());
+  const t = useFrameT();
   const L = moduleLang(lang);
   // 21.10.2026: подписи из data/homeTexts — под translate="no" только на своём языке (ru/en/kk);
   // на прочих их по-прежнему доводит живой переводчик.
   const trH = lang === "ru" || lang === "en" || lang === "kk" ? ("no" as const) : undefined;
+  // 27.10.2026: виджету конституции на прочих языках (ar — саудовская волна) — английские подписи,
+  // а не русские: без lang он брал SLIDER_SHORT_LABELS (ru), замер locale ar-SA на проде: «Пол, Закон, Ротация…».
   // 21.10.2026: служебные подписи (Demo pipeline, runtime, OpenAPI) — только вошедшему;
   // гостю они на трёх языках не нужны и живым переводом не переводились.
   const [вошёл, setВошёл] = useState(false);
@@ -372,22 +382,9 @@ const DEMO_NOTE =
         }}
       >
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-          <div
-            style={{
-              display: "block",
-              fontSize: 15,
-              fontWeight: 800,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              padding: "6px 12px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.12)",
-              border: "1px solid rgba(255,255,255,0.2)",
-              width: "fit-content",
-            }}
-          >
-            Product MVP · ready for demo
-          </div>
+          {/* 30.10.2026: плашка «Product MVP · ready for demo» снята с первого экрана.
+              Разбор Науки: 12 из 22 людей ушли с «/» без нажатия; «MVP» в первой
+              строке говорит «ещё не продукт», а мы просим оплату. */}
           <h1
             style={{
               fontSize: "clamp(26px, 4.5vw, 42px)",
@@ -428,7 +425,12 @@ const DEMO_NOTE =
               исчезли — они ниже, списком: перестановка порядка одним действием не
               является, пока семь кнопок стоят тем же рядом. */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginTop: 28 }}>
-            <Link href="/devhub" style={btnPrimary}>
+            <Link
+              href={withChannel("/devhub", канал, "home", сыраяМетка)}
+              style={btnPrimary}
+              data-testid="home-primary-cta"
+              onClick={() => track({ type: "cta_click", source: "home", meta: { target: "devhub" } })}
+            >
               {t("home.cta.devhub")}
             </Link>
             <Link
@@ -444,6 +446,38 @@ const DEMO_NOTE =
               {t("home.cta.auth")}
             </Link>
           </div>
+          {/* 30.10.2026: на телефоне первый экран вёл дальше только DevHub. Ряд ведёт
+              к цене и к остальному продаваемому; подписи — из существующих словарей. */}
+          <nav
+            aria-label="AEVION"
+            data-testid="home-first-links"
+            style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}
+          >
+            {[
+              { k: "pricing", href: "/pricing", label: t("constitution.nav.pricing") },
+              { k: "cyberchess", href: "/cyberchess", label: "CyberChess" },
+              { k: "bureau", href: "/bureau", label: homeText("ipBureau", L) },
+              { k: "multichat", href: "/multichat-engine", label: homeText("qcoreMulti", L) },
+            ].map((x) => (
+              <Link
+                key={x.k}
+                href={withChannel(x.href, канал, "home", сыраяМетка)}
+                translate="no"
+                style={{
+                  color: "#fff",
+                  textDecoration: "none",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.4)",
+                  background: "rgba(255,255,255,0.1)",
+                }}
+              >
+                {x.label}
+              </Link>
+            ))}
+          </nav>
           {/* 07.10.2026, набросок. Баннер QVenture стоял ПЕРВЫМ элементом экрана и
               был самым крупным пятном: 325 из 390 пикселей на телефоне, 773 из 1280
               на столе. Товар для инвесторов занимал лучшее место витрины для всех.
@@ -485,6 +519,44 @@ const DEMO_NOTE =
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* 30.10.2026: сразу после первого экрана — то, что продаётся: бюро авторства,
+          CyberChess, DevHub, Мультичат. Тексты — существующие (HOME_CARDS, moduleNames,
+          словарь glossary); ссылки несут метку канала. */}
+      <section data-testid="home-sellable" style={{ background: "#0b1120", color: "#fff", padding: "22px 24px 4px" }}>
+        <div
+          style={{ maxWidth: 1280, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}
+        >
+          {[
+            { k: "bureau", href: "/bureau", title: HOME_CARDS.find((c) => c.id === "bureau")!.t[L], desc: HOME_CARDS.find((c) => c.id === "bureau")!.d[L] },
+            { k: "cyberchess", href: "/cyberchess", title: "CyberChess", desc: HOME_CARDS.find((c) => c.id === "cyberchess")!.d[L] },
+            { k: "devhub", href: "/devhub", title: "DevHub", desc: t("home.title") },
+            { k: "multichat", href: "/multichat-engine", title: homeText("qcoreMulti", L), desc: t("glossary.multichat.def") },
+          ].map((c) => (
+            <Link
+              key={c.k}
+              href={withChannel(c.href, канал, "home", сыраяМетка)}
+              translate="no"
+              data-testid={"home-sellable-" + c.k}
+              onClick={() => track({ type: "cta_click", source: "home", meta: { target: c.k } })}
+              style={{
+                textDecoration: "none",
+                color: "#fff",
+                padding: "14px 16px",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.35)",
+                background: "rgba(255,255,255,0.12)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              <span style={{ fontWeight: 900, fontSize: 16 }}>{c.title}</span>
+              <span style={{ fontSize: 15, opacity: 0.85, lineHeight: 1.45 }}>{c.desc}</span>
+            </Link>
+          ))}
         </div>
       </section>
 
@@ -1282,7 +1354,7 @@ const DEMO_NOTE =
                     <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                       Constitution отпечаток
                     </div>
-                    <ConstitutionEmbed sliders={cc.sliders} label={`${cc.flag} ${cc.name}`} size="sm" />
+                    <ConstitutionEmbed sliders={cc.sliders} label={`${cc.flag} ${cc.name}`} size="sm" lang={trH ? L : "en"} />
                     <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
                       <a
                         href={`/constitution?country=${cc.code}`}
@@ -1361,7 +1433,7 @@ const DEMO_NOTE =
             sliders={{ floor: 75, ruleOfLaw: 85, rotation: 70, transparency: 80, multiStatus: 75, skinInGame: 70, polycentricity: 65, positiveSum: 80 }}
             label={homeText("constLabel", L)}
             size="md"
-            lang={trH ? L : undefined}
+            lang={trH ? L : "en"}
           />
           <div style={{ flex: 1, minWidth: 280 }}>
             <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>

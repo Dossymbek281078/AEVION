@@ -1,9 +1,11 @@
 "use client";
 
-import { useI18n } from "./i18n";
+import { useI18nOptional } from "./i18n";
+import { useServerLang, языкКадра } from "./serverLangContext";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import { STANDALONE_APPS } from "./termPricing";
 import { predlagaemOtdelno } from "./neProdayotsyaOtdelno";
+import { isEnglish } from "./pricingLocalize";
 
 /** Сколько приложений продаётся отдельно. Числом словом («пять») страница
  *  расходилась с витриной: приложений девять, и сумма $480 в другом месте
@@ -36,6 +38,8 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Hero — control (A) */
     "hero.badge": "AEVION GTM · ПРАЙС-ЛИСТ",
     "hero.title": "Цены AEVION",
+    "ask.title": "Спросить о тарифах",
+    "ask.placeholder": "например: чем Lite отличается от Full?",
     "hero.subtitle": "Единая платформа: цифровая собственность, AI, финтех, потребительские продукты — все модули под одним аккаунтом.",
     /* Hero variant B — savings/comparison angle */
     /* 🔴 12.10.2026: «−73%» убрано. Расчёта под этим числом в коде НЕТ ни
@@ -544,6 +548,8 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "hero.badge": "AEVION GTM · PRICING",
     "hero.title": "AEVION pricing",
+    "ask.title": "Ask about plans",
+    "ask.placeholder": "e.g. What's the difference between Lite and Full?",
     "hero.subtitle": "Unified platform: digital IP, AI, fintech, consumer products — every module under a single account.",
     "hero.B.badge": "AEVION GTM · FOUR TOOLS IN ONE SUBSCRIPTION",
     "hero.B.title": "Replace 4 SaaS with one platform",
@@ -1006,6 +1012,67 @@ const baseDict: Record<Lang, Record<string, string>> = {
 };
 
 /**
+ * Казахский словарь страницы цен: первый экран и верх страницы (48 ключей, которые рисует /pricing
+ * у холодного гостя) + строка «Спросить о тарифах». Названия тарифов и бренд AEVION не переводятся.
+ */
+export const kkDict: Record<string, string> = {
+  "ask.title": "Тарифтер туралы сұрау",
+  "ask.placeholder": "мысалы: Lite пен Full айырмашылығы неде?",
+  "loading.pricing": "Баға жүктелуде...",
+  "hero.badge": "AEVION GTM · БАҒА ТІЗІМІ",
+  "hero.title": "AEVION бағалары",
+  "hero.subtitle": "Бірыңғай платформа: цифрлық меншік, ЖИ, финтех, тұтынушылық өнімдер — барлық модуль бір аккаунтта.",
+  "hero.B.badge": "AEVION GTM · БІР ЖАЗЫЛЫМДА ТӨРТ ҚҰРАЛ",
+  "hero.B.title": "4 SaaS-ты бір шешіммен ауыстырыңыз",
+  "hero.B.subtitle": "Цифрлық меншік, ЖИ, қолтаңбалар және төлемдер — бір жазылымда, DocuSign + OpenAI + Stripe + Patently байламының орнына.",
+  "promo.activeBanner": "БЕЛСЕНДІ ПРОМОКОДТАР:",
+  "promo.upTo": "дейін",
+  "promo.capNote": "(тапсырыстың 50%-ынан артық емес)",
+  "tier.detailsLink": "{name} туралы толығырақ →",
+  "tier.perMonth": "/ай",
+  "tier.openCalc": "Есептегішті ашу →",
+  "tier.popular": "ТАНЫМАЛ",
+  "testimonials.title": "Клиенттер не дейді",
+  "testimonials.subtitle": "AEVION-дағы нақты командалар. Барлық дәйексөз авторлардың рұқсатымен жарияланған.",
+  "modules.title": "Барлық модульдер",
+  "modules.subtitle": `AEVION-ның ${MODULE_NODES} өнімі. Барлығы кез келген ақылы тарифке кіреді; ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} қосымша жеке де сатылады.`,
+  // «Модуль» — казахское заимствование, на этом же экране «Барлық модульдер»; «Бөлім» давал смесь терминов.
+  "modules.colModule": "Модуль",
+  "modules.colDescription": "Сипаттама",
+  "modules.colStatus": "Мәртебе",
+  "modules.colAddon": "Жеке, айына бастап",
+  "modules.colIncluded": "Кіреді",
+  "calc.title": "Есептегіш",
+  "calc.subtitle": "Мерзім, пайдаланушылар және промокод — смета бүкіл мерзімге төлемді есептейді.",
+  "calc.tier": "ТАРИФТІК ЖОСПАР",
+  "calc.seats": "ПАЙДАЛАНУШЫЛАР (SEATS)",
+  "calc.promo": "ПРОМОКОД",
+  "calc.estimate": "ЕСЕП",
+  "calc.empty": "Сол жақтан параметрлерді таңдаңыз...",
+  "industries.title": "Сіздің салаңыз үшін",
+  "industries.subtitle": "Сіздің вертикалыңызға арналған кейстер мен ұсынылатын стек.",
+  "industries.banks": "Банктер және финтех",
+  "industries.startups": "Стартаптар",
+  "industries.government": "Мемлекеттік сектор",
+  "industries.creators": "Контент авторлары",
+  "industries.lawFirms": "Заң фирмалары",
+  "compare.title": "AEVION және баламалар",
+  "compare.subtitle": "Әдетте бөлек-бөлек жиналатын нәрсе бізде — бір аккаунт пен бір жазылымда.",
+  "faq.title": "Сұрақ-жауап",
+  "faq.subtitle": "Ең жиі қойылатын сұрақтар осында. Жауап таппасаңыз, жазыңыз:",
+  "faq.contactCta": "байланыс формасы арқылы бізге жазыңыз",
+  "compliance.title": "Compliance және технологиялар",
+  "newsletter.title": "Қазір сатып алуға дайын емессіз бе?",
+  "newsletter.subtitle": "Email жаңартуларына жазылыңыз — 2 аптада бір рет: жаңа модульдер, клиент кейстері, промокодтар.",
+  "newsletter.emailLabel": "Жаңартуларға арналған электрондық пошта",
+  "newsletter.placeholder": "your@email.com",
+  "newsletter.submit": "Жазылу",
+  "notes.title": "Шарттар",
+  "notes.docsApi": "API құжаттамасы:",
+  "notes.endpoint": "Баға эндпоинті:",
+};
+
+/**
  * Композиция базового словаря и вынесенных секций.
  * Section keys имеют приоритет (override) над baseDict.
  */
@@ -1014,9 +1081,13 @@ const baseDict: Record<Lang, Record<string, string>> = {
  * строки, что видит человек, а не свою копию рядом. Копия — это второй
  * источник правды, и он расходится молча.
  */
+const DICT_EN = { ...baseDict.en, ...migrationsDict.en };
 export const PRICING_DICT: Record<string, Record<string, string>> = {
   ru: { ...baseDict.ru, ...migrationsDict.ru },
-  en: { ...baseDict.en, ...migrationsDict.en },
+  en: DICT_EN,
+  // kk: переведён первый экран и верх страницы (kkDict ниже); остальные ключи — на английском, НЕ на русском
+  // (30.10.2026: раньше kk целиком брал ru, и казахский гость видел «Цены AEVION», «Выбрать Max»).
+  kk: { ...DICT_EN, ...kkDict },
 };
 
 const dict = PRICING_DICT;
@@ -1035,10 +1106,23 @@ export function termUnitKey(months: number): string {
   return "pricing.term.month.many";
 }
 
+/**
+ * Словарь страницы цен для языка. kk имеет свой словарь (30.10.2026; до этого брал русский —
+ * тест pricingKkFallsBackToRussian, 27.10, — и казахский гость видел русскую страницу);
+ * непереведённые ключи kk — английские. Прочие языки без словаря — английский, как в isEnglish.
+ */
+export function pricingDictFor(lang: string): Record<string, string> {
+  return dict[lang] ?? (isEnglish(lang) ? dict.en : dict.ru) ?? {};
+}
+
 export function usePricingT() {
-  const { lang } = useI18n();
+// 30.10.2026 (замер Науки): I18nProvider до langReady держит "en", и русский гость
+// из соцсети видел английский первый кадр. Пока язык не определён, берём язык,
+// выбранный сервером в макете маршрута (кука → Accept-Language → ru); без макета
+// (тест одиночного компонента) — прежнее поведение.
+  const lang = языкКадра(useI18nOptional(), useServerLang());
   return (key: string, vars?: Record<string, string | number>): string => {
-    const raw = (dict[lang] ?? dict.en ?? {})[key] ?? dict.en?.[key] ?? key;
+    const raw = pricingDictFor(lang)[key] ?? dict.en?.[key] ?? key;
     if (!vars) return raw;
     return Object.keys(vars).reduce(
       (acc, k) => acc.replace(`{${k}}`, String(vars[k])),

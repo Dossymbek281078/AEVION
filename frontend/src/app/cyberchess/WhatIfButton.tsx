@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useState } from "react";
 import { отказТренера } from "./coachOutage";
 import { главныйВыдуманныйХод, текстВместоОтвета } from "./проверьХодыОтвета";
@@ -109,6 +110,7 @@ export default function WhatIfButton({ fen, san, evalStr, rank, isBest }: Props)
           animation: `cc-fade-in ${MOTION.fast} ${MOTION.ease}`,
         }}>{text}</div>
       )}
+      {open && text && <AiBadge />}
     </div>
   );
 }

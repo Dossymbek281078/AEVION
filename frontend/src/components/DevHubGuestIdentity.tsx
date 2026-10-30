@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { installDevhubGuestHeader, getDevhubGuestId, rotateDevhubGuestId } from "@/lib/devhubGuest";
+import { adoptDevhubGuestKeyFromUrl, installDevhubGuestHeader, getDevhubGuestId, rotateDevhubGuestId } from "@/lib/devhubGuest";
 import { getAuthToken } from "@/lib/auth";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -9,6 +9,8 @@ import { apiUrl } from "@/lib/apiBase";
 // монтирования, и первый список проектов успел бы уехать без заголовка —
 // показать общий ящик, а после обновления страницы вдруг свой. Модули
 // вычисляются раньше любого запроса.
+// Ключ из ссылки восстановления (?k=) — раньше установки заголовка и любых запросов страницы.
+adoptDevhubGuestKeyFromUrl();
 installDevhubGuestHeader();
 
 /**

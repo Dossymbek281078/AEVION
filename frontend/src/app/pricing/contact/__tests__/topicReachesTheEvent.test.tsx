@@ -41,11 +41,14 @@ vi.mock("next/navigation", () => ({
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState({}, "", "/");
+  try { sessionStorage.clear(); } catch {}
   vi.unstubAllGlobals();
 });
 
 async function отправитьФорму(поиск: string) {
   задать(поиск);
+  window.history.replaceState({}, "", поиск ? `/pricing/contact?${поиск}` : "/pricing/contact");
 
   const запросы: Array<{ адрес: string; тело: string }> = [];
   vi.stubGlobal("fetch", async (адрес: unknown, настройки?: { body?: unknown }) => {

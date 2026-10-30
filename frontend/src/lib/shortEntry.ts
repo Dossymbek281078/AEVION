@@ -61,7 +61,11 @@ export function меткаДляПерехода(
  * 64 знаков); всё прочее отбрасывается — короткий вход не должен стать способом протащить произвольный хвост.
  * Возвращает "" или строку вида "&probe=user-99&puzzle=li_075iw" — для приписывания после "?c=…".
  */
-const НЕСЁМ_ДАЛЬШЕ = ["probe", "puzzle", "lang", "utm_source", "utm_medium", "utm_campaign", "utm_content"] as const;
+// 30.10.2026: s = id сайта гостя DevHub, с которого пришёл человек по значку «Сделано в AEVION»;
+// нужен в page_view на /devhub (путь с query).
+const НЕСЁМ_ДАЛЬШЕ = ["probe", "puzzle", "lang", "s", "utm_source", "utm_medium", "utm_campaign", "utm_content",
+  "aff", // партнёрский id Lemon Squeezy
+] as const;
 const ЗНАЧЕНИЕ_ДОПУСТИМО = /^[a-zA-Z0-9._-]{1,64}$/;
 
 export function хвостПерехода(параметры: Record<string, string | string[] | undefined> | undefined): string {

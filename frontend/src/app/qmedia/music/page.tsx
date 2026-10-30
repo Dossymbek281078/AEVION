@@ -5,8 +5,11 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
+import { useQMediaT, saveErrorKey } from "../i18n";
+import { TrackActions } from "../TrackActions";
 
-const GENRES = ["All", "Pop", "Rock", "Electronic", "Classical", "Jazz", "Hip-hop", "Other"];
+// значения фильтра уходят на сервер как есть; подпись — из словаря
+const GENRES = ["all", "pop", "rock", "electronic", "classical", "jazz", "hip-hop", "other"];
 
 function bearerHeader(): HeadersInit {
   const t = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
@@ -14,8 +17,12 @@ function bearerHeader(): HeadersInit {
 }
 
 export default function QMediaMusicPage() {
+  const { t, label, num } = useQMediaT();
   const [tracks, setTracks] = useState<any[]>([]);
-  const [genre, setGenre] = useState("All");
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [genre, setGenre] = useState("all");
   const [current, setCurrent] = useState<any | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -26,13 +33,15 @@ export default function QMediaMusicPage() {
 
   // v0.8: load via @aevion-io/catalog-client SDK (cat.qmedia.tracks).
   useEffect(() => {
-    const g = genre === "All" ? undefined : genre.toLowerCase();
+    const g = genre === "all" ? undefined : genre;
     catalog.qmedia
       .tracks({ limit: 50, genre: g })
       .then((d) => {
+        setLoadFailed(false);
         if (d.items) setTracks(d.items);
       })
-      .catch(() => {});
+      // отказ загрузки — не «треков пока нет»
+      .catch(() => setLoadFailed(true));
   }, [genre]);
 
   const play = (track: any) => {
@@ -49,9 +58,19 @@ export default function QMediaMusicPage() {
   }, [isPlaying, current, volume]);
 
   const addTrack = async () => {
-    if (!form.title) return;
-    const r = await fetch(apiUrl("/api/qmedia/me/tracks"), { method: "POST", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ ...form, isPublic: true }) });
-    if (r.ok) { const d = await r.json(); setTracks(prev => [d, ...prev]); setAddOpen(false); setForm({ title: "", artist: "", url: "", genre: "pop" }); }
+    if (!form.title.trim()) { setAddError(t("err.titleRequired")); return; }
+    setAddError(null);
+    setSaving(true);
+    try {
+      const r = await fetch(apiUrl("/api/qmedia/me/tracks"), { method: "POST", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ ...form, isPublic: true }) });
+      if (!r.ok) { setAddError(t(saveErrorKey(r.status))); return; }
+      const d = await r.json();
+      setTracks(prev => [d, ...prev]); setAddOpen(false); setForm({ title: "", artist: "", url: "", genre: "pop" });
+    } catch {
+      setAddError(t("err.saveFailed"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -59,24 +78,25 @@ export default function QMediaMusicPage() {
       <Wave1Nav />
       <ProductPageShell>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: 0 }}>🎵 Music</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: 0 }}>🎵 {t("hub.music.title")}</h1>
           <Link href="/qmedia" style={{ fontSize: 12, color: "#0d9488", fontWeight: 700, textDecoration: "none" }}>← QMedia</Link>
-          <button onClick={() => setAddOpen(v => !v)} style={{ marginLeft: "auto", padding: "6px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Add track</button>
+          <button onClick={() => setAddOpen(v => !v)} style={{ marginLeft: "auto", padding: "6px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{t("music.add")}</button>
         </div>
 
         {addOpen && (
           <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: "1px solid rgba(13,148,136,0.3)", background: "rgba(13,148,136,0.04)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Title *" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
-              <input value={form.artist} onChange={e => setForm(p => ({ ...p, artist: e.target.value }))} placeholder="Artist" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} aria-label={t("common.titleA")} placeholder={t("common.title")} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <input value={form.artist} onChange={e => setForm(p => ({ ...p, artist: e.target.value }))} aria-label={t("common.artist")} placeholder={t("common.artist")} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
             </div>
-            <input value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} placeholder="Audio URL (mp3, ogg…)" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
+            <input value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} aria-label={t("music.urlA")} placeholder={t("music.url")} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
             <div style={{ display: "flex", gap: 8 }}>
-              <select value={form.genre} onChange={e => setForm(p => ({ ...p, genre: e.target.value }))} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
-                {["pop", "rock", "electronic", "classical", "jazz", "hip-hop", "other"].map(g => <option key={g} value={g}>{g}</option>)}
+              <select aria-label={t("common.genre")} value={form.genre} onChange={e => setForm(p => ({ ...p, genre: e.target.value }))} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
+                {["pop", "rock", "electronic", "classical", "jazz", "hip-hop", "other"].map(g => <option key={g} value={g}>{label("genre", g)}</option>)}
               </select>
-              <button onClick={addTrack} style={{ padding: "8px 16px", borderRadius: 8, background: "#0d9488", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
+              <button onClick={addTrack} disabled={saving} style={{ padding: "8px 16px", borderRadius: 8, background: "#0d9488", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{t("common.save")}</button>
             </div>
+            {addError && <p role="alert" style={{ margin: "8px 0 0", fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{addError}</p>}
           </div>
         )}
 
@@ -86,33 +106,35 @@ export default function QMediaMusicPage() {
             <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>{current.artist}</div>
             {current.url && <audio ref={audioRef} src={current.url} onTimeUpdate={e => setProgress((e.currentTarget.currentTime / (e.currentTarget.duration || 1)) * 100)} onEnded={next} />}
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <button onClick={prev} style={{ border: "none", background: "transparent", fontSize: 20, cursor: "pointer" }}>⏮</button>
-              <button onClick={() => setIsPlaying(v => !v)} style={{ width: 44, height: 44, borderRadius: "50%", background: "#0d9488", color: "#fff", border: "none", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{isPlaying ? "⏸" : "▶"}</button>
-              <button onClick={next} style={{ border: "none", background: "transparent", fontSize: 20, cursor: "pointer" }}>⏭</button>
-              <input type="range" min={0} max={100} value={progress} onChange={e => { if (audioRef.current) audioRef.current.currentTime = (Number(e.target.value) / 100) * audioRef.current.duration; setProgress(Number(e.target.value)); }} style={{ flex: 1 }} />
+              <button onClick={prev} aria-label={t("player.prev")} title={t("player.prev")} style={{ border: "none", background: "transparent", fontSize: 20, cursor: "pointer" }}>⏮</button>
+              <button onClick={() => setIsPlaying(v => !v)} aria-label={isPlaying ? t("player.pause") : t("player.play")} style={{ width: 44, height: 44, borderRadius: "50%", background: "#0d9488", color: "#fff", border: "none", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{isPlaying ? "⏸" : "▶"}</button>
+              <button onClick={next} aria-label={t("player.next")} title={t("player.next")} style={{ border: "none", background: "transparent", fontSize: 20, cursor: "pointer" }}>⏭</button>
+              <input type="range" aria-label={t("player.seek")} min={0} max={100} value={progress} onChange={e => { if (audioRef.current) audioRef.current.currentTime = (Number(e.target.value) / 100) * audioRef.current.duration; setProgress(Number(e.target.value)); }} style={{ flex: 1 }} />
               <span style={{ fontSize: 12, color: "#64748b" }}>🔊</span>
-              <input type="range" min={0} max={1} step={0.05} value={volume} onChange={e => setVolume(Number(e.target.value))} style={{ width: 70 }} />
+              <input type="range" aria-label={t("player.volume")} min={0} max={1} step={0.05} value={volume} onChange={e => setVolume(Number(e.target.value))} style={{ width: 70 }} />
             </div>
           </div>
         )}
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
           {GENRES.map(g => (
-            <button key={g} onClick={() => setGenre(g)} style={{ padding: "4px 12px", borderRadius: 20, border: "1px solid rgba(15,23,42,0.15)", background: genre === g ? "#0d9488" : "#fff", color: genre === g ? "#fff" : "#475569", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{g}</button>
+            <button key={g} onClick={() => setGenre(g)} style={{ padding: "4px 12px", borderRadius: 20, border: "1px solid rgba(15,23,42,0.15)", background: genre === g ? "#0d9488" : "#fff", color: genre === g ? "#fff" : "#475569", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{g === "all" ? t("common.all") : label("genre", g)}</button>
           ))}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {tracks.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13 }}>No tracks yet. Be the first to add one!</p>}
-          {tracks.map((t, i) => (
-            <div key={t.id} onClick={() => play(t)} style={{ padding: "10px 14px", borderRadius: 10, background: current?.id === t.id ? "rgba(13,148,136,0.08)" : "#f8fafc", border: `1px solid ${current?.id === t.id ? "rgba(13,148,136,0.3)" : "rgba(15,23,42,0.08)"}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ width: 24, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>{current?.id === t.id && isPlaying ? "▶" : i + 1}</span>
+          {loadFailed && <p role="alert" style={{ color: "#dc2626", fontSize: 13 }}>{t("err.loadFailed")}</p>}
+          {!loadFailed && tracks.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13 }}>{t("music.empty")}</p>}
+          {tracks.map((tr, i) => (
+            <div key={tr.id} onClick={() => play(tr)} style={{ padding: "10px 14px", borderRadius: 10, background: current?.id === tr.id ? "rgba(13,148,136,0.08)" : "#f8fafc", border: `1px solid ${current?.id === tr.id ? "rgba(13,148,136,0.3)" : "rgba(15,23,42,0.08)"}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ width: 24, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>{current?.id === tr.id && isPlaying ? "▶" : i + 1}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{t.title}</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{tr.title}</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>{tr.artist}</div>
               </div>
-              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "rgba(13,148,136,0.08)", color: "#0d9488", fontWeight: 600 }}>{t.genre}</span>
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>▶ {t.playCount}</span>
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "rgba(13,148,136,0.08)", color: "#0d9488", fontWeight: 600 }}>{label("genre", tr.genre)}</span>
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>▶ {num(tr.playCount)}</span>
+              <TrackActions trackId={tr.id} />
             </div>
           ))}
         </div>

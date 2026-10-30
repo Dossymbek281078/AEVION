@@ -2,6 +2,7 @@
 "use client";
 
 import { detectLocale, type GlobeLocale } from "./globusLocale";
+import { bboxCenterLon, lonWidth, wrapAwareLonRange } from "./globusLonRange";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -236,6 +237,40 @@ const COUNTRY_I18N: Record<string, { ru?: string; kk?: string }> = {
   World: { ru: "Мир", kk: "Әлем" },
 };
 
+/** Подписи панели страны (до 27.10 были только английскими на всех языках сайта). */
+function sheetText(locale: "en" | "ru" | "kk") {
+  if (locale === "ru")
+    return {
+      sheet: "Страна",
+      clear: "Сбросить фильтр страны",
+      breakdown: "Разбивка по категориям",
+      nodes: (n: number) => {
+        const d10 = n % 10, d100 = n % 100;
+        const w = d10 === 1 && d100 !== 11 ? "узел" : d10 >= 2 && d10 <= 4 && (d100 < 12 || d100 > 14) ? "узла" : "узлов";
+        return `${n} ${w}`;
+      },
+      share: (p: string) => `${p}% экосистемы`,
+      none: (c: string) => `В стране ${c} пока нет узлов AEVION.`,
+    };
+  if (locale === "kk")
+    return {
+      sheet: "Ел",
+      clear: "Ел сүзгісін тазалау",
+      breakdown: "Санаттар бойынша бөлу",
+      nodes: (n: number) => `${n} түйін`,
+      share: (p: string) => `экожүйенің ${p}%`,
+      none: (c: string) => `${c} елінде әзірге AEVION түйіндері жоқ.`,
+    };
+  return {
+    sheet: "Country sheet",
+    clear: "Clear country filter",
+    breakdown: "Category breakdown",
+    nodes: (n: number) => `${n} ${n === 1 ? "node" : "nodes"}`,
+    share: (p: string) => `${p}% of ecosystem`,
+    none: (c: string) => `No AEVION nodes registered in ${c} yet.`,
+  };
+}
+
 function displayCountry(name: string, locale: "en" | "ru" | "kk"): string {
   if (locale === "en") return name;
   const e = COUNTRY_I18N[name];
@@ -293,11 +328,16 @@ function buildCountriesIfNeeded() {
 
       const polys: number[][][] = [];
       let west = 180, south = 90, east = -180, north = -90;
+      // Те же долготы в шкале 0..360: у стран через 180° (Россия, Фиджи) там рамка узкая.
+      let west360 = 360, east360 = 0;
 
       const processRing = (ring: number[][]) => {
         for (const [lon, lat] of ring) {
           if (lon < west) west = lon;
           if (lon > east) east = lon;
+          const lon360 = lon < 0 ? lon + 360 : lon;
+          if (lon360 < west360) west360 = lon360;
+          if (lon360 > east360) east360 = lon360;
           if (lat < south) south = lat;
           if (lat > north) north = lat;
         }
@@ -320,6 +360,7 @@ function buildCountriesIfNeeded() {
         continue;
       }
 
+      [west, east] = wrapAwareLonRange(west, east, west360, east360);
       entries.push({
         name,
         bbox: [west, south, east, north],
@@ -2347,6 +2388,9 @@ export default function Globus3D({
 
       // Если перемещения не было — это клик: focus-режим вместо моментальной навигации.
       if (!didDrag) {
+        // Цель берём по точке нажатия, а не по последнему наведению: у касания наведения нет,
+        // и раньше тап по глобусу на телефоне ничего не выбирал (замер 27.10: панель страны 0/49 касанием).
+        updateHover(ev.clientX, ev.clientY);
         const cur = labelRef.current;
         if (cur) {
           focusMarkerRef.current(cur.marker);
@@ -3039,14 +3083,9 @@ export default function Globus3D({
     if (!entry) return;
     const [w, s, e, n] = entry.bbox;
     const centerLat = (s + n) / 2;
-    let centerLon = (w + e) / 2;
-    if (w > e) {
-      // bbox wraps через 180° (Russia, Fiji) — берём «среднее» с учётом разрыва.
-      centerLon = ((w + e + 360) / 2) % 360;
-      if (centerLon > 180) centerLon -= 360;
-    }
+    const centerLon = bboxCenterLon(w, e);
     const latRange = Math.abs(n - s);
-    const lonRange = Math.abs(e - w);
+    const lonRange = lonWidth(w, e);
     const spread = Math.max(
       latRange,
       lonRange * Math.cos((centerLat * Math.PI) / 180),
@@ -3666,7 +3705,8 @@ export default function Globus3D({
 
       {!initError && selectedCountry ? (
         <div
-          aria-label={`Country sheet: ${selectedCountry}`}
+          data-country-sheet={selectedCountry}
+          aria-label={`${sheetText(locale).sheet}: ${displayCountry(selectedCountry, locale)}`}
           style={{
             position: "absolute",
             top: isNarrow ? 64 : 232,
@@ -3707,8 +3747,8 @@ export default function Globus3D({
             </div>
             <button
               type="button"
-              title="Clear country filter"
-              aria-label="Clear country filter"
+              title={sheetText(locale).clear}
+              aria-label={sheetText(locale).clear}
               onClick={() => setSelectedCountry(null)}
               style={{
                 background: "transparent",
@@ -3742,8 +3782,7 @@ export default function Globus3D({
             }}
           >
             <span>
-              {selectedCountryMarkers.length}{" "}
-              {selectedCountryMarkers.length === 1 ? "node" : "nodes"}
+              {sheetText(locale).nodes(selectedCountryMarkers.length)}
             </span>
             {selectedCountryMarkers.length > 0 && markers.length > 0 ? (
               <span
@@ -3755,14 +3794,14 @@ export default function Globus3D({
                   textTransform: "none",
                 }}
               >
-                · {((selectedCountryMarkers.length / markers.length) * 100).toFixed(1)}% of ecosystem
+                · {sheetText(locale).share(((selectedCountryMarkers.length / markers.length) * 100).toFixed(1))}
               </span>
             ) : null}
           </div>
 
           {selectedCountryMarkers.length > 0 ? (
             <div
-              aria-label="Category breakdown"
+              aria-label={sheetText(locale).breakdown}
               style={{
                 display: "flex",
                 gap: 2,
@@ -3810,7 +3849,7 @@ export default function Globus3D({
                 lineHeight: 1.45,
               }}
             >
-              No AEVION nodes registered in {displayCountry(selectedCountry, locale)} yet.
+              {sheetText(locale).none(displayCountry(selectedCountry, locale))}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

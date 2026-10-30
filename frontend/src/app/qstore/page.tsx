@@ -384,7 +384,7 @@ export default function QStorePage() {
     <>
       <Wave1Nav />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 16px 16px" }}>
-        <PaddleUpgradeButton variant="banner" appId="qstore" label="QStore Pro — безлимитные листинги" />
+        <PaddleUpgradeButton variant="banner" appId="qstore" />
         <div style={{ marginTop: 10 }}>
           <ModulePricingChip moduleId="qstore" />
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
@@ -231,9 +232,12 @@ export function AdvisorChat({
             {t("advisor.empty", { balance: formatCurrency(account.balance, code) })}
           </div>
         ) : (
-          visibleMessages.map((m, i) => (
-            <Bubble key={i} role={m.role} content={m.content} />
-          ))
+          <>
+            <AiBadge />
+            {visibleMessages.map((m, i) => (
+              <Bubble key={i} role={m.role} content={m.content} />
+            ))}
+          </>
         )}
         {busy ? (
           <Bubble role="assistant" content={t("advisor.thinking")} muted />

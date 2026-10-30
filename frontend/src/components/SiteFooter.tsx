@@ -6,6 +6,7 @@ import { KeepChannelLink } from "./KeepChannelLink";
 import { repoUrl } from "@/lib/repoUrl";
 import { FooterWaitlist } from "./FooterWaitlist";
 import { useChromeLang } from "./siteChromeI18n";
+import { useNavHref } from "./useNavHref";
 
 /**
  * Ссылка подвала. Раньше тот же объект стиля был вписан в каждую из двенадцати
@@ -37,6 +38,7 @@ export function SiteFooter() {
   // 21.10.2026: подписи — из словаря siteChromeI18n (ru/en/kk). translate="no" только при
   // своём словаре: на прочих языках подвал по-прежнему переводит живой переводчик.
   const { t, own } = useChromeLang();
+  const nav = useNavHref();
   const tr = own ? ("no" as const) : undefined;
   return (
     <footer
@@ -82,13 +84,13 @@ export function SiteFooter() {
             {t("products")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <KeepChannelLink href="/qright" style={footerLink}><span translate={tr}>{t("qrightLink")}</span></KeepChannelLink>
-            <KeepChannelLink href="/qsign" style={footerLink}><span translate={tr}>{t("qsignLink")}</span></KeepChannelLink>
-            <KeepChannelLink href="/bureau" style={footerLink}><span translate={tr}>{t("ipBureau")}</span></KeepChannelLink>
-            <KeepChannelLink href="/planet" style={footerLink}><span translate={tr}>{t("planetCompliance")}</span></KeepChannelLink>
-            <KeepChannelLink href="/awards" style={footerLink}><span translate={tr}>{t("awards")}</span></KeepChannelLink>
-            <KeepChannelLink href="/bank" style={footerLink}><span translate={tr}>{t("aevionBank")}</span></KeepChannelLink>
-            <KeepChannelLink href="/cyberchess" style={footerLink}><span translate="no">CyberChess</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/qright")} style={footerLink}><span translate={tr}>{t("qrightLink")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/qsign")} style={footerLink}><span translate={tr}>{t("qsignLink")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/bureau")} style={footerLink}><span translate={tr}>{t("ipBureau")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/planet")} style={footerLink}><span translate={tr}>{t("planetCompliance")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/awards")} style={footerLink}><span translate={tr}>{t("awards")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/bank")} style={footerLink}><span translate={tr}>{t("aevionBank")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/cyberchess")} style={footerLink}><span translate="no">CyberChess</span></KeepChannelLink>
           </div>
         </div>
 
@@ -98,10 +100,10 @@ export function SiteFooter() {
             {t("company")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <KeepChannelLink href="/demo" style={footerLink}><span translate={tr}>{t("demo")}</span></KeepChannelLink>
-            <KeepChannelLink href="/terms" style={footerLink}><span translate={tr}>{t("termsOfService")}</span></KeepChannelLink>
-            <KeepChannelLink href="/privacy" style={footerLink}><span translate={tr}>{t("privacyPolicy")}</span></KeepChannelLink>
-            <KeepChannelLink href="/help" style={footerLink}><span translate={tr}>{t("helpCenter")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/demo")} style={footerLink}><span translate={tr}>{t("demo")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/terms")} style={footerLink}><span translate={tr}>{t("termsOfService")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/privacy")} style={footerLink}><span translate={tr}>{t("privacyPolicy")}</span></KeepChannelLink>
+            <KeepChannelLink href={nav("/help")} style={footerLink}><span translate={tr}>{t("helpCenter")}</span></KeepChannelLink>
           </div>
         </div>
 
@@ -153,9 +155,9 @@ export function SiteFooter() {
       >
         <div translate={tr}>&copy; {year} AEVION. {t("rights")}</div>
         <div style={{ display: "flex", gap: 16 }}>
-          <KeepChannelLink href="/terms" style={footerLinkMuted}><span translate={tr}>{t("terms")}</span></KeepChannelLink>
-          <KeepChannelLink href="/privacy" style={footerLinkMuted}><span translate={tr}>{t("privacy")}</span></KeepChannelLink>
-          <KeepChannelLink href="/help" style={footerLinkMuted}><span translate={tr}>{t("help")}</span></KeepChannelLink>
+          <KeepChannelLink href={nav("/terms")} style={footerLinkMuted}><span translate={tr}>{t("terms")}</span></KeepChannelLink>
+          <KeepChannelLink href={nav("/privacy")} style={footerLinkMuted}><span translate={tr}>{t("privacy")}</span></KeepChannelLink>
+          <KeepChannelLink href={nav("/help")} style={footerLinkMuted}><span translate={tr}>{t("help")}</span></KeepChannelLink>
         </div>
       </div>
     </footer>

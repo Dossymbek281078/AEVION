@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQsignT } from "./i18n";
+import { MoiPodpisi } from "./MoiPodpisi";
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -1604,6 +1605,7 @@ export default function QSignPage() {
         </div>
 
         {/* ─── Recent signatures feed ─── */}
+        <MoiPodpisi />
         {recent && recent.items.length > 0 ? (
           <div style={{ marginTop: 24, ...card }}>
             <div

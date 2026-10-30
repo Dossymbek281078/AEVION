@@ -19,6 +19,8 @@ import {
   successRate,
 } from "../openingRepertoireData";
 import { sanToUci } from "../sanToUci";
+import { useCcI18n } from "../i18n";
+import { tt } from "./repertoireText";
 
 const COLORS = {
   bg: "#0b0414",
@@ -41,6 +43,7 @@ const COLORS = {
 type Mode = "manage" | "search" | "compare" | "print";
 
 export default function RepertoirePage() {
+  const { locale: L } = useCcI18n();
   const [mode, setMode] = useState<Mode>("manage");
   const [branches, setBranches] = useState<RepertoireBranch[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -95,7 +98,7 @@ export default function RepertoirePage() {
               borderRadius: 8,
             }}
           >
-            ← Вернуться в CyberChess
+            {tt(L, "← Вернуться в CyberChess")}
           </Link>
 
           <ModeSwitcher mode={mode} setMode={setMode} />
@@ -137,6 +140,7 @@ export default function RepertoirePage() {
 
 // ===== Mode Switcher =====
 function ModeSwitcher({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
+  const { locale: L } = useCcI18n();
   const modes: { key: Mode; label: string; icon: string }[] = [
     { key: "manage", label: "Управление", icon: "🗂" },
     { key: "search", label: "Поиск", icon: "🔍" },
@@ -175,7 +179,7 @@ function ModeSwitcher({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
             fontSize: 13,
           }}
         >
-          {m.icon} {m.label}
+          {m.icon} {tt(L, m.label)}
         </button>
       ))}
     </div>
@@ -192,6 +196,7 @@ function ToolBar({
   branches: RepertoireBranch[];
   onImported: () => void;
 }) {
+  const { locale: L } = useCcI18n();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -214,15 +219,15 @@ function ToolBar({
     const text = await file.text();
     const imported = importRepertoireJson(text);
     if (!imported) {
-      alert("Не удалось распарсить файл. Ожидается JSON, экспортированный отсюда.");
+      alert(tt(L, "Не удалось распарсить файл. Ожидается JSON, экспортированный отсюда."));
       return;
     }
-    if (!confirm(`Импортировать ${imported.length} веток? Текущий репертуар будет ЗАМЕНЁН.`)) {
+    if (!confirm(tt(L, "Импортировать {n} веток? Текущий репертуар будет ЗАМЕНЁН.").replace("{n}", String(imported.length)))) {
       return;
     }
     saveRepertoire(imported);
     onImported();
-    alert(`Импортировано: ${imported.length}`);
+    alert(tt(L, "Импортировано: {n}").replace("{n}", String(imported.length)));
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -237,10 +242,10 @@ function ToolBar({
       }}
     >
       <button onClick={handleExport} style={ghostBtn}>
-        ⬇ Экспорт JSON
+        {tt(L, "⬇ Экспорт JSON")}
       </button>
       <button onClick={handleImportClick} style={ghostBtn}>
-        ⬆ Импорт JSON
+        {tt(L, "⬆ Импорт JSON")}
       </button>
       <input
         ref={fileRef}
@@ -254,11 +259,11 @@ function ToolBar({
           onClick={() => window.print()}
           style={{ ...ghostBtn, color: COLORS.accentBright, borderColor: COLORS.accentBright }}
         >
-          🖨 Печать страницы
+          {tt(L, "🖨 Печать страницы")}
         </button>
       )}
       <span style={{ fontSize: 12, color: COLORS.textDim, marginLeft: "auto" }}>
-        Всего веток: <strong style={{ color: COLORS.text }}>{branches.length}</strong>
+        {tt(L, "Всего веток:")} <strong style={{ color: COLORS.text }}>{branches.length}</strong>
       </span>
     </div>
   );
@@ -266,6 +271,7 @@ function ToolBar({
 
 // ===== Search View =====
 function SearchView({ branches }: { branches: RepertoireBranch[] }) {
+  const { locale: L } = useCcI18n();
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -292,12 +298,12 @@ function SearchView({ branches }: { branches: RepertoireBranch[] }) {
         }}
       >
         <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.accentBright, marginBottom: 10 }}>
-          Поиск по веткам
+          {tt(L, "Поиск по веткам")}
         </div>
-        <input aria-label="Поиск по репертуару"
+        <input aria-label={tt(L, "Поиск по репертуару")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="ECO, имя, заметки, ходы…"
+          placeholder={tt(L, "ECO, имя, заметки, ходы…")}
           autoFocus
           style={{
             ...inputStyle,
@@ -307,7 +313,7 @@ function SearchView({ branches }: { branches: RepertoireBranch[] }) {
           }}
         />
         <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 14 }}>
-          Найдено: <strong style={{ color: COLORS.text }}>{filtered.length}</strong> из {branches.length}
+          {tt(L, "Найдено:")} <strong style={{ color: COLORS.text }}>{filtered.length}</strong> {tt(L, "из")} {branches.length}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -316,7 +322,7 @@ function SearchView({ branches }: { branches: RepertoireBranch[] }) {
           ))}
           {filtered.length === 0 && (
             <div style={{ textAlign: "center", padding: 40, color: COLORS.textDim }}>
-              Ничего не найдено.
+              {tt(L, "Ничего не найдено.")}
             </div>
           )}
         </div>
@@ -326,6 +332,7 @@ function SearchView({ branches }: { branches: RepertoireBranch[] }) {
 }
 
 function SearchHitCard({ branch, query }: { branch: RepertoireBranch; query: string }) {
+  const { locale: L } = useCcI18n();
   const colorBadge = branch.color === "white" ? "♔" : "♚";
   const rate = successRate(branch);
 
@@ -368,7 +375,7 @@ function SearchHitCard({ branch, query }: { branch: RepertoireBranch; query: str
           <Highlight text={branch.name} query={query} />
         </span>
         <span style={{ marginLeft: "auto", fontSize: 11, color: COLORS.textDim }}>
-          {rate}% успех · {branch.attempts} попыток
+          {rate}% {tt(L, "успех")} · {branch.attempts} {tt(L, "попыток")}
         </span>
       </div>
       <div style={{ fontFamily: "monospace", fontSize: 12, color: COLORS.textDim }}>
@@ -419,6 +426,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
 
 // ===== Compare View =====
 function CompareView({ branches }: { branches: RepertoireBranch[] }) {
+  const { locale: L } = useCcI18n();
   const [leftId, setLeftId] = useState<string>(branches[0]?.id || "");
   const [rightId, setRightId] = useState<string>(branches[1]?.id || branches[0]?.id || "");
 
@@ -444,7 +452,7 @@ function CompareView({ branches }: { branches: RepertoireBranch[] }) {
             color: COLORS.textDim,
           }}
         >
-          Для сравнения нужно минимум 2 ветки. Добавь ещё в режиме «Управление».
+          {tt(L, "Для сравнения нужно минимум 2 ветки. Добавь ещё в режиме «Управление».")}
         </div>
       </div>
     );
@@ -461,7 +469,7 @@ function CompareView({ branches }: { branches: RepertoireBranch[] }) {
         }}
       >
         <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.accentBright, marginBottom: 14 }}>
-          Сравнение веток
+          {tt(L, "Сравнение веток")}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -469,13 +477,13 @@ function CompareView({ branches }: { branches: RepertoireBranch[] }) {
             branches={branches}
             value={leftId}
             onChange={setLeftId}
-            label="Ветка A"
+            label={tt(L, "Ветка A")}
           />
           <BranchPicker
             branches={branches}
             value={rightId}
             onChange={setRightId}
-            label="Ветка B"
+            label={tt(L, "Ветка B")}
           />
         </div>
 
@@ -514,6 +522,7 @@ function BranchPicker({
 }
 
 function CompareCard({ branch }: { branch: RepertoireBranch }) {
+  const { locale: L } = useCcI18n();
   const [replies, setReplies] = useState<BookReply[] | null>(null);
   const [totals, setTotals] = useState<PositionTotals | null>(null);
   const [loading, setLoading] = useState(true);
@@ -606,15 +615,15 @@ function CompareCard({ branch }: { branch: RepertoireBranch }) {
           marginBottom: 12,
         }}
       >
-        <MiniStat label="Попыток" value={branch.attempts} />
+        <MiniStat label={tt(L, "Попыток")} value={branch.attempts} />
         <MiniStat
-          label="Успех"
+          label={tt(L, "Успех")}
           value={`${rate}%`}
           color={rate >= 70 ? COLORS.green : rate >= 40 ? COLORS.yellow : COLORS.red}
         />
       </div>
 
-      {loading && <div style={{ fontSize: 12, color: COLORS.textDim }}>Грузим Lichess…</div>}
+      {loading && <div style={{ fontSize: 12, color: COLORS.textDim }}>{tt(L, "Грузим Lichess…")}</div>}
 
       {totals && totals.total > 0 && (
         <div
@@ -627,7 +636,7 @@ function CompareCard({ branch }: { branch: RepertoireBranch }) {
             marginBottom: 10,
           }}
         >
-          <strong>{shortNum(totals.total)}</strong> игр · W{" "}
+          <strong>{shortNum(totals.total)}</strong> {tt(L, "игр")} · W{" "}
           {Math.round((totals.white / totals.total) * 100)}% / D{" "}
           {Math.round((totals.draws / totals.total) * 100)}% / B{" "}
           {Math.round((totals.black / totals.total) * 100)}%
@@ -635,7 +644,7 @@ function CompareCard({ branch }: { branch: RepertoireBranch }) {
       )}
 
       <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 6 }}>
-        Топ ответы:
+        {tt(L, "Топ ответы:")}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {stats.slice(0, 3).map((s, i) => (
@@ -699,6 +708,7 @@ function shortNum(n: number): string {
 
 // ===== Print View =====
 function PrintView({ branches }: { branches: RepertoireBranch[] }) {
+  const { locale: L } = useCcI18n();
   return (
     <div style={{ maxWidth: 1100, margin: "20px auto 0", padding: "0 20px 40px" }}>
       <style jsx global>{`
@@ -748,10 +758,10 @@ function PrintView({ branches }: { branches: RepertoireBranch[] }) {
           }}
           className="print-card"
         >
-          Дебютный репертуар — печать
+          {tt(L, "Дебютный репертуар — печать")}
         </div>
         <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 20 }}>
-          Сгенерировано {new Date().toLocaleString("ru-RU")} · Всего веток: {branches.length}
+          {tt(L, "Сгенерировано")} {new Date().toLocaleString(L === "en" ? "en-US" : L === "kk" ? "kk-KZ" : "ru-RU")} · {tt(L, "Всего веток:")} {branches.length}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -760,7 +770,7 @@ function PrintView({ branches }: { branches: RepertoireBranch[] }) {
           ))}
           {branches.length === 0 && (
             <div style={{ color: COLORS.textDim, padding: 20, textAlign: "center" }}>
-              Репертуар пуст.
+              {tt(L, "Репертуар пуст.")}
             </div>
           )}
         </div>
@@ -770,6 +780,7 @@ function PrintView({ branches }: { branches: RepertoireBranch[] }) {
 }
 
 function PrintBranchCard({ branch }: { branch: RepertoireBranch }) {
+  const { locale: L } = useCcI18n();
   const rate = successRate(branch);
   const streak = recentStreak(branch);
 
@@ -800,10 +811,10 @@ function PrintBranchCard({ branch }: { branch: RepertoireBranch }) {
         </span>
         <span style={{ fontSize: 15, fontWeight: 700 }}>{branch.name}</span>
         <span style={{ fontSize: 11, color: COLORS.textDim }}>
-          {branch.color === "white" ? "(За белых)" : "(За чёрных)"}
+          {branch.color === "white" ? tt(L, "(За белых)") : tt(L, "(За чёрных)")}
         </span>
         <span style={{ fontSize: 11, color: COLORS.textDim, marginLeft: "auto" }}>
-          Успех: <strong style={{ color: COLORS.text }}>{rate}%</strong> · {branch.attempts} попыток
+          {tt(L, "Успех:")} <strong style={{ color: COLORS.text }}>{rate}%</strong> · {branch.attempts} {tt(L, "попыток")}
         </span>
       </div>
 

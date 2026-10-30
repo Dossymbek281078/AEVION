@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useI18n } from "@/lib/i18n";
+import { useI18nOptional } from "@/lib/i18n";
 
 const NF_TEXT: Record<string, Record<string, string>> = {
   title:     { en: "This node is not on the map", ru: "Такой страницы не существует", kk: "Бұл бет табылмады", de: "Diese Seite existiert nicht", fr: "Cette page n'existe pas", es: "Esta página no existe", zh: "页面不存在", ja: "ページが見つかりません", ar: "هذه الصفحة غير موجودة", pt: "Esta página não existe", tr: "Bu sayfa bulunamadı" },
@@ -30,7 +30,11 @@ function tx(map: Record<string, Record<string, string>>, key: string, lang: stri
 
 export default function NotFound() {
   const [query, setQuery] = useState("");
-  const { lang } = useI18n();
+  // 30.10.2026, Sentry JAVASCRIPT-NEXTJS-3: POST /index с заголовком server action
+  // рендерит эту страницу БЕЗ корневого I18nProvider, и useI18n бросал
+  // «must be used within I18nProvider» - 500 вместо 404. Берём безопасный хук:
+  // нет провайдера - английский, как у провайдера до гидрации. Сам useI18n не трогаем.
+  const lang = useI18nOptional()?.lang ?? "en";
   const helpHref = query.trim() ? `/help?q=${encodeURIComponent(query.trim())}` : "/help";
 
   const QUICK_LINKS = [
@@ -74,7 +78,7 @@ export default function NotFound() {
           onSubmit={(e) => { e.preventDefault(); if (typeof window !== "undefined") window.location.href = helpHref; }}
           style={{ display: "flex", gap: 8, marginBottom: 28, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}
         >
-          <label htmlFor="nf-search" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
+          <label htmlFor="nf-search" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", whiteSpace: "nowrap" }}>
             {tx(NF_TEXT, "search", lang)} AEVION
           </label>
           <input

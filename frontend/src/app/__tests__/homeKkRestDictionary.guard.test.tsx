@@ -70,7 +70,7 @@ describe("главная: остаток kk — словарём", () => {
     expect(HOME).not.toContain("Creator economy ($104B)");
     expect(HOME).not.toContain(">Other modules<");
     expect(HOME).toContain('...(вошёл ? [{ k: "Stack", v: "Next + Node + PG" }] : [])');
-    expect(HOME).toContain("lang={trH ? L : undefined}");
+    expect(HOME).toContain('lang={trH ? L : "en"}');
     expect(HOME).toContain("INVEST_CARDS.map((card)");
     // Ряд под каталогом: имена под translate="no" (живой перевод делал из QRight «Registry»).
     expect(HOME).toContain('<span translate="no">QRight</span>');

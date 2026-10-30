@@ -77,6 +77,10 @@ export const LANG_COOKIE = "aevion_lang_v1";
  * машине не гонялся несколько дней, а CI запускается лишь на четырёх ветках.
  */
 export const LANG_KEY_COUNT: Record<Lang, number> = {
+  // 27.10: ещё +4 — constitution.nav.academy/blog/pricing, pricing.tier.pro.cta (английские подписи на ru/kk).
+  // 27.10: ещё +4 — constitution.err.sign/pdf/publish/comment (сырое «HTTP 4xx: тело» на экране).
+  // 27.10: +2 в ru/en/kk — constitution.ai.errorDailyLimit / errorFailed: ошибка ИИ-совета
+  // показывалась сырым «HTTP 429: {json}».
   // 06.09: +2 (chargedRevenueByChannel, errorGeneric — возвращены потерянные
   // при мерже ключи денежных веток; usdNote уже был на месте).
   // 08.09: +2 в каждом словаре — titleNoPayment / subtitleNoPayment для
@@ -186,9 +190,16 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 20.10 (бюро «Мои сертификаты»): +7 — bureau.mine.title/empty/protectFirst/verify/protectedAt, qright.registry.mine/all.
   // 21.10 (оплата вперёд — это подписка): +1 — pricing.home.tier.prepayRenews; «одним платежом» снято (касса LS: billed every N months).
   // 21.10 (бюро «Проверено», ручная проверка): +26 — bureau.kycm.* (страница /bureau/kyc-manual/[id]).
-  ru: 7470,
-  en: 7470,
-  kk: 7470,
+  // 30.10: +2 в ru/en/kk — moduleChip.freeQuota / noLimitInPlanet: плашка бюро и QRight
+  // называет норму «3 работы в месяц бесплатно» и что подписка снимает её.
+  // 30.10: +56 в ru/en/kk — auth.* (страница /auth): при ?lang=en заголовок, подзаголовок,
+  // «Почта», подсказки проверки, блок «Что открывает аккаунт» шли по-русски литералами
+  // рядом с английской кнопкой «Create account». Число — счёт по словарям.
+  // 30.10: +2 в ru/en/kk — moduleChip.perYear и moduleChip.buyTitleYear: годовая плашка CyberChess показывала сырое «$50moduleChip.perYear» (и подсказку-ключ на кнопке); сторож moduleChipKeysExistInDictionaries.
+  ru: 7540,
+  en: 7540,
+  kk: 7540,
+
   de: 134,
   fr: 134,
   es: 134,

@@ -1,11 +1,11 @@
 import { fetchOrPaywall } from "@/lib/paywall";
 import { PageTracking } from "@/components/PageTracking";
-import { PaywallScreen } from "@/components/PaywallScreen";
+import { ServerPaywallScreen } from "@/components/ServerPaywallScreen";
 import MultichatEnginePage from "./MultichatEngineClient";
 
 export default async function Page() {
   const r = await fetchOrPaywall("/api/multichat/health");
-  if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
+  if ("paywall" in r) return <ServerPaywallScreen payload={r.paywall} backHref="/modules" />;
   return (
     <>
       {/*

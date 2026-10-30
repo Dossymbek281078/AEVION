@@ -21,11 +21,28 @@
  */
 import type { Metadata } from "next";
 import HomePage from "./_home";
+import { serverLang } from "@/lib/serverLang";
+import { ServerLangProvider } from "@/lib/serverLangContext";
+import { строкиКадра, КЛЮЧИ_ГЛАВНОЙ } from "@/lib/serverFrameStrings";
+
+/*
+ * 30.10.2026 (замер Приложений, прод 4f71ad70f, ru-RU): сырой HTML главной отдавал
+ * английский h1 «Describe it in a sentence…», русский появлялся через ~6 с. Язык кадра
+ * решает сервер (кука → Accept-Language → ru) и отдаёт строки home.* до словаря.
+ * ЦЕНА: чтение cookies()/headers() делает «/» динамической — прежде она была статической
+ * (ни dynamic, ни revalidate, корневой макет куки не читает) и отдавалась с CDN.
+ */
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default function Page() {
-  return <HomePage />;
+export default async function Page() {
+  const lang = await serverLang("ru");
+  return (
+    <ServerLangProvider lang={lang} frameStrings={строкиКадра(lang, КЛЮЧИ_ГЛАВНОЙ)}>
+      <HomePage />
+    </ServerLangProvider>
+  );
 }

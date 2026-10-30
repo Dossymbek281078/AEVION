@@ -100,7 +100,8 @@ function walledPages(): Walled[] {
   const out: Walled[] = [];
   for (const file of walk(APP_ROOT)) {
     const code = stripComments(readFileSync(file, "utf8"));
-    if (!/<PaywallScreen/.test(code)) continue;
+    // ServerPaywallScreen — та же стена с языком первого кадра для серверных страниц.
+    if (!/<(Server)?PaywallScreen\b/.test(code)) continue;
     const m =
       code.match(/fetchOrPaywall[^(]*\(\s*"([^"]+)"/) ??
       code.match(/apiUrl\(\s*"(\/api\/[^"]+)"/);

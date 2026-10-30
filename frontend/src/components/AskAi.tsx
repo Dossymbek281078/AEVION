@@ -5,6 +5,7 @@
 // the answer, and surfaces a tiny badge of how the router resolved it (single
 // vs light/deep council) so the cost-aware routing is visible in-product. Every
 // ask feeds the shared savings tally under `module`.
+import { AiBadge } from "@/components/AiBadge";
 import { useId, useRef, useState } from "react";
 import { askSmart, type AskRouting } from "@/lib/askSmart";
 
@@ -107,6 +108,7 @@ export default function AskAi({
       {err && <p style={{ color: "#b91c1c", fontSize: 12, margin: "8px 0 0" }}>Could not answer: {err}</p>}
       {answer && (
         <div style={{ marginTop: 10 }}>
+          <AiBadge />
           {badge && (
             <span style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: "#0f766e", background: "rgba(13,148,136,0.1)", border: "1px solid rgba(13,148,136,0.3)", borderRadius: 999, padding: "1px 8px", marginBottom: 6 }}>
               {badge}{routing ? ` · $${routing.costUsd.toFixed(4)}` : ""}

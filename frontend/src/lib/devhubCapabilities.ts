@@ -140,6 +140,11 @@ const NOT_CONNECTED: Record<string, string> = {
   kk: "бұл арна біздің жақта әлі қосылмаған.",
 };
 
+/** Имя канала на языке страницы; незнакомый id — имя с сервера (замер 29.10: на /en шло «Выкатка на Railway»). */
+export function capabilityLabel(id: string, serverName: string | undefined, lang: string = "ru"): string {
+  return CAP_LABEL[CAP_LABEL[lang] ? lang : "en"][id] ?? serverName ?? id;
+}
+
 export function capabilityHint(
   idx: CapabilityIndex | null,
   id: string,

@@ -20,6 +20,9 @@ const RU: Record<string, string> = {
     "Зарегистрируйте работу и получите самодостаточный пакет доказательств — подписанный Ed25519 сразу и закреплённый в Bitcoin после подтверждения метки времени; проверяется, даже если AEVION завтра исчезнет.",
   "Open public transparency report": "Открыть публичный отчёт о прозрачности",
   "Live registry": "Живой реестр",
+  "registered": "зарегистрировано",
+  "active": "действует",
+  "View QRight Registry": "Открыть реестр QRight",
   "revoked": "отозвано",
   "Public report →": "Публичный отчёт →",
   // ключ автора
@@ -112,6 +115,7 @@ const RU: Record<string, string> = {
   "AEVION vault + public Witness Shard — fallback if you lose your Author Shard": "Хранилище AEVION + публичная доля-свидетель — запасной путь, если потеряете авторскую долю",
   "TYPE": "ТИП",
   "Content Hash (SHA-256)": "Хеш содержимого (SHA-256)",
+  "File Hash (SHA-256)": "Хеш файла (SHA-256)",
   "HMAC Signature": "Подпись HMAC",
   "Ed25519 Signature": "Подпись Ed25519",
   "Quantum Shield ID": "Идентификатор Quantum Shield",
@@ -169,6 +173,9 @@ const RU: Record<string, string> = {
   "🛡️ Protect Another Work": "🛡️ Защитить ещё одну работу",
   "Shield Dashboard →": "Панель защиты →",
   "Export JSON": "Экспорт JSON",
+  // подсказка гостю на карточке результата (30.10.2026)
+  "Create an account with this same email — the work will appear in your dashboard.": "Создайте аккаунт на эту же почту — работа появится в вашем кабинете.",
+  "Create account or sign in →": "Создать аккаунт или войти →",
   // реестр
   "Sign in to see your works": "Войдите, чтобы увидеть свои работы",
   "Search by title (≥ 2 chars)…": "Поиск по названию (от 2 знаков)…",
@@ -216,6 +223,11 @@ const RU: Record<string, string> = {
   "QRight Constitution": "Конституция QRight",
   "QRight as an IP institution: rule of law over power and transparency are the main sliders. The law fixes the object's hash, and neither an heir nor a corporate raider can overturn it. That is the «constitutional» guarantee for authors.": "QRight как институт IP: верховенство закона над верхом и прозрачность — главные ползунки. Закон фиксирует hash объекта, и его не отменит ни наследник, ни корпорация-захватчик. Это и есть «конституционная» гарантия для авторов.",
   "Ask about QRight": "Спросить о QRight",
+  // предложение после 402 free_quota_exceeded (30.10.2026, quotaOffer.ts)
+  "Free registrations this month are used up ({used} of {limit}) — the subscription has no limit.":
+    "Бесплатные регистрации в этом месяце исчерпаны ({used} из {limit}) — в подписке предела нет.",
+  "The AEVION Planet plan removes the limit and opens every app — from ${from}/mo on the 12-month term, ${month}/mo with no term.":
+    "План «AEVION Планета» снимает предел и открывает все приложения — от ${from}/мес на сроке 12 месяцев, ${month}/мес без срока.",
 };
 
 /**
@@ -248,6 +260,9 @@ const KK: Record<string, string> = {
   "Register your work and walk away with a self-contained proof bundle — Ed25519-signed immediately and Bitcoin-anchored once the timestamp confirms, verifiable even if AEVION disappears tomorrow.": "Жұмысыңызды тіркеп, өзіндік дәлелдер пакетін алыңыз — бірден Ed25519 арқылы қол қойылады, уақыт белгісі расталған соң Bitcoin-ға бекітіледі; AEVION ертең жоғалса да тексеріледі.",
   "Open public transparency report": "Ашықтықтың жария есебін ашу",
   "Live registry": "Тірі тізілім",
+  "registered": "тіркелген",
+  "active": "әрекет етеді",
+  "View QRight Registry": "QRight тізілімін ашу",
   "revoked": "кері шақырылды",
   "Public report →": "Жария есеп →",
   "Your browser doesn't support Ed25519 in WebCrypto, so the author co-signature layer is disabled. The other three layers (SHA-256, HMAC, and Shamir-Ed25519) still apply — but for forge-resistance against an AEVION breach, open this page in an up-to-date Chromium or Firefox.": "Браузеріңіз WebCrypto-да Ed25519-ды қолдамайды, сондықтан автордың қосымша қолтаңба қабаты өшірілген. Қалған үш қабат (SHA-256, HMAC және Shamir-Ed25519) әлі жұмыс істейді — бірақ AEVION бұзылған жағдайда жалғандыққа төзімділік үшін бұл бетті жаңартылған Chromium немесе Firefox-та ашыңыз.",
@@ -322,6 +337,7 @@ const KK: Record<string, string> = {
   "AEVION vault + public Witness Shard — fallback if you lose your Author Shard": "AEVION қоймасы + жария Куә үлесі — Автор үлесін жоғалтсаңыз, қосалқы жол",
   "TYPE": "ТҮРІ",
   "Content Hash (SHA-256)": "Мазмұн хеші (SHA-256)",
+  "File Hash (SHA-256)": "Файл хеші (SHA-256)",
   "HMAC Signature": "HMAC қолтаңбасы",
   "Ed25519 Signature": "Ed25519 қолтаңбасы",
   "Quantum Shield ID": "Quantum Shield ID",
@@ -374,6 +390,8 @@ const KK: Record<string, string> = {
   "🛡️ Protect Another Work": "🛡️ Тағы бір жұмысты қорғау",
   "Shield Dashboard →": "Shield панелі →",
   "Export JSON": "JSON экспорттау",
+  "Create an account with this same email — the work will appear in your dashboard.": "Осы электрондық поштамен аккаунт жасаңыз — жұмыс сіздің кабинетіңізде көрінеді.",
+  "Create account or sign in →": "Аккаунт жасау немесе кіру →",
   "Sign in to see your works": "Жұмыстарыңызды көру үшін кіріңіз",
   "Search by title (≥ 2 chars)…": "Атауы бойынша іздеу (≥ 2 таңба)…",
   "Filter loaded results by title…": "Жүктелген нәтижелерді атауы бойынша сүзу…",
@@ -402,6 +420,11 @@ const KK: Record<string, string> = {
   "QRight Constitution": "QRight конституциясы",
   "QRight as an IP institution: rule of law over power and transparency are the main sliders. The law fixes the object's hash, and neither an heir nor a corporate raider can overturn it. That is the «constitutional» guarantee for authors.": "QRight зияткерлік меншік институты ретінде: заңның биліктен үстемдігі мен ашықтық — басты жүгірткілер. Заң объектінің хешін бекітеді, оны мұрагер де, басып алушы корпорация да жоя алмайды. Авторлар үшін «конституциялық» кепілдік — осы.",
   "Ask about QRight": "QRight туралы сұрау",
+  // предложение после 402 free_quota_exceeded (30.10.2026, quotaOffer.ts)
+  "Free registrations this month are used up ({used} of {limit}) — the subscription has no limit.":
+    "Бұл айдағы тегін тіркеулер таусылды ({limit}-ден {used}) — жазылымда шек жоқ.",
+  "The AEVION Planet plan removes the limit and opens every app — from ${from}/mo on the 12-month term, ${month}/mo with no term.":
+    "«AEVION Планета» жоспары шекті алып тастайды және барлық қолданбаны ашады — 12 айлық мерзімде айына ${from} бастап, мерзімсіз айына ${month}.",
 };
 
 export const QRIGHT_DICT: Partial<Record<Lang, Record<string, string>>> = { ru: RU, kk: KK };

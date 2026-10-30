@@ -81,7 +81,8 @@ describe("плашка называет то, что откроется", () => 
       // 20.10.2026: адрес — из константы PRICING_TIERS_LIST (lib/products), литерал запрещён сторожем pricingTiersLiteralsGone.
       expect(код).toContain("const PLANET_TERMS_LIST = PRICING_TIERS_LIST");
       expect(PRICING_TIERS_LIST).toBe("/pricing#tiers");
-      expect(код).toContain("href={PLANET_TERMS_LIST}");
+      // 30.10.2026: ссылка может нести язык страницы (pricingHrefWithLang) — цель та же, список сроков #tiers.
+      expect(код).toMatch(/href=\{(?:pricingHrefWithLang\()?PLANET_TERMS_LIST\)?\}/);
       expect(код, "кнопка снова ведёт к кнопке Max, минуя выбор срока").not.toContain("href={STUDIO_PRO.href}");
       expect(код).toMatch(/pro\.fromPrice"\)\.replace\("\{p\}", `\$\$\{planetFromPerMonth\(\)\}`\)/);
       expect(код).toMatch(/pro\.termRange"\)\.replace\("\{max\}"/);

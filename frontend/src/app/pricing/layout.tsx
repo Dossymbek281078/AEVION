@@ -3,6 +3,17 @@ import { fromPricePerMonth } from "@/lib/termPricing";
 
 import { разметкаТоваров } from "@/lib/shopJsonLd";
 import { разметкаПриложений, оплачиваемыеПриложения } from "@/lib/appsJsonLd";
+import { getServerLang } from "@/lib/i18n-server";
+import { serverLang } from "@/lib/serverLang";
+import { ServerLangProvider } from "@/lib/serverLangContext";
+import { строкиКадра, КЛЮЧИ_ЦЕН } from "@/lib/serverFrameStrings";
+import { isEnglish } from "@/lib/pricingLocalize";
+import { moduleTitle } from "@/data/moduleNames";
+
+// 30.10.2026 (замер Науки): первый кадр /pricing шёл по-английски для русского гостя
+// (I18nProvider стартует с "en"). Макет решает язык на сервере (кука →
+// Accept-Language → ru) и кладёт его в ServerLangProvider — маршрут рисуется на каждый запрос.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   // Двуязычный заголовок (образец /qventure, /qright, /bureau): metadata у
@@ -53,8 +64,12 @@ export default async function PricingLayout({ children }: { children: React.Reac
   const товары = разметкаТоваров();
   const приложения = await разметкаПриложений();
   const приложения_список = await оплачиваемыеПриложения();
+  // 27.10.2026: язык читателя по куке — блок внизу был по-русски на любом языке,
+  // в том числе в ar-режиме саудовской волны.
+  const lang = await getServerLang();
+  const langFrame = await serverLang("ru");
   return (
-    <>
+    <ServerLangProvider lang={langFrame} frameStrings={строкиКадра(langFrame, КЛЮЧИ_ЦЕН)}>
       {товары ? (
         <script
           type="application/ld+json"
@@ -68,8 +83,8 @@ export default async function PricingLayout({ children }: { children: React.Reac
         />
       ) : null}
       {children}
-      <ЦеныДляРобота приложения={приложения_список} />
-    </>
+      <ЦеныДляРобота приложения={приложения_список} lang={lang} />
+    </ServerLangProvider>
   );
 }
 
@@ -94,21 +109,38 @@ export default async function PricingLayout({ children }: { children: React.Reac
  * те приложения, которые касса может продать. Цены берутся из каталога тем же
  * помощником, что и везде, и здесь НЕ переписываются числами.
  */
-export function ЦеныДляРобота({ приложения }: { приложения: Awaited<ReturnType<typeof оплачиваемыеПриложения>> }) {
+export function ЦеныДляРобота({ приложения, lang = "ru" }: { приложения: Awaited<ReturnType<typeof оплачиваемыеПриложения>>; lang?: string }) {
   if (!приложения.length) return null;
+  // ru — по-русски, kk — по-казахски (31.10.2026; раньше kk получал русский блок); любой другой язык — по-английски, тем же правилом, что
+  // и остальная страница цен (isEnglish). Числа не меняются — они из каталога.
+  const en = isEnglish(lang);
+  const kk = lang === "kk";
   return (
     <section
-      aria-label="Цены приложений AEVION"
+      aria-label={en ? "AEVION app prices" : kk ? "AEVION қосымшаларының бағасы" : "Цены приложений AEVION"}
       style={{ padding: "24px 16px", borderTop: "1px solid rgba(15,23,42,0.08)", fontSize: 13, lineHeight: 1.6 }}
     >
-      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 10px" }}>Приложения и цены</h2>
+      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 10px" }}>{en ? "Apps and prices" : kk ? "Қосымшалар және бағалар" : "Приложения и цены"}</h2>
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 4 }}>
         {приложения.map((app) => (
           <li key={app.slug}>
             <a href={`/pricing?app=${encodeURIComponent(app.slug)}#apps`} style={{ color: "#0d9488", textDecoration: "none" }}>
-              {app.name}
+              {moduleTitle(app.slug, lang, app.name)}
             </a>{" "}
-            — от ${fromPricePerMonth(app.baseMonthly).toFixed(2)} до ${app.baseMonthly.toFixed(2)} в месяц
+            {/* 27.10.2026: годовое приложение (шахматы) продаётся одной ценой за год — та же ветка
+                yearOnlyUsd, что в разметке товарПриложения. Без неё блок писал «от $12 до $24 в месяц»
+                при кассе $50/год — на /pricing и на экране сразу после оплаты. */}
+            {app.yearOnlyUsd != null
+              ? en
+                ? ` — $${app.yearOnlyUsd.toFixed(2)} per year`
+                : kk
+                  ? ` — жылына $${app.yearOnlyUsd.toFixed(2)}`
+                  : ` — $${app.yearOnlyUsd.toFixed(2)} в год`
+              : en
+                ? ` — from $${fromPricePerMonth(app.baseMonthly).toFixed(2)} to $${app.baseMonthly.toFixed(2)} per month`
+                : kk
+                  ? ` — айына $${fromPricePerMonth(app.baseMonthly).toFixed(2)} бастап $${app.baseMonthly.toFixed(2)} дейін`
+                  : ` — от $${fromPricePerMonth(app.baseMonthly).toFixed(2)} до $${app.baseMonthly.toFixed(2)} в месяц`}
           </li>
         ))}
       </ul>

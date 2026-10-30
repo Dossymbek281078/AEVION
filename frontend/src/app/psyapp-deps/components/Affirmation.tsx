@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { usePsyT, AFFIRMATIONS } from "../i18n";
 
 export default function Affirmation() {
   const [list, setList] = useState<string[]>([]);
   const [idx, setIdx] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const { t, lang } = usePsyT();
 
   const refresh = useCallback((items: string[]) => {
     if (items.length === 0) return;
@@ -14,6 +16,14 @@ export default function Affirmation() {
   }, []);
 
   useEffect(() => {
+    // Сервер отдаёт аффирмации только на русском; для en/kk — свой список из словаря.
+    const местные = AFFIRMATIONS[lang];
+    if (местные) {
+      setList(местные);
+      setIdx(Math.floor(Math.random() * местные.length));
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         const r = await fetch(apiUrl("/api/psyapp-deps/affirmations"), { cache: "no-store" });
@@ -28,13 +38,13 @@ export default function Affirmation() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [lang]);
 
-  const current = list[idx] ?? "Один день — это победа. Ты сильнее, чем кажется.";
+  const current = list[idx] ?? t("aff.fallback");
 
   return (
     <div style={styles.card}>
-      <div style={styles.eyebrow}>Аффирмация дня</div>
+      <div style={styles.eyebrow}>{t("aff.eyebrow")}</div>
       <blockquote style={styles.quote}>
         <span style={styles.openQuote}>«</span>
         {current}
@@ -46,7 +56,7 @@ export default function Affirmation() {
         disabled={loading || list.length === 0}
         style={styles.refreshBtn}
       >
-        ↻ Другая
+        {t("aff.another")}
       </button>
     </div>
   );

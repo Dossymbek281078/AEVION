@@ -40,3 +40,11 @@ export function themeRu(t: string): string {
   return THEME_RU[t] ?? t;
 }
 
+// 24.10.2026: банк иногда присылает тему уже по-русски («Эндшпиль») — на /en она
+// так и шла. Обратная карта: русскую метку переводим в английскую, остальное — как есть.
+const THEME_EN: Record<string, string> = Object.fromEntries(Object.entries(THEME_RU).map(([en, ru]) => [ru, en]));
+
+export function themeEn(t: string): string {
+  return THEME_EN[t] ?? t;
+}
+

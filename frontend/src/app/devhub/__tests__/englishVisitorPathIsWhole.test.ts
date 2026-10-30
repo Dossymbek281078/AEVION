@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { языкИзЗаголовка } from "../layout";
@@ -16,6 +16,10 @@ import { языкИзАдреса } from "../../../lib/i18n";
  *     человек делится ссылкой, а соцсети и поисковик берут русский заголовок;
  *   • /en/devhub/launch отвечал 404 — потерянный посетитель без следа в учёте.
  */
+// 30.10.2026: /en/devhub теперь несёт конструктор из /devhub первым блоком (он клиентский и
+// требует роутер). Эта проверка — про ссылки ПОСАДОЧНОЙ, поэтому конструктор здесь заглушка;
+// его собственная отрисовка проверена в en/devhub/__tests__/enDevhubIsTheConstructor.test.tsx.
+vi.mock("../page", () => ({ default: () => null }));
 const i18n = readFileSync(join(__dirname, "..", "..", "..", "lib", "i18n.tsx"), "utf8");
 
 describe("адрес сильнее сохранённого выбора языка", () => {
@@ -82,5 +86,35 @@ describe("английские входы не ведут в 404", () => {
     // метка обязана доехать, иначе переход уйдёт в «unattributed»
     expect(код).toContain("URLSearchParams");
     expect(код).toContain("searchParams");
+  });
+});
+
+describe("внутренние ссылки с /en/devhub остаются английскими (29.10.2026: «Open it» уводил на русский /devhub)", () => {
+  it("помощник: есть своя английская страница — /en/…, нет — ?lang=en, хеш в конце", async () => {
+    const { englishHref } = await import("../../../lib/englishPages");
+    expect(englishHref("/devhub")).toBe("/en/devhub");
+    expect(englishHref("/devhub/launch")).toBe("/en/devhub/launch");
+    expect(englishHref("/pricing")).toBe("/pricing?lang=en");
+    expect(englishHref("/pricing#planet-buy")).toBe("/pricing?lang=en#planet-buy");
+  });
+
+  it("отрисованная страница: ни одна внутренняя ссылка не ведёт на русский адрес без ?lang=en", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const mod = await import("../../en/devhub/page");
+    const el = await mod.default({ searchParams: Promise.resolve({ c: "ph" }) });
+    const html = renderToStaticMarkup(el);
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&"));
+    const внутренние = hrefs.filter((h) => h.startsWith("/"));
+    expect(внутренние.length, "ссылок не нашлось — прибор слеп").toBeGreaterThan(3);
+    for (const h of внутренние) {
+      const путь = h.split(/[?#]/)[0];
+      expect(
+        путь.startsWith("/en/") || /[?&]lang=en(&|#|$)/.test(h),
+        `ссылка ${h} уводит на русский адрес`,
+      ).toBe(true);
+    }
+    // «Open it» — карточка бесплатного входа
+    const карточка = html.match(/<a href="([^"]+)"[^>]*>(?:(?!<\/a>).)*Open it/s);
+    expect(карточка?.[1].replace(/&amp;/g, "&")).toMatch(/^\/en\/devhub(\?|$)/);
   });
 });

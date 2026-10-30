@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getAuthHeaders } from "@/lib/auth";
@@ -210,6 +211,7 @@ export default function HealthPlanPage() {
 
         {/* Goals */}
         <Section icon="🎯" title="Цели">
+          <AiBadge />
           <BulletList items={plan.goals} color="text-teal-300" />
         </Section>
 

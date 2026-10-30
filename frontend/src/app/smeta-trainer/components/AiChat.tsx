@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import type { AiNotice, Lsr, LsrCalc } from "../lib/types";
 import { QUICK_QUESTIONS, type AiMessage } from "../lib/aiConsultant";
@@ -353,6 +354,7 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
         <>
           {/* История */}
           <div className="flex-1 overflow-auto p-3 space-y-3">
+            <AiBadge />
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} group/msg`}>
                 <div className={`max-w-[92%] rounded-xl px-3 py-2 text-xs leading-relaxed relative ${

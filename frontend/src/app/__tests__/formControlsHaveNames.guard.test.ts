@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import ruDict from "@/lib/i18n-lang/ru";
 
 /**
  * Органы управления обязаны иметь имя для читалки.
@@ -36,9 +37,17 @@ describe("подписи у полей ввода", () => {
   });
 
   it("ключ подписи есть в обоих языках", () => {
+    // Считаем не вхождения (kkDict добавил третье — это не нарушение), а явно: ключ есть в ru и в en.
     const s = readFileSync(join(SRC, "lib", "pricingI18n.ts"), "utf8");
-    const n = s.split("newsletter.emailLabel").length - 1;
-    expect(n, `ключ найден ${n} раз(а), а языков два — кто-то останется без подписи`).toBe(2);
+    const ru = s.slice(s.indexOf("baseDict: Record<Lang"), s.indexOf("export const kkDict"));
+    const iEn = ru.search(/\n  en: \{/);
+    const iRu = ru.search(/\n  ru: \{/);
+    expect(iEn, "не нашёл блок en").toBeGreaterThan(0);
+    expect(iRu, "не нашёл блок ru").toBeGreaterThan(0);
+    const блокRu = iRu < iEn ? ru.slice(iRu, iEn) : ru.slice(iRu);
+    const блокEn = iEn < iRu ? ru.slice(iEn, iRu) : ru.slice(iEn);
+    expect(блокRu, "в ru нет подписи поля почты").toContain('"newsletter.emailLabel"');
+    expect(блокEn, "в en нет подписи поля почты").toContain('"newsletter.emailLabel"');
   });
 
   it("форма автора в QRight названа, а не только подсказана", () => {
@@ -184,14 +193,15 @@ describe("поля, найденные широким обходом 29.08.2026"
 describe("вход на платформу называет свои поля", () => {
   it("три поля формы регистрации связаны с подписями", () => {
     const s = readFileSync(join(process.cwd(), "src/app/auth/page.tsx"), "utf8");
-    for (const [ключ, имя] of [["name", "Имя"], ["email", "Почта"], ["password", "Пароль"]] as const) {
-      // 06-07.09 (сведение двух окон, контракт одинаковый): aria уехали в
-      // словарь AUTH_A11Y (ru/en/kk) — проверяем ОБЕ половины косвенности:
-      // фраза в ru-ветке И провод aria-label={AA.*}.
-      expect(s, `фраза «${имя}» исчезла из ru-ветки словаря AUTH_A11Y`)
-        .toContain(`${ключ}: "${имя}"`);
+    // 06-07.09 (сведение двух окон): aria уехали в локальный словарь AUTH_A11Y;
+    // 30.10.2026 — в общий словарь auth.* (при lang=en страница шла по-русски
+    // литералами). Проверяем ОБЕ половины косвенности: фраза в ru-ветке
+    // словаря И провод aria-label={t("ключ")}.
+    const ru: Record<string, string> = ruDict;
+    for (const [ключ, имя] of [["auth.name", "Имя"], ["auth.form.email", "Почта"], ["auth.password", "Пароль"]] as const) {
+      expect(ru[ключ], `фраза «${имя}» исчезла из ru-ветки словаря (${ключ})`).toBe(имя);
       expect(s, `поле «${имя}» больше не связано со словарём`)
-        .toContain(`aria-label={AA.${ключ}}`);
+        .toContain(`aria-label={t("${ключ}")}`);
     }
   });
 

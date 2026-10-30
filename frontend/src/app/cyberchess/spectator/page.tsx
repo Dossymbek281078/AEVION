@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useCcI18n } from "../i18n";
+import { tt } from "./spectatorText";
 
 const T = {
   bg: "#0a0e1a",
@@ -32,20 +33,20 @@ type LiveGame = {
   result?: string | null;
 };
 
-function fmtAge(ts?: number): string {
+function fmtAge(ts: number | undefined, L: string): string {
   if (!ts) return "—";
   const diffMs = Date.now() - ts;
-  if (diffMs < 0) return "только что";
+  if (diffMs < 0) return tt(L, "только что");
   const sec = Math.floor(diffMs / 1000);
-  if (sec < 60) return `${sec} сек назад`;
+  if (sec < 60) return `${sec} ${tt(L, "сек назад")}`;
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} мин назад`;
+  if (min < 60) return `${min} ${tt(L, "мин назад")}`;
   const hr = Math.floor(min / 60);
-  return `${hr} ч назад`;
+  return `${hr} ${tt(L, "ч назад")}`;
 }
 
 export default function SpectatorHubPage() {
-  const { t } = useCcI18n();
+  const { t, locale: L } = useCcI18n();
   const [games, setGames] = useState<LiveGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export default function SpectatorHubPage() {
       // сервера показывалось «HTTP 500». Теперь наоборот: человеку понятная
       // фраза всегда, техника — в консоль.
       console.warn("[spectator] не удалось загрузить список:", e);
-      setError("Не удалось загрузить список трансляций. Попробуйте позже.");
+      setError(tt(L, "Не удалось загрузить список трансляций. Попробуйте позже."));
     } finally {
       setLoading(false);
     }
@@ -145,7 +146,7 @@ export default function SpectatorHubPage() {
                 color: T.textDim,
               }}
             >
-              Прямые трансляции партий CyberChess · обновление каждые 10 сек
+              {tt(L, "Прямые трансляции партий CyberChess · обновление каждые 10 сек")}
             </div>
           </div>
           <div
@@ -167,7 +168,7 @@ export default function SpectatorHubPage() {
                 display: "inline-block",
               }}
             />
-            <span>{games.length} {t("spectator.hub.live")} · {fmtAge(lastRefresh)}</span>
+            <span>{games.length} {t("spectator.hub.live")} · {fmtAge(lastRefresh, L)}</span>
             <button
               onClick={fetchList}
               style={{
@@ -212,7 +213,7 @@ export default function SpectatorHubPage() {
               fontSize: 14,
             }}
           >
-            загружаем live-партии…
+            {tt(L, "загружаем идущие партии…")}
           </div>
         )}
 
@@ -237,14 +238,14 @@ export default function SpectatorHubPage() {
                 кусок адреса вместо названия раздела. Найдено 27.08.2026
                 чтением экрана. */}
             <div style={{ fontSize: 13 }}>
-              Попросите друга включить трансляцию{" "}
+              {tt(L, "Попросите друга включить трансляцию")}{" "}
               <Link
                 href="/cyberchess"
                 style={{ color: T.accent, textDecoration: "none" }}
               >
-                в приложении
+                {tt(L, "в приложении")}
               </Link>
-              {" "}— значок 📡 в верхней панели.
+              {" "}{tt(L, "— значок 📡 в верхней панели.")}
             </div>
           </div>
         )}
@@ -354,7 +355,7 @@ export default function SpectatorHubPage() {
                           minWidth: 0,
                         }}
                       >
-                        {g.hostName || "Аноним"}
+                        {g.hostName || tt(L, "Аноним")}
                       </div>
                       {isP2P && (
                         <span
@@ -381,7 +382,7 @@ export default function SpectatorHubPage() {
                         marginBottom: isP2P ? 6 : 14,
                       }}
                     >
-                      {ai} · рейтинг {rating}
+                      {ai} · {tt(L, "рейтинг")} {rating}
                     </div>
                     {isP2P && (
                       <div
@@ -417,7 +418,7 @@ export default function SpectatorHubPage() {
                         }}
                       >
                         <div style={{ color: T.textMute, fontSize: 10 }}>
-                          Последний ход
+                          {tt(L, "Последний ход")}
                         </div>
                         <div
                           style={{
@@ -439,7 +440,7 @@ export default function SpectatorHubPage() {
                         }}
                       >
                         <div style={{ color: T.textMute, fontSize: 10 }}>
-                          Ходов
+                          {tt(L, "Ходов")}
                         </div>
                         <div
                           style={{
@@ -463,7 +464,7 @@ export default function SpectatorHubPage() {
                       }}
                     >
                       <div style={{ color: T.textDim }}>
-                        👁 {viewers} · {fmtAge(ageRef)}
+                        👁 {viewers} · {fmtAge(ageRef, L)}
                       </div>
                       <div
                         style={{
@@ -476,7 +477,7 @@ export default function SpectatorHubPage() {
                           fontSize: 12,
                         }}
                       >
-                        👀 Смотреть
+                        {tt(L, "👀 Смотреть")}
                       </div>
                     </div>
                   </div>

@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useI18nOptional } from "@/lib/i18n";
+import { interpolate, peekDict, useI18nOptional } from "@/lib/i18n";
+import type { Lang } from "@/lib/i18n-data";
+// Английский словарь — единственный, который можно компилировать в страницу
+// (см. lib/i18n-lang/README.md); запас, когда нет ни серверных строк, ни словаря.
+import en from "@/lib/i18n-lang/en";
+import { useAuthServerText } from "./authServerText";
 import { setAuthToken } from "@/lib/auth";
 import { адресВозвратаИлиОткуда } from "./returnTo";
 import { ПОСЛЕДНЯЯ_СТРАНИЦА } from "@/components/LastPageMemory";
@@ -23,40 +28,44 @@ const TOKEN_KEY = "aevion_auth_token_v1";
 // ─────────────────────────────────────────────────────────────────────────
 
 // Email validation: basic shape check (no overreach — backend is authoritative).
-// Returns null when valid, or a user-facing reason string.
+// Returns null when valid, or the DICTIONARY KEY of a user-facing reason
+// (auth.email.err.*) — the text is resolved at render time in the visitor's
+// language. 30.10.2026: these were Russian literals and reached the EN screen.
 function checkEmail(raw: string): string | null {
   const e = raw.trim();
   if (!e) return null; // empty = neutral (not an error yet)
   // Must contain exactly one @, with non-empty local + domain, and a TLD.
   const at = e.indexOf("@");
-  if (at < 1 || at !== e.lastIndexOf("@")) return "В адресе должна быть ровно одна @";
+  if (at < 1 || at !== e.lastIndexOf("@")) return "auth.email.err.oneAt";
   const local = e.slice(0, at);
   const domain = e.slice(at + 1);
-  if (!local || local.length > 64) return "Часть до @ — от 1 до 64 символов";
-  if (!domain || !domain.includes(".")) return "После @ нужна точка — например, mail.ru";
+  if (!local || local.length > 64) return "auth.email.err.local";
+  if (!domain || !domain.includes(".")) return "auth.email.err.domainDot";
   const tld = domain.split(".").pop() || "";
-  if (tld.length < 2) return "После последней точки нужно хотя бы две буквы";
-  if (/\s/.test(e)) return "В адресе не должно быть пробелов";
+  if (tld.length < 2) return "auth.email.err.tld";
+  if (/\s/.test(e)) return "auth.email.err.spaces";
   return null;
 }
 
 type PasswordStrength = {
   score: 0 | 1 | 2 | 3 | 4;
-  label: string;
+  /** Dictionary key auth.pw.score0..4 */
+  labelKey: string;
   color: string;
-  hints: string[];
+  /** Dictionary keys auth.pw.hint.* */
+  hintKeys: string[];
 };
 
 // Lightweight strength scorer: length + class diversity. Not a security
 // claim (backend bcrypt + min-6 enforcement still applies), just user guidance.
 function scorePassword(pw: string): PasswordStrength {
-  const hints: string[] = [];
-  if (pw.length < 6) hints.push("минимум 6 знаков");
-  if (pw.length < 12) hints.push("12 знаков — надёжнее");
-  if (!/[a-z]/.test(pw)) hints.push("строчную букву");
-  if (!/[A-Z]/.test(pw)) hints.push("заглавную букву");
-  if (!/[0-9]/.test(pw)) hints.push("цифру");
-  if (!/[^A-Za-z0-9]/.test(pw)) hints.push("знак вроде ! или -");
+  const hintKeys: string[] = [];
+  if (pw.length < 6) hintKeys.push("auth.pw.hint.min6");
+  if (pw.length < 12) hintKeys.push("auth.pw.hint.len12");
+  if (!/[a-z]/.test(pw)) hintKeys.push("auth.pw.hint.lower");
+  if (!/[A-Z]/.test(pw)) hintKeys.push("auth.pw.hint.upper");
+  if (!/[0-9]/.test(pw)) hintKeys.push("auth.pw.hint.digit");
+  if (!/[^A-Za-z0-9]/.test(pw)) hintKeys.push("auth.pw.hint.symbol");
 
   let s = 0;
   if (pw.length >= 6) s++;
@@ -65,14 +74,14 @@ function scorePassword(pw: string): PasswordStrength {
   if (/[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw)) s++;
   const score = Math.min(4, s) as 0 | 1 | 2 | 3 | 4;
 
-  const map: Record<number, { label: string; color: string }> = {
-    0: { label: "коротковат", color: "#94a3b8" },
-    1: { label: "слабый", color: "#dc2626" },
-    2: { label: "средний", color: "#f59e0b" },
-    3: { label: "хороший", color: "#0d9488" },
-    4: { label: "надёжный", color: "#16a34a" },
+  const colors: Record<number, string> = {
+    0: "#94a3b8",
+    1: "#dc2626",
+    2: "#f59e0b",
+    3: "#0d9488",
+    4: "#16a34a",
   };
-  return { score, label: map[score].label, color: map[score].color, hints };
+  return { score, labelKey: `auth.pw.score${score}`, color: colors[score], hintKeys };
 }
 
 // Best-effort JWT exp extraction. No verification (server is authoritative);
@@ -134,28 +143,43 @@ const OAUTH_META: Record<string, { brand: string; gradient: string; envHint: str
   },
 };
 
-// Атрибуты формы входа (aria/placeholder) — слепая зона машинного
-// доводчика AutoTranslate: он переводит текст, но не атрибуты. Живой
-// замер 06.09.2026 (en-US): страница английская, подсказки полей русские —
-// и это ФОРМА РЕГИСТРАЦИИ, первое, что заполняет западный визитёр.
-// Тот же образец, что GEN_UI/ATTR_UI в devhub; вне провайдера — русский.
-const AUTH_A11Y: Record<string, { name: string; namePh: string; email: string; password: string; passwordPh: string; forgot: string; tabLogin: string; tabRegister: string }> = {
-  // Подписи вкладок — в словаре, а не строкой по-русски: 12.10.2026 приёмка
-  // увидела на английской странице вкладку «In» — живой перевод вшитого «Вход».
-  ru: { name: "Имя", namePh: "Как к вам обращаться", email: "Почта", password: "Пароль", passwordPh: "Не короче 6 знаков", forgot: "Забыли пароль?", tabLogin: "Вход", tabRegister: "Регистрация" },
-  en: { name: "Name", namePh: "What should we call you", email: "Email", password: "Password", passwordPh: "At least 6 characters", forgot: "Forgot your password?", tabLogin: "Log in", tabRegister: "Register" },
-  kk: { name: "Аты", namePh: "Сізге қалай жүгінейік", email: "Пошта", password: "Құпиясөз", passwordPh: "Кемінде 6 таңба", forgot: "Құпиясөзді ұмыттыңыз ба?", tabLogin: "Кіру", tabRegister: "Тіркелу" },
-};
+// Вся видимая речь страницы — ключи auth.* в lib/i18n-lang/{ru,en,kk}.ts.
+//
+// История: до 06.09.2026 всё было по-русски литералами; 06.09 атрибуты
+// (aria/placeholder) и 12.10 вкладки переехали в локальную таблицу AUTH_A11Y —
+// атрибуты слепая зона доводчика AutoTranslate. 30.10.2026 замер на проде
+// (390 и 1280, ?lang=en): h1 «Вход в AEVION», подзаголовок, «Почта», блок «Что
+// открывает аккаунт» — 14 русских узлов рядом с английской «Create account».
+// Доводчик переводит только то, что есть в словаре, а литералов там нет.
+// Поэтому теперь ОДИН механизм — словарь через t(), как на остальном сайте,
+// и таблица AUTH_A11Y снята (её ключи — auth.form.*, auth.tab.*).
+type T = (key: string, vars?: Record<string, string | number>) => string;
 
 export default function AuthPage() {
-  // Язык посетителя нужен дважды: словарю атрибутов И атрибуту lang на main.
-  // Прибитый lang="ru" при живом доводчике означал: текст переведён на
+  // Язык посетителя нужен дважды: словарю И атрибуту lang на main.
+  // Прибитый lang=«ru» при живом доводчике означал: текст переведён на
   // английский, а блок объявлен русским — читалка читает EN-текст русским
   // голосом (класс 28.08, 204 места; доводчик lang-атрибуты не переписывает,
-  // проверено чтением AutoTranslate 07.09). До гидрации lang="ru" честен:
-  // SSR-текст страницы русский.
-  const визитёрLang = useI18nOptional()?.lang ?? "ru";
-  const AA = AUTH_A11Y[визитёрLang] ?? AUTH_A11Y.ru;
+  // проверено чтением AutoTranslate 07.09).
+  //
+  // ПЕРВЫЙ КАДР (30.10.2026, решение Оркестратора: ru — основной канал, вход —
+  // денежный экран). I18nProvider стартует с "en" и русский словарь догружает
+  // куском, поэтому словарь через t() дал бы английский SSR-HTML и первый кадр
+  // с перерисовкой. Пока провайдер не определил язык (langReady), страница
+  // рисует строки, выбранные СЕРВЕРОМ в auth/layout.tsx по куке и
+  // Accept-Language (умолчание ru) — SSR, первый кадр и гидрация совпадают.
+  // Когда язык определён, берём словарь провайдера, если он уже скачан; если
+  // ещё нет, а язык тот же, что у сервера, — остаёмся на серверных строках
+  // (без мигания английским); иначе — en до прихода словаря.
+  const i18n = useI18nOptional();
+  const серверный = useAuthServerText();
+  const языкОпределён = i18n?.langReady === true;
+  const визитёрLang: Lang = языкОпределён ? i18n!.lang : (серверный?.lang ?? "ru");
+  const t: T = (key, vars) => {
+    if (i18n && языкОпределён && peekDict(визитёрLang)) return i18n.t(key, vars);
+    const серверная = серверный && серверный.lang === визитёрLang ? серверный.strings[key] : undefined;
+    return interpolate(серверная ?? en[key] ?? key, vars);
+  };
   const { showToast } = useToast();
   const [mode, setMode] = useState<"login" | "register">("register");
   const [name, setName] = useState("");
@@ -186,6 +210,7 @@ export default function AuthPage() {
 
   // Session-expiry display: decode exp from JWT (UX only, not auth check).
   const exp = useMemo(() => readJwtExp(token), [token]);
+  const вошёл = !!token && !!me?.user;
   const remaining = exp ? formatRemaining(exp * 1000 - nowMs) : null;
 
   useEffect(() => {
@@ -218,7 +243,8 @@ export default function AuthPage() {
       } catch (e: any) {
         if (cancelled) return;
         // Non-fatal — email/password path still works. Show a quiet hint.
-        setOauthLoadErr(e?.message || "список способов входа не загрузился");
+        // Пустая строка = причина неизвестна; текст подставит словарь при рендере.
+        setOauthLoadErr(e?.message || "");
         setOauthProviders([]);
       }
     })();
@@ -252,65 +278,67 @@ export default function AuthPage() {
   const signIn = async () => {
     setErr(null); setMe(null); setBusy(true);
     try {
-      if (!email.trim() || !password.trim()) throw new Error("Введите адрес почты и пароль");
+      if (!email.trim() || !password.trim()) throw new Error(t("auth.err.emailPasswordRequired"));
       // Run inline validators before hitting backend — saves a round-trip
       // and gives the user the same feedback as the inline hint.
       const ee = checkEmail(email);
-      if (ee) throw new Error(ee);
+      if (ee) throw new Error(t(ee));
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Не удалось войти");
+      if (!res.ok) throw new Error(data?.error || t("auth.err.loginFailed"));
       const nextToken = data.token as string;
       setToken(nextToken);
       // Через владельца токена, а не напрямую: setAuthToken пишет ещё и
   // псевдонимы, под которыми токен читают десятки модулей. Прямая
   // запись оставляла бы их пустыми до следующего старта приложения.
   setAuthToken(nextToken);
-      showToast("Вы вошли", "success");
+      setPassword(""); // пароль в DOM после успеха не держим
+      showToast(t("auth.toast.loggedin"), "success");
       вернутьТуда();
     } catch (e: any) {
-      setErr(e?.message || "Error");
-      showToast(e?.message || "Не удалось войти", "error");
+      setErr(e?.message || t("auth.err.loginFailed"));
+      showToast(e?.message || t("auth.err.loginFailed"), "error");
     } finally { setBusy(false); }
   };
 
   const register = async () => {
     setErr(null); setMe(null); setBusy(true);
     try {
-      if (!name.trim() || !email.trim() || !password.trim()) throw new Error("Name, email и пароль обязательны");
+      if (!name.trim() || !email.trim() || !password.trim()) throw new Error(t("auth.err.allRequired"));
       // Mirror backend min-6 + run inline email validator.
       const ee = checkEmail(email);
-      if (ee) throw new Error(ee);
-      if (password.length < 6) throw new Error("Пароль — не короче 6 знаков");
+      if (ee) throw new Error(t(ee));
+      if (password.length < 6) throw new Error(t("auth.err.passwordShort"));
       const res = await fetch(apiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Не удалось зарегистрироваться");
+      if (!res.ok) throw new Error(data?.error || t("auth.err.registerFailed"));
       const nextToken = data.token as string;
       setToken(nextToken);
       // Через владельца токена, а не напрямую: setAuthToken пишет ещё и
   // псевдонимы, под которыми токен читают десятки модулей. Прямая
   // запись оставляла бы их пустыми до следующего старта приложения.
   setAuthToken(nextToken);
-      showToast("Аккаунт создан. Добро пожаловать в AEVION", "success");
+      setPassword(""); // пароль в DOM после успеха не держим
+      showToast(t("auth.toast.registered"), "success");
       вернутьТуда();
     } catch (e: any) {
-      setErr(e?.message || "Error");
-      showToast(e?.message || "Не удалось зарегистрироваться", "error");
+      setErr(e?.message || t("auth.err.registerFailed"));
+      showToast(e?.message || t("auth.err.registerFailed"), "error");
     } finally { setBusy(false); }
   };
 
   const logout = () => {
     try { localStorage.removeItem(TOKEN_KEY); } catch {}
     setToken(""); setMe(null);
-    showToast("Вы вышли", "info");
+    showToast(t("auth.toast.loggedout"), "info");
   };
 
   // Kick off the OAuth dance. Server's /start endpoint will 302 to the
@@ -335,9 +363,11 @@ export default function AuthPage() {
   };
 
   return (
-    // lang="ru" на блоке содержимого: корневой <html lang> у сайта "en", а этот
-    // экран переведён на русский целиком (замер 28.08.2026 по отдаваемому HTML:
-    // 547 русских букв). Ближайшая пометка выигрывает у корневой.
+    // lang на блоке содержимого — язык провайдера: корневой <html lang> у сайта
+    // "en", а этот экран до 30.10.2026 был русским целиком (замер 28.08.2026 по
+    // отдаваемому HTML: 547 русских букв) и нёс пометку ru. Ближайшая пометка
+    // выигрывает у корневой. С 30.10 страница многоязычная через словарь auth.*,
+    // поэтому из «русских страниц» сторожа declaredLangRuPages она снята.
     <main lang={визитёрLang}>
       <ProductPageShell maxWidth={720}>
         <Wave1Nav />
@@ -348,11 +378,10 @@ export default function AuthPage() {
         <div className="aevion-auth-card" style={{ borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden" }}>
           <div className="aevion-auth-hero" style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", padding: "28px 24px 20px", color: "#fff" }}>
             <h1 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-              Вход в AEVION
+              {t("auth.hero.title")}
             </h1>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }}>
-              Один аккаунт на все модули: шахматы, ИИ-помощник, бюро прав, кошелёк.
-              Зарегистрируйтесь или войдите — это займёт минуту.
+              {t("auth.hero.subtitle")}
             </p>
           </div>
           <div className="aevion-auth-body" style={{ padding: "24px 24px 28px" }}>
@@ -397,13 +426,13 @@ export default function AuthPage() {
                       >
                         <span style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor" }} />
                         {remaining.tone === "expired"
-                          ? "Сессия истекла — войдите снова"
-                          : `Сессия закончится через ${remaining.text}`}
+                          ? t("auth.session.expired")
+                          : t("auth.session.endsIn", { left: remaining.text })}
                       </div>
                     ) : null}
                   </div>
                   <button onClick={logout} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)", color: "#dc2626", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    Выйти
+                    {t("auth.logout")}
                   </button>
                 </div>
                 {/* Порядок не случаен: 30 августа открываются ШАХМАТЫ, и почти
@@ -413,25 +442,31 @@ export default function AuthPage() {
                     видел, куда идти дальше. Порядок меняется одной строкой. */}
                 <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Link href="/cyberchess" style={{ padding: "8px 14px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
-                    ♟ Играть в шахматы →
+                    ♟ {t("auth.after.chess")}
                   </Link>
                   <Link href="/qright" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.35)", color: "#0f172a", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
-                    Зарегистрировать работу в QRight
+                    {t("auth.after.qright")}
                   </Link>
                   <Link href="/planet" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #0f766e", color: "#0f766e", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
-                    🌍 Planet Lab
+                    🌍 {t("auth.cta.planet")}
                   </Link>
                   <Link href="/account" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
-                    ⚙ Настройки аккаунта
+                    ⚙ {t("auth.after.account")}
                   </Link>
                 </div>
               </div>
             ) : null}
 
+            {/* 30.10.2026: вошедшему форма входа/регистрации не нужна (замер прода: после
+                регистрации под карточкой «вы вошли» оставалась полная форма с введённым
+                паролем). Прячем, пока нет подтверждённой сессии: если токен протух и /me не
+                ответил — форма остаётся, человеку нужно войти заново. */}
+            {!вошёл ? (
+            <>
             <div style={{ display: "inline-flex", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", marginBottom: 20 }}>
               {(["register", "login"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)} disabled={busy} style={{ padding: "10px 20px", border: "none", background: mode === m ? "#0f172a" : "#fff", color: mode === m ? "#fff" : "#64748b", fontWeight: mode === m ? 800 : 600, fontSize: 14, cursor: "pointer" }}>
-                  {m === "register" ? AA.tabRegister : AA.tabLogin}
+                  {m === "register" ? t("auth.tab.register") : t("auth.tab.login")}
                 </button>
               ))}
             </div>
@@ -501,7 +536,7 @@ export default function AuthPage() {
                           {meta.brand}
                         </span>
                         <span>
-                          {mode === "register" ? "Регистрация через" : "Войти через"} {p.name}
+                          {t(mode === "register" ? "auth.oauth.registerVia" : "auth.oauth.loginVia", { provider: p.name })}
                         </span>
                         {!p.configured ? (
                           <span
@@ -518,7 +553,7 @@ export default function AuthPage() {
                               border: "1px solid rgba(245,158,11,0.3)",
                             }}
                           >
-                            Не настроен
+                            {t("auth.oauth.notConfigured")}
                           </span>
                         ) : null}
                       </button>
@@ -539,14 +574,14 @@ export default function AuthPage() {
                   }}
                 >
                   <span style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.08)" }} />
-                  <span>или по почте</span>
+                  <span>{t("auth.oauth.orEmail")}</span>
                   <span style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.08)" }} />
                 </div>
               </div>
             ) : null}
 
             {/* OAuth fetch failed — quiet inline notice, doesn't block email login. */}
-            {!token && oauthLoadErr ? (
+            {!token && oauthLoadErr !== null ? (
               <div
                 style={{
                   maxWidth: 440,
@@ -559,20 +594,20 @@ export default function AuthPage() {
                   fontSize: 12,
                 }}
               >
-                Не удалось загрузить способы входа ({oauthLoadErr}). Вход по почте работает.
+                {t("auth.oauth.loadFailed", { reason: oauthLoadErr || t("auth.oauth.listFailed") })}
               </div>
             ) : null}
 
             <div style={{ display: "grid", gap: 14, maxWidth: 440 }}>
               {mode === "register" ? (
                 <div>
-                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Имя</div>
-                  <input aria-label={AA.name} value={name} onChange={(e) => setName(e.target.value)} placeholder={AA.namePh} style={inputStyle} disabled={busy} />
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>{t("auth.name")}</div>
+                  <input aria-label={t("auth.name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("auth.form.namePh")} style={inputStyle} disabled={busy} />
                 </div>
               ) : null}
               <div>
-                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Почта</div>
-                <input aria-label={AA.email}
+                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>{t("auth.form.email")}</div>
+                <input aria-label={t("auth.form.email")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="user@example.com"
@@ -591,17 +626,17 @@ export default function AuthPage() {
                 />
                 {emailError ? (
                   <div id="email-hint" style={{ marginTop: 6, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
-                    {emailError}
+                    {t(emailError)}
                   </div>
                 ) : email && !emailError ? (
                   <div id="email-hint" style={{ marginTop: 6, fontSize: 12, color: "#0d9488", fontWeight: 600 }}>
-                    ✓ Адрес выглядит верно
+                    ✓ {t("auth.email.ok")}
                   </div>
                 ) : null}
               </div>
               <div>
-                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Пароль</div>
-                <input aria-label={AA.password} value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder={AA.passwordPh} style={inputStyle} disabled={busy} />
+                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>{t("auth.password")}</div>
+                <input aria-label={t("auth.password")} value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder={t("auth.form.passwordPh")} style={inputStyle} disabled={busy} />
                 {password ? (
                   <div style={{ marginTop: 8 }}>
                     {/* Strength bar — 4 segments, fills left→right by score. */}
@@ -621,11 +656,11 @@ export default function AuthPage() {
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
                       <span style={{ color: pwStrength.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                        {pwStrength.label}
+                        {t(pwStrength.labelKey)}
                       </span>
-                      {pwStrength.hints.length > 0 && mode === "register" ? (
+                      {pwStrength.hintKeys.length > 0 && mode === "register" ? (
                         <span style={{ color: "#64748b", textAlign: "right" }}>
-                          Добавьте: {pwStrength.hints.slice(0, 2).join(", ")}
+                          {t("auth.pw.add", { hints: pwStrength.hintKeys.slice(0, 2).map((k) => t(k)).join(", ") })}
                         </span>
                       ) : null}
                     </div>
@@ -650,16 +685,19 @@ export default function AuthPage() {
               {mode === "login" ? (
                 <Link
                   href="/build/reset-password"
-                  aria-label={AA.forgot}
+                  aria-label={t("auth.form.forgot")}
                   style={{ fontSize: 13, color: "#0d9488", fontWeight: 700, textDecoration: "none", alignSelf: "flex-start" }}
                 >
-                  {AA.forgot}
+                  {t("auth.form.forgot")}
                 </Link>
               ) : null}
               <button onClick={mode === "login" ? signIn : register} disabled={submitDisabled} style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: submitDisabled ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #0ea5e9)", color: "#fff", cursor: submitDisabled ? "default" : "pointer", fontWeight: 900, fontSize: 15, boxShadow: submitDisabled ? "none" : "0 4px 14px rgba(13,148,136,0.35)" }}>
-                {busy ? "Секунду…" : mode === "register" ? "Создать аккаунт" : "Войти"}
+                {busy ? t("auth.waiting") : mode === "register" ? t("auth.submit.register") : t("auth.submit.login")}
               </button>
             </div>
+
+            </>
+            ) : null}
 
             {err ? (
               <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(220,38,38,0.25)", background: "rgba(220,38,38,0.06)", color: "#991b1b", fontSize: 13 }}>
@@ -670,7 +708,7 @@ export default function AuthPage() {
             {token ? (
               <details style={{ marginTop: 20 }}>
                 <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#64748b" }}>
-                  Токен доступа (нужен только разработчикам)
+                  {t("auth.token.summary")}
                 </summary>
                 <textarea readOnly value={token} rows={3} style={{ width: "100%", fontFamily: "monospace", fontSize: 11, padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.1)", marginTop: 8, color: "#475569", background: "#f8fafc" }} />
               </details>
@@ -680,21 +718,21 @@ export default function AuthPage() {
 
         {/* What you get */}
         <div style={{ marginTop: 20, padding: "18px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>Что открывает аккаунт AEVION</div>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>{t("auth.benefits.title")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
             {[
-              { icon: "📝", title: "Права на работы", desc: "Зарегистрировать и защитить свои файлы отпечатком SHA-256" },
-              { icon: "🔐", title: "Подпись документов", desc: "Подписать договор или акт по стандарту HMAC-SHA256" },
-              { icon: "💰", title: "Кошелёк", desc: "Копить кредиты AEC и получать отчисления автоматически" },
-              { icon: "♟️", title: "Шахматы", desc: "Играть в CyberChess, набирать рейтинг и участвовать в турнирах" },
-              { icon: "🏆", title: "Премия", desc: "Подать музыку или фильм на AEVION Awards и побороться за приз" },
-              { icon: "📊", title: "Рейтинг доверия", desc: "Накапливать репутацию, общую для всех модулей платформы" },
+              { icon: "📝", key: "rights" },
+              { icon: "🔐", key: "sign" },
+              { icon: "💰", key: "wallet" },
+              { icon: "♟️", key: "chess" },
+              { icon: "🏆", key: "awards" },
+              { icon: "📊", key: "trust" },
             ].map((item) => (
-              <div key={item.title} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <div key={item.key} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{item.title}</div>
-                  <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.4 }}>{item.desc}</div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{t(`auth.benefits.${item.key}.title`)}</div>
+                  <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.4 }}>{t(`auth.benefits.${item.key}.desc`)}</div>
                 </div>
               </div>
             ))}

@@ -6,6 +6,8 @@ import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildApplication, type ApplicationStatus } from "@/lib/build/api";
 import { Skeleton } from "@/components/build/Skeleton";
 import { useToast } from "@/components/build/Toast";
+import { formatSalary } from "@/lib/build/format";
+import { useBuildT } from "../i18n";
 
 const STATUS_COLOR: Record<ApplicationStatus, string> = {
   PENDING: "text-amber-200 bg-amber-500/10 border-amber-500/20",
@@ -34,6 +36,7 @@ function Body() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<ApplicationStatus | "ALL">("ALL");
   const toast = useToast();
+  const { t, st } = useBuildT();
 
   useEffect(() => {
     buildApi
@@ -44,10 +47,10 @@ function Body() {
   }, []);
 
   async function withdraw(id: string) {
-    if (!confirm("Withdraw this application? The employer will be notified.")) return;
+    if (!confirm(t("apps.withdrawConfirm"))) return;
     try {
       await buildApi.withdrawApplication(id);
-      toast.success("Application withdrawn");
+      toast.success(t("apps.withdrawn"));
       const r = await buildApi.myApplications();
       setItems(r.items);
     } catch (e) {
@@ -68,16 +71,16 @@ function Body() {
     <div>
       <div className="mb-6 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">My applications</h1>
+          <h1 className="text-2xl font-bold text-white">{t("apps.title")}</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Track vacancies you applied for.
+            {t("apps.sub")}
           </p>
         </div>
         <Link
           href="/build/vacancies"
           className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
         >
-          Browse vacancies
+          {t("apps.browse")}
         </Link>
       </div>
 
@@ -94,7 +97,7 @@ function Body() {
                 : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
             }`}
           >
-            {s === "ALL" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}{" "}
+            {s === "ALL" ? t("status.ALL") : st("astatus", s)}{" "}
             <span className="ml-1 font-bold">{counts[s]}</span>
           </button>
         ))}
@@ -120,14 +123,14 @@ function Body() {
           <div className="text-4xl">📋</div>
           <p className="mt-3 text-sm text-slate-400">
             {filter === "ALL"
-              ? "You haven't applied for any vacancies yet."
-              : `No ${filter.toLowerCase()} applications.`}
+              ? t("apps.none")
+              : t("apps.noneStatus", { s: st("astatus", filter) })}
           </p>
           <Link
             href="/build/vacancies"
             className="mt-4 inline-block text-sm text-emerald-300 hover:underline"
           >
-            Browse open vacancies →
+            {t("apps.browseOpen")}
           </Link>
         </div>
       )}
@@ -142,6 +145,7 @@ function Body() {
 }
 
 function ClosingSoonBanner({ items }: { items: BuildApplication[] }) {
+  const { t, tn } = useBuildT();
   const closingSoon = items
     .filter((a) => a.status === "PENDING" && a.vacancyStatus === "OPEN" && a.vacancyExpiresAt)
     .map((a) => ({
@@ -157,12 +161,12 @@ function ClosingSoonBanner({ items }: { items: BuildApplication[] }) {
   return (
     <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
       <div className="text-xs font-semibold uppercase tracking-wider text-amber-200">
-        ⏰ Closing soon
+        {t("apps.closingSoon")}
       </div>
       <p className="mt-1 text-sm text-amber-100">
         {closingSoon.length === 1
-          ? "1 vacancy you applied to is closing in the next 3 days. The recruiter may stop reviewing once it expires."
-          : `${closingSoon.length} vacancies you applied to are closing within 3 days.`}
+          ? t("apps.closingOne")
+          : t("apps.closingMany", { n: closingSoon.length })}
       </p>
       <ul className="mt-2 space-y-0.5 text-xs">
         {closingSoon.slice(0, 5).map((a) => (
@@ -171,8 +175,8 @@ function ClosingSoonBanner({ items }: { items: BuildApplication[] }) {
               href={`/build/vacancy/${encodeURIComponent(a.vacancyId)}`}
               className="text-amber-200 hover:underline"
             >
-              {a.vacancyTitle ?? "Vacancy"} —{" "}
-              {a.daysLeft === 0 ? "ends today" : `${a.daysLeft} day${a.daysLeft === 1 ? "" : "s"} left`}
+              {a.vacancyTitle ?? t("common.vacancy")} —{" "}
+              {a.daysLeft === 0 ? t("common.endsToday") : tn("common.daysLeft", a.daysLeft)}
             </Link>
           </li>
         ))}
@@ -189,6 +193,7 @@ function ApplicationCard({
   onWithdraw: () => void;
 }) {
   const statusCls = STATUS_COLOR[app.status];
+  const { t, st, date, lang } = useBuildT();
   const icon = STATUS_ICON[app.status];
 
   return (
@@ -200,15 +205,15 @@ function ApplicationCard({
               href={`/build/vacancy/${encodeURIComponent(app.vacancyId)}`}
               className="font-semibold text-white hover:text-emerald-200"
             >
-              {app.vacancyTitle || "Vacancy"}
+              {app.vacancyTitle || t("common.vacancy")}
             </Link>
             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold uppercase ${statusCls}`}>
-              {icon} {app.status}
+              {icon} {st("astatus", app.status)}
             </span>
           </div>
           {app.projectTitle && (
             <div className="mt-0.5 text-xs text-slate-400">
-              Project: {app.projectTitle}
+              {t("apps.project", { t: app.projectTitle })}
             </div>
           )}
           {app.message && (
@@ -218,21 +223,21 @@ function ApplicationCard({
           )}
           {app.status === "REJECTED" && app.rejectReason && (
             <p className="mt-1.5 rounded-md bg-rose-500/10 px-2.5 py-1 text-xs text-rose-200">
-              Reason: {app.rejectReason}
+              {t("common.reason", { r: app.rejectReason })}
             </p>
           )}
         </div>
         <div className="shrink-0 text-right">
           {app.salary ? (
             <div className="text-sm font-semibold text-emerald-300">
-              ${app.salary.toLocaleString()}
+              {formatSalary(app.salary, "USD", lang)}
             </div>
           ) : null}
           <div className="mt-1 text-[10px] text-slate-500">
-            Applied {new Date(app.createdAt).toLocaleDateString("ru-RU")}
+            {t("apps.appliedOn", { date: date(app.createdAt) })}
           </div>
           <div className="mt-0.5 text-[10px] text-slate-600">
-            Updated {new Date(app.updatedAt).toLocaleDateString("ru-RU")}
+            {t("apps.updatedOn", { date: date(app.updatedAt) })}
           </div>
         </div>
       </div>
@@ -242,7 +247,7 @@ function ApplicationCard({
           href={`/build/vacancy/${encodeURIComponent(app.vacancyId)}`}
           className="rounded-md border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:bg-white/10"
         >
-          View vacancy →
+          {t("apps.viewVacancy")}
         </Link>
         {app.status === "ACCEPTED" && (
           <>
@@ -250,13 +255,13 @@ function ApplicationCard({
               href={`/build/messages?to=${encodeURIComponent(app.userId)}`}
               className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200 transition hover:bg-emerald-500/20"
             >
-              Message employer
+              {t("apps.messageEmployer")}
             </Link>
             <Link
               href="/build/trials"
               className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1 text-xs text-fuchsia-200 transition hover:bg-fuchsia-500/20"
             >
-              Trial tasks
+              {t("apps.trials")}
             </Link>
           </>
         )}
@@ -266,7 +271,7 @@ function ApplicationCard({
             onClick={onWithdraw}
             className="rounded-md border border-rose-500/20 bg-rose-500/5 px-3 py-1 text-xs text-rose-200/80 transition hover:bg-rose-500/10"
           >
-            Withdraw
+            {t("apps.withdraw")}
           </button>
         )}
       </div>

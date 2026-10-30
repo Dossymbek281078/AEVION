@@ -31,6 +31,10 @@ export const SUPPORTED_LOCALES: { code: CcLocale; label: string; flag: string }[
 
 const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   ru: {
+    "rolik.title": "Задача из последнего ролика Ави",
+    "rolik.solve": "Решить",
+    "rolik.loading": "Задача грузится…",
+    "rolik.date": "ролик от {d}",
     ...PZ_SLOVA.ru,
     // ── Видимый текст игрового экрана (волна EN, 19.10.2026). Русские значения —
     //    ДОСЛОВНО как было в page.tsx хардкодом; английские — рядом в en.
@@ -41,6 +45,17 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "game.yourMove": "Ваш ход",
     "game.aiMove": "Ход ИИ",
     "game.you": "Вы",
+    "game.panel": "Партия",
+    "game.moveNo": "Ход:",
+    "game.over": "Партия завершена",
+    "game.youWon": "Вы выиграли",
+    "game.draw": "Ничья",
+    "game.youLost": "Вы проиграли",
+    "game.moves": "ходов",
+    "game.analyzeWhole": "Проанализировать всю партию",
+    "game.player": "Игрок",
+    "game.player1": "Игрок 1",
+    "game.player2": "Игрок 2",
     "game.thinkingBadge": "думаю",
     "game.playingWhite": "Игра за белых",
     "game.playingBlack": "Игра за чёрных",
@@ -517,6 +532,14 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "attr.chess_personality": "🧠 Шахматный характер",
     "attr.position_editor": "♛ Редактор позиции",
     "attr.settings_2": "⚙ Настройки",
+    "attr.sound_on": "Включить звук",
+    "attr.sound_off": "Выключить звук",
+    "attr.sidebar_open": "Открыть боковую панель",
+    "attr.sidebar_close": "Свернуть боковую панель",
+    "attr.sidebar_open_puzzle": "Открыть панель задачи: подсказка, решение, следующая",
+    "dock.notes": "Заметки",
+    "dock.links": "Ссылки",
+    "dock.hotkeys": "Клавиши",
     "attr.premove_limit": "Предел премувов",
     "attr.master_games": "♛ Партии мастеров",
     "attr.review": "📊 Разбор",
@@ -524,6 +547,10 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "attr.quick_game_setup": "Быстрая настройка партии",
   },
   en: {
+    "rolik.title": "Puzzle from Avi's latest video",
+    "rolik.solve": "Solve",
+    "rolik.loading": "Loading the puzzle…",
+    "rolik.date": "video of {d}",
     ...PZ_SLOVA.en,
     // ── Visible game-screen text (EN wave, 2026-10-19). RU originals kept verbatim.
     "game.check": "Check!",
@@ -532,6 +559,17 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "game.yourMove": "Your move",
     "game.aiMove": "AI to move",
     "game.you": "You",
+    "game.panel": "Game",
+    "game.moveNo": "Move:",
+    "game.over": "Game over",
+    "game.youWon": "You won",
+    "game.draw": "Draw",
+    "game.youLost": "You lost",
+    "game.moves": "moves",
+    "game.analyzeWhole": "Analyze the whole game",
+    "game.player": "Player",
+    "game.player1": "Player 1",
+    "game.player2": "Player 2",
     "game.thinkingBadge": "thinking",
     "game.playingWhite": "Playing as white",
     "game.playingBlack": "Playing as black",
@@ -964,6 +1002,14 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "attr.chess_personality": "🧠 Chess personality",
     "attr.position_editor": "♛ Position editor",
     "attr.settings_2": "⚙ Settings",
+    "attr.sound_on": "Unmute",
+    "attr.sound_off": "Mute",
+    "attr.sidebar_open": "Open sidebar",
+    "attr.sidebar_close": "Collapse sidebar",
+    "attr.sidebar_open_puzzle": "Open puzzle panel: hint, solution, next",
+    "dock.notes": "Notes",
+    "dock.links": "Links",
+    "dock.hotkeys": "Hotkeys",
     "attr.premove_limit": "Premove limit",
     "attr.master_games": "♛ Master games",
     "attr.review": "📊 Review",
@@ -971,6 +1017,10 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "attr.quick_game_setup": "Quick game setup",
   },
   kk: {
+    "rolik.title": "Авидің соңғы бейнесіндегі есеп",
+    "rolik.solve": "Шешу",
+    "rolik.loading": "Есеп жүктелуде…",
+    "rolik.date": "{d} бейнесі",
     ...PZ_SLOVA.kk,
     // 21.10.2026: 50 ключей игрового экрана здесь не было — tFor тихо брал русский
     // (замер yazyk-devhub.mjs --click: «Анализ варианта», «Игра за белых» у kk).
@@ -982,6 +1032,17 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "game.yourMove": "Сіздің жүрісіңіз",
     "game.aiMove": "ЖИ жүрісі",
     "game.you": "Сіз",
+    "game.panel": "Партия",
+    "game.moveNo": "Жүріс:",
+    "game.over": "Партия аяқталды",
+    "game.youWon": "Сіз жеңдіңіз",
+    "game.draw": "Тең ойын",
+    "game.youLost": "Сіз жеңілдіңіз",
+    "game.moves": "жүріс",
+    "game.analyzeWhole": "Бүкіл партияны талдау",
+    "game.player": "Ойыншы",
+    "game.player1": "1-ойыншы",
+    "game.player2": "2-ойыншы",
     "game.thinkingBadge": "ойлануда",
     "game.playingWhite": "Ақтармен ойын",
     "game.playingBlack": "Қаралармен ойын",
@@ -1433,6 +1494,14 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "attr.chess_personality": "🧠 Шахмат мінезі",
     "attr.position_editor": "♛ Позиция редакторы",
     "attr.settings_2": "⚙ Баптаулар",
+    "attr.sound_on": "Дыбысты қосу",
+    "attr.sound_off": "Дыбысты өшіру",
+    "attr.sidebar_open": "Бүйірлік панельді ашу",
+    "attr.sidebar_close": "Бүйірлік панельді жию",
+    "attr.sidebar_open_puzzle": "Есеп панелін ашу: кеңес, шешім, келесі",
+    "dock.notes": "Жазбалар",
+    "dock.links": "Сілтемелер",
+    "dock.hotkeys": "Пернелер",
     "attr.premove_limit": "Премув шегі",
     "attr.master_games": "♛ Шеберлер партиялары",
     "attr.review": "📊 Талдау",
@@ -1478,6 +1547,16 @@ function readSiteLangCookie(): string | null {
 export function loadLocale(): CcLocale {
   if (typeof window === "undefined") return DEFAULT_LOCALE;
   try {
+    // 0. Явный `?lang=` в адресе — просьба ссылки; провайдер сайта слушается её (lib/i18n.tsx,
+    //    языкИзЗапроса) и ставит html lang, но в куку и localStorage НЕ пишет. Шахматы её не читали:
+    //    замер 28.10.2026 — /cyberchess?lang=en при браузере ru-RU: html.lang=en, а 71 видимая
+    //    строка лобби русская (словарь был, locale оставался ru). Метка письма mail-* — тоже en.
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const fromQuery = siteLangToCc(q.get("lang"));
+      if (fromQuery) return fromQuery;
+      if ((q.get("c") ?? "").trim().toLowerCase().startsWith("mail-")) return "en";
+    } catch {}
     // 1. Свой явный выбор — старше всех: человек выбрал язык именно для шахмат.
     const stored = localStorage.getItem(LOCALE_KEY);
     if (stored === "ru" || stored === "en" || stored === "kk") return stored;
@@ -1539,7 +1618,7 @@ export function useCcI18n() {
     let observer: MutationObserver | null = null;
     if (typeof MutationObserver !== "undefined" && typeof document !== "undefined") {
       observer = new MutationObserver(() => setLocaleState(loadLocale()));
-      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["lang", "data-lang-src"] });
     }
     return () => {
       window.removeEventListener("cc-locale-changed", handler as EventListener);

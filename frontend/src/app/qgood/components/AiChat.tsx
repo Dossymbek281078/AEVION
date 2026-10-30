@@ -1,5 +1,6 @@
 'use client';
 
+import { AiBadge } from "@/components/AiBadge";
 import { useState, useRef, useEffect } from 'react';
 import { apiUrl } from '@/lib/apiBase';
 import { useI18n } from '@/lib/i18n';
@@ -68,6 +69,7 @@ export default function AiChat({ userId = 'anonymous' }: Props) {
             {t('qgood.chat.empty')}
           </div>
         )}
+        <AiBadge />
         {messages.map((msg, i) => (
           <div
             key={i}

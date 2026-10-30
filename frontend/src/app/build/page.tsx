@@ -10,11 +10,12 @@ import { formatSalary } from "@/lib/build/format";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useI18n } from "@/lib/i18n";
 import { WaitlistIfMissing } from "@/components/FooterWaitlist";
+import { useBuildT, visibleProjects } from "./i18n";
 
 const STATUS_FILTERS: (ProjectStatus | "ALL")[] = ["ALL", "OPEN", "IN_PROGRESS", "DONE"];
 
 export default function BuildHomePage() {
-  const { t } = useI18n();
+  const { t: tb, st, lang } = useBuildT();
   const token = useBuildAuth((s) => s.token);
   const hydrated = useBuildAuth((s) => s.hydrated);
   const [projects, setProjects] = useState<BuildProject[]>([]);
@@ -67,7 +68,8 @@ export default function BuildHomePage() {
         limit: 100,
       })
       .then((r) => {
-        if (!cancelled) setProjects(r.items);
+        // en/kk: проекты-образцы (по-русски, не переводятся) не показываются — см. visibleProjects.
+        if (!cancelled) setProjects(visibleProjects(r.items, lang));
       })
       .catch((e) => {
         if (!cancelled) setError((e as Error).message);
@@ -78,7 +80,7 @@ export default function BuildHomePage() {
     return () => {
       cancelled = true;
     };
-  }, [status, q, mineOnly, token]);
+  }, [status, q, mineOnly, token, lang]);
 
   const stats = useMemo(() => {
     // Проекты-образцы (example) в счёт не идут — за ними нет работодателя.
@@ -98,24 +100,24 @@ export default function BuildHomePage() {
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-paper-ink">Construction projects</h2>
+          <h2 className="text-2xl font-bold text-paper-ink">{tb("home.title")}</h2>
           <p className="mt-1 text-sm text-paper-ink-faint">
-            Browse open projects, post a vacancy, or apply directly.
+            {tb("home.sub")}
           </p>
         </div>
         <Link
           href="/build/create-project"
           className="rounded-lg bg-paper-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-paper-teal-deep"
         >
-          + New project
+          {tb("home.newProject")}
         </Link>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Total" value={summary?.total ?? stats.total} />
-        <Stat label="Open" value={summary?.open ?? stats.open} tone="emerald" />
-        <Stat label="In progress" value={summary?.inProgress ?? stats.active} tone="amber" />
-        <Stat label="Vacancies" value={summary?.vacancies ?? stats.vacancies} />
+        <Stat label={tb("common.total")} value={summary?.total ?? stats.total} />
+        <Stat label={tb("common.open")} value={summary?.open ?? stats.open} tone="emerald" />
+        <Stat label={tb("common.inProgress")} value={summary?.inProgress ?? stats.active} tone="amber" />
+        <Stat label={tb("common.vacancies")} value={summary?.vacancies ?? stats.vacancies} />
       </div>
 
       <LiveActivityBand />
@@ -126,8 +128,8 @@ export default function BuildHomePage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          aria-label="Search by title or description"
-          placeholder="Search by title or description…"
+          aria-label={tb("home.searchAria")}
+          placeholder={tb("home.searchPh")}
           className="flex-1 rounded-lg border border-paper-rule bg-white px-3 py-2 text-sm text-paper-ink placeholder:text-paper-ink-faint-2 focus:border-paper-teal focus:outline-none"
         />
         {token && (
@@ -140,7 +142,7 @@ export default function BuildHomePage() {
                 : "border border-paper-rule bg-white text-paper-ink-soft hover:bg-paper-2"
             }`}
           >
-            {mineOnly ? "✓ Mine only" : "Mine only"}
+            {mineOnly ? tb("home.mineOnlyOn") : tb("home.mineOnly")}
           </button>
         )}
         <div className="flex items-center gap-1">
@@ -154,7 +156,7 @@ export default function BuildHomePage() {
                   : "border border-paper-rule bg-white text-paper-ink-soft hover:bg-paper-2"
               }`}
             >
-              {s}
+              {s === "ALL" ? tb("status.ALL") : st("pstatus", s)}
             </button>
           ))}
         </div>
@@ -189,9 +191,9 @@ export default function BuildHomePage() {
       {!loading && projects.length === 0 && !(mineOnly && token) && (
         <div className="rounded-xl border border-paper-rule bg-white p-8 text-center">
           <p className="text-sm text-paper-ink-soft">
-            No projects match these filters. Try clearing the search or{" "}
+            {q.trim() || status !== "ALL" ? tb("home.emptyFiltered") : tb("home.emptyNone")}{" "}
             <Link href="/build/create-project" className="text-paper-teal-deep underline">
-              post the first one
+              {tb("home.postFirst")}
             </Link>
             .
           </p>
@@ -211,12 +213,12 @@ export default function BuildHomePage() {
           Компонент сам не рисуется, если поле на странице появится. */}
       <div className="mt-10 max-w-xl">
         <WaitlistIfMissing
-          lang="en"
+          lang={lang === "ru" || lang === "kk" ? lang : "en"}
           source="build-home"
-          title="Not hiring today? Leave your email"
-          description="We write when AEVION has news - new modules and openings included."
-          buttonLabel="Notify me"
-          doneText="Done — your address is saved. A confirmation is already in your inbox."
+          title={tb("home.wlTitle")}
+          description={tb("home.wlDesc")}
+          buttonLabel={tb("home.wlButton")}
+          doneText={tb("home.wlDone")}
         />
       </div>
     </BuildShell>
@@ -224,6 +226,7 @@ export default function BuildHomePage() {
 }
 
 function SmartSuggestions() {
+  const { t, lang } = useBuildT();
   const [items, setItems] = useState<import("@/lib/build/api").BuildVacancy[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -247,7 +250,7 @@ function SmartSuggestions() {
   return (
     <div className="mb-8 rounded-xl border border-paper-rule bg-white p-5">
       <div className="mb-3 text-xs font-bold uppercase tracking-wider text-paper-teal-deep">
-        ✨ Suggested for you
+        {t("home.suggested")}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {items.map((v) => (
@@ -258,7 +261,7 @@ function SmartSuggestions() {
           >
             <div className="font-semibold text-paper-ink text-sm">{v.title}</div>
             <div className="mt-0.5 text-xs text-paper-ink-faint">
-              {formatSalary(v.salary, v.salaryCurrency)}
+              {formatSalary(v.salary, v.salaryCurrency, lang)}
               {v.city ? ` · ${v.city}` : ""}
             </div>
           </Link>
@@ -270,11 +273,12 @@ function SmartSuggestions() {
 
 function LandingHero({ publicStats }: { publicStats: { vacancies: number; candidates: number; projects: number } | null }) {
   const { t } = useI18n();
+  const { t: tb } = useBuildT();
   return (
     <section className="mb-10 rounded-2xl border-y-[3px] border-paper-ink bg-paper-card px-6 py-10 sm:px-10 sm:py-14">
       <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-paper-teal-deep">
         <span className="h-1.5 w-1.5 rounded-full bg-paper-red" />
-        AEVION QBuild · Construction Recruiting
+        {tb("home.heroEyebrow")}
       </div>
       <h1 className="mt-4 font-serif text-4xl font-extrabold tracking-tight text-paper-ink sm:text-5xl lg:text-6xl" style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif' }}>
         {t("build.home.heroTitleLine1")}<br />
@@ -335,6 +339,7 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
 }
 
 function LiveActivityBand() {
+  const { t: tb } = useBuildT();
   const [items, setItems] = useState<
     { kind: "VACANCY" | "APPLICATION" | "HIRE"; title: string; city: string | null; at: string }[]
   >([]);
@@ -363,11 +368,11 @@ function LiveActivityBand() {
   function relative(at: string): string {
     const ms = Date.now() - new Date(at).getTime();
     const m = Math.floor(ms / 60_000);
-    if (m < 1) return "just now";
-    if (m < 60) return `${m}m ago`;
+    if (m < 1) return tb("home.justNow");
+    if (m < 60) return tb("home.minAgo", { n: m });
     const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
+    if (h < 24) return tb("home.hourAgo", { n: h });
+    return tb("home.dayAgo", { n: Math.floor(h / 24) });
   }
 
   return (
@@ -375,7 +380,7 @@ function LiveActivityBand() {
       <div className="flex items-center gap-2 border-b border-paper-rule px-3 py-1.5">
         <span className="inline-block h-2 w-2 rounded-full bg-paper-red" />
         <span className="text-[10px] font-semibold uppercase tracking-wider text-paper-ink-soft">
-          Live · last 20 events
+          {tb("home.liveTitle")}
         </span>
       </div>
       <ul className="divide-y divide-[#ecebe5] max-h-48 overflow-y-auto">
@@ -388,10 +393,10 @@ function LiveActivityBand() {
                 : "text-[#8a3fb0]";
           const verb =
             e.kind === "HIRE"
-              ? "✓ hired for"
+              ? tb("home.liveHired")
               : e.kind === "VACANCY"
-                ? "+ posted"
-                : "→ applied to";
+                ? tb("home.livePosted")
+                : tb("home.liveApplied");
           return (
             <li key={i} className="flex items-center gap-2 px-3 py-1.5 text-xs">
               <span className={`shrink-0 font-semibold ${tone}`}>{verb}</span>
@@ -407,9 +412,10 @@ function LiveActivityBand() {
 }
 
 function LiveStat({ n, label }: { n: number; label: string }) {
+  const { num } = useBuildT();
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className="text-2xl font-extrabold text-paper-teal">{n.toLocaleString("ru-RU")}</span>
+      <span className="text-2xl font-extrabold text-paper-teal">{num(n)}</span>
       <span className="text-paper-ink-soft">{label}</span>
     </div>
   );
@@ -431,6 +437,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "em
 }
 
 function FeaturedEmployers() {
+  const { t } = useBuildT();
   const [items, setItems] = useState<Awaited<ReturnType<typeof buildApi.featuredEmployers>>["items"]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -458,10 +465,10 @@ function FeaturedEmployers() {
     <section className="mb-6">
       <div className="mb-2 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-paper-ink-faint">
-          Featured employers
+          {t("home.featured")}
         </h2>
         <Link href="/build/leaderboard" className="text-[11px] text-paper-teal-deep hover:underline">
-          See all →
+          {t("common.seeAll")}
         </Link>
       </div>
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -490,10 +497,10 @@ function FeaturedEmployers() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                   <span className="truncate text-sm font-semibold text-paper-ink group-hover:text-paper-teal-deep">
-                    {e.name ?? "Anonymous"}
+                    {e.name ?? t("home.anon")}
                   </span>
                   {e.verifiedAt && (
-                    <span className="text-[10px] text-[#1f6f9f]" title="Verified">✓</span>
+                    <span className="text-[10px] text-[#1f6f9f]" title={t("home.verified")}>✓</span>
                   )}
                 </div>
                 {e.city && <div className="truncate text-[10px] text-paper-ink-faint">📍 {e.city}</div>}
@@ -502,13 +509,13 @@ function FeaturedEmployers() {
             <div className="mt-2 flex items-center justify-between text-[10px] text-paper-ink-faint">
               <span>
                 {e.openVacancies > 0 ? (
-                  <span className="text-paper-teal-deep">{e.openVacancies} open</span>
+                  <span className="text-paper-teal-deep">{t("home.openN", { n: e.openVacancies })}</span>
                 ) : (
-                  <span className="text-paper-ink-faint-2">no open roles</span>
+                  <span className="text-paper-ink-faint-2">{t("home.noOpen")}</span>
                 )}
               </span>
               <span>
-                {e.hires > 0 && <span>{e.hires} hires</span>}
+                {e.hires > 0 && <span>{t("home.hires", { n: e.hires })}</span>}
                 {e.avgRating > 0 && (
                   <span className="ml-1.5 text-[#b7791f]">★ {e.avgRating.toFixed(1)}</span>
                 )}

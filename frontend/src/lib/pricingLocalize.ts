@@ -16,8 +16,9 @@
  * строке, не только в тесте: сторож должен быть не слабее того, кто примет
  * значение дальше (покупатель читает цену).
  *
- * Для языков без перевода (kk) поведение прежнее — русский текст бэкенда.
+ * Казахский — pricingLocalizeKk.ts (30.10.2026). Для языков без перевода поведение прежнее.
  */
+import { tierKk, notesKk, promoKk, badgeKk, trustNumberKk } from "./pricingLocalizeKk";
 
 type TierLike = {
   id: string;
@@ -78,6 +79,22 @@ export const NOTES_EN: Record<string, string> = {
 /** Промо-описания — тоже по русскому тексту. */
 export const PROMO_EN: Record<string, string> = {
   "Запуск GTM — 20% на любой платный тариф": "GTM launch — 20% off any paid tier",
+  "Стартапам в первый год — 50% на Lite": "Startups in their first year — 50% off Lite",
+  "Ранние пользователи — 30% на любой платный тариф": "Early users — 30% off any paid tier",
+  "Реферальный — $10 в первый месяц": "Referral — $10 off the first month",
+  "Команды — до $100 на Full (не более 50% от суммы заказа)": "Teams — up to $100 off Full (no more than 50% of the order)",
+};
+
+/**
+ * Знаки соответствия (/api/pricing/trust → badges) — по id; статус по русскому тексту:
+ * изменился статус на бэкенде → перевод отпадает сам, показывается русский (замер 29.10: на /en
+ * «аудит не пройден», «Хранение в РК» шли по-русски).
+ */
+export const BADGE_LABEL_EN: Record<string, string> = { "kz-152": "Data residency in Kazakhstan" };
+export const BADGE_STATUS_EN: Record<string, string> = {
+  "аудит не пройден": "not audited",
+  "политика опубликована, удаление по запросу работает; аудита нет": "policy published, deletion on request works; no audit",
+  "локализацию данных в РК не предоставляем": "we do not offer data localization in Kazakhstan",
 };
 
 /**
@@ -163,8 +180,17 @@ function pick(ru: string, en: string | undefined): string {
   return en != null && sameDigits(ru, en) ? en : ru;
 }
 
+/**
+ * Показывать ли английский перевод цен вместо русского исходника.
+ *
+ * 27.10.2026 (саудовская волна, замер Продаж locale ar-SA): в ar-режиме /pricing отдавала
+ * 3436 знаков кириллицы — тарифы, заметки, однострочники модулей шли по-русски, потому что
+ * «не en» означало «русский». Арабского перевода цен нет; для любого языка, кроме ru и kk,
+ * запасной — английский (так же устроены словари, lib/i18n-lang/README.md). Пустой/неизвестный
+ * язык по-прежнему русский: прежнее поведение страниц без провайдера не меняется.
+ */
 export function isEnglish(lang: string): boolean {
-  return lang === "en";
+  return !!lang && lang !== "ru" && lang !== "kk";
 }
 
 /**
@@ -228,6 +254,9 @@ const RULES_EN: Array<[RegExp, (...m: string[]) => string]> = [
 
 /** Строка или примечание расчёта (/api/pricing/quote) на языке страницы; без перевода — русская. */
 export function localizeQuoteText(ru: string, lang: string): string {
+  // 31.10.2026 (путь платящего на kk): калькулятор писал «План «AEVION Планета» — 3 месяца, списание
+  // ежемесячно по $225» по-русски. Правило сайта для kk — без казахского перевода по-английски.
+  if (lang === "kk") return pick(ru, translateBackendText(ru) ?? undefined);
   if (!isEnglish(lang)) return ru;
   return pick(ru, translateBackendText(ru) ?? undefined);
 }
@@ -244,6 +273,7 @@ export function translateBackendText(ru: string): string | null {
 }
 
 export function localizeTier<T extends TierLike>(tier: T, lang: string): T {
+  if (lang === "kk") return tierKk(tier);
   if (!isEnglish(lang)) return tier;
   const en = TIER_EN[tier.id];
   return {
@@ -255,21 +285,35 @@ export function localizeTier<T extends TierLike>(tier: T, lang: string): T {
 }
 
 export function localizeNotes(notes: string[], lang: string): string[] {
+  if (lang === "kk") return notesKk(notes);
   if (!isEnglish(lang)) return notes;
   return notes.map((n) => pick(n, NOTES_EN[n]));
 }
 
 export function localizePromoDescription(description: string, lang: string): string {
+  if (lang === "kk") return promoKk(description);
   if (!isEnglish(lang)) return description;
   return pick(description, PROMO_EN[description]);
 }
 
+export function localizeTrustBadge<T extends { id: string; label: string; status?: string }>(b: T, lang: string): T {
+  if (lang === "kk") return badgeKk(b);
+  if (!isEnglish(lang)) return b;
+  const status = b.status != null ? pick(b.status, BADGE_STATUS_EN[b.status]) : b.status;
+  return { ...b, label: pick(b.label, BADGE_LABEL_EN[b.id]), status };
+}
+
 export function localizeModuleOneLiner(moduleId: string, oneLiner: string, lang: string): string {
+  // 31.10.2026, путь платящего CyberChess на kk (прод 2f217a909): таблица «Все модули» на /pricing давала
+  // 43 русских описания — kk считался «не английским» и получал оригинал. Правило сайта (pricingI18n, kk):
+  // чего нет на казахском — по-английски, НЕ по-русски. Числа сверяет тот же pick().
+  if (lang === "kk") return pick(oneLiner, MODULE_ONE_LINER_EN[moduleId]);
   if (!isEnglish(lang)) return oneLiner;
   return pick(oneLiner, MODULE_ONE_LINER_EN[moduleId]);
 }
 
 export function localizeTrustNumber<T extends { label: string; hint?: string }>(n: T, lang: string): T {
+  if (lang === "kk") return trustNumberKk(n);
   if (!isEnglish(lang)) return n;
   const en = TRUST_NUMBER_EN[n.label];
   if (!en) return n;

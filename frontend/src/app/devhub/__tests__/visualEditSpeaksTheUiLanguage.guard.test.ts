@@ -18,7 +18,7 @@ const SRC = fs.readFileSync(path.resolve(__dirname, "..", "[id]", "page.tsx"), "
 
 function visualBlock(src: string): string {
   const start = src.indexOf('{activeTab === "visual" && (');
-  const end = src.indexOf("↩ Отменить последнюю правку ИИ", start);
+  const end = src.indexOf('tPro("proj.undoAi")', start);
   return start >= 0 && end > start ? src.slice(start, end) : "";
 }
 

@@ -11,12 +11,14 @@ import { CompareToggleButton } from "@/components/build/CompareToggleButton";
 import { buildApi, type BuildVacancy, type VacancyStatus } from "@/lib/build/api";
 import { formatSalary } from "@/lib/build/format";
 import { getRecentVacancies, clearRecentVacancies, type RecentVacancy } from "@/lib/build/recentlyViewed";
+import { useBuildT } from "../i18n";
 import {
   WORK_MODES,
-  WORK_MODE_LABELS,
   EDUCATION_LEVELS,
-  EDUCATION_LEVEL_LABELS,
   WORK_REGIONS_KZ,
+  regionLabelIn,
+  workModeLabelIn,
+  educationLabelIn,
   type WorkMode,
   type EducationLevel,
 } from "@/lib/build/geo";
@@ -29,6 +31,7 @@ function VacanciesFeedInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useI18n();
+  const { t: tb, st, lang } = useBuildT();
   const [items, setItems] = useState<FeedVacancy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -208,9 +211,9 @@ function VacanciesFeedInner() {
     <BuildShell>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Vacancies feed</h1>
+          <h1 className="text-2xl font-bold text-white">{tb("feed.title")}</h1>
           <p className="mt-1 text-sm text-slate-400">
-            All open positions across QBuild projects. Filter by status, salary, or city.
+            {tb("feed.sub")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -218,7 +221,7 @@ function VacanciesFeedInner() {
             href="/api/build/public/rss/vacancies.xml"
             target="_blank"
             rel="noopener noreferrer"
-            title="Subscribe via RSS — last 50 open vacancies"
+            title={tb("feed.rssTitle")}
             className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/20"
           >
             🛜 RSS
@@ -227,20 +230,20 @@ function VacanciesFeedInner() {
             href="/build/create-project"
             className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
           >
-            Post a project
+            {tb("feed.postProject")}
           </Link>
         </div>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Listed" value={stats.total} />
-        <Stat label="Open" value={stats.open} tone="emerald" />
-        <Stat label="Avg salary" value={stats.avgSalary > 0 ? formatSalary(stats.avgSalary, stats.avgCurrency) : "—"} />
-        <Stat label="Cities" value={stats.cities} />
+        <Stat label={tb("feed.listed")} value={stats.total} />
+        <Stat label={tb("common.open")} value={stats.open} tone="emerald" />
+        <Stat label={tb("feed.avgSalary")} value={stats.avgSalary > 0 ? formatSalary(stats.avgSalary, stats.avgCurrency, lang) : "—"} />
+        <Stat label={tb("feed.cities")} value={stats.cities} />
       </div>
 
       <div className="mb-3 flex items-center gap-2">
-        <input aria-label="Describe what you are looking for"
+        <input aria-label={tb("feed.nlAria")}
           value={nlQuery}
           onChange={(e) => setNlQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -257,7 +260,7 @@ function VacanciesFeedInner() {
           disabled={nlBusy || !nlQuery.trim()}
           className="rounded-lg bg-fuchsia-500/20 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/30 disabled:opacity-50"
         >
-          {nlBusy ? "…" : "AI search"}
+          {nlBusy ? "…" : tb("feed.aiSearch")}
         </button>
       </div>
       {nlExplanation && <p className="mb-3 text-xs text-fuchsia-200/80">🔎 {nlExplanation}</p>}
@@ -266,41 +269,41 @@ function VacanciesFeedInner() {
       <div className="mb-5 flex flex-col gap-3">
         {/* Search + filter toggle row (always visible) */}
         <div className="flex gap-2">
-          <input aria-label="Search title or description"
+          <input aria-label={tb("feed.searchAria")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search title or description…"
+            placeholder={tb("feed.searchPh")}
             className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
           />
           <button
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
             className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 sm:hidden"
-            aria-label="Toggle filters"
+            aria-label={tb("feed.filtersAria")}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-            Filters
+            {tb("feed.filters")}
           </button>
         </div>
         {/* Secondary filters — always visible sm+, collapsible on mobile */}
         <div className={`flex flex-col gap-3 sm:flex sm:flex-row sm:items-center ${filtersOpen ? "flex" : "hidden sm:flex"}`}>
-        <input aria-label="City"
+        <input aria-label={tb("common.city")}
           value={city}
           onChange={(e) => setCity(e.target.value)}
-          placeholder="City"
+          placeholder={tb("common.city")}
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-32"
         />
-        <input aria-label="Minimum pay"
+        <input aria-label={tb("feed.minAria")}
           value={minSalary}
           onChange={(e) => setMinSalary(e.target.value.replace(/[^\d]/g, ""))}
-          placeholder="Min"
+          placeholder={tb("feed.min")}
           inputMode="numeric"
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-24"
         />
-        <input aria-label="Maximum pay"
+        <input aria-label={tb("feed.maxAria")}
           value={maxSalary}
           onChange={(e) => setMaxSalary(e.target.value.replace(/[^\d]/g, ""))}
-          placeholder="Max"
+          placeholder={tb("feed.max")}
           inputMode="numeric"
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-24"
         />
@@ -308,66 +311,71 @@ function VacanciesFeedInner() {
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
           className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
-          title="Salary currency"
+          title={tb("feed.currencyTitle")}
+          aria-label={tb("feed.currencyTitle")}
         >
-          <option value="">Any currency</option>
+          <option value="">{tb("feed.anyCurrency")}</option>
           <option value="USD">USD</option>
           <option value="RUB">RUB</option>
           <option value="KZT">KZT</option>
           <option value="EUR">EUR</option>
         </select>
-        <input aria-label="Skill"
+        <input aria-label={tb("feed.skillAria")}
           value={skill}
           onChange={(e) => setSkill(e.target.value)}
-          placeholder="Skill (e.g. AutoCAD)"
+          placeholder={tb("feed.skillPh")}
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-40"
         />
         <select
           value={region}
           onChange={(e) => setRegion(e.target.value)}
+          aria-label={tb("feed.regionAria")}
           className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
         >
-          <option value="">Any region</option>
+          <option value="">{tb("feed.anyRegion")}</option>
           {WORK_REGIONS_KZ.map((r) => (
-            <option key={r.slug} value={r.slug}>{r.label}</option>
+            <option key={r.slug} value={r.slug}>{regionLabelIn(r.slug, lang)}</option>
           ))}
         </select>
         <select
           value={workMode}
           onChange={(e) => setWorkMode(e.target.value as WorkMode | "")}
+          aria-label={tb("feed.modeAria")}
           className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
         >
-          <option value="">Any work mode</option>
+          <option value="">{tb("feed.anyMode")}</option>
           {WORK_MODES.map((m) => (
-            <option key={m} value={m}>{WORK_MODE_LABELS[m]}</option>
+            <option key={m} value={m}>{workModeLabelIn(m, lang)}</option>
           ))}
         </select>
         <select
           value={educationLevel}
           onChange={(e) => setEducationLevel(e.target.value as EducationLevel | "")}
+          aria-label={tb("feed.eduAria")}
           className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
         >
-          <option value="">Any education req.</option>
+          <option value="">{tb("feed.anyEdu")}</option>
           {EDUCATION_LEVELS.map((lvl) => (
-            <option key={lvl} value={lvl}>{EDUCATION_LEVEL_LABELS[lvl]}</option>
+            <option key={lvl} value={lvl}>{educationLabelIn(lvl, lang)}</option>
           ))}
         </select>
-        <input aria-label="My years exp"
+        <input aria-label={tb("feed.expAria")}
           value={maxExperience}
           onChange={(e) => setMaxExperience(e.target.value.replace(/[^\d]/g, ""))}
-          placeholder="My years exp."
-          title="Show only vacancies that don't require more experience than this"
+          placeholder={tb("feed.expPh")}
+          title={tb("feed.expTitle")}
           inputMode="numeric"
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-28"
         />
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as "recent" | "salary" | "popular")}
+          aria-label={tb("feed.sortAria")}
           className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
         >
-          <option value="recent">Recent</option>
-          <option value="salary">Salary ↓</option>
-          <option value="popular">Popular</option>
+          <option value="recent">{tb("feed.sortRecent")}</option>
+          <option value="salary">{tb("feed.sortSalary")}</option>
+          <option value="popular">{tb("feed.sortPopular")}</option>
         </select>
         <div className="flex items-center gap-1">
           {STATUS_FILTERS.map((s) => (
@@ -380,7 +388,7 @@ function VacanciesFeedInner() {
                   : "bg-white/5 text-slate-400 hover:bg-white/10"
               }`}
             >
-              {s}
+              {s === "ALL" ? tb("status.ALL") : st("vstatus", s)}
             </button>
           ))}
         </div>
@@ -404,7 +412,7 @@ function VacanciesFeedInner() {
           ))}
           {skill && (
             <button onClick={() => setSkill("")} className="rounded-full border border-white/5 px-2.5 py-0.5 text-xs text-slate-500 hover:text-slate-300">
-              ✕ clear
+              {tb("feed.clearSkill")}
             </button>
           )}
         </div>
@@ -449,9 +457,9 @@ function VacanciesFeedInner() {
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
           <p className="text-sm text-slate-400">
-            No vacancies match these filters. Try clearing them, or{" "}
+            {tb("feed.noMatch")}{" "}
             <Link href="/build" className="text-emerald-300 underline">
-              browse projects
+              {tb("feed.browseProjects")}
             </Link>
             .
           </p>
@@ -501,6 +509,7 @@ function Stat({
 }
 
 function RecentlyViewedRow() {
+  const { t, lang } = useBuildT();
   const [items, setItems] = useState<RecentVacancy[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
@@ -515,7 +524,7 @@ function RecentlyViewedRow() {
     <div className="mb-4">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          Recently viewed
+          {t("feed.recent")}
         </span>
         <button
           onClick={() => {
@@ -524,7 +533,7 @@ function RecentlyViewedRow() {
           }}
           className="text-[10px] text-slate-500 hover:text-slate-300"
         >
-          Clear
+          {t("common.clear")}
         </button>
       </div>
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -539,7 +548,7 @@ function RecentlyViewedRow() {
               {v.title}
             </div>
             <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400">
-              {v.salary > 0 && <span className="text-emerald-300">{formatSalary(v.salary)}</span>}
+              {v.salary > 0 && <span className="text-emerald-300">{formatSalary(v.salary, undefined, lang)}</span>}
               {v.city && <span>📍 {v.city}</span>}
             </div>
           </Link>
@@ -571,6 +580,7 @@ function SavedSearches({
   current: Omit<SavedSearch, "id" | "name">;
   onApply: (s: Omit<SavedSearch, "id" | "name">) => void;
 }) {
+  const { t, st } = useBuildT();
   const [items, setItems] = useState<SavedSearch[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
@@ -593,17 +603,17 @@ function SavedSearches({
   function describe(c: Omit<SavedSearch, "id" | "name">) {
     const parts: string[] = [];
     if (c.q) parts.push(`"${c.q}"`);
-    if (c.skill) parts.push(`skill:${c.skill}`);
-    if (c.city) parts.push(`city:${c.city}`);
-    if (c.minSalary) parts.push(`≥$${c.minSalary}`);
-    if (c.sort !== "recent") parts.push(`sort:${c.sort}`);
-    if (c.status !== "OPEN") parts.push(`status:${c.status}`);
-    return parts.length > 0 ? parts.join(" · ") : "all open vacancies";
+    if (c.skill) parts.push(t("feed.savedSkill", { v: c.skill }));
+    if (c.city) parts.push(t("feed.savedCity", { v: c.city }));
+    if (c.minSalary) parts.push(t("feed.savedMin", { v: c.minSalary }));
+    if (c.sort !== "recent") parts.push(t("feed.savedSort", { v: t(c.sort === "salary" ? "feed.sortSalary" : "feed.sortPopular") }));
+    if (c.status !== "OPEN") parts.push(t("feed.savedStatus", { v: c.status === "ALL" ? t("status.ALL") : st("vstatus", c.status) }));
+    return parts.length > 0 ? parts.join(" · ") : t("feed.savedAll");
   }
 
   function save() {
     const summary = describe(current);
-    const name = window.prompt("Name this search:", summary === "all open vacancies" ? "" : summary);
+    const name = window.prompt(t("feed.savePrompt"), summary === t("feed.savedAll") ? "" : summary);
     if (!name?.trim()) return;
     const id = `s_${Date.now()}`;
     persist([{ id, name: name.trim().slice(0, 60), ...current }, ...items].slice(0, 20));
@@ -623,9 +633,9 @@ function SavedSearches({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Saved:</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t("feed.saved")}</span>
       {items.length === 0 && (
-        <span className="text-[11px] text-slate-500">none yet</span>
+        <span className="text-[11px] text-slate-500">{t("feed.savedNone")}</span>
       )}
       {items.map((s) => (
         <span
@@ -641,7 +651,7 @@ function SavedSearches({
           </button>
           <button
             onClick={() => remove(s.id)}
-            aria-label={`Delete ${s.name}`}
+            aria-label={t("feed.savedDeleteAria", { name: s.name })}
             className="text-fuchsia-200/60 hover:text-fuchsia-200"
           >
             ×
@@ -653,7 +663,7 @@ function SavedSearches({
           onClick={save}
           className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
         >
-          ★ Save current
+          {t("feed.saveCurrent")}
         </button>
       )}
     </div>

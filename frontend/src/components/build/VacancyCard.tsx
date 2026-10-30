@@ -7,7 +7,8 @@ import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { BookmarkButton } from "./BookmarkButton";
 import { deriveApplySource, deriveReferrerUserId } from "@/lib/build/applySource";
-import { regionLabel, WORK_MODE_LABELS } from "@/lib/build/geo";
+import { regionLabelIn, workModeLabelIn } from "@/lib/build/geo";
+import { useBuildT } from "@/app/build/i18n";
 
 export function VacancyCard({
   vacancy,
@@ -26,6 +27,7 @@ export function VacancyCard({
   const me = useBuildAuth((s) => s.user);
   const [applied, setApplied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { t, tn, lang, date, num } = useBuildT();
 
   const isClosed = vacancy.status === "CLOSED";
   const isOwner = me?.id === vacancy.clientId;
@@ -41,8 +43,8 @@ export function VacancyCard({
     : null;
   const expiringSoon = daysLeft != null && daysLeft >= 0 && daysLeft <= 7 && !isClosed;
   const city = vacancy.city || vacancy.projectCity || null;
-  const region = regionLabel(vacancy.region);
-  const workModeLabel = vacancy.workMode ? WORK_MODE_LABELS[vacancy.workMode] : null;
+  const region = regionLabelIn(vacancy.region, lang);
+  const workModeLabel = workModeLabelIn(vacancy.workMode, lang);
   const hasLocationLine = !!city || !!region || !!workModeLabel;
 
   async function quickApply(e: React.MouseEvent) {
@@ -79,23 +81,23 @@ export function VacancyCard({
       <div className="mb-2 flex flex-wrap gap-1">
         {isFeatured && (
           <div className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-1 text-xs font-bold uppercase tracking-wider text-amber-200">
-            ★ Featured
+            {t("vcard.featured")}
           </div>
         )}
         {isUrgent && !isClosed && (
           <div
             className="inline-flex items-center gap-1 rounded-full border border-red-400/60 bg-red-500/20 px-2 py-1 text-xs font-bold uppercase tracking-wider text-red-200 animate-pulse"
-            title={(vacancy as {urgentNote?: string|null}).urgentNote ?? "Срочный найм"}
+            title={(vacancy as {urgentNote?: string|null}).urgentNote ?? t("vcard.urgentTitle")}
           >
-            🚨 Срочно
+            {t("vcard.urgent")}
           </div>
         )}
         {hot && !isClosed && (
           <div
             className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-1 text-xs font-bold uppercase tracking-wider text-rose-200"
-            title="Trending — high applicant interest right now"
+            title={t("vcard.hotTitle")}
           >
-            🔥 Hot
+            {t("vcard.hot")}
           </div>
         )}
       </div>
@@ -121,15 +123,15 @@ export function VacancyCard({
           <div className="text-right">
             {vacancy.salary > 0 ? (
               <div className="text-sm font-bold text-emerald-300">
-                {vacancy.salary.toLocaleString("ru-RU")}
+                {num(vacancy.salary)}
                 <span className="ml-1 text-[11px] font-normal text-slate-400">
                   {vacancy.salaryCurrency || "₽"}
                 </span>
               </div>
             ) : (
-              <div className="text-xs text-slate-500">по договору</div>
+              <div className="text-xs text-slate-500">{t("vcard.negotiable")}</div>
             )}
-            {isClosed && <div className="mt-0.5 text-[10px] uppercase text-slate-500">закрыта</div>}
+            {isClosed && <div className="mt-0.5 text-[10px] uppercase text-slate-500">{t("vcard.closed")}</div>}
           </div>
           <BookmarkButton kind="VACANCY" targetId={vacancy.id} />
         </div>
@@ -137,7 +139,7 @@ export function VacancyCard({
       <p className="mt-2 line-clamp-2 text-sm text-slate-300">{vacancy.description}</p>
       <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-400">
         <span className="flex items-center gap-2">
-          {new Date(vacancy.createdAt).toLocaleDateString()}
+          {date(vacancy.createdAt)}
           {expiringSoon && (
             <span
               className={`rounded-full px-1.5 py-1 text-xs font-semibold ${
@@ -147,9 +149,9 @@ export function VacancyCard({
                     ? "bg-amber-500/20 text-amber-200"
                     : "bg-amber-500/10 text-amber-300"
               }`}
-              title={`Closes ${new Date(vacancy.expiresAt!).toLocaleDateString()}`}
+              title={t("common.closes", { date: date(vacancy.expiresAt!) })}
             >
-              {daysLeft === 0 ? "ends today" : `${daysLeft}d left`}
+              {daysLeft === 0 ? t("common.endsToday") : t("vcard.dLeft", { n: daysLeft! })}
             </span>
           )}
         </span>
@@ -157,10 +159,7 @@ export function VacancyCard({
           {typeof vacancy.applicationsCount === "number" && (
             <span className="flex items-center gap-1">
               <span>👥</span>
-              <span>{vacancy.applicationsCount} {
-                vacancy.applicationsCount === 1 ? "отклик" :
-                vacancy.applicationsCount < 5 ? "отклика" : "откликов"
-              }</span>
+              <span>{tn("vcard.apps", vacancy.applicationsCount)}</span>
             </span>
           )}
           {footerAction}
@@ -170,13 +169,13 @@ export function VacancyCard({
       {token && !isOwner && !isClosed && (
         <div className="mt-3 flex items-center gap-2" onClick={(e) => e.preventDefault()}>
           {applied ? (
-            <span className="text-xs font-semibold text-emerald-300">✓ Applied</span>
+            <span className="text-xs font-semibold text-emerald-300">{t("vcard.applied")}</span>
           ) : hasQuestions ? (
             <Link
               href={`/build/vacancy/${encodeURIComponent(vacancy.id)}`}
               className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/30"
             >
-              Apply →
+              {t("vcard.apply")}
             </Link>
           ) : (
             <button
@@ -184,7 +183,7 @@ export function VacancyCard({
               disabled={busy}
               className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/30 disabled:opacity-50"
             >
-              {busy ? "…" : "Quick apply"}
+              {busy ? "…" : t("vcard.quick")}
             </button>
           )}
         </div>

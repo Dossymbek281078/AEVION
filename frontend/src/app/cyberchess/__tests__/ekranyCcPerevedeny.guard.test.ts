@@ -1,0 +1,65 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { TRAINING_TEXT } from "../training/trainingText";
+import { CPI_TEXT } from "../cpi/cpiText";
+import { ECONOMY_TEXT } from "../economy/economyText";
+import { MATCHMAKING_TEXT } from "../matchmaking/matchmakingText";
+import { LEADERBOARD_TEXT } from "../leaderboard/leaderboardText";
+import { HISTORY_TEXT } from "../history/historyText";
+import { REPLAYS_TEXT } from "../replays/replaysText";
+import { SPECTATOR_TEXT } from "../spectator/spectatorText";
+import { DAILY_TEXT } from "../daily/dailyText";
+import { REPERTOIRE_TEXT } from "../repertoire/repertoireText";
+import { TOURNAMENTS_TEXT } from "../tournaments/tournamentsText";
+import { STUDIO_TEXT } from "../studio/studioText";
+import { OPENING_REPERTOIRE_TEXT } from "../openingRepertoireText";
+
+/**
+ * Экраны CyberChess под /cyberchess/* на /en были русскими (замер 24.10.2026 браузером:
+ * 221 чужая строка на 12 страницах). У каждой страницы свой словарь (ключ — строка из кода);
+ * данные страницы (списки тренажёров, факторов, примеров) переводятся при выводе.
+ * Сторож: каждый tt(L, "…") и каждое значение перечисленных полей данных имеет en и kk;
+ * английский текст без кириллицы. Новая надпись без перевода — красный.
+ */
+type Tr = Partial<Record<"en" | "ru" | "kk", string>>;
+const ЭКРАНЫ: Array<{ путь: string; словарь: Record<string, Tr>; поля: string[]; минимум?: number }> = [
+  { путь: "training/page.tsx", словарь: TRAINING_TEXT, поля: ["name", "desc", "label", "drillName", "reps"] },
+  { путь: "cpi/page.tsx", словарь: CPI_TEXT, поля: ["desc", "title", "note", "basis"] },
+  { путь: "economy/page.tsx", словарь: ECONOMY_TEXT, поля: ["title", "desc", "style", "bio", "label"] },
+  { путь: "matchmaking/page.tsx", словарь: MATCHMAKING_TEXT, поля: ["sub"] },
+  { путь: "leaderboard/page.tsx", словарь: LEADERBOARD_TEXT, поля: ["label"], минимум: 4 },
+  { путь: "history/page.tsx", словарь: HISTORY_TEXT, поля: ["bullet", "blitz", "rapid", "classical"], минимум: 4 },
+  // у /replays нет списков с текстом — только вызовы
+  { путь: "replays/page.tsx", словарь: REPLAYS_TEXT, поля: ["__нет_полей__"], минимум: 0 },
+  { путь: "spectator/page.tsx", словарь: SPECTATOR_TEXT, поля: ["__нет_полей__"], минимум: 0 },
+  // названия фигур для диктора — в одинарных кавычках, ловятся вызовом tt(L, PIECE_NAME[…])
+  { путь: "daily/page.tsx", словарь: DAILY_TEXT, поля: ["__нет_полей__"], минимум: 0 },
+  { путь: "repertoire/page.tsx", словарь: REPERTOIRE_TEXT, поля: ["label"], минимум: 4 },
+  // подписи фильтров — тернарники внутри tt(L, …): ловятся вызовами, данных-полей нет
+  { путь: "tournaments/page.tsx", словарь: TOURNAMENTS_TEXT, поля: ["__нет_полей__"], минимум: 0 },
+  { путь: "studio/page.tsx", словарь: STUDIO_TEXT, поля: ["label"], минимум: 15 },
+  { путь: "OpeningRepertoire.tsx", словарь: OPENING_REPERTOIRE_TEXT, поля: ["label"], минимум: 5 },
+];
+const ИСКЛЮЧЕНИЯ = new Set(["AEVION", "Chess training"]);
+
+describe.each(ЭКРАНЫ)("экран $путь", ({ путь, словарь, поля, минимум = 5 }) => {
+  const код = readFileSync(join(__dirname, "..", путь), "utf8");
+
+  it("каждый вызов и каждое значение данных — с en и kk", () => {
+    const вызовы = [...код.matchAll(/tt\(L, "([^"]+)"\)/g)].map((m) => m[1]);
+    const данные = [...код.matchAll(new RegExp(`\\b(?:${поля.join("|")}): "([^"]+)"`, "g"))]
+      .map((m) => m[1]).filter((v) => !ИСКЛЮЧЕНИЯ.has(v));
+    // знаменатель: прибор, не нашедший вызовов, был бы «чист» вслепую
+    expect(вызовы.length, "вызовов tt").toBeGreaterThanOrEqual(10);
+    expect(данные.length, "значений данных").toBeGreaterThanOrEqual(минимум);
+    const все = [...new Set([...вызовы, ...данные])];
+    for (const loc of ["en", "kk"] as const) {
+      expect(все.filter((k) => !словарь[k]?.[loc]), `без ${loc}`).toEqual([]);
+    }
+  });
+
+  it("английский текст без кириллицы", () => {
+    expect(Object.entries(словарь).filter(([, v]) => /[А-Яа-яЁё]/.test(v.en ?? "")).map(([k]) => k)).toEqual([]);
+  });
+});

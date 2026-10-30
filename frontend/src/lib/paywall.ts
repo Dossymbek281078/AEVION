@@ -76,8 +76,17 @@ export function isPaywallPayload(x: unknown): x is PaywallPayload {
  * HealthAI и QVenture, а перехватчик ловил только `upgrade_required`. Гость на
  * второй проверке HealthAI видел «проверка не удалась», в бюро — голый код
  * `free_quota_exceeded`; ссылки на оплату не было ни там, ни там.
+ *
+ * 🔴 30.10.2026 (окно Приложения-2·Бюро), приёмка прода 7d91f4884: гость на /qright
+ * после 3 бесплатных читал «Если подписка уже есть — войдите под почтой, которой
+ * платили», а кнопки входа в окне не было — PaywallModal рисует её только при
+ * authState "anonymous" и loginUrl, а ответ нормы их не несёт. Запрос ушёл без
+ * входа → `вход.анонимно`: окно получает кнопку входа с возвратом на ту же страницу.
  */
-export function стенаИзНормы(x: unknown): PaywallPayload | null {
+export function стенаИзНормы(
+  x: unknown,
+  вход?: { анонимно: boolean; next?: string },
+): PaywallPayload | null {
   if (!x || typeof x !== "object") return null;
   const o = x as Record<string, unknown>;
   if (o.error !== "free_quota_exceeded" || typeof o.module !== "string" || typeof o.upgradeUrl !== "string") {
@@ -89,8 +98,61 @@ export function стенаИзНормы(x: unknown): PaywallPayload | null {
     plan: "free",
     requiredTiers: ["lite", "medium", "full"],
     upgradeUrl: o.upgradeUrl,
-    message: typeof o.message === "string" ? o.message : "Бесплатная норма на этот месяц исчерпана.",
+    message: текстСтеныИзНормы(o.freePerMonth),
+    ...(вход?.анонимно
+      ? { authState: "anonymous" as const, loginUrl: `/auth?next=${encodeURIComponent(вход.next || "/")}` }
+      : {}),
   };
+}
+
+/** Ушёл ли запрос без входа (после подстановки токена в сВходом). */
+function безВхода(input: RequestInfo | URL, init?: RequestInit): boolean {
+  try {
+    if (typeof Request !== "undefined" && input instanceof Request && input.headers.has("authorization")) return false;
+    return !new Headers(init?.headers ?? undefined).has("authorization");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Текст стены по норме — свой, а не `message` сервера.
+ *
+ * 🔴 30.10.2026 (окно Приложения-2·Бюро), кадр прода 043aa4cc7, гость на /qright,
+ * 4-я регистрация: окно показало «На этом аккаунте покупки нет. Если вы оплачивали
+ * другим адресом — войдите под ним» — про 3 бесплатных в месяц ни слова. Текст
+ * сервера («…оформить: https://aevion.app/pricing») содержит сырой адрес, и
+ * PaywallModal такие тексты заменяет общей фразой про покупки. Здесь — правда о
+ * пределе без адресов (кнопки окна и так ведут к тарифам и входу), на языке страницы.
+ */
+export function языкСтены(): "ru" | "en" | "kk" {
+  if (typeof document === "undefined") return "ru";
+  const l = document.documentElement?.lang || "";
+  if (/^en/i.test(l)) return "en";
+  if (/^(kk|kz)/i.test(l)) return "kk";
+  return "ru";
+}
+
+function текстСтеныИзНормы(freePerMonth: unknown): string {
+  const норма = Number(freePerMonth);
+  const естьНорма = Number.isFinite(норма) && норма > 0;
+  const lang = языкСтены();
+  if (lang === "en") {
+    return (
+      (естьНорма ? `Your ${норма} free actions this month are used up. ` : "Your free actions this month are used up. ") +
+      "If you already have a subscription, sign in with the email you paid with. Otherwise a plan removes the limit."
+    );
+  }
+  if (lang === "kk") {
+    return (
+      (естьНорма ? `Осы айдағы ${норма} тегін әрекет таусылды. ` : "Осы айдағы тегін әрекеттер таусылды. ") +
+      "Жазылымыңыз болса — төлеген поштаңызбен кіріңіз. Болмаса — жоспар шектеуді алып тастайды."
+    );
+  }
+  return (
+    (естьНорма ? `Бесплатных действий в этом месяце: ${норма} — исчерпаны. ` : "Бесплатные действия в этом месяце исчерпаны. ") +
+    "Если подписка уже есть — войдите под почтой, которой платили. Если нет — план снимает предел."
+  );
 }
 
 /**
@@ -229,20 +291,22 @@ export function tierLabel(t: CanonicalTier): string {
  * Поэтому требование переводится в человеческую фразу, а не в ярлык тарифа.
  * Подпись ТЕКУЩЕГО плана (tierLabel) остаётся как была: там «Free» верно.
  */
-export function требуемоеСловами(tiers: CanonicalTier[]): string {
+export function требуемоеСловами(tiers: CanonicalTier[], lang: "ru" | "en" | "kk" = "ru"): string {
   const платные = tiers.filter((t) => t !== "free");
   // Только free в списке — платить не за что; прежний контракт (пустая строка)
   // сохранён: его закрепил существующий тест, и он поймал мою ошибку.
   if (!платные.length) return "";
   // 19.10.2026, один план (слово основателя): открывает план «AEVION Планета» на любом сроке.
   // «от Lite» — прежняя лестница тарифов, её больше нет на витрине; цена — из лесенки плана.
+  if (платные.includes("full") && lang === "en") return `the “AEVION Planet” plan, any term — from $${planetFromPerMonth()}/mo with a 12-month commitment (billed monthly), $${planetPricePerMonth("lite")}/mo with no commitment`;
+  if (платные.includes("full") && lang === "kk") return `«AEVION Планета» жоспары, кез келген мерзім — жылдық міндеттемемен айына $${planetFromPerMonth()}-ден (ай сайын есептен шығару), мерзімсіз айына $${planetPricePerMonth("lite")}`;
   if (платные.includes("full")) return `план «AEVION Планета», любой срок — от $${planetFromPerMonth()}/мес при обязательстве на год (списание ежемесячно), $${planetPricePerMonth("lite")}/мес без срока`;
   return платные.map(tierLabel).join(" / ");
 }
 
 /** Pretty tier list for display. С 08.10.2026 — человеческая фраза, см. выше. */
-export function formatTiers(tiers: CanonicalTier[]): string {
-  return требуемоеСловами(tiers);
+export function formatTiers(tiers: CanonicalTier[], lang: "ru" | "en" | "kk" = "ru"): string {
+  return требуемоеСловами(tiers, lang);
 }
 
 /* ───── Global fetch interceptor → window event ─────────────────────────────
@@ -324,7 +388,12 @@ export function installPaywallInterceptor(): void {
     if (res.status !== 402 || тихо) return res;
     try {
       const body = await res.clone().json();
-      const стена = isPaywallPayload(body) ? body : стенаИзНормы(body);
+      const стена = isPaywallPayload(body)
+        ? body
+        : стенаИзНормы(body, {
+            анонимно: безВхода(вход, настройки),
+            next: window.location.pathname + window.location.search,
+          });
       if (стена) triggerPaywall(стена, userInitiated);
     } catch {
       /* not a JSON upgrade_required body — leave it to the caller */

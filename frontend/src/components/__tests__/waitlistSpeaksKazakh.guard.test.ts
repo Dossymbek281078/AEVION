@@ -11,7 +11,9 @@ const FOOT = readFileSync(join(__dirname, "..", "FooterWaitlist.tsx"), "utf8");
 describe("лист ожидания говорит по-казахски", () => {
   test("у WaitlistCapture есть свой kk и язык kk выбирается", () => {
     expect(CAP).toMatch(/\n  kk: \{\n    title: "/);
-    expect(CAP).toContain('i18n?.lang === "kk" ? "kk"');
+    // 27.10.2026: выбор языка вынесен в языкФормы (ru/en/kk/ar свои, остальные — английский).
+    expect(CAP).toContain('if (l === "en" || l === "kk" || l === "ar") return l;');
+    expect(CAP).toContain("lang ?? языкФормы(i18n?.lang)");
     // знаменатель: тот же набор полей, что у ru
     const поля = (блок: string) => [...блок.matchAll(/^    (\w+):/gm)].map((m) => m[1]);
     const ru = CAP.slice(CAP.indexOf("  ru: {"), CAP.indexOf("  en: {"));

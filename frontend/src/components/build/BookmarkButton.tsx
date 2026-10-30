@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useBuildT } from "@/app/build/i18n";
 
 // Tiny client-side cache so we don't refetch the entire bookmarks list
 // every time a card mounts. Refreshed on first toggle. Module-scoped.
@@ -41,6 +42,7 @@ export function BookmarkButton({
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [pulse, setPulse] = useState(false);
+  const { t } = useBuildT();
 
   useEffect(() => {
     if (!token) return;
@@ -85,8 +87,8 @@ export function BookmarkButton({
           setBusy(false);
         }
       }}
-      title={saved ? "Remove from saved" : "Save"}
-      aria-label={saved ? "Remove from saved" : "Save"}
+      title={saved ? t("bmk.remove") : t("bmk.save")}
+      aria-label={saved ? t("bmk.remove") : t("bmk.save")}
       className={`inline-flex h-7 w-7 items-center justify-center rounded-md border text-sm transition duration-200 disabled:opacity-50 ${
         pulse ? "scale-125" : "scale-100"
       } ${

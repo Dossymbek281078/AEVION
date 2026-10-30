@@ -3,11 +3,13 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { denPoMestnomu } from "../denPoMestnomu";
-import { themeRu } from './themes';
+import { themeRu, themeEn } from './themes';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
 import { zadachaDlyaEkrana } from "../puzzleNormalize";
 import { track } from "@/lib/track";
+import { useCcI18n } from "../i18n";
+import { tt } from "./dailyText";
 
 type Puzzle = {
   /** Есть только у задач из банка; у встроенных его нет. */
@@ -117,11 +119,11 @@ const PIECE_NAME: Record<string, string> = {
 };
 
 /** Подпись клетки: координата, что на ней стоит и что с ней можно сделать. */
-function squareLabel(sq: string, piece: string, opts: { selected: boolean; legal: boolean }): string {
-  const what = piece ? (PIECE_NAME[piece] ?? 'фигура') : 'пусто';
+function squareLabel(sq: string, piece: string, opts: { selected: boolean; legal: boolean }, L: string): string {
+  const what = piece ? tt(L, PIECE_NAME[piece] ?? 'фигура') : tt(L, "пусто");
   const extra = [
-    opts.selected ? 'выбрана' : '',
-    opts.legal ? 'возможный ход' : '',
+    opts.selected ? tt(L, "выбрана") : '',
+    opts.legal ? tt(L, "возможный ход") : '',
   ].filter(Boolean).join(', ');
   return extra ? `${sq}, ${what}, ${extra}` : `${sq}, ${what}`;
 }
@@ -165,6 +167,7 @@ function formatTime(ms: number): string {
 }
 
 export default function DailyPuzzlePage() {
+  const { locale: L } = useCcI18n();
   /**
    * Задача дня приходит С СЕРВЕРА, а встроенный набор — только запасной путь.
    *
@@ -179,7 +182,12 @@ export default function DailyPuzzlePage() {
    * заменяет её. Обратный порядок дал бы пустую доску на секунду и белый экран
    * при недоступной сети.
    */
-  const [puzzle, setPuzzle] = useState<Puzzle>(() => кЗадаче(POOL[dayIndex() % POOL.length]));
+  // 27.10.2026: встроенная задача ДНЯ выбирается после монтирования, а не при первом рендере.
+  // Статический HTML страницы собран в день сборки, клиент считал день по местному времени —
+  // разный текст при гидратации (React #418 на /cyberchess/daily, сторож page-errors 27.10 04:04;
+  // замер 14:0x: SSR «Вилка 1200», клиент «Эндшпиль 1167»). Первый рендер одинаков у сервера и
+  // клиента (POOL[0]); день — эффектом; настоящая задача с сервера заменяет обе.
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => кЗадаче(POOL[0]));
   const [fromBank, setFromBank] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
   const [lbState, setLbState] = useState<'loading' | 'ok' | 'failed'>('loading');
@@ -225,7 +233,7 @@ export default function DailyPuzzlePage() {
         const rows = Array.isArray(j?.leaderboard) ? j.leaderboard : [];
         setLeaderboard(
           rows.map((e: Record<string, unknown>) => ({
-            name: String(e.name ?? e.userId ?? 'игрок'),
+            name: String(e.name ?? e.userId ?? tt(L, "игрок")),
             streak: Number(e.streak) || 0,
             country: String(e.country ?? '🌍'),
             score: typeof e.score === 'number' ? e.score : undefined,
@@ -265,7 +273,7 @@ export default function DailyPuzzlePage() {
           id: String(p.id),
           fen: String(p.fen),
           sol,
-          theme: String(p.theme ?? 'Тактика'),
+          theme: String(p.theme ?? 'Tactic'),
           rating: Number(p.rating) || 1200,
         }));
         // Признак берётся из ответа сервера, а не угадывается: сервер сам знает,
@@ -294,6 +302,10 @@ export default function DailyPuzzlePage() {
     };
   }, []);
 
+  // Задача дня по местному календарю — после монтирования (см. комментарий у useState выше).
+  // Стоит ПОСЛЕ проверки ходов серверной задачи: сторож dailySolutionGuarded считает порядок вызовов.
+  useEffect(() => { setPuzzle(кЗадаче(POOL[dayIndex() % POOL.length])); }, []);
+
   // Смена задачи обязана сбросить ВСЁ состояние решения. Иначе останутся ходы
   // и подсказки от прошлой позиции — тот же класс, что «ответы под чужими
   // вопросами».
@@ -306,8 +318,17 @@ export default function DailyPuzzlePage() {
     setSolIndex(0);
     setHintLevel(0);
     setHintsUsed(0);
-    setSolved(false);
-    setMessage('');
+    // Сброс не должен стирать «решено сегодня»: этот эффект идёт ПОСЛЕ чтения
+    // серии при монтировании и снова — когда приходит серверная задача, и без
+    // проверки решивший утром вечером видел задачу нерешённой.
+    let solvedToday = false;
+    let savedStreak = 0;
+    try {
+      solvedToday = localStorage.getItem('cc_daily_last_solved') === todayKey();
+      savedStreak = parseInt(localStorage.getItem('cc_daily_streak') || '0', 10) || 0;
+    } catch {}
+    setSolved(solvedToday);
+    setMessage(solvedToday ? tt(L, "Уже решено сегодня. Серия: {s}").replace("{s}", String(savedStreak)) : '');
     setPromoMove(null);
     setBotPending(false);
   }, [puzzle]);
@@ -332,7 +353,7 @@ export default function DailyPuzzlePage() {
       setBestStreak(rawBest);
       if (lastSolved === today) {
         setSolved(true);
-        setMessage(`Уже решено сегодня. Серия: ${curStreak}`);
+        setMessage(tt(L, "Уже решено сегодня. Серия: {s}").replace("{s}", String(curStreak)));
       }
     } catch {
       // ignore
@@ -402,9 +423,12 @@ export default function DailyPuzzlePage() {
   const finalizeSolved = useCallback(async (totalMs: number, hUsed: number) => {
     const today = todayKey();
     const usedHints = hUsed > 0;
+    let againToday = false;
+    try { againToday = localStorage.getItem('cc_daily_last_solved') === today; } catch {}
     // Streak: hint-use breaks streak gain but does not zero it. Per spec:
     // "Использование hint = streak break (но не reset)" → we interpret as: streak stays same, no +1.
-    const newStreak = usedHints ? streak : streak + 1;
+    // Повторное решение в тот же день серию не растит.
+    const newStreak = usedHints || againToday ? streak : streak + 1;
     const newBest = Math.max(bestStreak, newStreak);
     try {
       localStorage.setItem('cc_daily_streak', String(newStreak));
@@ -419,8 +443,8 @@ export default function DailyPuzzlePage() {
     stopTimer();
     setMessage(
       usedHints
-        ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Серия не растёт, но и не сбрасывается: ${newStreak}.`
-        : `Поздравляем! Решено за ${formatTime(totalMs)}. Серия +1 = ${newStreak}. Рекорд: ${newBest}`
+        ? tt(L, "Решено за {t} с подсказками ({h}). Серия не растёт, но и не сбрасывается: {s}.").replace("{t}", String(formatTime(totalMs))).replace("{h}", String(hUsed)).replace("{s}", String(newStreak))
+        : tt(L, "Поздравляем! Решено за {t}. Серия +1 = {s}. Рекорд: {b}").replace("{t}", String(formatTime(totalMs))).replace("{s}", String(newStreak)).replace("{b}", String(newBest))
     );
 
     // Отправка на сервер. Изменилось два раза за 19.08.2026, и оба важны.
@@ -467,8 +491,8 @@ export default function DailyPuzzlePage() {
           if (j.streak !== newStreak) {
             setMessage(
               usedHints
-                ? `Решено за ${formatTime(totalMs)} с подсказками (${hUsed}). Серия не растёт: ${j.streak}.`
-                : `Поздравляем! Решено за ${formatTime(totalMs)}. Серия: ${j.streak}.`
+                ? tt(L, "Решено за {t} с подсказками ({h}). Серия не растёт: {s}.").replace("{t}", String(formatTime(totalMs))).replace("{h}", String(hUsed)).replace("{s}", String(j.streak))
+                : tt(L, "Поздравляем! Решено за {t}. Серия: {s}.").replace("{t}", String(formatTime(totalMs))).replace("{s}", String(j.streak))
             );
           }
         }
@@ -484,7 +508,7 @@ export default function DailyPuzzlePage() {
         //
         // Технический код (moves_required, wrong_day) не показываем: сервер шлёт
         // рядом человеческую подсказку, её и читаем, а код уходит в консоль.
-        let podskazka = 'Сервер не засчитал решение. Попробуйте ещё раз.';
+        let podskazka = tt(L, "Сервер не засчитал решение. Попробуйте ещё раз.");
         try {
           const j = (await r.json()) as { error?: string; hint?: string };
           if (typeof j.hint === 'string' && j.hint) podskazka = j.hint;
@@ -551,7 +575,7 @@ export default function DailyPuzzlePage() {
       moveRes = null;
     }
     if (!moveRes) {
-      setMessage('Невозможный ход. Попробуй другой.');
+      setMessage(tt(L, "Невозможный ход. Попробуй другой."));
       return;
     }
 
@@ -567,7 +591,7 @@ export default function DailyPuzzlePage() {
       chessRef.current = c2;
       refreshBoard();
       setLastMove(null);
-      setMessage(`Не тот ход для этой задачи. Ожидался другой. Попробуй ещё раз.`);
+      setMessage(tt(L, "Не тот ход для этой задачи. Ожидался другой. Попробуй ещё раз."));
       return;
     }
 
@@ -586,7 +610,7 @@ export default function DailyPuzzlePage() {
     // Check if next move is bot's reply: in pool, player plays sol[0], sol[2], sol[4], ...
     // Indices 1, 3, ... are bot replies.
     if (nextIdx % 2 === 1 && nextIdx < puzzle.sol.length) {
-      setMessage(`Верно. Бот отвечает...`);
+      setMessage(tt(L, "Верно. Бот отвечает..."));
       playBotReply(puzzle.sol, nextIdx);
       // After bot reply, advance solIndex past bot's move
       window.setTimeout(() => {
@@ -605,11 +629,11 @@ export default function DailyPuzzlePage() {
           const totalMs = startedAtRef.current != null ? Date.now() - startedAtRef.current : timeMs;
           finalizeSolved(totalMs, hintsUsed);
         } else {
-          setMessage('Твой ход.');
+          setMessage(tt(L, "Твой ход."));
         }
       }, 600);
     } else {
-      setMessage('Верно. Продолжай.');
+      setMessage(tt(L, "Верно. Продолжай."));
     }
   }, [solved, puzzle.sol, solIndex, hintsUsed, timeMs, refreshBoard, startTimerIfNeeded, playBotReply, finalizeSolved]);
 
@@ -675,11 +699,11 @@ export default function DailyPuzzlePage() {
     const exp = puzzle.sol[solIndex];
     if (!exp) return;
     if (next === 1) {
-      setMessage(`Подсказка 1/3: ищи ход в районе клетки ${exp.slice(0, 2)}.`);
+      setMessage(tt(L, "Подсказка 1/3: ищи ход в районе клетки {c}.").replace("{c}", String(exp.slice(0, 2))));
     } else if (next === 2) {
-      setMessage(`Подсказка 2/3: ход начинается с ${exp.slice(0, 2)}.`);
+      setMessage(tt(L, "Подсказка 2/3: ход начинается с {c}.").replace("{c}", String(exp.slice(0, 2))));
     } else {
-      setMessage(`Подсказка 3/3: полный ход — ${exp}.`);
+      setMessage(tt(L, "Подсказка 3/3: полный ход — {m}.").replace("{m}", String(exp)));
     }
   }
 
@@ -691,18 +715,18 @@ export default function DailyPuzzlePage() {
     setLegalDests([]);
     setLastMove(null);
     setSolIndex(0);
-    setMessage('Доска сброшена. Твой ход.');
+    setMessage(tt(L, "Доска сброшена. Твой ход."));
     // Note: timer continues; hints are kept (penalty stays)
   }
 
   async function sharePuzzle() {
-    const text = `Я решил puzzle of the day на AEVION CyberChess streak ${streak}! 🧩 #AEVION`;
+    const text = tt(L, "Я решил задачу дня на AEVION CyberChess, серия {s}! 🧩 #AEVION").replace("{s}", String(streak));
     try {
       await navigator.clipboard.writeText(text);
       setShareCopied(true);
       window.setTimeout(() => setShareCopied(false), 2000);
     } catch {
-      setMessage('Не удалось скопировать. Текст: ' + text);
+      setMessage(tt(L, "Не удалось скопировать. Текст:") + ' ' + text);
     }
   }
 
@@ -744,10 +768,10 @@ export default function DailyPuzzlePage() {
             WebkitTextFillColor: 'transparent',
           }}
         >
-          🧩 Задача дня
+          {tt(L, "🧩 Задача дня")}
         </h1>
         <p style={{ color: '#9aa0b4', margin: '0 0 24px 0', fontSize: 14 }}>
-          Одна задача в день. Решай каждый день — держи серию. Многоходовые задачи: бот отвечает за противника.
+          {tt(L, "Одна задача в день. Решай каждый день — держи серию. Многоходовые задачи: бот отвечает за противника.")}
         </p>
 
         {/* Перенос вместо сетки: жёсткие 360px боковой колонки плюс отступ 24 не
@@ -767,17 +791,17 @@ export default function DailyPuzzlePage() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: 12, color: '#9aa0b4' }}>Тема</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{themeRu(puzzle.theme)}</div>
+                  <div style={{ fontSize: 12, color: '#9aa0b4' }}>{tt(L, "Тема")}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#00ff9d' }}>{L === 'en' ? themeEn(puzzle.theme) : themeRu(puzzle.theme)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 12, color: '#9aa0b4' }}>Время</div>
+                  <div style={{ fontSize: 12, color: '#9aa0b4' }}>{tt(L, "Время")}</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: '#ffd84d', fontVariantNumeric: 'tabular-nums' }}>
                     ⏱ {formatTime(timeMs)}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12, color: '#9aa0b4' }}>Рейтинг</div>
+                  <div style={{ fontSize: 12, color: '#9aa0b4' }}>{tt(L, "Рейтинг")}</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: '#b56bff' }}>{puzzle.rating}</div>
                 </div>
               </div>
@@ -792,8 +816,8 @@ export default function DailyPuzzlePage() {
                 style={{ fontSize: 12, color: fromBank ? '#9aa0b4' : '#ffd84d', marginBottom: 10 }}
               >
                 {fromBank
-                  ? 'Задача дня из общего банка — одна и та же у всех игроков сегодня'
-                  : 'Резервная задача: банк задач не ответил, у других игроков сегодня может быть другая'}
+                  ? tt(L, "Задача дня из общего банка — одна и та же у всех игроков сегодня")
+                  : tt(L, "Резервная задача: банк задач не ответил, у других игроков сегодня может быть другая")}
               </div>
 
               <div style={{ position: 'relative' }}>
@@ -802,7 +826,7 @@ export default function DailyPuzzlePage() {
                   // подряд, не сказав, что это. Роль grid не ставим намеренно —
                   // она потребовала бы строк и ячеек по спецификации, а
                   // полсделанной семантики хуже honest-простой.
-                  aria-label="Шахматная доска задачи дня"
+                  aria-label={tt(L, "Шахматная доска задачи дня")}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(8, 1fr)',
@@ -838,7 +862,7 @@ export default function DailyPuzzlePage() {
                           type="button"
                           key={`${r}-${c}`}
                           onClick={() => onCellClick(r, c)}
-                          aria-label={squareLabel(sq, piece, { selected: !!sel, legal: !!legal })}
+                          aria-label={squareLabel(sq, piece, { selected: !!sel, legal: !!legal }, L)}
                           aria-pressed={!!sel}
                           disabled={solved || botPending}
                           style={{
@@ -892,7 +916,7 @@ export default function DailyPuzzlePage() {
                       borderRadius: 8,
                     }}
                   >
-                    <div style={{ color: '#e6e6f0', fontWeight: 700 }}>Выбери фигуру для превращения</div>
+                    <div style={{ color: '#e6e6f0', fontWeight: 700 }}>{tt(L, "Выбери фигуру для превращения")}</div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       {(['q', 'r', 'b', 'n'] as const).map((p) => (
                         <button
@@ -925,7 +949,7 @@ export default function DailyPuzzlePage() {
                         fontSize: 12,
                       }}
                     >
-                      Отмена
+                      {tt(L, "Отмена")}
                     </button>
                   </div>
                 )}
@@ -945,9 +969,9 @@ export default function DailyPuzzlePage() {
                     cursor: solved || hintLevel === 3 ? 'not-allowed' : 'pointer',
                     fontSize: 14,
                   }}
-                  title="3 уровня подсказки: район → клетка-начало → полный ход. Каждая тратит одну подсказку и снимает прибавку к серии за эту задачу."
+                  title={tt(L, "3 уровня подсказки: район → клетка-начало → полный ход. Каждая тратит одну подсказку и снимает прибавку к серии за эту задачу.")}
                 >
-                  💡 Подсказка ({hintLevel}/3)
+                  {tt(L, "💡 Подсказка")} ({hintLevel}/3)
                 </button>
                 <button
                   onClick={resetBoard}
@@ -963,7 +987,7 @@ export default function DailyPuzzlePage() {
                     fontSize: 14,
                   }}
                 >
-                  ↺ Сброс
+                  {tt(L, "↺ Сброс")}
                 </button>
                 <button
                   onClick={sharePuzzle}
@@ -978,7 +1002,7 @@ export default function DailyPuzzlePage() {
                     fontSize: 14,
                   }}
                 >
-                  {shareCopied ? '✓ Скопировано!' : '📤 Поделиться'}
+                  {shareCopied ? tt(L, "✓ Скопировано!") : tt(L, "📤 Поделиться")}
                 </button>
               </div>
 
@@ -1008,7 +1032,7 @@ export default function DailyPuzzlePage() {
                   padding: 16,
                 }}
               >
-                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Текущая серия</div>
+                <div style={{ fontSize: 12, color: '#9aa0b4' }}>{tt(L, "Текущая серия")}</div>
                 <div style={{ fontSize: 32, fontWeight: 800, color: '#00ff9d' }}>🔥 {streak}</div>
               </div>
               <div
@@ -1019,7 +1043,7 @@ export default function DailyPuzzlePage() {
                   padding: 16,
                 }}
               >
-                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Лучшая серия</div>
+                <div style={{ fontSize: 12, color: '#9aa0b4' }}>{tt(L, "Лучшая серия")}</div>
                 <div style={{ fontSize: 32, fontWeight: 800, color: '#b56bff' }}>🏆 {bestStreak}</div>
               </div>
               <div
@@ -1030,7 +1054,7 @@ export default function DailyPuzzlePage() {
                   padding: 16,
                 }}
               >
-                <div style={{ fontSize: 12, color: '#9aa0b4' }}>Подсказки</div>
+                <div style={{ fontSize: 12, color: '#9aa0b4' }}>{tt(L, "Подсказки")}</div>
                 <div style={{ fontSize: 32, fontWeight: 800, color: '#ffd84d' }}>💡 {hintsUsed}</div>
               </div>
             </div>
@@ -1056,26 +1080,25 @@ export default function DailyPuzzlePage() {
                 месяц не заходил. Название исправлено, потому что менять правило
                 хуже: таблица, ежедневно вычёркивающая людей, отталкивает. */}
             <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px 0', color: '#b56bff' }}>
-              🏆 Лучшие серии — топ-100
+              {tt(L, "🏆 Лучшие серии — топ-100")}
             </h2>
             <div style={{ fontSize: 11, color: '#9aa0b4', margin: '0 0 10px 0' }}>
-              Личный рекорд каждого игрока, а не серия на сегодня.
+              {tt(L, "Личный рекорд каждого игрока, а не серия на сегодня.")}
             </div>
             {/* Три состояния различаются СЛОВАМИ. Пустой список и отказ
                 выглядели бы одинаково — пустой таблицей, — а для человека это
                 разные вещи: в первом случае он первый, во втором мы не знаем. */}
             {lbState === 'loading' && (
-              <div style={{ fontSize: 13, color: '#9aa0b4' }}>Загружаем таблицу…</div>
+              <div style={{ fontSize: 13, color: '#9aa0b4' }}>{tt(L, "Загружаем таблицу…")}</div>
             )}
             {lbState === 'failed' && (
               <div data-testid="daily-lb-failed" style={{ fontSize: 13, color: '#ffd84d' }}>
-                Таблицу не удалось загрузить. Это не значит, что она пуста — мы просто не смогли
-                спросить сервер.
+                {tt(L, "Таблицу не удалось загрузить. Это не значит, что она пуста — мы просто не смогли спросить сервер.")}
               </div>
             )}
             {lbState === 'ok' && leaderboard.length === 0 && (
               <div data-testid="daily-lb-empty" style={{ fontSize: 13, color: '#9aa0b4' }}>
-                Сегодня задачу ещё никто не решил. Решите — и будете первым.
+                {tt(L, "Сегодня задачу ещё никто не решил. Решите — и будете первым.")}
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

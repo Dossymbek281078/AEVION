@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
@@ -680,6 +681,7 @@ export default function QAIPage() {
                 </div>
               )}
 
+              <AiBadge />
               {messages.map((msg) => (
                 <div
                   key={msg.id}

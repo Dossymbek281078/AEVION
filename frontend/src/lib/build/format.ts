@@ -26,7 +26,16 @@ export function currencySymbol(currency?: string | null): string {
 export function formatSalary(
   amount?: number | null,
   currency?: string | null,
+  lang?: string | null,
 ): string {
   if (!amount || amount <= 0) return "—";
-  return `${currencySymbol(currency)}${amount.toLocaleString()}`;
+  return `${currencySymbol(currency)}${amount.toLocaleString(lang ? localeOf(lang) : undefined)}`;
+}
+
+/**
+ * Локаль чисел и дат по языку страницы (29.10.2026): на kk было «2026-10-29» и «$1,000»
+ * (локаль браузера), на ru — «29.10.2026». Язык без своей локали → en-US.
+ */
+export function localeOf(lang: string | null | undefined): string {
+  return lang === "ru" ? "ru-RU" : lang === "kk" ? "kk-KZ" : "en-US";
 }

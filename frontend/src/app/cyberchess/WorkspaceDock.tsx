@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useCcI18n } from "./i18n";
 
 type Section = "chessy" | "daily" | "notes" | "links" | "hotkeys";
 
@@ -27,18 +28,21 @@ type Props = {
 
 const NOTES_STORAGE = "aevion_chess_dock_notes_v1";
 
+// label — ключ словаря i18n.ts (подпись и aria-label шли по-русски на /en: замер 29.10).
 // imya: подпись — имя продукта, переводить её нельзя. Живой перевод
 // получал «Chessy» на КАЖДОМ заходе (замер 02.09.2026: три отправки с
 // экрана анализа) — это платный вызов и риск, что вернётся «Чесси».
 const SECTIONS: { id: Section; icon: string; label: string; imya?: boolean }[] = [
   { id: "chessy",  icon: "💰", label: "Chessy", imya: true },
-  { id: "daily",   icon: "🎯", label: "Задача дня" },
-  { id: "notes",   icon: "📝", label: "Заметки" },
-  { id: "links",   icon: "🔗", label: "Ссылки" },
-  { id: "hotkeys", icon: "⌨", label: "Клавиши" },
+  { id: "daily",   icon: "🎯", label: "start.daily.title" },
+  { id: "notes",   icon: "📝", label: "dock.notes" },
+  { id: "links",   icon: "🔗", label: "dock.links" },
+  { id: "hotkeys", icon: "⌨", label: "dock.hotkeys" },
 ];
 
 export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenChessyShop }: Props) {
+  const { t } = useCcI18n();
+  const lab = (s: { label: string; imya?: boolean }) => s.imya ? s.label : t(s.label);
   const [open, setOpen] = useState<Section | null>(null);
   const [notes, setNotes] = useState("");
 
@@ -78,7 +82,7 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
         {SECTIONS.map(s => {
           const active = open === s.id;
           return (
-            <button key={s.id} onClick={() => toggle(s.id)} title={s.label} aria-label={s.label} aria-pressed={active}
+            <button key={s.id} onClick={() => toggle(s.id)} title={lab(s)} aria-label={lab(s)} aria-pressed={active}
               translate={s.imya ? "no" : undefined}
               className={s.imya ? "notranslate" : undefined}
               style={{
@@ -108,10 +112,10 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: "#fbbf24", letterSpacing: 0.5 }}>
-              {SECTIONS.find(s => s.id === open)?.icon} {SECTIONS.find(s => s.id === open)?.label}
+              {SECTIONS.find(s => s.id === open)?.icon} {(() => { const s = SECTIONS.find(x => x.id === open); return s ? lab(s) : ""; })()}
             </span>
             <span style={{ flex: 1 }} />
-            <button onClick={() => setOpen(null)} aria-label="Закрыть панель"
+            <button onClick={() => setOpen(null)} aria-label={t("oshibka.close")}
               style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 16, cursor: "pointer", padding: 0 }}>✕</button>
           </div>
 
@@ -150,7 +154,7 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
 
           {open === "notes" && (
             <div>
-              <textarea aria-label="Заметки"
+              <textarea aria-label={t("dock.notes")}
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Быстрые заметки — сохраняются автоматически…"

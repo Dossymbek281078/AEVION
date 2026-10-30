@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
@@ -136,6 +137,7 @@ function WidgetContent() {
             </div>
           </div>
         )}
+        <AiBadge />
         {messages.map((m, i) => (
           <div key={i} style={{
             display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start",

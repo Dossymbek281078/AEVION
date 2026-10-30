@@ -1546,7 +1546,7 @@ export default function HealthAIPage() {
 
         {/* Paddle upgrade banner */}
         <div style={{ marginBottom: 16 }}>
-          <PaddleUpgradeButton variant="banner" appId="healthai" label="Разблокировать HealthAI Pro" />
+          <PaddleUpgradeButton variant="banner" appId="healthai" />
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>

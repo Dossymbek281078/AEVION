@@ -83,7 +83,8 @@ export default function ConstitutionPricingPage() {
         t("constitution.pricing.tier.pro.feature.support"),
         t("constitution.pricing.tier.pro.feature.allFree"),
       ],
-      cta: "Choose a term →",
+      // 27.10.2026: была английская подпись на любом языке
+      cta: t("constitution.pricing.tier.pro.cta"),
       ctaHref: PLANET_PRICING,
       highlight: true,
     },

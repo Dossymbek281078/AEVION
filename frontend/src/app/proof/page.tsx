@@ -219,7 +219,7 @@ node demo-local.mjs                                   # sign 3 files, alter one 
             Shamir <b>2-of-3</b> custody of the proof records, with Ed25519.
           </Row>
           <Row>
-            Public verification endpoint: anyone can fetch a record and recheck it offline.
+            Public verification address: anyone can fetch a record and recheck it offline.
           </Row>
         </ul>
         <p style={{ color: "#64748b", fontSize: 14, lineHeight: 1.7, marginBottom: 26 }}>

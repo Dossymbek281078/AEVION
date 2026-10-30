@@ -4,6 +4,7 @@ import {
   localizeModuleOneLiner,
   localizeNotes,
   localizePromoDescription,
+  localizeQuoteText,
   localizeTier,
   localizeTrustNumber,
   sameDigits,
@@ -99,6 +100,20 @@ describe("pricingLocalize: примечания, промо, модули, до�
       expect(sameDigits(m.oneLiner, en), `${m.id}: числа`).toBe(true);
     }
     expect(localizeModuleOneLiner("qventure", "совет 5 ролей", "en")).toBe("совет 5 ролей"); // число разошлось → русский
+  });
+
+  it("kk: описания модулей — английские, не русские (правило сайта: нет казахского → en). Замер 31.10: 43 русских на /pricing", () => {
+    for (const m of pricing.modules) {
+      expect(localizeModuleOneLiner(m.id, m.oneLiner, "kk"), `${m.id}: «${m.oneLiner}»`).toBe(localizeModuleOneLiner(m.id, m.oneLiner, "en"));
+    }
+    expect(localizeModuleOneLiner("cyberchess", "Шахматная платформа нового поколения", "ru")).toBe("Шахматная платформа нового поколения");
+  });
+
+  it("kk: строка калькулятора — английская (как en), на ru — прежняя", () => {
+    const ru = "План «AEVION Планета» — 3 месяца, списание ежемесячно по $225";
+    expect(localizeQuoteText(ru, "kk")).toBe(localizeQuoteText(ru, "en"));
+    expect(localizeQuoteText(ru, "kk")).not.toMatch(CYRILLIC);
+    expect(localizeQuoteText(ru, "ru")).toBe(ru);
   });
 
   it("en: подписи блока доверия переведены вместе с подсказками", () => {

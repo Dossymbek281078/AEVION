@@ -15,17 +15,19 @@ import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { getAuthToken } from "@/lib/auth";
 import { TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetPricePerMonth, planetTotal, planetFromPerMonth } from "@/lib/termPricing";
-import { useI18n } from "@/lib/i18n";
+import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
 import { shagPervogoEkrana, podklyuchitSobytiyaPervogoEkrana } from "@/lib/sobytiyaPervogoEkrana";
 import { productById, fromPerMonthOf, PRICING_TIERS_LIST } from "@/lib/products";
+import { englishHref } from "@/lib/englishPages";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { stackForIdea, даннымНуженСервер, доступенРежимПриложения, стекДляРежима,
   type РежимПостройки } from "@/lib/devhubStackChoice";
-import { indexCapabilities, isCapabilityBlocked, type CapabilityIndex } from "@/lib/devhubCapabilities";
+import { capabilityLabel, indexCapabilities, isCapabilityBlocked, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { DEVHUB_EXAMPLES, exampleText } from "./examples";
 import { primerDlyaPustogoPolya, ПОЛЕ_ОПИСАНИЯ_ФОН, ПОЛЕ_ОПИСАНИЯ_ТЕКСТ } from "@/lib/devhubPervyyShag";
 
@@ -212,7 +214,11 @@ export default function DevHubPage() {
   const t = useDevhubT();
   // Цена и ссылка на кассу — из одного источника с бэкендом, см. блок ниже.
   const devhubProduct = productById("aevion-planet"); // 19.10: цена в герое — план, а не отдельный DevHub
-  const { lang } = useI18n();
+  // 30.10.2026: язык кадра — серверный, пока провайдер не определил свой (см. useDevhubT).
+  const lang = языкКадра(useI18nOptional(), useServerLang());
+  // 30.10.2026: на /en/devhub конструктор вёл в /pricing без языка — гость с русским браузером
+  // попадал на русские цены [приёмка прода 7d91f4884]. Ссылки в цены несут язык страницы; ru — как было.
+  const pricingHrefWithLang = (h: string) => (lang === "en" ? englishHref(h) : lang === "kk" ? h.replace(/(#|$)/, (m) => (h.includes("?") ? "&" : "?") + "lang=kk" + m) : h);
   /* Заголовок первого экрана по метке ролика (?c=). Метка живёт в window, поэтому на сервере и в
      первой отрисовке — общее обещание, после монтирования — обещание ролика (13.10.2026). */
   const [обещание, setОбещание] = useState(() => zagolovokPoMetke(lang, null));
@@ -805,7 +811,7 @@ export default function DevHubPage() {
                 .replace("{a}", `$${fromPerMonthOf(devhubProduct)}`)
                 .replace("{b}", `$${devhubProduct.priceUsd}`)}{" "}
               <Link
-                href={devhubProduct.href}
+                href={pricingHrefWithLang(devhubProduct.href)}
                 style={{ color: "#5eead4", fontWeight: 700, whiteSpace: "nowrap" }}
               >
                 {t("hero.priceCta")} →
@@ -1113,7 +1119,7 @@ export default function DevHubPage() {
                   на длинных сроках месяц дешевле, и это видно на странице цен. */}
               {STUDIO_PRO ? (
               <a
-                href={PLANET_TERMS_LIST}
+                href={pricingHrefWithLang(PLANET_TERMS_LIST)}
                 // Выбор срока на /pricing; событие оставлено здесь, чтобы видеть,
                 // сколько человек пошло покупать именно со страницы DevHub.
                 onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub", meta: { processor: STUDIO_PRO.processor } })}
@@ -1270,7 +1276,7 @@ export default function DevHubPage() {
                     */}
                   {off.map((c, i) => (
                     <span key={c.id} title={capabilityOffReason(c.status, c.offCode, t)}>
-                      <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
+                      <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{capabilityLabel(c.id, c.name, lang)}</span>
                       {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}
                     </span>
                   ))}

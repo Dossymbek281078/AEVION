@@ -12,8 +12,10 @@ export default async function Image() {
       badge: "RESEARCH",
       title: "Out of the loop, on purpose.",
       accent: "on purpose.",
-      subtitle: "Behavioral analytics · anonymous group support · early-warning · QGood escalation",
-      pills: ["🎯 Trigger-детектор", "👥 Anonymous", "🚨 Early-warning", "🩺 Bridge → QGood"],
+      // 28.10.2026: прежде «behavioral analytics · group support · early-warning · QGood escalation» — ничего из этого
+      // в PsyApp нет (в planningStubs это «planned»). Здесь — то, что работает на проде.
+      subtitle: "Anonymous day counter · trigger journal · AI support · daily affirmations",
+      pills: ["📅 Day counter", "📓 Trigger journal", "💬 AI support", "👤 Anonymous"],
     },
     "rose",
   );

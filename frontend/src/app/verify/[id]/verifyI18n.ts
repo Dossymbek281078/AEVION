@@ -11,6 +11,22 @@
 import type { Lang } from "@/lib/i18n-data";
 
 const RU: Record<string, string> = {
+  "SHA-256 verified": "SHA-256 сошёлся",
+  "SHA-256 verified under the v1 rule — location not covered": "SHA-256 сошёлся по правилу v1 — место регистрации хешем не покрыто",
+  "HMAC-SHA256 re-verified": "HMAC-SHA256 пересчитан и сошёлся",
+  "Hash mismatch": "Хеш не сошёлся",
+  "Signature mismatch": "Подпись не сошлась",
+  "Verification error": "Ошибка проверки",
+  "Legacy row — signedAt not recorded": "Старая запись — время подписи не сохранено",
+  "Legacy shield (pre-v2)": "Старый щит (до v2)",
+  "Music / Audio": "Музыка / Аудио",
+  "Code / Software": "Код / Программы",
+  "Design / Visual": "Дизайн / Графика",
+  "Text / Article": "Текст / Статья",
+  "Video / Film": "Видео / Фильм",
+  "Idea / Concept": "Идея / Концепция",
+  "Other": "Другое",
+  "Certificate not found or invalid": "Сертификат не найден или недействителен",
   "Verifying certificate...": "Проверяем сертификат…",
   "Verification Failed": "Проверка не пройдена",
   "Certificate not found": "Сертификат не найден",
@@ -141,6 +157,22 @@ const RU: Record<string, string> = {
 };
 
 const KK: Record<string, string> = {
+  "SHA-256 verified": "SHA-256 сәйкес келді",
+  "SHA-256 verified under the v1 rule — location not covered": "SHA-256 v1 ережесі бойынша сәйкес келді — тіркеу орны хешке кірмейді",
+  "HMAC-SHA256 re-verified": "HMAC-SHA256 қайта есептелді, сәйкес келді",
+  "Hash mismatch": "Хеш сәйкес келмеді",
+  "Signature mismatch": "Қолтаңба сәйкес келмеді",
+  "Verification error": "Тексеру қатесі",
+  "Legacy row — signedAt not recorded": "Ескі жазба — қол қою уақыты сақталмаған",
+  "Legacy shield (pre-v2)": "Ескі қалқан (v2-ге дейін)",
+  "Music / Audio": "Музыка / Аудио",
+  "Code / Software": "Код / Бағдарламалар",
+  "Design / Visual": "Дизайн / Графика",
+  "Text / Article": "Мәтін / Мақала",
+  "Video / Film": "Видео / Фильм",
+  "Idea / Concept": "Идея / Тұжырым",
+  "Other": "Басқа",
+  "Certificate not found or invalid": "Сертификат табылмады немесе жарамсыз",
   "Verifying certificate...": "Сертификат тексерілуде…",
   "Verification Failed": "Тексеру өтпеді",
   "Certificate not found": "Сертификат табылмады",
@@ -272,8 +304,41 @@ export const VERIFY_DICT: Partial<Record<Lang, Record<string, string>>> = { ru: 
 /** Перевод строки страницы проверки; нет перевода — английский источник как есть. */
 export function tv(lang: Lang | undefined, en: string): string {
   const d = lang ? VERIFY_DICT[lang] : undefined;
-  return (d && d[en]) || en;
+  if (!d) return en;
+  if (d[en]) return d[en];
+  // Строки плиток с подставленными значениями (версия ключа, статус, отпечаток).
+  const p = PATTERNS[lang as "ru" | "kk"];
+  if (p) {
+    for (const [re, fn] of p) {
+      const m = en.match(re);
+      if (m) return fn(m);
+    }
+  }
+  return en;
 }
+
+const STATUS_RU: Record<string, string> = { active: "активен", inactive: "не активен", revoked: "отозван" };
+const STATUS_KK: Record<string, string> = { active: "белсенді", inactive: "белсенді емес", revoked: "қайтарылған" };
+
+type Rule = [RegExp, (m: RegExpMatchArray) => string];
+const PATTERNS: Record<"ru" | "kk", Rule[]> = {
+  ru: [
+    [/^Signed under v(\d+) · current key$/, (m) => `Подписано ключом v${m[1]} · текущий ключ`],
+    [/^Signed under v(\d+) · current is v(\d+) · key rotated, signature still valid$/, (m) => `Подписано ключом v${m[1]} · текущий v${m[2]} · ключ сменили, подпись по-прежнему верна`],
+    [/^Status: (.+)$/, (m) => `Статус: ${STATUS_RU[m[1]] || m[1]}`],
+    [/^Verified · author key (.+)$/, (m) => `Сошлось · ключ автора ${m[1]}`],
+    [/^Signature mismatch · purported key (.+)$/, (m) => `Подпись не сошлась · заявленный ключ ${m[1]}`],
+    [/^(active|inactive|revoked)$/, (m) => STATUS_RU[m[1]]],
+  ],
+  kk: [
+    [/^Signed under v(\d+) · current key$/, (m) => `v${m[1]} кілтімен қол қойылған · ағымдағы кілт`],
+    [/^Signed under v(\d+) · current is v(\d+) · key rotated, signature still valid$/, (m) => `v${m[1]} кілтімен қол қойылған · ағымдағы v${m[2]} · кілт ауыстырылған, қолтаңба жарамды`],
+    [/^Status: (.+)$/, (m) => `Күйі: ${STATUS_KK[m[1]] || m[1]}`],
+    [/^Verified · author key (.+)$/, (m) => `Сәйкес · автор кілті ${m[1]}`],
+    [/^Signature mismatch · purported key (.+)$/, (m) => `Қолтаңба сәйкес емес · жарияланған кілт ${m[1]}`],
+    [/^(active|inactive|revoked)$/, (m) => STATUS_KK[m[1]]],
+  ],
+};
 
 /** Сколько ключей покрыто в каждом языке — для сторожа и отчёта (знаменатель). */
 export function verifyDictCoverage(): { ru: number; kk: number } {

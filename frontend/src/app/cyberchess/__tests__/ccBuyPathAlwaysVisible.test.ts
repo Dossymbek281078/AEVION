@@ -19,7 +19,8 @@ describe("путь к кассе CyberChess всегда на экране", () 
     expect(page).toContain('const ccBuyProduct=productById("cyberchess");');
     expect(page).toContain('const ccBuyLabel=(ccBuyProduct?.format||"").replace(/^приложение · /,"")||"купить";');
     // метка канала — после отрисовки, как в ModulePricingChip
-    expect(page).toContain('sCcBuyHref(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()))');
+    // 30.10.2026: + язык посетителя (sYazykom), иначе /kk/cyberchess вёл на русские цены
+    expect(page).toContain('sCcBuyHref(sYazykom(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()),cc.locale))');
   });
   it("шапка ≥769: ссылка в кассу рядом с «Помощь»", () => {
     expect(page).toContain('{vwPx>=769&&<a href={ccBuyHref} data-cc-buy="header"');
@@ -31,7 +32,8 @@ describe("путь к кассе CyberChess всегда на экране", () 
   it("телефон <769: первый пункт меню «Ещё» — купить", () => {
     const i = page.indexOf("...(vwPx<769?[\n");
     expect(i).toBeGreaterThan(0);
-    expect(page.slice(i, i + 400)).toContain("lbl:`Купить CyberChess · ${ccBuyLabel}`,act:()=>{window.location.href=ccBuyHref}");
+    // 29.10: на en/kk подпись из словаря (на /en шла «Купить CyberChess · $50/год»), на ru — прежняя.
+    expect(page.slice(i, i + 400)).toContain('lbl:cc.locale==="ru"?`Купить CyberChess · ${ccBuyLabel}`:`${cc.t("buy.card.title")} · ${ccBuyLabelLoc}`,act:()=>{window.location.href=ccBuyHref}');
   });
   it("магазин Chessy: карточка настоящей кассы стоит ВЫШЕ лестницы AEV", () => {
     const shop = page.indexOf('data-cc-buy="shop"');

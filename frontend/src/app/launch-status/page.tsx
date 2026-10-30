@@ -50,7 +50,9 @@ export default function LaunchStatusPage() {
   const [health, setHealth] = useState<ApiState<Health>>(initial<Health>());
   const [modules, setModules] = useState<ApiState<ModulesStatus>>(initial<ModulesStatus>());
   const [quotas, setQuotas] = useState<ApiState<Quotas>>(initial<Quotas>());
-  const [now, setNow] = useState(Date.now());
+  // 0 на сервере и при первом рендере клиента: дата в начальном состоянии — разные значения
+  // при сборке и у посетителя, React #418 (тот же класс, что /cyberchess/daily 27.10).
+  const [now, setNow] = useState(0);
 
   const load = async () => {
     const fetchOne = async <T,>(path: string, set: (s: ApiState<T>) => void) => {
@@ -73,6 +75,7 @@ export default function LaunchStatusPage() {
   useEffect(() => {
     load();
     const interval = setInterval(load, 60_000);
+    setNow(Date.now());
     const tick = setInterval(() => setNow(Date.now()), 1_000);
     return () => {
       clearInterval(interval);
@@ -106,9 +109,11 @@ export default function LaunchStatusPage() {
           <h1 className="text-4xl font-bold tracking-tight mb-2">AEVION Launch Status</h1>
           <p className="text-slate-400">
             Real-time состояние production-инфраструктуры. Auto-refresh каждые 60 секунд.{" "}
-            <span className="text-slate-500">
-              · последнее обновление {Math.floor((now - Math.max(health.fetchedAt, modules.fetchedAt, quotas.fetchedAt)) / 1000)}s назад
-            </span>
+            {now > 0 && (
+              <span className="text-slate-500">
+                · последнее обновление {Math.floor((now - Math.max(health.fetchedAt, modules.fetchedAt, quotas.fetchedAt)) / 1000)}s назад
+              </span>
+            )}
           </p>
         </div>
 

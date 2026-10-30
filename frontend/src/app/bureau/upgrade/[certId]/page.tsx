@@ -9,6 +9,8 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { InfoTip } from "@/components/InfoTip";
 import { useToast } from "@/components/ToastProvider";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18nOptional } from "@/lib/i18n";
+import { useBureauText } from "../../bureauText";
 import { upgradeDisclosure, type KycMode } from "../kycDisclosure";
 
 type Step =
@@ -43,6 +45,11 @@ export default function BureauUpgradePage() {
   const params = useParams();
   const certId = (params?.certId as string) || "";
   const { showToast } = useToast();
+  // 30.10.2026: прод на ru показывал страницу повышения целиком по-английски.
+  // Перевод — тем же словарём bureauText.ts, что и соседняя /bureau: ключ —
+  // английская строка, en возвращает её как есть.
+  const lang = useI18nOptional()?.lang ?? "en";
+  const tb = useBureauText(lang);
 
   const [step, setStep] = useState<Step>("intro");
 
@@ -120,7 +127,7 @@ export default function BureauUpgradePage() {
           setStep("payment");
         } else if (step === "kyc-running" && data.kyc.status === "rejected") {
           setStep("error");
-          setErrorMsg(`KYC rejected: ${data.kyc.decision || "no reason given"}`);
+          setErrorMsg(`${tb("KYC rejected:")} ${data.kyc.decision || tb("no reason given")}`);
         } else if (step === "payment" && data.ready) {
           // Both KYC approved + payment paid — apply upgrade
           await applyUpgrade(verificationId);
@@ -140,7 +147,7 @@ export default function BureauUpgradePage() {
   const startKyc = async (e: FormEvent) => {
     e.preventDefault();
     if (!declaredName.trim()) {
-      setErrorMsg("Please enter the name on your ID document.");
+      setErrorMsg(tb("Please enter the name on your ID document."));
       return;
     }
     setErrorMsg(null);
@@ -158,7 +165,7 @@ export default function BureauUpgradePage() {
       // перехватчик (lib/paywall.ts); голый код «free_quota_exceeded» в
       // красной строке человеку ничего не говорит.
       if (r.status === 402 && data?.error === "free_quota_exceeded") return;
-      if (!r.ok) throw new Error(data?.error || `Error ${r.status}`);
+      if (!r.ok) throw new Error(data?.error || `${tb("Error")} ${r.status}`);
       setVerificationId(data.verificationId);
       setStep("kyc-running");
       // Open the KYC widget in a new tab so the user can finish it.
@@ -179,7 +186,7 @@ export default function BureauUpgradePage() {
       });
       const data = await r.json();
       if (!r.ok && r.status !== 409) {
-        throw new Error(data?.error || `Error ${r.status}`);
+        throw new Error(data?.error || `${tb("Error")} ${r.status}`);
       }
       if (data.checkoutUrl) {
         window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
@@ -201,9 +208,9 @@ export default function BureauUpgradePage() {
         body: JSON.stringify({ verificationId: vid }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || `Error ${r.status}`);
+      if (!r.ok) throw new Error(data?.error || `${tb("Error")} ${r.status}`);
       setStep("done");
-      showToast("Certificate upgraded to Verified!", "success");
+      showToast(tb("Certificate upgraded to Verified!"), "success");
     } catch (e) {
       setErrorMsg((e as Error).message);
       setStep("error");
@@ -218,17 +225,15 @@ export default function BureauUpgradePage() {
         {/* Header */}
         <div style={{ borderRadius: 16, overflow: "hidden", marginBottom: 22 }}>
           <div style={{ background: "linear-gradient(135deg, #312e81, #4f46e5)", padding: "22px 24px", color: "#fff" }}>
-            <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.7, marginBottom: 4 }}>UPGRADE TO VERIFIED</div>
+            <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.7, marginBottom: 4 }}>{tb("UPGRADE TO VERIFIED")}</div>
             <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>
-              Certify your real-name authorship
+              {tb("Certify your real-name authorship")}
             </h1>
             <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6, lineHeight: 1.5 }}>
-              Identity-verified certificates carry stronger evidentiary weight in
-              IP disputes — the bureau attests that your government-issued ID
-              matched the author named on this work.
+              {tb("Identity-verified certificates carry stronger evidentiary weight in IP disputes — the bureau attests that your government-issued ID matched the author named on this work.")}
             </div>
             <div style={{ fontSize: 11, fontFamily: "monospace", opacity: 0.7, marginTop: 8 }}>
-              Cert: {certId}
+              {tb("Cert:")} {certId}
             </div>
           </div>
         </div>
@@ -236,9 +241,9 @@ export default function BureauUpgradePage() {
         {/* Progress steps */}
         <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
           {[
-            { id: "kyc", label: "Identity" },
-            { id: "pay", label: "Payment" },
-            { id: "apply", label: "Apply" },
+            { id: "kyc", label: tb("Identity") },
+            { id: "pay", label: tb("Payment") },
+            { id: "apply", label: tb("Apply") },
           ].map((s, i) => {
             const stepIdx =
               step === "intro" || step === "kyc-form" || step === "kyc-running"
@@ -282,37 +287,35 @@ export default function BureauUpgradePage() {
             }}
           >
             <div style={{ fontSize: 14, fontWeight: 900, color: "#92400e", marginBottom: 6 }}>
-              This tier cannot be completed yet
+              {tb("This tier cannot be completed yet")}
             </div>
             <div style={{ fontSize: 12, color: "#78350f", lineHeight: 1.6 }}>
-              Our identity or payment provider is not configured, so the upgrade
-              would not go through. Nothing will be charged. Ask us and we will
-              tell you when the Verified tier opens.
+              {tb("Our identity or payment provider is not configured, so the upgrade would not go through. Nothing will be charged. Ask us and we will tell you when the Verified tier opens.")}
             </div>
           </div>
         )}
 
         {step === "intro" && (
           <div style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px" }}>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>What you&apos;ll do</div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>{tb("What you'll do")}</div>
             <ol style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: "#0f172a", lineHeight: 1.7 }}>
-              <li>{disclosure.identityStep}</li>
-              <li><b>Pay {ценаСПериодом()}</b> for the Verified-tier upgrade.</li>
-              <li><b>Certificate is upgraded</b> with your real-name attestation; the verify page now shows &ldquo;Verified Author&rdquo;.</li>
+              <li>{tb(disclosure.identityStep)}</li>
+              <li><b>{tb("Pay")} {ценаСПериодом(undefined, lang)}</b> {tb("for the Verified-tier upgrade.")}</li>
+              <li><b>{tb("Certificate is upgraded")}</b> {tb("with your real-name attestation; the verify page now shows “Verified Author”.")}</li>
             </ol>
             <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", fontSize: 11, color: "#92400e", lineHeight: 1.55 }}>
-              {disclosure.vendorNote}
+              {tb(disclosure.vendorNote)}
             </div>
             {disclosure.notice && (
               <div
                 role="alert"
                 style={{ marginTop: 12, padding: "12px 14px", borderRadius: 10, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.25)", fontSize: 12, color: "#b91c1c", lineHeight: 1.6, fontWeight: 600 }}
               >
-                {disclosure.notice}
+                {tb(disclosure.notice)}
               </div>
             )}
             <button onClick={() => setStep("kyc-form")} style={{ marginTop: 16, padding: "12px 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
-              Start identity check →
+              {tb("Start identity check →")}
             </button>
           </div>
         )}
@@ -321,10 +324,10 @@ export default function BureauUpgradePage() {
           <form onSubmit={startKyc} style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px", display: "grid", gap: 14 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 6, display: "block" }}>
-                Full name on your ID document
+                {tb("Full name on your ID document")}
                 <InfoTip
-                  label="Why we need this"
-                  text="Pre-fills the KYC widget so the verification matches faster. The KYC vendor still cross-checks against your actual ID — typing the wrong name here just slows things down."
+                  label={tb("Why we need this")}
+                  text={tb("Pre-fills the KYC widget so the verification matches faster. The KYC vendor still cross-checks against your actual ID — typing the wrong name here just slows things down.")}
                 />
               </label>
               <input
@@ -332,18 +335,18 @@ export default function BureauUpgradePage() {
                 onChange={(e) => setDeclaredName(e.target.value)}
                 aria-required="true"
                 required
-                placeholder="e.g. Aliya Nurgalieva"
+                placeholder={tb("e.g. Aliya Nurgalieva")}
                 style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, outline: "none", boxSizing: "border-box" }}
               />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 6, display: "block" }}>
-                Country of issue
+                {tb("Country of issue")}
               </label>
               <input
                 value={declaredCountry}
                 onChange={(e) => setDeclaredCountry(e.target.value)}
-                placeholder="e.g. KZ, RU, US"
+                placeholder={tb("e.g. KZ, RU, US")}
                 style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, outline: "none", boxSizing: "border-box" }}
               />
             </div>
@@ -353,7 +356,7 @@ export default function BureauUpgradePage() {
               </div>
             )}
             <button type="submit" style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
-              Open KYC widget →
+              {tb("Open KYC widget →")}
             </button>
           </form>
         )}
@@ -361,16 +364,15 @@ export default function BureauUpgradePage() {
         {step === "kyc-running" && (
           <div role="status" aria-live="polite" style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>
-              Waiting for KYC to finish…
+              {tb("Waiting for KYC to finish…")}
             </div>
             <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6, marginBottom: 12 }}>
-              The KYC widget opened in a new tab. Finish the verification there.
-              We&apos;ll auto-detect approval and continue here.
+              {tb("The KYC widget opened in a new tab. Finish the verification there. We'll auto-detect approval and continue here.")}
             </div>
             {status && (
               <div style={{ fontSize: 11, fontFamily: "monospace", color: "#475569", padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)" }}>
-                Status: <b>{status.kyc.status}</b>
-                {status.kyc.verifiedName && <> · Name: <b>{status.kyc.verifiedName}</b></>}
+                {tb("Status:")} <b>{status.kyc.status}</b>
+                {status.kyc.verifiedName && <> · {tb("Name:")} <b>{status.kyc.verifiedName}</b></>}
               </div>
             )}
           </div>
@@ -384,7 +386,7 @@ export default function BureauUpgradePage() {
                   то же переобещание, что на первом шаге, только уже ПОСЛЕ
                   прохождения и прямо перед оплатой. */}
               <span aria-hidden>✓</span>{" "}
-              {kycMode === "stub" ? "Identity step completed (demo mode)" : "Identity verified"}
+              {kycMode === "stub" ? tb("Identity step completed (demo mode)") : tb("Identity verified")}
               {status?.kyc.verifiedName && (
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>
                   &nbsp;· <b>{status.kyc.verifiedName}</b>
@@ -392,17 +394,16 @@ export default function BureauUpgradePage() {
               )}
             </div>
             <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6, marginBottom: 14 }}>
-              Last step: {ценаСПериодом()} for the Verified-tier upgrade. After payment, the
-              certificate is stamped with the name you declared
-              {kycMode === "stub" ? " (identity provider not connected yet)" : " as attested by our KYC provider"}.
+              {tb("Last step:")} {ценаСПериодом(undefined, lang)} {tb("for the Verified-tier upgrade. After payment, the certificate is stamped with the name you declared")}
+              {kycMode === "stub" ? ` ${tb("(identity provider not connected yet)")}` : ` ${tb("as attested by our KYC provider")}`}.
             </div>
             {!status?.payment.intentId ? (
               <button onClick={startPayment} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
-                Continue to payment ({ценаСПериодом()}) →
+                {tb("Continue to payment")} ({ценаСПериодом(undefined, lang)}) →
               </button>
             ) : (
               <div role="status" aria-live="polite" style={{ fontSize: 12, color: "#475569" }}>
-                Awaiting payment confirmation… (intent: <code>{status.payment.intentId}</code>)
+                {tb("Awaiting payment confirmation…")} ({tb("intent:")} <code>{status.payment.intentId}</code>)
               </div>
             )}
           </div>
@@ -411,7 +412,7 @@ export default function BureauUpgradePage() {
         {step === "applying" && (
           <div role="status" aria-live="polite" style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", padding: "20px 22px", textAlign: "center" }}>
             <div style={{ fontSize: 32, marginBottom: 8 }} aria-hidden>⚡</div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>Applying upgrade to certificate…</div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>{tb("Applying upgrade to certificate…")}</div>
           </div>
         )}
 
@@ -419,18 +420,17 @@ export default function BureauUpgradePage() {
           <div style={{ borderRadius: 14, border: "1px solid rgba(16,185,129,0.3)", background: "linear-gradient(135deg, rgba(16,185,129,0.05), rgba(13,148,136,0.05))", padding: "24px 22px", textAlign: "center" }}>
             <div style={{ fontSize: 40, marginBottom: 6 }} aria-hidden>🎉</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: "#065f46", marginBottom: 6 }}>
-              Certificate upgraded to Verified!
+              {tb("Certificate upgraded to Verified!")}
             </div>
             <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6, marginBottom: 14 }}>
-              The verify page now shows the &ldquo;Verified Author&rdquo; badge with your real-name
-              attestation date. The bundle.json reflects the change automatically.
+              {tb("The verify page now shows the “Verified Author” badge with your real-name attestation date. The bundle.json reflects the change automatically.")}
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
               <Link href={`/verify/${certId}`} style={{ padding: "10px 16px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
-                Open verify page →
+                {tb("Open verify page →")}
               </Link>
               <Link href="/bureau" style={{ padding: "10px 16px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
-                Back to bureau
+                {tb("Back to bureau")}
               </Link>
             </div>
           </div>
@@ -439,13 +439,13 @@ export default function BureauUpgradePage() {
         {step === "error" && (
           <div role="alert" style={{ borderRadius: 14, border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.04)", padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 900, color: "#991b1b", marginBottom: 6 }}>
-              ❌ Upgrade did not complete
+              {tb("❌ Upgrade did not complete")}
             </div>
             <div style={{ fontSize: 12, color: "#7f1d1d", lineHeight: 1.6, marginBottom: 12 }}>
-              {errorMsg || "Something went wrong. No charge was applied if payment had not started."}
+              {errorMsg || tb("Something went wrong. No charge was applied if payment had not started.")}
             </div>
             <button onClick={() => { setStep("intro"); setErrorMsg(null); setVerificationId(null); }} style={{ padding: "10px 16px", borderRadius: 10, border: "1px solid #991b1b", background: "#fff", color: "#991b1b", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
-              Try again
+              {tb("Try again")}
             </button>
           </div>
         )}

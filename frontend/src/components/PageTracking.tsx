@@ -1,7 +1,7 @@
 "use client";
 
 import { channelNow } from "@/lib/channelNow";
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 import { track } from "@/lib/track";
 import { channelFrom } from "@/lib/products";
 
@@ -21,7 +21,23 @@ import { channelFrom } from "@/lib/products";
  *
  * Ставится одной строкой: <PageTracking page="qmelanin" />
  */
+/**
+ * 31.10.2026: страница, вложенная в другую (/en/devhub рисует конструктор /devhub
+ * и считает себя сама), глушит счёт вложенной — иначе один заход давал два page_view
+ * и каждый клик по оплате считался дважды. Пропом нельзя: у страницы Next props
+ * заданы (params/searchParams), поэтому флаг идёт через контекст.
+ */
+const СчётВложенногоВыключен = createContext(false);
+export function БезСчётаВложенного({ children }: { children: React.ReactNode }) {
+  return <СчётВложенногоВыключен.Provider value={true}>{children}</СчётВложенногоВыключен.Provider>;
+}
+
 export function PageTracking({ page }: { page: string }) {
+  const выключен = useContext(СчётВложенногоВыключен);
+  return выключен ? null : <PageTrackingЖивой page={page} />;
+}
+
+function PageTrackingЖивой({ page }: { page: string }) {
   const sent = useRef(false);
 
   useEffect(() => {

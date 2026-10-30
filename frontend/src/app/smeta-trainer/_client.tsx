@@ -8,7 +8,7 @@ import { rates } from "./lib/corpus";
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
-import ModulePricingChip from "@/components/ModulePricingChip";
+import { FreeChip } from "./components/FreeChip";
 
 export default function SmetaTrainerPage() {
   return (
@@ -32,7 +32,7 @@ export default function SmetaTrainerPage() {
             ❓ Инструкция
           </Link>
           <div className="hidden md:block">
-            <ModulePricingChip moduleId="smeta-trainer" theme="dark" />
+            <FreeChip />
           </div>
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}
@@ -49,7 +49,7 @@ export default function SmetaTrainerPage() {
           после «Пропустить» на странице ни одной кнопки «Купить»/«Тарифы», путь к оплате с телефона обрывался на входе.
           На узком экране чип выводится отдельной строкой под шапкой; на столе — как раньше, в шапке. */}
       <div className="md:hidden bg-slate-900 px-4 py-2 border-t border-slate-800" data-testid="smeta-pricing-chip-mobile">
-        <ModulePricingChip moduleId="smeta-trainer" theme="dark" />
+        <FreeChip />
       </div>
       <OnboardingModal />
       <LevelHome />

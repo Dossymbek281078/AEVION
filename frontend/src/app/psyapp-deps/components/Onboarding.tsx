@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { ключОшибки } from "./oshibka";
+import { usePsyT, type Key } from "../i18n";
 
 type Addiction = "alcohol" | "smoking" | "other";
 
@@ -9,10 +11,10 @@ interface Props {
   onStarted: (alias: string, storage?: string) => void;
 }
 
-const OPTIONS: { value: Addiction; label: string; emoji: string; hint: string }[] = [
-  { value: "alcohol", label: "Алкоголь", emoji: "🍷", hint: "Полный отказ или сокращение" },
-  { value: "smoking", label: "Курение", emoji: "🚬", hint: "Сигареты, вейп, никотин" },
-  { value: "other",   label: "Другое",   emoji: "✨", hint: "Сахар, азартные игры, экраны" },
+const OPTIONS: { value: Addiction; label: Key; emoji: string; hint: Key }[] = [
+  { value: "alcohol", label: "onb.alcohol", emoji: "🍷", hint: "onb.alcoholHint" },
+  { value: "smoking", label: "onb.smoking", emoji: "🚬", hint: "onb.smokingHint" },
+  { value: "other",   label: "onb.other",   emoji: "✨", hint: "onb.otherHint" },
 ];
 
 function suggestAlias(): string {
@@ -27,10 +29,11 @@ export default function Onboarding({ onStarted }: Props) {
   const [addiction, setAddiction] = useState<Addiction>("alcohol");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = usePsyT();
 
   async function handleStart() {
     if (!/^[a-z0-9_-]{2,40}$/i.test(alias)) {
-      setError("Псевдоним 2–40 символов: латиница, цифры, _ или -");
+      setError(t("onb.aliasRule"));
       return;
     }
     setLoading(true);
@@ -43,7 +46,7 @@ export default function Onboarding({ onStarted }: Props) {
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setError(d.error || "Не получилось начать. Попробуй ещё раз.");
+        setError(t(ключОшибки(d.error, "onb.fail")));
         setLoading(false);
         return;
       }
@@ -58,24 +61,23 @@ export default function Onboarding({ onStarted }: Props) {
       // потерянный счёт бьёт сильнее любой технической ошибки. До этой правки
       // страница поле выбрасывала.
       onStarted(alias, d.storage);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Сеть недоступна";
-      setError(msg);
+    } catch {
+      setError(t("err.offline"));
       setLoading(false);
     }
   }
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.title}>Начнём путь</h2>
+      <h2 style={styles.title}>{t("onb.title")}</h2>
       <p style={styles.subtitle}>
-        Без имени, без email. Только псевдоним — чтобы сохранять прогресс на этом устройстве.
+        {t("onb.sub")}
       </p>
 
       <div style={styles.field}>
-        <label style={styles.label}>Псевдоним</label>
+        <label style={styles.label}>{t("onb.alias")}</label>
         <div style={styles.row}>
-          <input aria-label="Псевдоним"
+          <input aria-label={t("onb.alias")}
             type="text"
             value={alias}
             onChange={(e) => setAlias(e.target.value.toLowerCase())}
@@ -87,8 +89,8 @@ export default function Onboarding({ onStarted }: Props) {
             type="button"
             onClick={() => setAlias(suggestAlias())}
             style={styles.diceBtn}
-            title="Сгенерировать новый"
-            aria-label="Сгенерировать новый псевдоним"
+            title={t("onb.regen")}
+            aria-label={t("onb.regen")}
           >
             🎲
           </button>
@@ -96,7 +98,7 @@ export default function Onboarding({ onStarted }: Props) {
       </div>
 
       <div style={styles.field}>
-        <label style={styles.label}>От чего хочешь освободиться?</label>
+        <label style={styles.label}>{t("onb.question")}</label>
         <div style={styles.optionGrid}>
           {OPTIONS.map((o) => {
             const active = addiction === o.value;
@@ -113,8 +115,8 @@ export default function Onboarding({ onStarted }: Props) {
                 }}
               >
                 <span style={styles.optionEmoji}>{o.emoji}</span>
-                <span style={styles.optionLabel}>{o.label}</span>
-                <span style={styles.optionHint}>{o.hint}</span>
+                <span style={styles.optionLabel}>{t(o.label)}</span>
+                <span style={styles.optionHint}>{t(o.hint)}</span>
               </button>
             );
           })}
@@ -133,10 +135,10 @@ export default function Onboarding({ onStarted }: Props) {
           cursor: loading ? "wait" : "pointer",
         }}
       >
-        {loading ? "Запускаем…" : "Начать путь"}
+        {loading ? t("onb.starting") : t("onb.start")}
       </button>
       <p style={styles.note}>
-        Данные хранятся на сервере под этим псевдонимом. Это поддержка, не медицинский совет.
+        {t("onb.note")}
       </p>
     </div>
   );

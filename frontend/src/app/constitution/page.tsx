@@ -688,7 +688,9 @@ export default function ConstitutionPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setSignError(err instanceof Error ? err.message : "sign_failed");
+      // 27.10.2026: человеку — понятный текст; технические подробности (код, тело ответа) — в консоль, не на экран
+      console.warn("[constitution] подпись не удалась", err);
+      setSignError(t("constitution.err.sign"));
     } finally {
       setSigning(false);
     }
@@ -725,7 +727,9 @@ export default function ConstitutionPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setPdfError(err instanceof Error ? err.message : "pdf_failed");
+      // 27.10.2026: человеку — понятный текст; технические подробности (код, тело ответа) — в консоль, не на экран
+      console.warn("[constitution] PDF не собрался", err);
+      setPdfError(t("constitution.err.pdf"));
     } finally {
       setPdfBusy(false);
     }
@@ -788,7 +792,9 @@ export default function ConstitutionPage() {
       const j = (await pubRes.json()) as { artifact?: { id?: string } };
       if (j.artifact?.id) setPublishedId(j.artifact.id);
     } catch (err) {
-      setPublishError(err instanceof Error ? err.message : "publish_failed");
+      // 27.10.2026: человеку — понятный текст; технические подробности (код, тело ответа) — в консоль, не на экран
+      console.warn("[constitution] публикация не удалась", err);
+      setPublishError(t("constitution.err.publish"));
     } finally {
       setPublishing(false);
     }
@@ -878,19 +884,19 @@ export default function ConstitutionPage() {
                 href="/constitution/learn"
                 className="px-4 py-2 rounded border border-emerald-400/60 text-emerald-300 font-semibold hover:bg-emerald-500/10"
               >
-                🎓 Academy
+                🎓 {t("constitution.nav.academy")}
               </Link>
               <Link
                 href="/constitution/blog"
                 className="px-4 py-2 rounded border border-amber-400/60 text-amber-300 font-semibold hover:bg-amber-500/10"
               >
-                📝 Blog
+                📝 {t("constitution.nav.blog")}
               </Link>
               <Link
                 href="/constitution/pricing"
                 className="px-4 py-2 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] font-bold hover:opacity-90"
               >
-                💎 Pricing
+                💎 {t("constitution.nav.pricing")}
               </Link>
             </div>
           )}
@@ -1987,6 +1993,9 @@ function pushAiHistory(entry: AiHistoryEntry): AiHistoryEntry[] {
   return trimmed;
 }
 
+/** Ошибка ИИ-совета, текст которой уже переведён и годится человеку; остальное — общим текстом. */
+class ПонятнаяОшибкаИИ extends Error {}
+
 function AiAdvisorModal({
   onClose,
   onApply,
@@ -2032,8 +2041,16 @@ function AiAdvisorModal({
         body: JSON.stringify({ description: description.trim() }),
       });
       if (!r.ok) {
-        const text = await r.text().catch(() => "");
-        throw new Error(`HTTP ${r.status}: ${text.slice(0, 140)}`);
+        // 27.10.2026: сюда раньше уходило `HTTP ${status}: <сырое тело>` — и человек на исчерпанной
+        // суточной норме видел JSON с английским «Free tier… Upgrade → Pro». Код и тело разбираем,
+        // показываем человеческий текст (ПонятнаяОшибкаИИ проходит catch как есть).
+        const j = (await r.json().catch(() => null)) as { error?: string; used?: number; limit?: number } | null;
+        if (r.status === 429 && j?.error === "ai_daily_limit") {
+          throw new ПонятнаяОшибкаИИ(
+            t("constitution.ai.errorDailyLimit", { used: j.used ?? "", limit: j.limit ?? "" }),
+          );
+        }
+        throw new ПонятнаяОшибкаИИ(t("constitution.ai.errorFailed"));
       }
       if (!r.body) throw new Error("no_body");
       const reader = r.body.getReader();
@@ -2068,7 +2085,8 @@ function AiAdvisorModal({
               finalProvider = ev.provider ?? "unknown";
               setProvider(finalProvider);
             } else if (ev.kind === "error") {
-              setError(ev.message ?? "stream_error");
+              // сервер кладёт сюда текст отказа провайдера (constitutionAi.ts) — человеку он ни о чём
+              setError(t("constitution.ai.errorFailed"));
             }
           } catch {
             /* ignore */
@@ -2089,7 +2107,8 @@ function AiAdvisorModal({
         setError(t("constitution.ai.errorNoSliders"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ai_failed");
+      // сеть, «no_body» и прочее техническое — общим понятным текстом
+      setError(err instanceof ПонятнаяОшибкаИИ ? err.message : t("constitution.ai.errorFailed"));
     } finally {
       setBusy(false);
     }
@@ -2473,7 +2492,9 @@ function SocialPanel({ artifactId }: { artifactId: string }) {
       setText("");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "comment_failed");
+      // 27.10.2026: человеку — понятный текст; технические подробности (код, тело ответа) — в консоль, не на экран
+      console.warn("[constitution] комментарий не отправился", err);
+      setError(t("constitution.err.comment"));
     } finally {
       setBusy(false);
     }

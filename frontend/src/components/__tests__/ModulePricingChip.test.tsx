@@ -134,7 +134,9 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     guest();
     const { container } = render(<ModulePricingChip moduleId="bureau" />);
     const text = container.textContent ?? "";
-    expect(text).toContain("Входит в подписку AEVION");
+    // 30.10.2026: формула бюро уточнена — называет норму «3 работы в месяц бесплатно»
+    // и что подписка снимает предел (сторож chipNamesFreeQuota). Суть прежняя: подписка, не касса модуля.
+    expect(text).toContain("в подписке AEVION");
     expect(text, "на плашке осталась отдельная цена бюро").not.toContain("$32");
     expect(text, "бюро всё ещё подаётся как отдельный товар").not.toContain("IP Bureau");
     expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#planet-buy");

@@ -54,6 +54,20 @@ describe("цены видны без скриптов", () => {
     expect(ссылки).toContain("/pricing?app=devhub#apps");
   });
 
+  // 27.10.2026: блок писал CyberChess «от $12.00 до $24.00 в месяц» при кассе $50/год
+  // (замер прода /pricing и /pricing/checkout/success, разметка там же — 50.00).
+  it("годовое приложение — одна цена за год, без месячной вилки (ru и en)", () => {
+    const ГОДОВОЕ = [
+      { slug: "cyberchess", name: "CyberChess", baseMonthly: 24, yearOnlyUsd: 50 },
+    ] as unknown as typeof ПРИМЕР;
+    for (const [lang, год] of [["ru", "в год"], ["en", "per year"]] as const) {
+      const текст = render(<ЦеныДляРобота приложения={ГОДОВОЕ} lang={lang} />).container.textContent || "";
+      expect(текст, lang).toContain("$50.00");
+      expect(текст, lang).toContain(год);
+      expect(текст, `${lang}: месячной вилки быть не должно`).not.toMatch(/\$24\.00|\$12\.00|в месяц|per month/);
+    }
+  });
+
   it("layout действительно зовёт блок — иначе он ничего не обещает", () => {
     expect(LAYOUT).toContain("<ЦеныДляРобота");
     expect(LAYOUT, "список берётся из общего источника, а не второй выборкой")

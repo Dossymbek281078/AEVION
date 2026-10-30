@@ -18,12 +18,12 @@ const НОРМА_402 = {
 };
 
 describe("стенаИзНормы", () => {
-  it("отказ по норме превращается в стену с адресом оплаты и текстом сервера", () => {
+  it("отказ по норме превращается в стену с адресом оплаты и честным текстом о пределе (с 30.10 — не текст сервера: в нём сырой адрес)", () => {
     const с = стенаИзНормы(НОРМА_402);
     expect(с).not.toBeNull();
     expect(с!.module).toBe("healthai");
     expect(с!.upgradeUrl).toBe("https://aevion.app/pricing");
-    expect(с!.message).toContain("норма");
+    expect(с!.message).toMatch(/исчерпан/i);
     expect(с!.requiredTiers).not.toContain("free");
   });
 
@@ -62,6 +62,38 @@ describe("перехватчик: 402 по норме поднимает окн�
     window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
   });
 
+  // 30.10.2026, приёмка прода 7d91f4884: гость читал «войдите под почтой оплаты», а кнопки входа не было.
+  it("🔴 гость без входа: в окне кнопка входа с возвратом на ту же страницу", async () => {
+    window.localStorage.removeItem("aevion_auth_token_v1");
+    window.history.replaceState(null, "", "/qright?lang=en&c=x");
+    window.fetch = vi.fn().mockResolvedValue(ответ(402, { ...НОРМА_402, module: "qright" }));
+    installPaywallInterceptor();
+    const handler = vi.fn();
+    window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+    await window.fetch("/api-backend/api/pipeline/protect", { method: "POST" });
+    const evt = handler.mock.calls[0][0] as CustomEvent<PaywallPayload>;
+    expect(evt.detail.authState).toBe("anonymous");
+    expect(evt.detail.loginUrl).toBe("/auth?next=%2Fqright%3Flang%3Den%26c%3Dx");
+    window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+  });
+
+  it("КОНТРОЛЬ: вошедший (токен подставлен) кнопки входа не получает", async () => {
+    window.localStorage.setItem("aevion_auth_token_v1", "t-smoke");
+    try {
+      window.fetch = vi.fn().mockResolvedValue(ответ(402, НОРМА_402));
+      installPaywallInterceptor();
+      const handler = vi.fn();
+      window.addEventListener(PAYWALL_EVENT, handler as EventListener);
+      await window.fetch("/api-backend/api/healthai/check");
+      const evt = handler.mock.calls[0][0] as CustomEvent<PaywallPayload>;
+      expect(evt.detail.authState).toBeUndefined();
+      expect(evt.detail.loginUrl).toBeUndefined();
+      window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+    } finally {
+      window.localStorage.removeItem("aevion_auth_token_v1");
+    }
+  });
+
   it("КОНТРОЛЬ: 402 с чужим кодом окна не поднимает", async () => {
     window.fetch = vi.fn().mockResolvedValue(ответ(402, { error: "card_declined" }));
     installPaywallInterceptor();
@@ -70,5 +102,56 @@ describe("перехватчик: 402 по норме поднимает окн�
     await window.fetch("/api-backend/api/qmaskcard/x");
     expect(handler).not.toHaveBeenCalled();
     window.removeEventListener(PAYWALL_EVENT, handler as EventListener);
+  });
+});
+
+/*
+ * 30.10.2026 (окно Приложения-2·Бюро), кадр прода 043aa4cc7, гость ru 1280 на /qright,
+ * 4-я регистрация → 402 free_quota_exceeded: окно показало «На этом аккаунте покупки
+ * нет. Если вы оплачивали другим адресом — войдите под ним», а про исчерпанные
+ * 3 бесплатных — ни слова. Причина: текст сервера содержит адрес «https://…/pricing»,
+ * PaywallModal такие тексты заменяет общей фразой про покупки (сАдресами). Стена из
+ * нормы обязана нести свой честный текст: сколько бесплатных, что исчерпаны, что
+ * делать (войти, если подписка есть, или оформить план) — и без сырых адресов.
+ */
+describe("стена из нормы говорит правду о пределе", () => {
+  const норма = { ...НОРМА_402, module: "qright", used: 4, freePerMonth: 3 };
+  afterEach(() => { document.documentElement.lang = ""; });
+
+  it("ru: называет норму и исчерпание, без сырого адреса", () => {
+    document.documentElement.lang = "ru";
+    const с = стенаИзНормы(норма)!;
+    expect(с.message).not.toMatch(/https?:\/\//);
+    expect(с.message).toMatch(/3/);
+    expect(с.message).toMatch(/исчерпан/i);
+    expect(с.message).toMatch(/войдите/i);
+    expect(с.message).toMatch(/план|подписк/i);
+    expect(с.upgradeUrl).toBe("https://aevion.app/pricing");
+  });
+
+  it("en: страница на английском — текст стены английский", () => {
+    document.documentElement.lang = "en";
+    const с = стенаИзНормы(норма)!;
+    expect(с.message).not.toMatch(/https?:\/\//);
+    expect(с.message).toMatch(/3/);
+    expect(с.message).toMatch(/used up|exhausted/i);
+    expect(с.message).toMatch(/sign in/i);
+    expect(с.message).not.toMatch(/[а-яА-Я]/);
+  });
+
+  it("kk: страница на казахском — текст стены казахский (проход kk на проде 30.10.2026)", () => {
+    document.documentElement.lang = "kk";
+    const с = стенаИзНормы(норма)!;
+    expect(с.message).not.toMatch(/https?:\/\//);
+    expect(с.message).toMatch(/3/);
+    expect(с.message).toMatch(/таусылды/);
+    expect(с.message).toMatch(/кіріңіз/);
+    expect(с.message).not.toMatch(/исчерпан|used up/i);
+  });
+
+  it("КОНТРОЛЬ: норма без чисел — текст всё равно честный и без адреса", () => {
+    const с = стенаИзНормы({ ...НОРМА_402, used: undefined, freePerMonth: undefined })!;
+    expect(с.message).not.toMatch(/https?:\/\//);
+    expect(с.message).toMatch(/исчерпан/i);
   });
 });

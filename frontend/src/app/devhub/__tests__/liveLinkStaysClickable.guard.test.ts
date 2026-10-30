@@ -33,7 +33,11 @@ describe("DevHub: живой адрес после выкатки", () => {
 
   it("после выкатки Pages страница опрашивает проект до live, а не перечитывает один раз", () => {
     const i = SRC.indexOf("setPagesResult({ liveUrl: d.liveUrl");
-    const j = SRC.indexOf("Публикация на Cloudflare Pages не удалась", i);
+    // 30.10.2026: текст ошибки ушёл в словарь TOAST_UI — конец ветки теперь ключ TL.pagesPublishFail2.
+    // Обе границы обязаны найтись: при −1 срез брал бы весь хвост файла, и проверка проходила бы даром.
+    const j = SRC.indexOf("TL.pagesPublishFail2", i);
+    expect(i, "начало ветки выкатки Pages не найдено").toBeGreaterThan(0);
+    expect(j, "конец ветки выкатки Pages не найден").toBeGreaterThan(i);
     const ветка = SRC.slice(i, j);
     expect(ветка).toContain("const pollPages = async");
     expect(ветка).toMatch(/st === "live" \|\| st === "error" \|\| pagesTries >= 36/);

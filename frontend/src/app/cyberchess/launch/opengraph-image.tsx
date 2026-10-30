@@ -1,9 +1,7 @@
 import { ImageResponse } from "next/og";
 import { CHESS_LAUNCH_UTC, CHESS_LAUNCH_HUMAN } from "../launchDate";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
-import { fromPricePerMonth, standaloneApp } from "@/lib/termPricing";
-
-const CHESS_BASE_MONTHLY = standaloneApp("cyberchess")?.baseMonthly ?? 0;
+import { CHESS_YEARLY_USD } from "@/lib/termPricing";
 
 export const runtime = "edge";
 export const alt = `CyberChess — открываем ${CHESS_LAUNCH_HUMAN}: 500 000+ задач, Stockfish 18, ИИ-коуч`;
@@ -66,9 +64,8 @@ export default function CyberChessLaunchOg() {
           {[
             { n: "500 000+", t: "задач в банке" },
             { n: "Stockfish 18", t: "движок" },
-            // 15.09.2026: CyberChess — приложение лестницы сроков; «от» — месяц
-            // на 12-месячном сроке, число из @/lib/termPricing, не литералом.
-            { n: `от $${fromPricePerMonth(CHESS_BASE_MONTHLY)}`, t: "в месяц" },
+            // 19.10.2026: шахматы — $50 в год (слово основателя), число из @/lib/termPricing.
+            { n: `$${CHESS_YEARLY_USD}`, t: "в год" },
           ].map((c) => (
             <div
               key={c.n}

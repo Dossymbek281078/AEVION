@@ -20,6 +20,7 @@
 // модуле нет: контраст проверяется тестом, а литерал проверка не видит).
 // Страница переведена на светлый газетный эталон AEVION 2026-07-27.
 
+import { AiBadge } from "@/components/AiBadge";
 import { useEffect, useState, type ReactNode } from "react";
 import { useI18nOptional } from "@/lib/i18n";
 import { tm } from "./mcText";
@@ -81,15 +82,23 @@ const PANEL = [
 /** Имя агента для человека: роль из PANEL, а не внутренний id. 20.10.2026 (путь гостя
  *  на проде): в блоке разногласий печаталось «analyst: 2 · skeptic: 8» посреди русского
  *  экрана — карточки ответов уже звали agentTitle, а разногласия — нет. */
-export function имяАгента(id: string): string {
-  return agentTitle(PANEL.find((a) => a.id === id)?.role, id);
+export function имяАгента(id: string, lang?: string): string {
+  return названиеАгента(PANEL.find((a) => a.id === id)?.role, id, lang);
+}
+
+/** Подписи ролей на экране /en (решение Оркестратора 30.10.2026). На сервер уходит прежняя русская роль из PANEL —
+ *  промпт агента не меняется, переводится только то, что видит человек. */
+const ИМЕНА_НА_ENGLISH: Record<string, string> = { analyst: "Analyst", skeptic: "Skeptic", practic: "Practitioner" };
+
+export function названиеАгента(role: string | undefined, id: string, lang?: string): string {
+  return (lang === "en" ? ИМЕНА_НА_ENGLISH[id] : undefined) || agentTitle(role, id);
 }
 
 /** Текст проверки собирает сервер (services/multichat/dissent.ts) — с id агентов:
  *  «Сверить число с источником — analyst: 200 против practic: 30». Замер 20.10 на проде.
  *  Подставляем имена ролей там, где текст видит человек (экран и скачиваемый отчёт). */
-export function сИменами(text: string): string {
-  return PANEL.reduce((t, a) => t.replace(new RegExp(`\\b${a.id}\\b`, "g"), имяАгента(a.id)), text);
+export function сИменами(text: string, lang?: string): string {
+  return PANEL.reduce((t, a) => t.replace(new RegExp(`\\b${a.id}\\b`, "g"), имяАгента(a.id, lang)), text);
 }
 
 /**
@@ -149,6 +158,43 @@ const EXAMPLE_ANSWERS = [
       "десяти живым людям — узнаете больше, чем из любого тарифа. Тариф соберёте после первой оплаты.",
   },
 ];
+// Тот же пример для /en (замер на проде 30.10.2026, сайт 4f71ad70f: гость на английской странице
+// нажимал «Show an example» и читал три русских ответа). Числа и развилка те же — 40 против 300
+// визитов и «запускать / не запускать»; прогон через прод-эндпоинт /dissent/preview 30.10 дал
+// числовое расхождение 40↔300 и прямое отрицание по «launch», 3 проверки.
+const EXAMPLE_PROMPT_EN = "Should we launch a paid tier before the first sale?";
+const EXAMPLE_ANSWERS_EN = [
+  {
+    agentId: "analyst",
+    provider: "example",
+    ok: true,
+    reply:
+      "A paid tier before the first sale tests not demand but willingness to pay among those who already came. " +
+      "At the current traffic that is about 40 visitors a month — the sample is too small, the conclusion will be noise. " +
+      "First you need a channel that brings at least 300 visits.",
+  },
+  {
+    agentId: "skeptic",
+    provider: "example",
+    ok: true,
+    reply:
+      "The question is framed wrong. A tier is not an experiment but a commitment: you will have to defend the price, " +
+      "and changing it after launch costs more than it seems. At the current traffic that is about 300 visitors a month, " +
+      "and still what decides is not the number but what exactly the money is taken for.",
+  },
+  {
+    agentId: "practic",
+    provider: "example",
+    ok: true,
+    reply:
+      "Not sure this is a fork at all today. Do not launch a tier yet: put up a payment link for one module and show it " +
+      "to ten real people — you will learn more than from any pricing page. Build the tier after the first payment.",
+  },
+];
+/** Пример на языке страницы: en — английский, остальное — русский исходник. */
+export function примерДляЯзыка(lang: string): { prompt: string; answers: typeof EXAMPLE_ANSWERS } {
+  return lang === "en" ? { prompt: EXAMPLE_PROMPT_EN, answers: EXAMPLE_ANSWERS_EN } : { prompt: EXAMPLE_PROMPT, answers: EXAMPLE_ANSWERS };
+}
 
 
 /** Скачивание одним способом на весь модуль: две реализации подряд разъезжаются
@@ -170,72 +216,76 @@ function download(name: string, text: string, mime: string) {
  *
  *  Markdown, а не PDF: открывается везде, вставляется в задачу или письмо без
  *  конвертации, и его видно в diff, если положат в репозиторий. */
-function buildReport(
+export function buildReport(
   prompt: string,
   results: AgentResult[],
   dissent: Dissent | null,
   receipt: SignedReceipt | null,
-  isExample: boolean
+  isExample: boolean,
+  lang?: string
 ): string {
+  // 30.10.2026: отчёт на /en скачивался с русскими заголовками и подписями — все литералы через tm;
+  // без lang — русский как прежде. Тексты сервера (dissent.note, checks, signatureNote) приходят уже на языке запроса.
+  const t = (s: string) => tm(lang, s);
   const L: string[] = [];
-  L.push("# Консилиум AEVION", "");
-  if (isExample) L.push("> Это пример: ответы агентов заданы заранее, разногласия посчитаны настоящим алгоритмом.", "");
-  L.push(`**Вопрос:** ${prompt}`, "");
+  L.push(`# ${t("Консилиум AEVION")}`, "");
+  if (isExample) L.push(`> ${t("Это пример: ответы агентов заданы заранее, разногласия посчитаны настоящим алгоритмом.")}`, "");
+  L.push(`**${t("Вопрос:")}** ${prompt}`, "");
 
   if (dissent) {
     const verdict =
-      dissent.verdict === "consensus" ? "агенты сошлись"
-        : dissent.verdict === "split" ? "агенты разошлись"
-          : "сравнивать не с чем";
-    L.push(`## Итог: ${verdict}`, "", dissent.note, "");
-    if (dissent.agreement != null) L.push(`Схожесть ответов: ${dissent.agreement}`, "");
-    if (dissent.outlier) L.push(`Дальше всех от остальных: **${dissent.outlier.agentId}**`, "");
+      dissent.verdict === "consensus" ? t("агенты сошлись")
+        : dissent.verdict === "split" ? t("агенты разошлись")
+          : t("сравнивать не с чем");
+    L.push(`## ${t("Итог:")} ${verdict}`, "", dissent.note, "");
+    if (dissent.agreement != null) L.push(`${t("Схожесть ответов:")} ${dissent.agreement}`, "");
+    if (dissent.outlier) L.push(`${t("Дальше всех от остальных:")} **${имяАгента(dissent.outlier.agentId, lang)}**`, "");
 
     if (dissent.contradictions?.length) {
-      L.push("### Прямое противоречие", "");
+      L.push(`### ${t("Прямое противоречие")}`, "");
       for (const c of dissent.contradictions) {
-        L.push(`- «${c.word}»: ${c.affirms.map(имяАгента).join(", ")} утверждает, ${c.denies.map(имяАгента).join(", ")} отрицает`);
+        L.push(`- «${c.word}»: ${c.affirms.map((x) => имяАгента(x, lang)).join(", ")} ${t("утверждает")}, ${c.denies.map((x) => имяАгента(x, lang)).join(", ")} ${t("отрицает")}`);
       }
       L.push("");
     }
 
     if (dissent.numericConflicts.length) {
-      L.push("### Расхождения в числах", "");
+      L.push(`### ${t("Расхождения в числах")}`, "");
       for (const c of dissent.numericConflicts) {
-        L.push(`- ${c.values.map((v) => `${имяАгента(v.agentId)}: ${v.raw}`).join(" против ")} (разброс ${c.spread})`);
-        L.push(`  - контекст: «${c.context}»`);
+        L.push(`- ${c.values.map((v) => `${имяАгента(v.agentId, lang)}: ${v.raw}`).join(` ${t("против")} `)} (${t("разброс")} ${c.spread})`);
+        L.push(`  - ${t("контекст:")} «${c.context}»`);
       }
       L.push("");
     }
 
     if (dissent.checks?.length) {
-      L.push("### Что проверить", "", "Порядок — по проверяемости: сверху то, что закрывается за минуту.", "");
-      dissent.checks.forEach((c, i) => L.push(`${i + 1}. ${сИменами(c.text)}`));
+      L.push(`### ${t("Что проверить")}`, "", t("Порядок — по проверяемости: сверху то, что закрывается за минуту."), "");
+      dissent.checks.forEach((c, i) => L.push(`${i + 1}. ${сИменами(c.text, lang)}`));
       L.push("");
     }
   }
 
-  L.push("## Ответы агентов", "");
+  L.push(`## ${t("Ответы агентов")}`, "");
   for (const r of results) {
     // Роль и человеческая причина: отчёт уходит коллеге, и «rate_limit_exceeded
     // ... per IP» в нём читается как вина отправителя.
-    L.push(`### ${agentTitle(r.role, r.agentId)}${r.provider ? ` · ${r.provider}` : ""}`, "");
+    L.push(`### ${названиеАгента(r.role, r.agentId, lang)}${r.provider ? ` · ${r.provider}` : ""}`, "");
     if (r.ok) {
       L.push(String(r.reply || "").trim(), "");
     } else {
-      const f = agentFailure(r.error);
-      L.push(`_Не ответил: ${f.human}_${f.technical ? ` (${f.technical})` : ""}`, "");
+      const f = agentFailure(r.error, lang);
+      L.push(`_${t("Не ответил:")} ${f.human}_${f.technical ? ` (${f.technical})` : ""}`, "");
     }
   }
 
   if (receipt) {
-    L.push("## Чек", "");
+    L.push(`## ${t("Чек")}`, "");
     L.push(`- sha256: \`${receipt.hash}\``);
-    L.push(`- канонизация: RFC8785, дайджест sha256`);
-    L.push(`- подпись: ${receipt.signature ? `${receipt.signature.algo}, ключ ${receipt.signature.kid}` : receipt.signatureNote || "отсутствует"}`);
-    L.push(`- вызовов ${receipt.receipt.cost.calls}, ответили ${receipt.receipt.cost.answered}, не ответили ${receipt.receipt.cost.failed}`);
+    L.push(`- ${t("канонизация: RFC8785, дайджест sha256")}`);
+    L.push(`- ${t("подпись:")} ${receipt.signature ? `${receipt.signature.algo}, ${t("ключ")} ${receipt.signature.kid}` : receipt.signatureNote || t("отсутствует")}`);
+    L.push(`- ${t("вызовов")} ${receipt.receipt.cost.calls}, ${t("ответили")} ${receipt.receipt.cost.answered}, ${t("не ответили")} ${receipt.receipt.cost.failed}`);
     L.push("");
-    L.push("Отчёту верить не обязательно: скачайте чек и пересчитайте хеш — сами или сторонней реализацией. Спецификация открыта.", "");
+    L.push(t("Отчёту верить не обязательно: скачайте чек и пересчитайте хеш — сами или сторонней реализацией. Спецификация открыта."), "");
   }
 
   return L.join("\n");
@@ -249,7 +299,7 @@ const MC_UI: Record<string, {
   askAria: string; askPh: string; busyAsk: string;
   // 23.10.2026: строка остатка гостя, стена и подпись «3 агента» были русским литералом и на en/kk
   // показывались по-русски (замер yazyk-devhub.mjs: одна и та же строка не на языке у en и kk).
-  guestLeft: (n: number) => string; guestOut: string; independent: string;
+  guestLeft: (n: number) => string; guestOut: string; guestOutLink: string; independent: string;
 }> = {
   // busyAsk — класс «busy-ярлык быстрее доводчика» (назначение 07.09,
   // рецепт №2 как у GEN_UI.busy*): ярлык живёт секунды и первым видит
@@ -258,14 +308,17 @@ const MC_UI: Record<string, {
   ru: { askAria: "Вопрос совету", askPh: "Например: стоит ли запускать платный тариф до первой продажи?", busyAsk: "Агенты отвечают…",
     guestLeft: (n) => `Бесплатно без входа: осталось ${n} ${n === 1 ? "запрос" : "запроса"}. Дальше — вход по почте.`,
     guestOut: "Бесплатные запросы на сегодня кончились — войдите по почте, и норма продолжится.",
+    guestOutLink: "войдите по почте",
     independent: "3 агента · 3 вызова · ответы независимы" },
   en: { askAria: "Question for the council", askPh: "For example: should we launch a paid tier before the first sale?", busyAsk: "Agents are answering…",
     guestLeft: (n) => `Free without signing in: ${n} ${n === 1 ? "request" : "requests"} left. Then sign in by email.`,
     guestOut: "Free requests for today are used up — sign in by email and the allowance continues.",
+    guestOutLink: "sign in by email",
     independent: "3 agents · 3 calls · independent answers" },
   kk: { askAria: "Кеңеске сұрақ", askPh: "Мысалы: алғашқы сатылымға дейін ақылы тарифті іске қосу керек пе?", busyAsk: "Агенттер жауап беруде…",
     guestLeft: (n) => `Кірусіз тегін: ${n} сұрау қалды. Әрі қарай — пошта арқылы кіру.`,
     guestOut: "Бүгінгі тегін сұраулар таусылды — пошта арқылы кіріңіз, норма жалғасады.",
+    guestOutLink: "пошта арқылы кіріңіз",
     independent: "3 агент · 3 шақыру · жауаптар тәуелсіз" },
 };
 
@@ -278,6 +331,9 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
   const [dissent, setDissent] = useState<Dissent | null>(null);
   const [receipt, setReceipt] = useState<SignedReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 402 upgrade_required — отказ стены, а не сбой агента: рядом с текстом нужна дорога к тарифу
+  // (замер 29.10: на квоту консилиума экран писал «Агент не ответил.» и кнопки не было).
+  const [tarifUrl, setTarifUrl] = useState<string | null>(null);
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [isExample, setIsExample] = useState(false);
 
@@ -331,6 +387,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
     // воронка считает по feature_use (events.ts), канал и пост track() прикладывает сам.
     track({ type: "feature_use", source: "multichat", meta: { feature: "council_ask", app: "multichat", guest: !isAuthenticated(), chars: q.length } });
     setError(null);
+    setTarifUrl(null);
     setIsExample(false);
     // Прошлый результат снимаем ДО запроса, а не после успешного ответа.
     //
@@ -355,6 +412,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         // 402 модульной стены приходит сюда кодом upgrade_required — человеку нужен текст, а
         // кнопки входа и тарифа уже даёт стена (PaywallModal). Замер 13.10.2026: на экране
         // печаталось голое «upgrade_required».
+        if (conv && conv.error === "upgrade_required") setTarifUrl(typeof conv.upgradeUrl === "string" ? conv.upgradeUrl : "/pricing?app=multichat-engine");
         if (conv?.error === "upgrade_required") throw new Error(tm(mcLang, "Бесплатные запросы на сегодня закончились. Войдите под почтой оплаты или откройте тариф — кнопки ниже."));
         throw new Error(conv?.error || tm(mcLang, "не удалось создать беседу"));
       }
@@ -362,14 +420,18 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       const r = await fetch(apiUrl(`/api/multichat/conversations/${conv.id}/dispatch`), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...заголовкиУстройства(), ...getAuthHeaders() },
-        body: JSON.stringify({ prompt: q, agents: PANEL }),
+        body: JSON.stringify({ prompt: q, agents: PANEL, lang: mcLang }),
       });
       const d = await r.json();
       if (!r.ok) {
         // retryAfterSec сервер присылает рядом с отказом — не показать его значит
         // заставить человека угадывать, когда пробовать снова.
-        const f = agentFailure(d?.error || `upstream ${r.status}`);
-        throw new Error(f.human + retryHint(d?.retryAfterSec));
+        if (r.status === 402 && d?.error === "upgrade_required") {
+          setTarifUrl(typeof d.upgradeUrl === "string" ? d.upgradeUrl : "/pricing?app=multichat-engine");
+          throw new Error(tm(mcLang, "Месячной квоты бесплатного тарифа не хватит на консилиум. Откройте тариф — ссылка ниже."));
+        }
+        const f = agentFailure(d?.error || `upstream ${r.status}`, mcLang);
+        throw new Error(f.human + retryHint(d?.retryAfterSec, mcLang));
       }
       setResults(d.results || []);
       setDissent(d.dissent || null);
@@ -391,22 +453,24 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
     setBusy(true);
     track({ type: "feature_use", source: "multichat", meta: { feature: "council_example", app: "multichat", guest: !isAuthenticated() } });
     setError(null);
+    setTarifUrl(null);
     // Симметрично ask(): если пример не загрузится, на экране не должен
     // остаться прошлый настоящий прогон — он там уже без своего вопроса.
     setResults(null);
     setDissent(null);
     setReceipt(null);
     setIsExample(false);
+    const пример = примерДляЯзыка(mcLang);
     try {
       const r = await fetch(apiUrl("/api/multichat/dissent/preview"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: EXAMPLE_ANSWERS }),
+        body: JSON.stringify({ answers: пример.answers, lang: mcLang }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || `сервер ответил ${r.status}`);
-      setPrompt(EXAMPLE_PROMPT);
-      setResults(EXAMPLE_ANSWERS);
+      setPrompt(пример.prompt);
+      setResults(пример.answers);
       setDissent(d.dissent || null);
       setReceipt(null); // чека у примера нет: ответы не наши, платить и подписывать нечего
       setIsExample(true);
@@ -473,11 +537,29 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {authed === false
             ? гостьМожет
               ? MC.guestLeft(свободно ?? 0)
-              : MC.guestOut
+              : (() => {
+                  // Стена без выхода (замер 30.10: «войдите по почте» — просто текст при выключенной кнопке):
+                  // сама фраза — ссылка на /auth, после входа человек возвращается сюда.
+                  const [до, после] = MC.guestOut.split(MC.guestOutLink);
+                  return (
+                    <>
+                      {до}
+                      <a href="/auth?next=/multichat-engine" data-mc-signin="guest-out" style={{ color: T.accent, fontWeight: 700 }}>
+                        {MC.guestOutLink}
+                      </a>
+                      {после}
+                    </>
+                  );
+                })()
             : MC.independent}
           </span>
       </div>
       {error && <p style={{ fontSize: 12, color: T.bad, margin: "8px 0 0" }}>{error}</p>}
+      {error && tarifUrl && (
+        <a href={tarifUrl} data-mc-buy="council-402" style={{ display: "inline-block", marginTop: 8, fontSize: 13, fontWeight: 700, color: T.accent }}>
+          {tm(mcLang, "Открыть тариф →")}
+        </a>
+      )}
 
       {/* Пометка обязательна: принять пример за свой прогон — то же самое, что
           показать нарисованный результат. */}
@@ -496,7 +578,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             </h3>
             {dissent.agreement != null && (
               <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: T.textFaded }}>
-                схожесть {dissent.agreement}
+                {tm(mcLang, "схожесть")} {dissent.agreement}
               </span>
             )}
             <span style={{ fontSize: 12, color: T.textMute }}>{dissent.note}</span>
@@ -516,7 +598,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                   <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0", color: T.text }}>
                     <span style={{ color: T.bad, fontWeight: 600 }}>«{c.word}»</span>
                     <span style={{ color: T.textDim }}>
-                      {" "}— {c.affirms.map(имяАгента).join(", ")} утверждает, {c.denies.map(имяАгента).join(", ")} отрицает
+                      {" "}— {c.affirms.map((x) => имяАгента(x, mcLang)).join(", ")} {tm(mcLang, "утверждает")}, {c.denies.map((x) => имяАгента(x, mcLang)).join(", ")} {tm(mcLang, "отрицает")}
                     </span>
                   </li>
                 ))}
@@ -533,7 +615,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                 {dissent.numericConflicts.slice(0, 5).map((c, i) => (
                   <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0" }}>
                     <span style={{ color: T.text }}>
-                      {c.values.map((v) => `${имяАгента(v.agentId)}: ${v.raw}`).join("  ·  ")}
+                      {c.values.map((v) => `${имяАгента(v.agentId, mcLang)}: ${v.raw}`).join("  ·  ")}
                     </span>
                     <span style={{ marginLeft: 8, fontSize: 12, color: T.textFaded }}>«{разметкаОтвета(c.context)}»</span>
                   </li>
@@ -545,9 +627,9 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.outlier && (
             <p style={{ fontSize: 14, color: T.textDim, margin: "14px 0 0" }}>
               <span style={{ color: T.textFaded }}>{tm(mcLang, "Особняком:")} </span>
-              <span style={{ color: T.warn }}>{имяАгента(dissent.outlier.agentId)}</span>
+              <span style={{ color: T.warn }}>{имяАгента(dissent.outlier.agentId, mcLang)}</span>
               <span style={{ fontSize: 12, color: T.textFaded }}>
-                {" "}— его ответ дальше всех от остальных. Это не «неправ», это «прочитать первым».
+                {" "}{tm(mcLang, "— его ответ дальше всех от остальных. Это не «неправ», это «прочитать первым».")}
               </span>
             </p>
           )}
@@ -555,7 +637,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.hedges.length > 0 && (
             <p style={{ fontSize: 14, color: T.textDim, margin: "8px 0 0" }}>
               <span style={{ color: T.textFaded }}>{tm(mcLang, "Осторожность и отказы:")} </span>
-              {dissent.hedges.map((h) => `${имяАгента(h.agentId)} (${h.kind === "failed" ? tm(mcLang, "не ответил") : h.note})`).join(", ")}
+              {dissent.hedges.map((h) => `${имяАгента(h.agentId, mcLang)} (${h.kind === "failed" ? tm(mcLang, "не ответил") : h.note})`).join(", ")}
             </p>
           )}
 
@@ -570,7 +652,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
               <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 7 }}>
                 {dissent.checks.map((c, i) => (
                   <li key={i} style={{ fontSize: 14, color: T.textDim, lineHeight: 1.55 }}>
-                    {разметкаОтвета(сИменами(c.text))}
+                    {разметкаОтвета(сИменами(c.text, mcLang))}
                   </li>
                 ))}
               </ol>
@@ -587,12 +669,12 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       {receipt && (
         <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, fontSize: 12, color: T.textFaded }}>
           <span>
-            Чек · вызовов {receipt.receipt.cost.calls}, ответили {receipt.receipt.cost.answered}
-            {receipt.receipt.cost.failed > 0 ? `, не ответили ${receipt.receipt.cost.failed}` : ""}
+            {tm(mcLang, "Чек · вызовов")} {receipt.receipt.cost.calls}, {tm(mcLang, "ответили")} {receipt.receipt.cost.answered}
+            {receipt.receipt.cost.failed > 0 ? `, ${tm(mcLang, "не ответили")} ${receipt.receipt.cost.failed}` : ""}
           </span>
           <span style={{ fontFamily: "ui-monospace, monospace" }}>sha256 {receipt.hash.slice(0, 16)}…</span>
           <span style={{ color: receipt.signature ? T.accent : T.warn }}>
-            {receipt.signature ? `подписан (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
+            {receipt.signature ? `${tm(mcLang, "подписан")} (${receipt.signature.algo}, ${receipt.signature.kid})` : receipt.signatureNote}
           </span>
           <button
             onClick={() =>
@@ -608,6 +690,17 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         </div>
       )}
 
+      {/* 29.10: дорога к прошлым беседам. Библиотека /multichat-engine/library существовала,
+          но ни одна страница на неё не ссылалась — вернувшийся человек не находил свой разбор. */}
+      {authed && results && results.length > 0 && (
+        <div style={{ marginTop: 10, fontSize: 13, color: T.textMute }}>
+          <a href="/multichat-engine/library" data-mc-library="after-answer" style={{ color: T.accent, fontWeight: 700 }}>
+            {tm(mcLang, "🗂 Мои беседы")}
+          </a>{" "}
+          {tm(mcLang, "— эта беседа сохранена в вашем аккаунте")}
+        </div>
+      )}
+
       {/* Отчёт доступен и без чека — например, у примера для гостя: пересылать
           коллеге разбор осмысленно и тогда, когда подписывать нечего. */}
       {results && results.length > 0 && (
@@ -616,7 +709,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             onClick={() =>
               download(
                 `aevion-consilium-${(receipt?.hash || "example").slice(0, 12)}.md`,
-                buildReport(prompt, results, dissent, receipt, isExample),
+                buildReport(prompt, results, dissent, receipt, isExample, mcLang),
                 "text/markdown;charset=utf-8"
               )
             }
@@ -637,11 +730,12 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", borderBottom: `1px solid ${T.surfaceSoft}`, paddingBottom: 6 }}>
                 {/* Роль, а не внутренний id: «analyst» в русском интерфейсе выглядит
                     утечкой кода, а роль сервер и так присылает в ответе. */}
-                <h4 style={{ fontSize: 15, margin: 0, color: T.text }}>{agentTitle(r.role, r.agentId)}</h4>
+                <h4 style={{ fontSize: 15, margin: 0, color: T.text }}>{названиеАгента(r.role, r.agentId, mcLang)}</h4>
                 <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded }}>
                   {r.provider || "—"}
                 </span>
               </div>
+              <AiBadge />
               <p style={{ marginTop: 10, whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.65, color: T.textDim }}>
                 {r.ok ? (
                   разметкаОтвета(r.reply ?? "")
@@ -649,10 +743,10 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                   // Причина по-русски, исходная строка сервера мелким рядом:
                   // прятать её нельзя, иначе отчёт человека об ошибке бесполезен.
                   <span style={{ color: T.bad }}>
-                    {agentFailure(r.error).human}
-                    {agentFailure(r.error).technical && (
+                    {agentFailure(r.error, mcLang).human}
+                    {agentFailure(r.error, mcLang).technical && (
                       <span style={{ display: "block", marginTop: 6, fontSize: 11, color: T.textFaded }}>
-                        {agentFailure(r.error).technical}
+                        {agentFailure(r.error, mcLang).technical}
                       </span>
                     )}
                   </span>

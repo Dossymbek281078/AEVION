@@ -26,6 +26,7 @@ import path from "node:path";
 // 136 (13.10.2026): +1 — строки масштаба на первом экране берут подписи из словаря (cc.t("board.zoom…")),
 // в русском тексте английских слов не прибавилось; ключи словаря прибор считает как слова.
 // 23.10.2026: 131 → 123 (клавиши Ctrl/Enter/Esc в белом списке, «Lichess username» переведён).
+// 28.10.2026: блок ролика Ави добавил +1 (console.warn с «[cyberchess]» и обрывки JSX между кавычками) — исправлен код, предел 123 остался.
 const PREDEL = 123;
 /*
  * Имена собственные — дебюты, игроки, площадки, названия режимов и тем — не
@@ -38,6 +39,12 @@ const ИМЕНА = new Set([
   "Klimt", "FIDE", "QShield", "QSign", "QCoreAI", "Chessy", "Rush", "Survival", "Ghost",
   "Neon", "Obsidian", "Sakura", "Wood", "Rose", "Dark", "Reel", "WhatIf", "Masters", "masters",
   "Twin", "Fishing", "Puzzle", "Play", "Command", "Emoji", "Expert", "Master",
+  // 24.10.2026: Chess.com — название сайта, как Lichess (набор звуков «Chess.com стиль» и его kk)
+  "Chess", "chess",
+  // 24.10.2026: Glicko — название рейтинговой системы, GitHub — сервиса (страница CPI)
+  "Glicko", "Glicko-", "GitHub",
+  // 24.10.2026: имена стримеров и канал из подборки студии (Levy Rozman, Jerry, Nelson Lopez, gmhikaru)
+  "Levy", "Rozman", "Jerry", "Nelson", "gmhikaru",
 ]);
 
 const BELYJ = new Set([
@@ -52,6 +59,8 @@ const BELYJ = new Set([
   "Pro", "Free",
   // Технические, но неизбежные в строках.
   "QR", "SVG", "PNG", "URL", "API",
+  // 24.10.2026: формат файла, как PNG/SVG (экспорт/импорт репертуара)
+  "JSON",
   // 23.10.2026: названия клавиш — не английский текст, а надпись на клавише;
   // ник-пример — имя. Перенос атрибутов в словарь удвоил их (ru + kk).
   "Ctrl", "Enter", "Esc", "DrNykterstein",

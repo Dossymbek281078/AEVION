@@ -1,4 +1,5 @@
 "use client";
+import { AiBadge } from "@/components/AiBadge";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { отказТренера, тренерОтветил, пометкаЗапаснойМодели } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
@@ -801,6 +802,7 @@ ${quality === "blunder" || quality === "mistake"
               Выбери действие выше или задай свой вопрос
             </div>
           )}
+          <AiBadge />
           {msgs.map((m, i) => (
             <div key={i} style={{
               marginBottom: 8, display: "flex", flexDirection: "column",

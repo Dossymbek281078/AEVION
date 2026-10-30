@@ -11,6 +11,7 @@
 // Цвета — только через токены ../../theme: контраст проверяется тестом
 // scripts/multichat-contrast.test.mjs, а сырой литерал проверка не видит.
 
+import { AiBadge } from "@/components/AiBadge";
 import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
@@ -18,6 +19,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { T } from "../../theme";
 import { agentFailure } from "../../failureText";
+import { useI18nOptional } from "@/lib/i18n";
+import { tm } from "../../mcText";
 
 interface Turn {
   role: "user" | "assistant" | "system";
@@ -38,9 +41,13 @@ interface SharedConversation {
   truncated?: boolean;
 }
 
-function fmtDate(iso?: string) {
+function dateLocale(lang: string) {
+  return lang === "ru" ? "ru-RU" : lang === "kk" ? "kk-KZ" : "en-GB";
+}
+
+function fmtDate(iso: string | undefined, lang: string) {
   if (!iso) return "";
-  return new Date(iso).toLocaleString("ru-RU", {
+  return new Date(iso).toLocaleString(dateLocale(lang), {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -51,6 +58,9 @@ function fmtDate(iso?: string) {
 export default function SharedConversationPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
+  // 30.10.2026: на /en страница беседы показывала русский интерфейс. Язык — из провайдера, подписи — через tm.
+  const lang = useI18nOptional()?.lang ?? "ru";
+  const t = (s: string) => tm(lang, s);
   const [data, setData] = useState<SharedConversation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -67,7 +77,7 @@ export default function SharedConversationPage() {
     try {
       const r = await fetch(apiUrl(`/api/multichat/shared/${encodeURIComponent(token)}`));
       if (r.status === 404) {
-        setError("Эта ссылка не найдена или была отозвана автором.");
+        setError(t("Эта ссылка не найдена или была отозвана автором."));
         return;
       }
       if (!r.ok) {
@@ -75,12 +85,12 @@ export default function SharedConversationPage() {
         // «Ошибка 429» ему ничего не говорит, а «per IP» из ответа сервера
         // звучит как его вина, хотя предел общий для всех в эту минуту.
         const body = (await r.json().catch(() => null)) as { error?: unknown } | null;
-        setError(agentFailure(body?.error ?? `upstream ${r.status}`).human);
+        setError(t(agentFailure(body?.error ?? `upstream ${r.status}`).human));
         return;
       }
       setData(await r.json());
     } catch {
-      setError("Не удалось загрузить");
+      setError(t("Не удалось загрузить"));
     } finally {
       setLoading(false);
     }
@@ -99,7 +109,7 @@ export default function SharedConversationPage() {
   if (loading) {
     return (
       <div style={screen}>
-        <p style={{ color: T.textMute, fontSize: 14 }}>Загрузка…</p>
+        <p style={{ color: T.textMute, fontSize: 14 }}>{t("Загрузка…")}</p>
       </div>
     );
   }
@@ -109,7 +119,7 @@ export default function SharedConversationPage() {
       <div style={screen}>
         <div style={{ maxWidth: 460, textAlign: "center" }}>
           <h1 style={{ fontSize: 22, fontWeight: 600, margin: "0 0 8px", color: T.text }}>
-            Ссылка недоступна
+            {t("Ссылка недоступна")}
           </h1>
           <p style={{ fontSize: 15, color: T.textMute, lineHeight: 1.6, margin: 0 }}>{error}</p>
           <Link
@@ -120,7 +130,7 @@ export default function SharedConversationPage() {
               fontSize: 14, fontWeight: 600, textDecoration: "none",
             }}
           >
-            Открыть Мультичат
+            {t("Открыть Мультичат")}
           </Link>
         </div>
       </div>
@@ -167,7 +177,7 @@ export default function SharedConversationPage() {
       >
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
           <Link href="/multichat-engine" style={{ color: T.textMute, fontSize: 14, textDecoration: "none" }}>
-            AEVION Мультичат
+            {t("AEVION Мультичат")}
           </Link>
           <span style={{ color: T.textFaded }}>·</span>
           <h1 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -175,14 +185,14 @@ export default function SharedConversationPage() {
           </h1>
         </div>
         <span style={{ fontSize: 12, color: T.textMute, border: `1px solid ${T.lineSoft}`, borderRadius: 999, padding: "2px 10px" }}>
-          Только просмотр
+          {t("Только просмотр")}
         </span>
       </header>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: 24, display: "grid", gap: 22 }}>
         <p style={{ fontSize: 13, color: T.textFaded, margin: 0 }}>
-          Беседа создана {fmtDate(data.conversation.createdAt)}. Ответы агентов показаны рядом
-          намеренно: там, где они разошлись, и надо смотреть в первую очередь.
+          {t("Беседа создана")} {fmtDate(data.conversation.createdAt, lang)}.{" "}
+          {t("Ответы агентов показаны рядом намеренно: там, где они разошлись, и надо смотреть в первую очередь.")}
         </p>
 
         {data.truncated && (
@@ -192,8 +202,8 @@ export default function SharedConversationPage() {
               border: `1px solid ${T.lineSoft}`, borderRadius: 10, padding: "10px 14px",
             }}
           >
-            Показана последняя часть беседы — {data.turns.length} реплик из{" "}
-            {data.totalTurns ?? data.turns.length}. Начало разговора в публичную ссылку не попало.
+            {t("Показана последняя часть беседы —")} {data.turns.length} {t("реплик из")}{" "}
+            {data.totalTurns ?? data.turns.length}. {t("Начало разговора в публичную ссылку не попало.")}
           </p>
         )}
 
@@ -201,7 +211,7 @@ export default function SharedConversationPage() {
           <div key={idx} style={{ display: "grid", gap: 12 }}>
             <div style={{ background: T.surfaceSoft, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 16 }}>
               <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, marginBottom: 6 }}>
-                Вопрос · {fmtDate(round.question.createdAt)}
+                {t("Вопрос ·")} {fmtDate(round.question.createdAt, lang)}
               </div>
               <div style={{ fontSize: 15, lineHeight: 1.65, whiteSpace: "pre-wrap", color: T.text }}>
                 {round.question.content}
@@ -221,8 +231,9 @@ export default function SharedConversationPage() {
                     <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: T.textFaded, marginBottom: 8 }}>
                       {a}
                     </div>
+                    <AiBadge />
                     <div style={{ fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap", color: failed ? T.warn : T.textDim }}>
-                      {failed ? "агент не ответил" : turn.content}
+                      {failed ? t("агент не ответил") : turn.content}
                     </div>
                   </article>
                 );
@@ -233,7 +244,7 @@ export default function SharedConversationPage() {
 
         <div style={{ textAlign: "center", paddingTop: 24, borderTop: `1px solid ${T.lineSoft}` }}>
           <p style={{ fontSize: 13, color: T.textFaded, margin: "0 0 12px" }}>
-            Это ответ консилиума AEVION — три роли отвечают независимо, и разногласие видно сразу.
+            {t("Это ответ консилиума AEVION — три роли отвечают независимо, и разногласие видно сразу.")}
           </p>
           <Link
             href="/multichat-engine"
@@ -242,7 +253,7 @@ export default function SharedConversationPage() {
               borderRadius: 10, padding: "9px 18px", fontSize: 14, fontWeight: 600, textDecoration: "none",
             }}
           >
-            Спросить свой консилиум →
+            {t("Спросить свой консилиум →")}
           </Link>
         </div>
       </div>

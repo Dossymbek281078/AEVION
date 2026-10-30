@@ -51,3 +51,90 @@ export function regionLabel(slug: string | null | undefined): string | null {
   if (!slug) return null;
   return WORK_REGIONS_KZ.find((r) => r.slug === slug)?.label ?? slug;
 }
+
+/*
+ * Подписи по языку страницы (29.10.2026). До этого регионы, режим работы и образование
+ * показывались только по-русски при любом языке сайта. Значение, уходящее на сервер
+ * (slug / WorkMode / EducationLevel), не меняется — переводится только подпись.
+ * ⚠️ kk — черновик, нужна вычитка носителя. Язык без словаря → en.
+ */
+type GeoLang = "ru" | "en" | "kk";
+function geoLang(lang: string | null | undefined): GeoLang {
+  return lang === "ru" || lang === "kk" ? lang : "en";
+}
+
+export const REGION_LABELS: Record<GeoLang, Record<string, string>> = {
+  ru: Object.fromEntries(WORK_REGIONS_KZ.map((r) => [r.slug, r.label])),
+  en: {
+    "almaty-city": "Almaty",
+    "astana-city": "Astana",
+    "shymkent-city": "Shymkent",
+    abai: "Abai Region",
+    akmola: "Akmola Region",
+    aktobe: "Aktobe Region",
+    "almaty-region": "Almaty Region",
+    atyrau: "Atyrau Region",
+    "east-kazakhstan": "East Kazakhstan Region",
+    zhambyl: "Zhambyl Region",
+    zhetysu: "Zhetysu Region",
+    "west-kazakhstan": "West Kazakhstan Region",
+    karaganda: "Karaganda Region",
+    kostanay: "Kostanay Region",
+    kyzylorda: "Kyzylorda Region",
+    mangystau: "Mangystau Region",
+    pavlodar: "Pavlodar Region",
+    "north-kazakhstan": "North Kazakhstan Region",
+    turkestan: "Turkestan Region",
+    ulytau: "Ulytau Region",
+  },
+  kk: {
+    "almaty-city": "Алматы",
+    "astana-city": "Астана",
+    "shymkent-city": "Шымкент",
+    abai: "Абай облысы",
+    akmola: "Ақмола облысы",
+    aktobe: "Ақтөбе облысы",
+    "almaty-region": "Алматы облысы",
+    atyrau: "Атырау облысы",
+    "east-kazakhstan": "Шығыс Қазақстан облысы",
+    zhambyl: "Жамбыл облысы",
+    zhetysu: "Жетісу облысы",
+    "west-kazakhstan": "Батыс Қазақстан облысы",
+    karaganda: "Қарағанды облысы",
+    kostanay: "Қостанай облысы",
+    kyzylorda: "Қызылорда облысы",
+    mangystau: "Маңғыстау облысы",
+    pavlodar: "Павлодар облысы",
+    "north-kazakhstan": "Солтүстік Қазақстан облысы",
+    turkestan: "Түркістан облысы",
+    ulytau: "Ұлытау облысы",
+  },
+};
+
+export const WORK_MODE_LABELS_BY_LANG: Record<GeoLang, Record<WorkMode, string>> = {
+  ru: WORK_MODE_LABELS,
+  en: { ON_SITE: "On site", REMOTE: "Remote", HYBRID: "Hybrid", FIELD_WORK: "Field work", FLY_IN_FLY_OUT: "Rotational shifts" },
+  kk: { ON_SITE: "Нысанда", REMOTE: "Қашықтан", HYBRID: "Аралас", FIELD_WORK: "Жүріп-тұрып жұмыс", FLY_IN_FLY_OUT: "Вахталық әдіс" },
+};
+
+export const EDUCATION_LEVEL_LABELS_BY_LANG: Record<GeoLang, Record<EducationLevel, string>> = {
+  ru: EDUCATION_LEVEL_LABELS,
+  en: { SECONDARY: "Secondary school", VOCATIONAL: "Vocational / college", BACHELOR: "Bachelor's degree", MASTER: "Master's degree", OTHER: "Other" },
+  kk: { SECONDARY: "Орта білім", VOCATIONAL: "Арнаулы орта / колледж", BACHELOR: "Бакалавриат", MASTER: "Магистратура", OTHER: "Басқа" },
+};
+
+/** Подпись региона на языке страницы; неизвестный slug показывается как есть. */
+export function regionLabelIn(slug: string | null | undefined, lang: string | null | undefined): string | null {
+  if (!slug) return null;
+  return REGION_LABELS[geoLang(lang)][slug] ?? slug;
+}
+
+export function workModeLabelIn(mode: string | null | undefined, lang: string | null | undefined): string | null {
+  if (!mode) return null;
+  return WORK_MODE_LABELS_BY_LANG[geoLang(lang)][mode as WorkMode] ?? mode;
+}
+
+export function educationLabelIn(level: string | null | undefined, lang: string | null | undefined): string | null {
+  if (!level) return null;
+  return EDUCATION_LEVEL_LABELS_BY_LANG[geoLang(lang)][level as EducationLevel] ?? level;
+}

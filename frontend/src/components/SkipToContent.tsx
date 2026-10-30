@@ -20,6 +20,38 @@ const LABELS: Record<string, string> = {
   ru: "Перейти к содержимому",
   en: "Skip to content",
   kk: "Мазмұнға өту",
+  // 27.10.2026: саудовская волна — в ar-режиме ссылка была по-русски (запасной путь был ru).
+  ar: "الانتقال إلى المحتوى",
+};
+
+/*
+ * 27.10.2026 (замер Продаж, locale ar-SA, 390 px): «left: -9999px» в RTL растягивал документ
+ * до 10389 px — страница ездила вбок на главной, /pricing и /verify. В LTR отрицательный left
+ * не создаёт прокрутки, в RTL — создаёт. Поэтому прячем приёмом «визуально скрыто» (1×1 px,
+ * clip), который не зависит от направления письма; при фокусе с Tab ссылка показывается в углу
+ * по inset-inline-start — то есть в начале строки и в ru/en, и в ar.
+ */
+const СКРЫТО: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  clipPath: "inset(50%)",
+  whiteSpace: "nowrap",
+  top: 0,
+  insetInlineStart: 0,
+};
+const ПОКАЗАНО: React.CSSProperties = {
+  position: "fixed",
+  width: "auto",
+  height: "auto",
+  overflow: "visible",
+  clip: "auto",
+  clipPath: "none",
+  whiteSpace: "normal",
+  top: 12,
+  insetInlineStart: 12,
 };
 
 export default function SkipToContent() {
@@ -54,9 +86,7 @@ export default function SkipToContent() {
         if (e.key === "Enter" || e.key === " ") перейти(e);
       }}
       style={{
-        position: "absolute",
-        left: "-9999px",
-        top: 0,
+        ...СКРЫТО,
         zIndex: 200,
         padding: "10px 16px",
         borderRadius: 8,
@@ -68,16 +98,13 @@ export default function SkipToContent() {
       }}
       onFocus={(e) => {
         // Появляется только при фокусе: зрячему мышью она не нужна.
-        e.currentTarget.style.left = "12px";
-        e.currentTarget.style.top = "12px";
-        e.currentTarget.style.position = "fixed";
+        Object.assign(e.currentTarget.style, ПОКАЗАНО);
       }}
       onBlur={(e) => {
-        e.currentTarget.style.left = "-9999px";
-        e.currentTarget.style.position = "absolute";
+        Object.assign(e.currentTarget.style, СКРЫТО);
       }}
     >
-      {LABELS[lang] ?? LABELS.ru}
+      {LABELS[lang] ?? LABELS.en}
     </a>
   );
 }

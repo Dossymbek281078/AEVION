@@ -1,5 +1,6 @@
 "use client";
 
+import { moduleTitle } from "@/data/moduleNames";
 import { channelNow } from "@/lib/channelNow";
 import { ждатьКарточкуПриложения } from "@/lib/scrollToAppCard";
 import { useEffect, useRef, useState, useMemo } from "react";
@@ -13,6 +14,7 @@ import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { channelFrom, keepChannel, withChannel } from "@/lib/products";
+import { сКассойПартнёра } from "@/lib/lsAffiliate";
 import { track } from "@/lib/track";
 import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
 import { usePricingT, termUnitKey } from "@/lib/pricingI18n";
@@ -20,6 +22,7 @@ import {
   localizeModuleOneLiner,
   localizeNotes,
   localizePromoDescription,
+  localizeTrustBadge,
   localizeTier,
   localizeTrustNumber,
   localizeQuoteText,
@@ -50,6 +53,8 @@ import {
 } from "@/lib/termPricing";
 import { тарифИзАдреса } from "./tarifIzAdresa";
 import { useI18n } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
+import { useFrameT } from "@/lib/serverFrameText";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -240,7 +245,11 @@ const ЧТО_ПЛАТНО: Record<string, string> = {
 
 export default function PricingPage() {
   const tp = usePricingT();
-  const { t, lang } = useI18n();
+  const i18n = useI18n();
+  // 30.10.2026: t() до langReady — серверные строки pricing.home.* (pricing/layout.tsx), не английский запас.
+  const t = useFrameT();
+  // 30.10.2026: язык кадра — серверный, пока провайдер не определил свой (см. usePricingT).
+  const lang = языкКадра(i18n, useServerLang());
   const heroVariant = useABVariant("hero");
   const heroPrefix = heroVariant === "A" ? "" : `${heroVariant}.`;
   const tierCardsVariant = useABVariant("tierCards");
@@ -439,6 +448,16 @@ export default function PricingPage() {
         setCheckingOut(null);
         return;
       }
+      /*
+       * 31.10.2026: касса на неверный адрес почты отвечает 400 invalid_email с
+       * текстом для человека («Проверьте адрес почты…»). Без этой ветки витрина
+       * знала только checkout_unavailable и показывала общую «Ошибка оплаты».
+       */
+      if (j.error === "invalid_email" && typeof j.message === "string") {
+        setCheckoutNotice(j.message);
+        setCheckingOut(null);
+        return;
+      }
       if (j.url) {
         // Метка канала доводится до кассы. Найдено 31.08.2026: главный путь
         // оплаты — этот, и он уходил по готовому адресу от бэкенда как есть.
@@ -446,7 +465,7 @@ export default function PricingPage() {
         // набор через Gumroad, а таблица тарифов идёт через сессию и метку
         // теряла. Получатели готовы оба: вебхук LemonSqueezy читает
         // custom_data.channel, вебхук Gumroad — url_params[channel].
-        window.location.href = withChannel(j.url, channel, "pricing");
+        window.location.href = сКассойПартнёра(withChannel(j.url, channel, "pricing"));
       } else {
         console.error("[checkout] no url returned", j);
         setCheckoutNotice(t("pricing.home.notice.checkoutError"));
@@ -2173,7 +2192,8 @@ export default function PricingPage() {
                     }}
                   >
                     <td style={{ padding: "10px 14px", fontWeight: 700 }}>
-                      {m.name}
+                      {/* 27.10.2026: имя модуля на языке читателя (en/kk/ar→en); из API шло русское — на /en и в ar 297 знаков кириллицы */}
+                      {moduleTitle(m.id, lang, m.name)}
                       <div style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>
                         {m.code}
                       </div>
@@ -2942,7 +2962,7 @@ export default function PricingPage() {
             {tp("compliance.title")}
           </h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {trust.badges.map((b) => {
+            {trust.badges.map((bRu) => localizeTrustBadge(bRu, lang)).map((b) => {
               const live = b.status === "live";
               return (
                 <div
@@ -3236,8 +3256,8 @@ export default function PricingPage() {
       <section style={{ margin: "28px auto 0", maxWidth: 760, textAlign: "left" }}>
         <AskAi
           module="pricing"
-          title="Ask about plans"
-          placeholder="e.g. What's the difference between Lite and Full?"
+          title={tp("ask.title")}
+          placeholder={tp("ask.placeholder")}
         />
       </section>
     </ProductPageShell>

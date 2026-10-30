@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
 import { DevHubGuestIdentity } from "@/components/DevHubGuestIdentity";
+import { serverLang } from "@/lib/serverLang";
+import { ServerLangProvider } from "@/lib/serverLangContext";
+
+// 30.10.2026 (замер Науки): /devhub — продукт первой оплаты, а русский гость из
+// соцсети получал английский первый кадр (I18nProvider стартует с "en"). Макет
+// решает язык на сервере (кука → Accept-Language → ru) и отдаёт его странице;
+// маршрут из-за этого рисуется на каждый запрос. В сыром HTML виден data-server-lang.
+export const dynamic = "force-dynamic";
 
 // Метаданные — самое опасное место для преувеличения: их читают в выдаче и в
 // предпросмотре ссылки, а сверить с продуктом там нечем. Поэтому обещают они
@@ -72,11 +80,12 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function DevHubLayout({ children }: { children: React.ReactNode }) {
+export default async function DevHubLayout({ children }: { children: React.ReactNode }) {
+  const lang = await serverLang("ru");
   return (
-    <>
+    <ServerLangProvider lang={lang}>
       <DevHubGuestIdentity />
       {children}
-    </>
+    </ServerLangProvider>
   );
 }

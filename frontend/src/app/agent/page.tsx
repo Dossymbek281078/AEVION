@@ -1,5 +1,6 @@
 "use client";
 
+import { AiBadge } from "@/components/AiBadge";
 import { useEffect, useMemo, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { activatable } from "@/lib/activatable";
@@ -328,6 +329,7 @@ export default function AgentPage() {
         {/* Result */}
         {result && (
           <div style={{ marginTop: 20, padding: 16, borderRadius: 12, background: "rgba(15,23,42,0.6)", border: "1px solid rgba(51,65,85,0.6)" }}>
+            {result.kind !== "error" && <AiBadge />}
             {result.kind === "image" && <img src={result.url} alt="generated" style={{ maxWidth: "100%", borderRadius: 8 }} />}
             {result.kind === "audio" && <audio controls src={result.url} style={{ width: "100%" }} />}
             {result.kind === "link" && (

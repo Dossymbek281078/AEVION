@@ -1,5 +1,6 @@
 import { BUILD_STAMP } from "@/lib/buildStamp";
-import { PLANET_BASE_MONTHLY, STANDALONE_APPS } from "@/lib/termPricing";
+import { CHESS_YEARLY_USD, PLANET_BASE_MONTHLY, PLANET_TERM_PRICE, STANDALONE_APPS } from "@/lib/termPricing";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import { store } from "../payments/v1/_lib";
 import { kvBackend } from "../payments/v1/_persist";
 
@@ -146,7 +147,15 @@ export function GET() {
       // Числа не секрет — они и так напечатаны на странице цен.
       pricing: {
         planetBaseMonthly: PLANET_BASE_MONTHLY,
-        apps: Object.fromEntries(STANDALONE_APPS.map((a) => [a.slug, a.baseMonthly])),
+        // С 19.10.2026 цены модулей отменены: отдаём цену Планеты (лестница по срокам) и
+        // только то, что продаётся отдельно (шахматы — $/год).
+        plan: PLANET_TERM_PRICE,
+        apps: Object.fromEntries(
+          STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).map((a) => [
+            a.slug,
+            a.yearOnlyUsd != null ? { yearUsd: a.yearOnlyUsd } : { baseMonthly: a.baseMonthly },
+          ]),
+        ),
       },
       surfaces,
     },

@@ -563,7 +563,7 @@ export default function DeepSanPage() {
       )}
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 16px" }}>
-        <PaddleUpgradeButton variant="banner" appId="deepsan" label={t("upgrade")} />
+        <PaddleUpgradeButton variant="banner" appId="deepsan" />
       </div>
 
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>

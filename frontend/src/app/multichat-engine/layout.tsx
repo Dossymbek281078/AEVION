@@ -1,10 +1,4 @@
 import type { Metadata } from "next";
-import { serverLang } from "@/lib/serverLang";
-import { ServerLangProvider } from "@/lib/serverLangContext";
-
-// Язык первого кадра платной стены (PaywallScreen) выбирает сервер: кука →
-// Accept-Language → ru (lib/serverLangContext.tsx, 30.10.2026).
-export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Multichat Engine — parallel AI agents · совет ИИ-агентов в одном окне",
@@ -44,7 +38,6 @@ export const metadata: Metadata = {
   alternates: { canonical: "/multichat-engine" },
 };
 
-export default async function MultichatLayout({ children }: { children: React.ReactNode }) {
-  const lang = await serverLang("ru");
-  return <ServerLangProvider lang={lang}>{children}</ServerLangProvider>;
+export default function MultichatLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

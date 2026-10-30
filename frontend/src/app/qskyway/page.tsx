@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
 import { englishUrlWithChannel } from "@/lib/englishPages";
-import { PaywallScreen } from "@/components/PaywallScreen";
+import { ServerPaywallScreen } from "@/components/ServerPaywallScreen";
 import QSkywayClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
 import { языки } from "@/lib/hreflang";
@@ -99,7 +99,7 @@ export default async function Page({
     return (
       <>
         <PageTracking page="qskyway" />
-        <PaywallScreen payload={r.paywall} backHref="/modules" />
+        <ServerPaywallScreen payload={r.paywall} backHref="/modules" />
       </>
     );
   }

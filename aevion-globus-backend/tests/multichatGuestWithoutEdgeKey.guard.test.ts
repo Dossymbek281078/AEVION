@@ -46,8 +46,8 @@ describe("ключа нет", () => {
   test("счёт по устройству работает как раньше: потраченное устройством видно ему же", async () => {
     const { a, m } = await поднять();
     const req = { headers: { "x-aevion-device": "dev-2" }, get(h: string) { return (this.headers as any)[h.toLowerCase()]; }, socket: { remoteAddress: "10.1.1.1" }, ip: "10.1.1.1" } as any;
-    m.засчитатьГостю(req);
-    m.засчитатьГостю(req);
+    await m.засчитатьГостю(req);
+    await m.засчитатьГостю(req);
     expect((await спросить(a, "dev-2")).body.осталось).toBe(0);
   });
 
@@ -56,7 +56,7 @@ describe("ключа нет", () => {
     await спросить(a, "dev-3");
     await спросить(a, "dev-4");
     await спросить(a, "dev-5");
-    const строки = warn.mock.calls.filter((c) => String(c[0]).includes("адрес гостя от сайта не пришёл"));
+    const строки = warn.mock.calls.filter((c: unknown[]) => String(c[0]).includes("адрес гостя от сайта не пришёл"));
     expect(строки).toHaveLength(1);
   });
 
@@ -64,8 +64,8 @@ describe("ключа нет", () => {
     const { a, m } = await поднять();
     // норма, потраченная на «чужой» адрес из заголовка, не должна списаться с этого гостя
     const чужой = { headers: { "x-aevion-client-ip": "178.91.246.196", "x-aevion-device": "dev-other" }, get(h: string) { return (this.headers as any)[h.toLowerCase()]; }, socket: { remoteAddress: "10.9.9.9" }, ip: "10.9.9.9" } as any;
-    m.засчитатьГостю(чужой);
-    m.засчитатьГостю(чужой);
+    await m.засчитатьГостю(чужой);
+    await m.засчитатьГостю(чужой);
     expect((await спросить(a, "dev-6")).body.осталось).toBe(2);
   });
 });

@@ -19,6 +19,7 @@ import { projects } from "../data/projects";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
 import { rateLimit } from "../lib/rateLimit";
+import { записатьИсход as записатьИсходОбщий } from "../lib/build/emailOutcomes";
 
 const capture = makeServiceCapture("provisioning");
 
@@ -575,6 +576,11 @@ let последняяОтправка: ИсходОтправки | null = null
 
 function записатьИсход(ok: boolean, httpStatus: number | null): void {
   последняяОтправка = { ok, httpStatus, when: new Date().toISOString() };
+  // 30.10.2026: тот же исход — в ОБЩИЙ учёт (lib/build/emailOutcomes), который
+  // отдаёт /api/auth/email/healthz. До этого здесь был свой счётчик с тем же
+  // именем, и healthz показывал «отправлено: 0» после реально ушедших писем
+  // гостям DevHub и waitlist (замер прода 12:28Z: два письма дошли, счётчик 0).
+  записатьИсходОбщий(ok, "resend", ok ? undefined : `HTTP ${httpStatus ?? "сеть"}`);
 }
 
 export function emailSenderStatus(): {

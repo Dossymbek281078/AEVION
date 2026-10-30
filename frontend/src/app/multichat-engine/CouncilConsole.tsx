@@ -158,6 +158,43 @@ const EXAMPLE_ANSWERS = [
       "десяти живым людям — узнаете больше, чем из любого тарифа. Тариф соберёте после первой оплаты.",
   },
 ];
+// Тот же пример для /en (замер на проде 30.10.2026, сайт 4f71ad70f: гость на английской странице
+// нажимал «Show an example» и читал три русских ответа). Числа и развилка те же — 40 против 300
+// визитов и «запускать / не запускать»; прогон через прод-эндпоинт /dissent/preview 30.10 дал
+// числовое расхождение 40↔300 и прямое отрицание по «launch», 3 проверки.
+const EXAMPLE_PROMPT_EN = "Should we launch a paid tier before the first sale?";
+const EXAMPLE_ANSWERS_EN = [
+  {
+    agentId: "analyst",
+    provider: "example",
+    ok: true,
+    reply:
+      "A paid tier before the first sale tests not demand but willingness to pay among those who already came. " +
+      "At the current traffic that is about 40 visitors a month — the sample is too small, the conclusion will be noise. " +
+      "First you need a channel that brings at least 300 visits.",
+  },
+  {
+    agentId: "skeptic",
+    provider: "example",
+    ok: true,
+    reply:
+      "The question is framed wrong. A tier is not an experiment but a commitment: you will have to defend the price, " +
+      "and changing it after launch costs more than it seems. At the current traffic that is about 300 visitors a month, " +
+      "and still what decides is not the number but what exactly the money is taken for.",
+  },
+  {
+    agentId: "practic",
+    provider: "example",
+    ok: true,
+    reply:
+      "Not sure this is a fork at all today. Do not launch a tier yet: put up a payment link for one module and show it " +
+      "to ten real people — you will learn more than from any pricing page. Build the tier after the first payment.",
+  },
+];
+/** Пример на языке страницы: en — английский, остальное — русский исходник. */
+export function примерДляЯзыка(lang: string): { prompt: string; answers: typeof EXAMPLE_ANSWERS } {
+  return lang === "en" ? { prompt: EXAMPLE_PROMPT_EN, answers: EXAMPLE_ANSWERS_EN } : { prompt: EXAMPLE_PROMPT, answers: EXAMPLE_ANSWERS };
+}
 
 
 /** Скачивание одним способом на весь модуль: две реализации подряд разъезжаются
@@ -423,16 +460,17 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
     setDissent(null);
     setReceipt(null);
     setIsExample(false);
+    const пример = примерДляЯзыка(mcLang);
     try {
       const r = await fetch(apiUrl("/api/multichat/dissent/preview"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: EXAMPLE_ANSWERS, lang: mcLang }),
+        body: JSON.stringify({ answers: пример.answers, lang: mcLang }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || `сервер ответил ${r.status}`);
-      setPrompt(EXAMPLE_PROMPT);
-      setResults(EXAMPLE_ANSWERS);
+      setPrompt(пример.prompt);
+      setResults(пример.answers);
       setDissent(d.dissent || null);
       setReceipt(null); // чека у примера нет: ответы не наши, платить и подписывать нечего
       setIsExample(true);

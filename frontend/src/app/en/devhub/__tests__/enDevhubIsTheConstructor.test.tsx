@@ -18,6 +18,15 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/Wave1Nav", () => ({ Wave1Nav: () => null }));
 vi.mock("@monaco-editor/react", () => ({ default: () => null }));
+// Счётчик рисует null — подменяем его меткой, но решает показать ли метку настоящий PageTracking
+// (с учётом глушения вложенного): считаем, сколько счётчиков реально ЖИВЫ в кадре.
+vi.mock("@/components/PageTracking", async (оригинал) => {
+  const m = await оригинал<typeof import("@/components/PageTracking")>();
+  return {
+    ...m,
+    PageTracking: (p: { page: string }) => (m.PageTracking(p) ? <i data-pt={p.page} /> : null),
+  };
+});
 
 // eslint-disable-next-line import/first
 import EnLayout from "../layout";
@@ -44,14 +53,29 @@ describe("/en/devhub", () => {
     expect(div.querySelector("[data-server-lang]")?.getAttribute("data-server-lang")).toBe("en");
   });
 
-  it("🔴 конструктор — первым блоком, на английском, без кириллицы в h1", async () => {
+  it("🔴 конструктор — первым блоком, на английском; в кадре ровно один h1 — конструктора", async () => {
     const div = await кадр("probe-x");
     const h1s = [...div.querySelectorAll("h1")];
-    expect(h1s.length).toBeGreaterThanOrEqual(2);
-    // Первый h1 — конструктора (из /devhub), второй — посадочной ниже.
+    expect(h1s.length).toBe(1);
     expect(h1s[0].textContent ?? "").not.toMatch(/\p{Script=Cyrillic}/u);
     expect(h1s[0].textContent).not.toContain("Describe it. Get a deployed project.");
-    expect(h1s[h1s.length - 1].textContent).toContain("Describe it. Get a deployed project.");
+    // Заголовок посадочной остался, но уровнем ниже.
+    const h2 = [...div.querySelectorAll("h2")].find((h) => (h.textContent ?? "").includes("Describe it. Get a deployed project."));
+    expect(h2).toBeTruthy();
+  });
+
+  it("🔴 учёт: ровно один счётчик посещений в кадре — en-devhub (конструктор не считает второй раз)", async () => {
+    const div = await кадр("probe-x");
+    const метки = [...div.querySelectorAll("[data-pt]")].map((e) => e.getAttribute("data-pt"));
+    expect(метки).toEqual(["en-devhub"]);
+  });
+
+  it("контроль: сам /devhub считает себя (счётчик конструктора жив вне /en)", async () => {
+    const Конструктор = (await import("../../../devhub/page")).default;
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })) as unknown as typeof fetch);
+    const div = document.createElement("div");
+    div.innerHTML = renderToString(<I18nProvider><Конструктор /></I18nProvider>);
+    expect([...div.querySelectorAll("[data-pt]")].map((e) => e.getAttribute("data-pt"))).toEqual(["devhub"]);
   });
 
   it("лист ожидания/посадочная — ниже конструктора, ссылки посадочной несут ?c=", async () => {
@@ -68,5 +92,8 @@ describe("/en/devhub", () => {
     expect(src).toContain('canonical: "https://aevion.app/en/devhub"');
     const макет = readFileSync(join(process.cwd(), "src/app/en/devhub/layout.tsx"), "utf8");
     expect(макет).toContain('<ServerLangProvider lang="en">');
+    // Личность гостя уже ставит корневой макет; второй экземпляр слал adopt-guest дважды.
+    expect(макет).not.toMatch(/<DevHubGuestIdentity/);
+    expect(readFileSync(join(process.cwd(), "src/app/layout.tsx"), "utf8")).toContain("<DevHubGuestIdentity />");
   });
 });

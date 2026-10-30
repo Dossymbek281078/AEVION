@@ -173,6 +173,18 @@ function битыйАдрес(): NextResponse {
   });
 }
 
+/**
+ * Заголовки запроса для серверного выбора языка (lib/serverLang.ts): макет не видит
+ * ни пути, ни строки запроса. Свои значения ВСЕГДА перезаписывают присланные
+ * клиентом — иначе язык можно было бы подменить заголовком.
+ */
+export function заголовкиДляЯзыка(исходные: Headers, pathname: string, search: string): Headers {
+  const h = new Headers(исходные);
+  h.set("x-aevion-pathname", pathname);
+  h.set("x-aevion-search", search);
+  return h;
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (!isDecodablePath(pathname)) {
@@ -206,9 +218,9 @@ export function middleware(req: NextRequest) {
     return ответ;
   }
 
-  return NextResponse.next();
-
-  return битыйАдрес();
+  return NextResponse.next({
+    request: { headers: заголовкиДляЯзыка(req.headers, pathname, req.nextUrl.search) },
+  });
 }
 
 /**

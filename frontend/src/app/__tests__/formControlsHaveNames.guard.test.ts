@@ -37,9 +37,17 @@ describe("подписи у полей ввода", () => {
   });
 
   it("ключ подписи есть в обоих языках", () => {
+    // Считаем не вхождения (kkDict добавил третье — это не нарушение), а явно: ключ есть в ru и в en.
     const s = readFileSync(join(SRC, "lib", "pricingI18n.ts"), "utf8");
-    const n = s.split("newsletter.emailLabel").length - 1;
-    expect(n, `ключ найден ${n} раз(а), а языков два — кто-то останется без подписи`).toBe(2);
+    const ru = s.slice(s.indexOf("baseDict: Record<Lang"), s.indexOf("export const kkDict"));
+    const iEn = ru.search(/\n  en: \{/);
+    const iRu = ru.search(/\n  ru: \{/);
+    expect(iEn, "не нашёл блок en").toBeGreaterThan(0);
+    expect(iRu, "не нашёл блок ru").toBeGreaterThan(0);
+    const блокRu = iRu < iEn ? ru.slice(iRu, iEn) : ru.slice(iRu);
+    const блокEn = iEn < iRu ? ru.slice(iEn, iRu) : ru.slice(iEn);
+    expect(блокRu, "в ru нет подписи поля почты").toContain('"newsletter.emailLabel"');
+    expect(блокEn, "в en нет подписи поля почты").toContain('"newsletter.emailLabel"');
   });
 
   it("форма автора в QRight названа, а не только подсказана", () => {

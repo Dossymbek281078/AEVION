@@ -7132,7 +7132,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
               сколько месяцев спишут. Числа считаются из таблицы цен. */}
           {STUDIO_PRO && (
             <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
-              {tPro("pro.termRange").replace("{max}", `$${pricePerMonth(STUDIO_PRO)}`).replace("{min}", `$${planetFromPerMonth()}`)}
+              {tPro("pro.termRange").replace("{max}", `$${planetPricePerMonth(СРОК_ПО_УМОЛЧАНИЮ)}`).replace("{min}", `$${planetFromPerMonth()}`)}
             </span>
           )}
           <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, textDecoration: "underline", whiteSpace: "nowrap" }}>

@@ -35,6 +35,9 @@ describe("DevHub: ступень «Планета» сразу под живым
     expect(block).toContain("planetPricePerMonth(СРОК_ПО_УМОЛЧАНИЮ)");
     expect(block).not.toContain("pricePerMonth(STUDIO_PRO)");
   });
+  it("плашка при 402 (upgradeNudge) тоже называет цену Планеты: во всём файле нет pricePerMonth(STUDIO_PRO) в тексте срока", () => {
+    expect(src).not.toContain("${pricePerMonth(STUDIO_PRO)}");
+  });
   it("тариф спрашивается с Bearer, как на /devhub", () => {
     expect(src).toMatch(/fetch\(apiUrl\("\/api\/devhub\/studio\/credits"\), \{ cache: "no-store", headers: токен \? \{ Authorization: "Bearer " \+ токен \} : \{\} \}\)[\s\S]{0,120}setТарифСтудии/);
   });

@@ -4054,8 +4054,17 @@ if (/Месячная норма исчерпана|Месячный лимит[
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
         <div style={{ textAlign: "center" }}>
-          <p style={{ color: "#64748b" }}>Проект не найден.</p>
-          <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700 }}>Вернуться в DevHub</Link>
+          {/* 30.10.2026: был только русский текст и тупик. Частый случай — ссылка из
+              письма «сохранить» (?k=гостевой ключ), а проект после входа ушёл в аккаунт:
+              без входа его не видно. Невошедшему — дорога ко входу с возвратом сюда. */}
+          <p style={{ color: "#64748b" }}>{tPro("proj.notFound")}</p>
+          {!getAuthToken() && (
+            <p data-devhub-notfound-signin style={{ color: "#64748b", fontSize: 13, maxWidth: 360, margin: "0 auto 10px" }}>
+              {tPro("proj.notFoundSignIn")}{" "}
+              <Link href={`/auth?next=${encodeURIComponent(`/devhub/${id}`)}`} style={{ color: "#0d9488", fontWeight: 700 }}>{tPro("proj.signIn")}</Link>
+            </p>
+          )}
+          <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700 }}>{tPro("proj.backToDevhub")}</Link>
         </div>
       </div>
     );

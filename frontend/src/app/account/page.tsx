@@ -7,6 +7,8 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18nOptional } from "@/lib/i18n";
+import { verifyRequestBody } from "@/lib/verifyRequestLang";
 import { formatDate, formatDateTime } from "@/lib/formatDate";
 import { titleForAppSlug } from "@/lib/appSlugTitle";
 
@@ -96,6 +98,7 @@ const btnDanger: CSSProperties = {
 
 export default function AccountPage() {
   const { showToast } = useToast();
+  const i18n = useI18nOptional();
   const [hasToken, setHasToken] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -328,9 +331,11 @@ export default function AccountPage() {
   const requestVerify = async () => {
     setVerifyBusy(true);
     try {
+      const langPart = verifyRequestBody(i18n?.lang);
       const r = await fetch(apiUrl("/api/auth/email/verify/request"), {
         method: "POST",
-        headers: authHeaders(),
+        headers: { ...authHeaders(), ...langPart.headers },
+        ...(langPart.body ? { body: langPart.body } : {}),
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {

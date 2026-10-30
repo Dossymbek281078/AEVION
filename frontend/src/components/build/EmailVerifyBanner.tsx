@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
 import { requestEmailVerification, BuildApiError } from "@/lib/build/api";
 
 export function EmailVerifyBanner({ email }: { email: string }) {
+  const i18n = useI18nOptional();
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -28,7 +30,7 @@ export function EmailVerifyBanner({ email }: { email: string }) {
               setBusy(true);
               setErr(null);
               try {
-                const r = await requestEmailVerification();
+                const r = await requestEmailVerification(i18n?.lang);
                 // Ручка отвечает 200 и когда письмо НЕ ушло: токен создан,
                 // отправка не удалась. Прежде здесь стояло безусловное
                 // «отправлено», и человек ждал письма, которого нет.

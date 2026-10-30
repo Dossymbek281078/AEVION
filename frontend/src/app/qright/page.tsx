@@ -14,7 +14,6 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
 import { PRICING_TERMS } from "@/lib/products";
-import { planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { track } from "@/lib/track";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -23,6 +22,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
 import { useI18n } from "@/lib/i18n";
 import { tq } from "./qrightI18n";
+import { quotaOfferText } from "./quotaOffer";
 import { ExportAllButton } from "./ExportAllButton";
 import {
   OWNER_REVOKE_REASON_CODES,
@@ -1124,8 +1124,9 @@ export default function QRightPage() {
               )}
               {quotaOffer && (
                 <div data-testid="quota-offer" role="status" style={{ fontSize: 13.5, lineHeight: 1.5, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)", color: "#0f172a" }}>
-                  <b>Free registrations this month are used up ({quotaOffer.used} of {quotaOffer.freePerMonth}).</b>{" "}
-                  The AEVION Planet plan removes the limit and opens every app — from ${planetFromPerMonth()}/mo on the 12-month term, ${planetPricePerMonth("lite")}/mo with no term.{" "}
+                  {/* 30.10.2026: текст по языку страницы и без «4 of 3» — см. quotaOffer.ts */}
+                  <b>{quotaOfferText(lang, quotaOffer).headline}</b>{" "}
+                  {quotaOfferText(lang, quotaOffer).body}{" "}
                   <a href={PRICING_TERMS} style={{ color: "#0d9488", fontWeight: 800 }}>{tq(lang, "See plans →")}</a>
                 </div>
               )}

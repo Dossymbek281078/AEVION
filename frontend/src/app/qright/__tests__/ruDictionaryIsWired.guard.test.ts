@@ -16,6 +16,8 @@ const RU = QRIGHT_DICT.ru ?? {};
 /** Строки авторской доли, которые присылает бэк (warning + три пути восстановления). */
 const ИЗ_БЭКА = /^(Save this shard offline|Your Author Shard \+|AEVION vault \+ public Witness Shard)/;
 const ЧЕРЕЗ_ДАННЫЕ = new Set(["Music / Audio", "Code / Software", "Design / Visual", "Text / Article", "Video / Film", "Idea / Concept", "Other"]);
+/** 30.10: текст предела 402 собирает quotaOffer.ts (подстановка used/limit); проводка — вызов quotaOfferText в page.tsx. */
+const предложениеНормы = readFileSync(join(process.cwd(), "src/app/qright/quotaOffer.ts"), "utf8");
 
 describe("/qright: русский словарь проведён в разметку", () => {
   test("КОНТРОЛЬ прибора: словарь не пустой", () => {
@@ -28,6 +30,7 @@ describe("/qright: русский словарь проведён в разме�
       // 20.10: тексты авторской доли приходят с бэка (routes/pipeline.ts) — проводка одна на все четыре,
       // соответствие строк бэка словарю держит authorShardTextsHaveRussian.guard
       if (ИЗ_БЭКА.test(k)) return !страница.includes("tq(lang, result.authorShard.warning)") || !страница.includes("• {tq(lang, p)}");
+      if (предложениеНормы.includes(`tq(lang, "${k}")`)) return !страница.includes("quotaOfferText(lang, quotaOffer)");
       return !страница.includes(`tq(lang, "${k}")`) && !страница.includes(`tq(lang, '${k}')`);
     });
     expect(непроведённые, `не проведены ${непроведённые.length} из ${Object.keys(RU).length}`).toEqual([]);

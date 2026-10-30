@@ -7476,6 +7476,8 @@ const ru: Record<string, string> = {
   "moduleChip.buyTitle": "Выбрать срок и оплатить — от {price}/мес при оплате за 12 месяцев",
   "moduleChip.planetFrom": "вся планета от {price}/мес",
   "moduleChip.includedInPlanet": "Входит в подписку AEVION",
+  "moduleChip.freeQuota": "{n} работы в месяц бесплатно",
+  "moduleChip.noLimitInPlanet": "без предела — в подписке AEVION от {price}/мес",
   "moduleChip.buy": "Купить",
   "moduleChip.requestAccess": "Обсудить доступ",
   "moduleChip.requestAccessTitle": "Отдельно пока не продаётся — напишите нам, подберём доступ",

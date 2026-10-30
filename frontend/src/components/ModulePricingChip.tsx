@@ -10,6 +10,7 @@ import { channelNow } from "@/lib/channelNow";
 import { useI18nOptional } from "@/lib/i18n";
 import { RazrabotkaPreduprezhdenie } from "./RazrabotkaPreduprezhdenie";
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
+import { FREE_ACTIONS_PER_MONTH, moduleHasFreeQuota } from "@/lib/freeActionQuota";
 import {
   PLANET_BASE_MONTHLY,
   TERM_TIERS,
@@ -241,6 +242,23 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
             <span style={{ color: palette.muted }}>·</span>
             <span style={{ color: palette.accent, fontWeight: 700 }}>
               {tr("moduleChip.planetFrom", "вся планета от {price}/мес", { price: planetFrom })}
+            </span>
+          </>
+        ) : moduleHasFreeQuota(moduleId) ? (
+          <>
+            {/*
+              🔴 30.10.2026: у бюро и QRight стены нет, подписка снимает месячную
+              норму бесплатных регистраций (бэкенд freeActionQuota.ts, 402
+              free_quota_exceeded после третьей работы). «Входит в подписку» здесь
+              было правдой без смысла: человек узнавал о пределе только из отказа.
+              Число — из lib/freeActionQuota.ts (копия бэкенда под сторожем), не руками.
+            */}
+            <span>
+              {tr("moduleChip.freeQuota", "{n} работы в месяц бесплатно", { n: FREE_ACTIONS_PER_MONTH })}
+            </span>
+            <span style={{ color: palette.muted }}>·</span>
+            <span style={{ color: palette.accent, fontWeight: 700 }}>
+              {tr("moduleChip.noLimitInPlanet", "без предела — в подписке AEVION от {price}/мес", { price: planetFrom })}
             </span>
           </>
         ) : (

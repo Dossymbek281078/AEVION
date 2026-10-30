@@ -199,6 +199,13 @@ const EN = {
   "what.fullResponse": "Full response",
   "what.webhookSecret": "Webhook secret",
   "what.snippet": "Snippet",
+  "mine.title": "My signatures",
+  "mine.lead": "Signatures made under your account — open the public check or revoke.",
+  "mine.empty": "You have not signed anything yet.",
+  "mine.error": "Could not load your signatures. Refresh the page.",
+  "mine.signed": "signed",
+  "mine.revoked": "revoked",
+  "mine.open": "Open check",
 } as const;
 
 type Key = keyof typeof EN;
@@ -386,6 +393,13 @@ const RU: Record<Key, string> = {
   "what.fullResponse": "Полный ответ",
   "what.webhookSecret": "Секрет вебхука",
   "what.snippet": "Пример",
+  "mine.title": "Мои подписи",
+  "mine.lead": "Подписи, сделанные под вашим входом, — откройте публичную проверку или отзовите.",
+  "mine.empty": "Вы пока ничего не подписали.",
+  "mine.error": "Не удалось загрузить ваши подписи. Обновите страницу.",
+  "mine.signed": "подписано",
+  "mine.revoked": "отозвано",
+  "mine.open": "Открыть проверку",
 };
 
 const KK: Record<Key, string> = {
@@ -570,6 +584,13 @@ const KK: Record<Key, string> = {
   "what.fullResponse": "Толық жауап",
   "what.webhookSecret": "Вебхук құпиясы",
   "what.snippet": "Мысал",
+  "mine.title": "Менің қолтаңбаларым",
+  "mine.lead": "Сіздің кіруіңізбен жасалған қолтаңбалар — ашық тексеруді ашыңыз немесе кері қайтарыңыз.",
+  "mine.empty": "Сіз әлі ештеңеге қол қойған жоқсыз.",
+  "mine.error": "Қолтаңбаларыңыз жүктелмеді. Бетті жаңартыңыз.",
+  "mine.signed": "қол қойылды",
+  "mine.revoked": "кері қайтарылды",
+  "mine.open": "Тексеруді ашу",
 };
 
 const DICT: Partial<Record<string, Record<Key, string>>> = { en: EN, ru: RU, kk: KK };

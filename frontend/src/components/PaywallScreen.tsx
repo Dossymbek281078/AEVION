@@ -5,6 +5,7 @@ import { KeepChannelLink } from "./KeepChannelLink";
 import { tierLabel, требуемоеСловами, языкСтены, type PaywallPayload, type CanonicalTier } from "@/lib/paywall";
 import { WaitlistIfMissing } from "./FooterWaitlist";
 import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 
 /**
  * Reusable blocking screen rendered when the backend returns a 402
@@ -25,8 +26,16 @@ import { useI18nOptional } from "@/lib/i18n";
  * любого языка — английский гость закрытого модуля читал «Перейти к тарифам →»
  * и «Уже оплатили?». Язык страницы живёт в I18nProvider (клиент), поэтому экран
  * становится клиентским компонентом: серверные страницы передают ему
- * сериализуемый payload, как и раньше. Вне провайдера (тесты) язык берётся из
- * document.lang — тот же порядок, что у PaywallModal.
+ * сериализуемый payload, как и раньше.
+ *
+ * Язык кадра — языкКадра(i18n, серверный): I18nProvider стартует с «en» и
+ * определяет язык уже в браузере, поэтому пока он не готов (langReady) берётся
+ * язык, выбранный серверным макетом маршрута (ServerLangProvider, кука →
+ * Accept-Language → ru). Так SSR-HTML, первый кадр и гидрация совпадают — без
+ * английской вспышки перед оплатой у русского гостя (замечание Продукта 30.10).
+ * Макеты всех серверных маршрутов со стеной дают провайдер — сторож
+ * app/__tests__/paywallScreenServerLang.guard. Вне обоих провайдеров (тест
+ * одиночного компонента) — document.lang, как у PaywallModal.
  */
 
 type Яз = "ru" | "en" | "kk";
@@ -117,7 +126,9 @@ interface Props {
 
 export function PaywallScreen({ payload, backHref = "/", backLabel }: Props) {
   const i18n = useI18nOptional();
-  const lang: Яз = i18n?.lang === "en" || i18n?.lang === "kk" || i18n?.lang === "ru" ? i18n.lang : языкСтены();
+  const серверный = useServerLang();
+  const кадр = языкКадра(i18n, серверный, языкСтены());
+  const lang: Яз = кадр === "ru" || кадр === "kk" ? кадр : "en";
   const с = СТРОКИ[lang];
   const { plan, requiredTiers, upgradeUrl, authState, loginUrl } = payload;
   // Не вошёл → возможно, уже оплатил: главный шаг — вход под почтой оплаты, а

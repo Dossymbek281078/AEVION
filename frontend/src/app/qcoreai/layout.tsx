@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 import QcoreQuotaMeter from "./QcoreQuotaMeter";
+import { serverLang } from "@/lib/serverLang";
+import { ServerLangProvider } from "@/lib/serverLangContext";
+
+// Язык первого кадра платной стены (PaywallScreen) выбирает сервер: кука →
+// Accept-Language → ru (lib/serverLangContext.tsx, 30.10.2026).
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: {
@@ -28,11 +34,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function QCoreAILayout({ children }: { children: React.ReactNode }) {
+export default async function QCoreAILayout({ children }: { children: React.ReactNode }) {
+  const lang = await serverLang("ru");
   return (
-    <>
+    <ServerLangProvider lang={lang}>
       <QcoreQuotaMeter />
       {children}
-    </>
+    </ServerLangProvider>
   );
 }

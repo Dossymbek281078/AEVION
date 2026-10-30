@@ -2,6 +2,12 @@ import type { ReactNode } from "react";
 import { AchievementToast } from "./components/AchievementToast";
 import { AutoSyncBridge } from "./lib/useAutoSync";
 import { KeyboardShortcuts } from "./components/KeyboardShortcuts";
+import { serverLang } from "@/lib/serverLang";
+import { ServerLangProvider } from "@/lib/serverLangContext";
+
+// Язык первого кадра платной стены (PaywallScreen) выбирает сервер: кука →
+// Accept-Language → ru (lib/serverLangContext.tsx, 30.10.2026).
+export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { языки } from "@/lib/hreflang";
@@ -35,7 +41,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function SmetaTrainerLayout({ children }: { children: ReactNode }) {
+export default async function SmetaTrainerLayout({ children }: { children: ReactNode }) {
+  const lang = await serverLang("ru");
   return (
     <>
       <style>{`
@@ -86,7 +93,7 @@ export default function SmetaTrainerLayout({ children }: { children: ReactNode }
       >
         Перейти к содержимому
       </a>
-      <div id="main-content">{children}</div>
+      <div id="main-content"><ServerLangProvider lang={lang}>{children}</ServerLangProvider></div>
       <AchievementToast />
       <AutoSyncBridge />
       <KeyboardShortcuts />

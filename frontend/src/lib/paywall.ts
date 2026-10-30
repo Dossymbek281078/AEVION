@@ -114,11 +114,17 @@ export function языкСтены(): "ru" | "en" | "kk" {
 function текстСтеныИзНормы(freePerMonth: unknown): string {
   const норма = Number(freePerMonth);
   const естьНорма = Number.isFinite(норма) && норма > 0;
-  const en = typeof document !== "undefined" && /^en\b/i.test(document.documentElement?.lang || "");
-  if (en) {
+  const lang = языкСтены();
+  if (lang === "en") {
     return (
       (естьНорма ? `Your ${норма} free actions this month are used up. ` : "Your free actions this month are used up. ") +
       "If you already have a subscription, sign in with the email you paid with. Otherwise a plan removes the limit."
+    );
+  }
+  if (lang === "kk") {
+    return (
+      (естьНорма ? `Осы айдағы ${норма} тегін әрекет таусылды. ` : "Осы айдағы тегін әрекеттер таусылды. ") +
+      "Жазылымыңыз болса — төлеген поштаңызбен кіріңіз. Болмаса — жоспар шектеуді алып тастайды."
     );
   }
   return (

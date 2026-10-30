@@ -107,6 +107,16 @@ describe("стена из нормы говорит правду о предел
     expect(с.message).not.toMatch(/[а-яА-Я]/);
   });
 
+  it("kk: страница на казахском — текст стены казахский (проход kk на проде 30.10.2026)", () => {
+    document.documentElement.lang = "kk";
+    const с = стенаИзНормы(норма)!;
+    expect(с.message).not.toMatch(/https?:\/\//);
+    expect(с.message).toMatch(/3/);
+    expect(с.message).toMatch(/таусылды/);
+    expect(с.message).toMatch(/кіріңіз/);
+    expect(с.message).not.toMatch(/исчерпан|used up/i);
+  });
+
   it("КОНТРОЛЬ: норма без чисел — текст всё равно честный и без адреса", () => {
     const с = стенаИзНормы({ ...НОРМА_402, used: undefined, freePerMonth: undefined })!;
     expect(с.message).not.toMatch(/https?:\/\//);

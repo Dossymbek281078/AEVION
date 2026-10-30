@@ -212,7 +212,7 @@ export default function VerifyPage() {
         <div style={{ textAlign: "center", maxWidth: 480, padding: "0 20px" }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>❌</div>
           <div style={{ fontSize: 22, fontWeight: 900, color: "#dc2626", marginBottom: 8 }}>{tv(lang, "Verification Failed")}</div>
-          <div style={{ fontSize: 14, color: "#475569", marginBottom: 20 }}>{error || tv(lang, "Certificate not found")}</div>
+          <div style={{ fontSize: 14, color: "#475569", marginBottom: 20 }}>{tv(lang, error || "Certificate not found")}</div>
           <div style={{ padding: "12px 16px", borderRadius: 10, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.15)", fontSize: 12, color: "#64748b", fontFamily: "monospace" }}>
             ID: {certId}
           </div>
@@ -444,7 +444,7 @@ export default function VerifyPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
               {[
                 { label: tv(lang, "Author"), value: cert.author },
-                { label: tv(lang, "Type"), value: KIND_LABELS[cert.kind] || cert.kind },
+                { label: tv(lang, "Type"), value: tv(lang, KIND_LABELS[cert.kind] || cert.kind) },
                 { label: tv(lang, "Protected At"), value: new Date(cert.protectedAt).toLocaleString() },
                 { label: tv(lang, "Location"), value: cert.location || tv(lang, "Not specified") },
               ].map((f) => (

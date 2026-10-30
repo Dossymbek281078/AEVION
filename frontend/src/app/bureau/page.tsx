@@ -779,7 +779,7 @@ function BureauPageInner() {
             { value: stats.total, label: tb("Certificates Issued"), color: "#0d9488" },
             { value: stats.totalVerifications, label: tb("Total Verifications"), color: "#3b82f6" },
             { value: LEGAL_FRAMEWORKS.length, label: tb("Legal Frameworks"), color: "#8b5cf6" },
-            { value: "3-Layer", label: tb("Cryptographic Protection"), color: "#f59e0b" },
+            { value: tb("3-Layer"), label: tb("Cryptographic Protection"), color: "#f59e0b" },
           ].map((s) => (
             <div key={s.label} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", textAlign: "center" }}>
               <div style={{ fontSize: 24, fontWeight: 900, color: s.color }}>{s.value}</div>
@@ -1190,7 +1190,7 @@ function BureauPageInner() {
                         <span style={{ fontSize: 15, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
                       </div>
                       <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{cert.title}</div>
-                      <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
+                      <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>{tb("by")} {tb(cert.author)}{cert.location ? ` · ${cert.location}` : ""}</div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                       {cert.verificationLevel === "verified" ? (

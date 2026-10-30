@@ -42,6 +42,11 @@ const RU_PAGES: Array<[string, string]> = (() => {
         if (segs.length === 0 && (e.name === "api" || e.name === "__tests__")) continue;
         walk(join(dir, e.name), [...segs, e.name]);
       } else if (e.name === "page.tsx" || e.name === "_client.tsx") {
+        // 30.10.2026: /auth переведена целиком через словарь auth.* (ru/en/kk) —
+        // язык задаёт провайдер, <main lang={…}> идёт за ним, русский текст в
+        // файле исчез. Это больше не «русская страница»: её держит рендер-сторож
+        // auth/__tests__/angliyskiyEkranBezKirillitsy.test.tsx и authPageIsRussian.
+        if (segs.join("/") === "auth") continue;
         const src = readFileSync(join(dir, e.name), "utf8");
         if (src.includes('lang="ru"')) out.push(["/" + segs.join("/"), join(dir, e.name)]);
       }

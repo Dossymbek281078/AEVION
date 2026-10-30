@@ -5,10 +5,13 @@
  * гостя: адресу и устройству. Когда адрес от сайта стал настоящим, гость отнимал норму у вошедшего.
  * Условие: вошедший считается ТОЛЬКО по своему id; адрес и устройство — только для гостя.
  */
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import jwt from "jsonwebtoken";
+
+// 30.10.2026: счёт гостя живёт в базе; здесь базы нет — модуль откатывается на память (и говорит об этом один раз).
+vi.mock("../src/lib/dbPool", () => ({ getPool: () => null }));
 
 const КЛЮЧ = "edge-key-for-tests-0123456789abcdef";
 const АДРЕС = "178.91.246.196";
@@ -47,8 +50,8 @@ describe("вошедшего не считают по адресу гостя", 
     const m = await import("../src/lib/multichatGuestPass");
     // Потолок адреса (10 в сутки) исчерпан пятью устройствами: подложенный Bearer не должен дать свежей нормы.
     for (const d of ["dev-A", "dev-A2", "dev-A3", "dev-A4", "dev-A5"]) {
-      m.засчитатьГостю(запрос(d));
-      m.засчитатьГостю(запрос(d));
+      await m.засчитатьГостю(запрос(d));
+      await m.засчитатьГостю(запрос(d));
     }
     const a = express();
     a.get("/api/multichat-guest/allowance", m.ручкаОстатка);
@@ -64,8 +67,8 @@ describe("вошедшего не считают по адресу гостя", 
 
   test("🔴 гость исчерпал адрес → новый вошедший с того же адреса получает свою полную норму", async () => {
     const m = await import("../src/lib/multichatGuestPass");
-    m.засчитатьГостю(запрос("dev-A"));
-    m.засчитатьГостю(запрос("dev-A"));
+    await m.засчитатьГостю(запрос("dev-A"));
+    await m.засчитатьГостю(запрос("dev-A"));
     const вошедший = await остаток("dev-new", "user-fresh-1");
     expect(вошедший.гость).toBe(false);
     expect(вошедший.использовано).toBe(0);
@@ -74,8 +77,8 @@ describe("вошедшего не считают по адресу гостя", 
 
   test("КОНТРОЛЬ: гость с нового устройства того же адреса получает свою норму, пока потолок адреса цел (30.10)", async () => {
     const m = await import("../src/lib/multichatGuestPass");
-    m.засчитатьГостю(запрос("dev-A"));
-    m.засчитатьГостю(запрос("dev-A"));
+    await m.засчитатьГостю(запрос("dev-A"));
+    await m.засчитатьГостю(запрос("dev-A"));
     const гость = await остаток("dev-B");
     expect(гость.гость).toBe(true);
     expect(гость.осталось).toBe(2);
@@ -83,8 +86,8 @@ describe("вошедшего не считают по адресу гостя", 
 
   test("траты вошедшего идут на его id: гостю того же адреса не мешают, ему самому — да", async () => {
     const m = await import("../src/lib/multichatGuestPass");
-    m.засчитатьГостю(запрос("dev-U", "user-2"));
-    m.засчитатьГостю(запрос("dev-U", "user-2"));
+    await m.засчитатьГостю(запрос("dev-U", "user-2"));
+    await m.засчитатьГостю(запрос("dev-U", "user-2"));
     expect((await остаток("dev-U", "user-2")).осталось).toBe(0);
     expect((await остаток("dev-other", "user-2")).осталось, "норма вошедшего привязана к id, не к устройству").toBe(0);
     expect((await остаток("dev-G")).осталось, "гость того же адреса не пострадал").toBe(2);

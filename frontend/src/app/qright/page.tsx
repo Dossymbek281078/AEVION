@@ -1405,7 +1405,7 @@ export default function QRightPage() {
                   style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
                   title={tq(lang, "Upgrade to Verified — adds real-name attestation by AEVION Bureau")}
                 >
-                  {tq(lang, "⭐ Upgrade to Verified")} ({ценаСПериодом(ценаПроверкиЦенты)})
+                  {tq(lang, "⭐ Upgrade to Verified")} ({ценаСПериодом(ценаПроверкиЦенты, lang)})
                 </Link>
               )}
               <Link

@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { serverLang } from "@/lib/serverLang";
+import { ServerLangProvider } from "@/lib/serverLangContext";
 
 const SITE = getSiteUrl();
+// 30.10.2026 (решение Оркестратора): первый кадр /bureau — на языке запроса.
+// Кука и Accept-Language читаются на каждый запрос (serverLang) — маршрут
+// рисуется динамически, как /auth. Умолчание ru: бюро — денежная страница
+// основного, русского канала; раньше первый кадр шёл по-английски (`?? "en"`).
+// Сама страница рисуется на клиенте (Suspense/useSearchParams) — в сыром HTML
+// язык виден по обёртке ServerLangProvider: data-server-lang / lang.
+export const dynamic = "force-dynamic";
 // 13.09.2026: явная ссылка на og.svg убрана. Она перебивала файловое
 // соглашение Next (opengraph-image.tsx рядом) и подставляла SVG с СЫРОГО
 // домена Railway, а SVG как превью не рисует ни одна крупная площадка —
@@ -57,7 +66,8 @@ const breadcrumbJsonLd = {
   ],
 };
 
-export default function BureauLayout({ children }: { children: React.ReactNode }) {
+export default async function BureauLayout({ children }: { children: React.ReactNode }) {
+  const lang = await serverLang("ru");
   return (
     <>
       <script
@@ -68,7 +78,7 @@ export default function BureauLayout({ children }: { children: React.ReactNode }
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      {children}
+      <ServerLangProvider lang={lang}>{children}</ServerLangProvider>
     </>
   );
 }

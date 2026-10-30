@@ -5,6 +5,7 @@ import { ценаVerifiedДляВитрины } from "./verifiedPrice";
 import { verifiedCta, verifiedContactLabel, tiersSellable } from "./verifiedCta";
 import { WaitlistCapture, языкФормы } from "@/components/WaitlistCapture";
 import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { useBureauText } from "./bureauText";
 import { useСсылкаВхода } from "../auth/loginHref";
 import { MyCertificates } from "./MyCertificates";
@@ -203,7 +204,10 @@ export function DataBuyerNotice() {
 
 function BureauPageInner() {
   const buI18n = useI18nOptional();
-  const buLang = buI18n?.lang ?? "en";
+  // 30.10.2026: до langReady провайдер держит "en" — первый кадр шёл по-английски и для
+  // русского гостя. Пока язык не определён, берём язык, выбранный сервером в
+  // bureau/layout.tsx (кука → Accept-Language → ru); без макета — прежнее "en".
+  const buLang = языкКадра(buI18n, useServerLang());
   const buT = buI18n?.t ?? ((k: string) => k);
   // 24.10.2026: перевод остальной страницы (не только первого экрана) — bureauText.ts
   const tb = useBureauText(buLang);

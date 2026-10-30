@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { launchHasPassed, PLATFORM_LAUNCH_HUMAN } from "../launchDate";
 import { useI18nOptional } from "@/lib/i18n";
+import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { QR_BUSY } from "./busyUi";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -21,7 +22,6 @@ import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ, ценаСПериодом } from "../bureau/verifiedPrice";
 import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
-import { useI18n } from "@/lib/i18n";
 import { tq } from "./qrightI18n";
 import { useСсылкаВхода } from "../auth/loginHref";
 import { quotaOfferText } from "./quotaOffer";
@@ -133,10 +133,15 @@ const KIND_OPTIONS = [
 type Step = "form" | "processing" | "done";
 
 export default function QRightPage() {
-  const qrLang = useI18nOptional()?.lang ?? "en";
+  const qrI18n = useI18nOptional();
+  // 30.10.2026: до langReady провайдер держит "en" — прод без JS отдавал русскому гостю
+  // «Protect Your Work». Пока язык не определён, берём язык, выбранный сервером в
+  // qright/layout.tsx (кука → Accept-Language → ru); без макета — прежнее "en".
+  const lang = языкКадра(qrI18n, useServerLang());
+  const qrLang = lang;
   const QR = QR_BUSY[qrLang] ?? QR_BUSY.en;
   const { showToast } = useToast();
-  const { lang, t } = useI18n();
+  const t = qrI18n?.t ?? ((k: string) => k);
   const TOKEN_KEY = "aevion_auth_token_v1";
 
   const [step, setStep] = useState<Step>("form");

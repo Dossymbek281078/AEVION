@@ -17,7 +17,10 @@
 import crypto from "node:crypto";
 import { canonicalHash, CANONICALIZATION_SPEC } from "../../lib/qsignV2/canonicalize";
 import { getActiveEd25519, resolveEd25519 } from "../../lib/qsignV2/keyRegistry";
-import type { DissentMap } from "./dissent";
+import type { DissentLang, DissentMap } from "./dissent";
+
+/** Пометка подписи на языке экрана. Русский — канон и умолчание; в хеш чека пометки не входят. */
+const пометка = (lang: DissentLang, ru: string, en: string): string => (lang === "en" ? en : ru);
 
 export type ReceiptAgent = {
   agentId: string;
@@ -126,14 +129,14 @@ export function buildReceipt(input: {
 
 /** Подпись через реестр QSign v2. Ключей нет — отдаём чек без подписи и прямо
  *  говорим почему: «похожая на подпись» строка хуже её отсутствия. */
-export async function signReceipt(receipt: Receipt): Promise<SignedReceipt> {
+export async function signReceipt(receipt: Receipt, lang: DissentLang = "ru"): Promise<SignedReceipt> {
   // Канонизация считается один раз: она обходит весь объект, и вызывать её
   // дважды ради хеша и подписи — лишняя работа на каждом ответе.
   const { hash, canonical } = canonicalHash(receipt);
   try {
     const key = await getActiveEd25519();
     if (!key?.privateKey || !key?.kid) {
-      return { receipt, hash, signature: null, signatureNote: "активный ed25519-ключ не настроен — чек без подписи" };
+      return { receipt, hash, signature: null, signatureNote: пометка(lang, "активный ed25519-ключ не настроен — чек без подписи", "no active ed25519 key is configured — receipt is unsigned") };
     }
     const value = crypto.sign(null, Buffer.from(canonical, "utf8"), key.privateKey).toString("hex");
     return { receipt, hash, signature: { algo: "ed25519", kid: key.kid, value }, signatureNote: null };
@@ -146,7 +149,7 @@ export async function signReceipt(receipt: Receipt): Promise<SignedReceipt> {
       receipt,
       hash,
       signature: null,
-      signatureNote: "реестр ключей недоступен — чек без подписи, но с проверяемым хешем",
+      signatureNote: пометка(lang, "реестр ключей недоступен — чек без подписи, но с проверяемым хешем", "key registry unavailable — receipt is unsigned but has a verifiable hash"),
     };
   }
 }
@@ -186,7 +189,7 @@ export async function verifyReceipt(input: {
   receipt: Receipt;
   hash?: string;
   signature?: { algo: string; kid: string; value: string } | null;
-}): Promise<VerifyResult> {
+}, lang: DissentLang = "ru"): Promise<VerifyResult> {
   const { hash: computedHash, canonical } = canonicalHash(input.receipt);
   const hashMatches = typeof input.hash === "string" ? input.hash === computedHash : null;
   const spec = { canonicalization: CANONICALIZATION_SPEC, digest: "sha256" as const, signature: "ed25519" as const };
@@ -198,13 +201,13 @@ export async function verifyReceipt(input: {
       signature: "absent",
       signatureNote:
         hashMatches === null
-          ? "чек не подписан, и хеш к нему не приложен — сверьте пересчитанный сами"
-          : "чек не подписан — проверен только хеш",
+          ? пометка(lang, "чек не подписан, и хеш к нему не приложен — сверьте пересчитанный сами", "receipt is unsigned and no hash was attached — compare the recomputed one yourself")
+          : пометка(lang, "чек не подписан — проверен только хеш", "receipt is unsigned — only the hash was checked"),
       spec,
     };
   }
   if (input.signature.algo !== "ed25519") {
-    return { hashMatches, computedHash, signature: "unverifiable", signatureNote: `неизвестный алгоритм подписи: ${String(input.signature.algo).slice(0, 32)}`, spec };
+    return { hashMatches, computedHash, signature: "unverifiable", signatureNote: пометка(lang, `неизвестный алгоритм подписи: ${String(input.signature.algo).slice(0, 32)}`, `unknown signature algorithm: ${String(input.signature.algo).slice(0, 32)}`), spec };
   }
   try {
     const key = await resolveEd25519(input.signature.kid);
@@ -218,6 +221,6 @@ export async function verifyReceipt(input: {
   } catch (e) {
     // Наружу — без деталей реестра/БД, как и при подписи.
     console.error("[multichat/receipt] проверка подписи не выполнена:", e instanceof Error ? e.message : e);
-    return { hashMatches, computedHash, signature: "unverifiable", signatureNote: "ключ подписи не разрешается — хеш проверен, подпись нет", spec };
+    return { hashMatches, computedHash, signature: "unverifiable", signatureNote: пометка(lang, "ключ подписи не разрешается — хеш проверен, подпись нет", "signing key cannot be resolved — hash checked, signature not"), spec };
   }
 }

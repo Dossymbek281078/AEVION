@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { BuyLink } from "@/components/BuyLink";
-import { PageTracking } from "@/components/PageTracking";
+import { PageTracking, БезСчётаВложенного } from "@/components/PageTracking";
 import { productById, fromPerMonthOf, channelFrom, channelFromRef, withChannel, keepChannel } from "@/lib/products";
 import { englishHref } from "@/lib/englishPages";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
@@ -76,13 +76,14 @@ export default async function EnDevhubPage({
   // читается им самим из адреса, а ссылки посадочной несут её через channel.
   return (
     <>
-    <DevHubConstructor />
+    {/* Конструктор считает себя как "devhub"; здесь считаем один раз — "en-devhub" ниже. */}
+    <БезСчётаВложенного><DevHubConstructor /></БезСчётаВложенного>
     <main style={styles.page}>
       <PageTracking page="en-devhub" />
       <div style={styles.wrap}>
         <header style={styles.head}>
           <div style={styles.brand}>AEVION</div>
-          <h1 style={styles.h1}>Describe it. Get a deployed project.</h1>
+          <h2 style={styles.h1}>Describe it. Get a deployed project.</h2>
           <p style={styles.lede}>
             DevHub turns a plain-words description into a working project:
             generation, live preview, deployment and a per-run ledger of what

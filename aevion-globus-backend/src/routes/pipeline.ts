@@ -2326,6 +2326,10 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
         label: pdfContentHashLabel(pdfHashVerdict, new Date().toISOString()),
         value: cert.contentHash,
       },
+      // Подпись свидетельства — то, что бюро продаёт; её строка была потеряна
+      // при добавлении FILE HASH (e9bdc4df5) и возвращена 30.10.2026 —
+      // якорь теста certificateIssuedTodayVerifies.
+      { label: "HMAC-SHA256 SIGNATURE", value: cert.signatureHmac },
       // Отпечаток файла — только если автор его прикладывал: пустое поле
       // читалось бы как «файла не было» или «отпечаток потерян». Честно про
       // охват: fileHash не входит в contentHash, подписи и якорь — это запись

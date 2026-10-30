@@ -2,7 +2,7 @@
 
 import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
-import { PRICING_TERMS, keepChannel, withChannel } from "@/lib/products";
+import { PRICING_TERMS, PRICING_TIERS_LIST, keepChannel, withChannel } from "@/lib/products";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById, MODULES } from "@/lib/products";
@@ -424,8 +424,9 @@ export default function AppsPage() {
                 ))}
               </div>
               <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 16 }}>
-                The ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps bought separately: ${RACK_RATE} for one month. The whole planet:
-                ${PLANET_BASE_MONTHLY} for one month, or ${PLANET_FROM}/mo on a 12-month term.
+                {/* 30.10.2026: цены модулей отменены (19.10) — сумма «по отдельности» называла то, что не продаётся. */}
+                All these apps come with the Planet plan: ${PLANET_BASE_MONTHLY} for one month, or ${PLANET_FROM}/mo on a
+                12-month term.
               </p>
             </div>
 
@@ -624,7 +625,9 @@ export default function AppsPage() {
                       </div>
                       {app.checkoutUrl && app.term ? (
                         <a
-                          href={keepChannel(app.checkoutUrl, channel)}
+                          // 30.10.2026: модуль на срок отдельно не продаётся — кнопка ведёт к выбору срока Планеты (#tiers),
+                          // а не в /pricing?app=…#apps (там раздел одних шахмат).
+                          href={keepChannel(PRICING_TIERS_LIST, channel)}
                           aria-label={`Выбрать срок: ${app.name}`}
                           onClick={() =>
                             track({

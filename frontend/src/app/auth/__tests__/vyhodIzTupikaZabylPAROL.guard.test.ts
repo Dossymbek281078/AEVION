@@ -14,7 +14,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import ru from "@/lib/i18n-lang/ru";
+import en from "@/lib/i18n-lang/en";
+import kk from "@/lib/i18n-lang/kk";
 
+const СЛОВАРИ: Record<"ru" | "en" | "kk", Record<string, string>> = { ru, en, kk };
 const ВХОД = readFileSync(join(process.cwd(), "src/app/auth/page.tsx"), "utf8");
 const ЦЕЛЬ = "/build/reset-password";
 
@@ -37,25 +41,15 @@ describe("забыл пароль — выход есть", () => {
   it("🔴 текст есть на трёх языках — знаменатель 3 из 3", () => {
     // Живой доводчик перевода на сайте есть, но ЕДИНСТВЕННЫЙ выход из тупика
     // на него не кладём: он молча обрезает длинные слова и переводит не всё.
+    // 30.10.2026: текст переехал из локальной таблицы AUTH_A11Y в общий словарь
+    // (ключ auth.form.forgot) — проверяем словари, а не кусок страницы.
+    expect(ВХОД, "ссылка не берёт текст из словаря").toContain(`{t("auth.form.forgot")}`);
+    expect(ВХОД, "aria-label ссылки не из словаря").toContain(`aria-label={t("auth.form.forgot")}`);
     const языки = ["ru", "en", "kk"] as const;
-    const начало = ВХОД.indexOf("const AUTH_A11Y");
-    const словарь = ВХОД.slice(начало, начало + 1200);
-    /*
-     * Нарочно БЕЗ регулярных выражений. Эта проверка переписывалась дважды:
-     * слэш съедался на границе вызова, "\s" в шаблоне становилось "s", и
-     * проверка перестала находить что-либо — покраснев на верном коде.
-     * Строковые операции калечить нечему.
-     */
     const тексты: string[] = [];
-    const КЛЮЧ = 'forgot: "';
     for (const я of языки) {
-      const i = словарь.indexOf(я + ": {");
-      expect(i, "языка нет в словаре: " + я).toBeGreaterThan(-1);
-      const строка = словарь.slice(i, словарь.indexOf("}", i) + 1);
-      const ключ = строка.indexOf(КЛЮЧ);
-      expect(ключ, "у языка нет текста ссылки: " + я).toBeGreaterThan(-1);
-      const от = ключ + КЛЮЧ.length;
-      const текст = строка.slice(от, строка.indexOf('"', от));
+      const текст = СЛОВАРИ[я]["auth.form.forgot"];
+      expect(текст, "у языка нет текста ссылки: " + я).toBeTruthy();
       expect(текст.length, "текст ссылки слишком короткий у " + я + ": " + текст).toBeGreaterThan(5);
       тексты.push(текст);
     }
@@ -68,18 +62,13 @@ describe("забыл пароль — выход есть", () => {
   it("🔴 подписи вкладок входа — из словаря на трёх языках, и английская не «In»", () => {
     // 12.10.2026 приёмка (bd): на EN-странице вкладка подписана «In» — живой перевод
     // вшитого русского «Вход». По-английски так не говорят; видит каждый EN-посетитель.
-    expect(ВХОД).toContain(`{m === "register" ? AA.tabRegister : AA.tabLogin}`);
+    expect(ВХОД).toContain(`{m === "register" ? t("auth.tab.register") : t("auth.tab.login")}`);
     expect(ВХОД).not.toContain(`? "Регистрация" : "Вход"`);
-    const начало = ВХОД.indexOf("const AUTH_A11Y");
-    const словарь = ВХОД.slice(начало, начало + 1600);
     const вход: string[] = [];
-    for (const я of ["ru", "en", "kk"]) {
-      const i = словарь.indexOf(я + ": {");
-      const строка = словарь.slice(i, словарь.indexOf("}", i) + 1);
-      const k = строка.indexOf('tabLogin: "');
-      expect(k, "у языка нет подписи вкладки входа: " + я).toBeGreaterThan(-1);
-      const от = k + 'tabLogin: "'.length;
-      вход.push(строка.slice(от, строка.indexOf('"', от)));
+    for (const я of ["ru", "en", "kk"] as const) {
+      const подпись = СЛОВАРИ[я]["auth.tab.login"];
+      expect(подпись, "у языка нет подписи вкладки входа: " + я).toBeTruthy();
+      вход.push(подпись);
     }
     expect(вход[1], "английская подпись").toBe("Log in");
     expect(new Set(вход).size, "подписи вкладки совпадают: " + вход.join(" | ")).toBe(3);

@@ -7525,6 +7525,8 @@ const kk: Record<string, string> = {
   "chain.hash": "Мазмұн хэші",
   "chain.at": "Уақыт",
   "moduleChip.perMonth": "/ай",
+  "moduleChip.perYear": "/жыл",
+  "moduleChip.buyTitleYear": "Бір жылға сатып алу — {price}/жыл",
   "moduleChip.compareTitle": "Мерзімдер мен бағалар: 1, 3, 6, 9 немесе 12 ай, ай сайын есептен шығару",
   "moduleChip.alreadyIncluded": "Тарифте бар",
   "moduleChip.from": "бастап",

@@ -7524,6 +7524,8 @@ const en: Record<string, string> = {
   "chain.hash": "Content hash",
   "chain.at": "Time",
   "moduleChip.perMonth": "/mo",
+  "moduleChip.perYear": "/yr",
+  "moduleChip.buyTitleYear": "Buy for a year — {price}/yr",
   "moduleChip.compareTitle": "Terms and prices: 1, 3, 6, 9 or 12 months, billed monthly",
   "moduleChip.alreadyIncluded": "Already included",
   "moduleChip.from": "from",

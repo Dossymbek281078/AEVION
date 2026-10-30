@@ -7524,6 +7524,8 @@ const ru: Record<string, string> = {
   "chain.hash": "Хэш содержимого",
   "chain.at": "Время",
   "moduleChip.perMonth": "/мес",
+  "moduleChip.perYear": "/год",
+  "moduleChip.buyTitleYear": "Купить на год — {price}/год",
   "moduleChip.compareTitle": "Сроки и цены: 1, 3, 6, 9 или 12 месяцев, списание ежемесячно",
   "moduleChip.alreadyIncluded": "Уже включено",
   "moduleChip.from": "от",

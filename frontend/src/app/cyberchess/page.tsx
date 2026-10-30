@@ -1819,7 +1819,9 @@ export default function CyberChessPage(){
     ? ccBuyLabel.replace(/^от\s+/,"").replace(/\/мес/g,"/ай").replace(/мес/g,"ай").replace(/\/год/g,"/жыл")
     : ccBuyLabel;
   const [ccBuyHref,sCcBuyHref]=useState<string>(ccBuyProduct?.href||"/pricing#apps");
-  useEffect(()=>{try{sCcBuyHref(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()))}catch{}},[ccBuyProduct?.href]);
+  // 30.10: + язык посетителя — иначе /kk/cyberchess вёл на русские цены (kk/en → ?lang=, ru — умолчание).
+  const sYazykom=(href:string,locale:string)=>{if(locale!=="kk"&&locale!=="en")return href;const[a,h]=href.split("#",2);const[p,q=""]=a.split("?",2);const s=new URLSearchParams(q);s.set("lang",locale);return `${p}?${s}${h?`#${h}`:""}`;};
+  useEffect(()=>{try{sCcBuyHref(sYazykom(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()),cc.locale))}catch{}},[ccBuyProduct?.href,cc.locale]);
   /*
    * 🔴 Насколько уменьшить доску, чтобы ПОД НЕЙ поместилась прилипшая строка
    * адреса. Считается ПО ЗАМЕРУ, а не константой, и только на узких экранах,

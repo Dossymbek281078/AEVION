@@ -14,6 +14,8 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18nOptional } from "@/lib/i18n";
+import { tm } from "../mcText";
 import { T } from "../theme";
 
 type VerifyResult = {
@@ -27,6 +29,10 @@ type VerifyResult = {
 
 
 export default function VerifyReceiptPage() {
+  // 30.10.2026: на /en проверка шла без языка — сервер отвечал signatureNote по-русски,
+  // а блок результата был русским литералом. Язык — серверу в ?lang=, подписи — через tm.
+  const lang = useI18nOptional()?.lang ?? "ru";
+  const t = (s: string) => tm(lang, s);
   const [raw, setRaw] = useState("");
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<VerifyResult | null>(null);
@@ -43,7 +49,7 @@ export default function VerifyReceiptPage() {
       } catch {
         throw new Error("Это не JSON — вставьте содержимое скачанного файла чека целиком.");
       }
-      const r = await fetch(apiUrl("/api/multichat/receipt/verify"), {
+      const r = await fetch(apiUrl(`/api/multichat/receipt/verify?lang=${encodeURIComponent(lang)}`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed),
@@ -137,44 +143,43 @@ export default function VerifyReceiptPage() {
           <div style={{ marginTop: 22, background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 12, padding: 18 }}>
             <h2 style={{ fontSize: 20, margin: 0, color: verdictColor }}>
               {res.hashMatches === null
-                ? "Хеш не приложен — сравнивать не с чем"
+                ? t("Хеш не приложен — сравнивать не с чем")
                 : res.hashMatches
-                  ? "Хеш сходится — содержимое не изменено"
-                  : "Хеш НЕ сходится — содержимое изменено"}
+                  ? t("Хеш сходится — содержимое не изменено")
+                  : t("Хеш НЕ сходится — содержимое изменено")}
             </h2>
             <p style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: T.textFaded, margin: "10px 0 0", wordBreak: "break-all" }}>
-              пересчитано: {res.computedHash}
+              {t("пересчитано:")} {res.computedHash}
             </p>
 
             <p style={{ fontSize: 14, color: T.textDim, margin: "14px 0 0" }}>
-              <span style={{ color: T.textFaded }}>Подпись: </span>
+              <span style={{ color: T.textFaded }}>{t("Подпись:")} </span>
               <span style={{ color: res.signature === "valid" ? T.accent : res.signature === "invalid" ? T.bad : T.warn }}>
-                {res.signature === "valid" ? "действительна"
-                  : res.signature === "invalid" ? "НЕ действительна"
-                    : res.signature === "absent" ? "отсутствует"
-                      : "не проверена"}
+                {res.signature === "valid" ? t("действительна")
+                  : res.signature === "invalid" ? t("НЕ действительна")
+                    : res.signature === "absent" ? t("отсутствует")
+                      : t("не проверена")}
               </span>
               {res.signatureNote && <span style={{ color: T.textFaded, fontSize: 13 }}> — {res.signatureNote}</span>}
             </p>
 
             <p style={{ fontSize: 12, color: T.textFaded, margin: "14px 0 0" }}>
-              Спецификация: канонизация {res.spec.canonicalization}, дайджест {res.spec.digest},
-              подпись {res.spec.signature}.
+              {t("Спецификация: канонизация")} {res.spec.canonicalization}, {t("дайджест")} {res.spec.digest},{" "}
+              {t("подпись")} {res.spec.signature}.
             </p>
 
             {res.hashMatches === false && (
               <p style={{ fontSize: 13, color: T.warn, margin: "12px 0 0", lineHeight: 1.6 }}>
-                Расхождение означает одно из двух: файл отредактировали после выдачи, либо это чек
-                другого ответа. Сравните поле <code>hash</code> в файле с пересчитанным выше.
+                {t("Расхождение означает одно из двух: файл отредактировали после выдачи, либо это чек другого ответа. Сравните поле")}{" "}
+                <code>hash</code> {t("в файле с пересчитанным выше.")}
               </p>
             )}
 
             {res.hashMatches === null && (
               <p style={{ fontSize: 13, color: T.textDim, margin: "12px 0 0", lineHeight: 1.6 }}>
-                Вы принесли сам чек, но без поля <code>hash</code> — это нормальный формат, просто
-                сверять нам не с чем. Хеш выше пересчитан по содержимому: сравните его с тем, что
-                указан у отправителя. Целиком скачанный файл (<code>receipt</code>, <code>hash</code>,{" "}
-                <code>signature</code>) страница сверит сама.
+                {t("Вы принесли сам чек, но без поля")} <code>hash</code>{" "}
+                {t("— это нормальный формат, просто сверять нам не с чем. Хеш выше пересчитан по содержимому: сравните его с тем, что указан у отправителя. Целиком скачанный файл")}{" "}
+                (<code>receipt</code>, <code>hash</code>, <code>signature</code>) {t("страница сверит сама.")}
               </p>
             )}
           </div>

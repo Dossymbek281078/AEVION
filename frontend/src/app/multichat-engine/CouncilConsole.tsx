@@ -179,7 +179,7 @@ function download(name: string, text: string, mime: string) {
  *
  *  Markdown, а не PDF: открывается везде, вставляется в задачу или письмо без
  *  конвертации, и его видно в diff, если положат в репозиторий. */
-function buildReport(
+export function buildReport(
   prompt: string,
   results: AgentResult[],
   dissent: Dissent | null,
@@ -187,45 +187,48 @@ function buildReport(
   isExample: boolean,
   lang?: string
 ): string {
+  // 30.10.2026: отчёт на /en скачивался с русскими заголовками и подписями — все литералы через tm;
+  // без lang — русский как прежде. Тексты сервера (dissent.note, checks, signatureNote) приходят уже на языке запроса.
+  const t = (s: string) => tm(lang, s);
   const L: string[] = [];
-  L.push("# Консилиум AEVION", "");
-  if (isExample) L.push("> Это пример: ответы агентов заданы заранее, разногласия посчитаны настоящим алгоритмом.", "");
-  L.push(`**Вопрос:** ${prompt}`, "");
+  L.push(`# ${t("Консилиум AEVION")}`, "");
+  if (isExample) L.push(`> ${t("Это пример: ответы агентов заданы заранее, разногласия посчитаны настоящим алгоритмом.")}`, "");
+  L.push(`**${t("Вопрос:")}** ${prompt}`, "");
 
   if (dissent) {
     const verdict =
-      dissent.verdict === "consensus" ? "агенты сошлись"
-        : dissent.verdict === "split" ? "агенты разошлись"
-          : "сравнивать не с чем";
-    L.push(`## Итог: ${verdict}`, "", dissent.note, "");
-    if (dissent.agreement != null) L.push(`Схожесть ответов: ${dissent.agreement}`, "");
-    if (dissent.outlier) L.push(`Дальше всех от остальных: **${dissent.outlier.agentId}**`, "");
+      dissent.verdict === "consensus" ? t("агенты сошлись")
+        : dissent.verdict === "split" ? t("агенты разошлись")
+          : t("сравнивать не с чем");
+    L.push(`## ${t("Итог:")} ${verdict}`, "", dissent.note, "");
+    if (dissent.agreement != null) L.push(`${t("Схожесть ответов:")} ${dissent.agreement}`, "");
+    if (dissent.outlier) L.push(`${t("Дальше всех от остальных:")} **${dissent.outlier.agentId}**`, "");
 
     if (dissent.contradictions?.length) {
-      L.push("### Прямое противоречие", "");
+      L.push(`### ${t("Прямое противоречие")}`, "");
       for (const c of dissent.contradictions) {
-        L.push(`- «${c.word}»: ${c.affirms.map((x) => имяАгента(x, lang)).join(", ")} утверждает, ${c.denies.map((x) => имяАгента(x, lang)).join(", ")} отрицает`);
+        L.push(`- «${c.word}»: ${c.affirms.map((x) => имяАгента(x, lang)).join(", ")} ${t("утверждает")}, ${c.denies.map((x) => имяАгента(x, lang)).join(", ")} ${t("отрицает")}`);
       }
       L.push("");
     }
 
     if (dissent.numericConflicts.length) {
-      L.push("### Расхождения в числах", "");
+      L.push(`### ${t("Расхождения в числах")}`, "");
       for (const c of dissent.numericConflicts) {
-        L.push(`- ${c.values.map((v) => `${имяАгента(v.agentId, lang)}: ${v.raw}`).join(" против ")} (разброс ${c.spread})`);
-        L.push(`  - контекст: «${c.context}»`);
+        L.push(`- ${c.values.map((v) => `${имяАгента(v.agentId, lang)}: ${v.raw}`).join(` ${t("против")} `)} (${t("разброс")} ${c.spread})`);
+        L.push(`  - ${t("контекст:")} «${c.context}»`);
       }
       L.push("");
     }
 
     if (dissent.checks?.length) {
-      L.push("### Что проверить", "", "Порядок — по проверяемости: сверху то, что закрывается за минуту.", "");
+      L.push(`### ${t("Что проверить")}`, "", t("Порядок — по проверяемости: сверху то, что закрывается за минуту."), "");
       dissent.checks.forEach((c, i) => L.push(`${i + 1}. ${сИменами(c.text, lang)}`));
       L.push("");
     }
   }
 
-  L.push("## Ответы агентов", "");
+  L.push(`## ${t("Ответы агентов")}`, "");
   for (const r of results) {
     // Роль и человеческая причина: отчёт уходит коллеге, и «rate_limit_exceeded
     // ... per IP» в нём читается как вина отправителя.
@@ -234,18 +237,18 @@ function buildReport(
       L.push(String(r.reply || "").trim(), "");
     } else {
       const f = agentFailure(r.error);
-      L.push(`_Не ответил: ${f.human}_${f.technical ? ` (${f.technical})` : ""}`, "");
+      L.push(`_${t("Не ответил:")} ${t(f.human)}_${f.technical ? ` (${f.technical})` : ""}`, "");
     }
   }
 
   if (receipt) {
-    L.push("## Чек", "");
+    L.push(`## ${t("Чек")}`, "");
     L.push(`- sha256: \`${receipt.hash}\``);
-    L.push(`- канонизация: RFC8785, дайджест sha256`);
-    L.push(`- подпись: ${receipt.signature ? `${receipt.signature.algo}, ключ ${receipt.signature.kid}` : receipt.signatureNote || "отсутствует"}`);
-    L.push(`- вызовов ${receipt.receipt.cost.calls}, ответили ${receipt.receipt.cost.answered}, не ответили ${receipt.receipt.cost.failed}`);
+    L.push(`- ${t("канонизация: RFC8785, дайджест sha256")}`);
+    L.push(`- ${t("подпись:")} ${receipt.signature ? `${receipt.signature.algo}, ${t("ключ")} ${receipt.signature.kid}` : receipt.signatureNote || t("отсутствует")}`);
+    L.push(`- ${t("вызовов")} ${receipt.receipt.cost.calls}, ${t("ответили")} ${receipt.receipt.cost.answered}, ${t("не ответили")} ${receipt.receipt.cost.failed}`);
     L.push("");
-    L.push("Отчёту верить не обязательно: скачайте чек и пересчитайте хеш — сами или сторонней реализацией. Спецификация открыта.", "");
+    L.push(t("Отчёту верить не обязательно: скачайте чек и пересчитайте хеш — сами или сторонней реализацией. Спецификация открыта."), "");
   }
 
   return L.join("\n");

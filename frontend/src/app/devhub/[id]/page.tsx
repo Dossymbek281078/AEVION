@@ -24,7 +24,7 @@ import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { pokazyvatKartochkuSokhraneniya, klyuchSokhraneniya, kanalDlyaLista, DEVHUB_SAVE_SOURCE, DEVHUB_SAVE_FEATURE } from "@/lib/devhubSaveCard";
 import { useI18nOptional } from "@/lib/i18n";
 import { tDevhub, type DevhubKey } from "../i18n";
-import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetFromPerMonth } from "@/lib/termPricing";
+import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { productById, PRICING_TIERS_LIST } from "@/lib/products";
 
 /**
@@ -5212,7 +5212,10 @@ if (/Месячная норма исчерпана|Месячный лимит[
                             {tPro("pro.upgrade")} — {tPro("pro.fromPrice").replace("{p}", `$${planetFromPerMonth()}`)}
                           </a>
                           <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
-                            {tPro("pro.termRange").replace("{max}", `$${pricePerMonth(STUDIO_PRO)}`).replace("{min}", `$${planetFromPerMonth()}`)}
+                            {/* Цена «без обязательства» — ПЛАНЕТЫ (250), как в баннере /devhub,
+                                а не старая база DevHub 200 × срок: приёмка 30.10 на проде показала
+                                «$200» здесь и «$250» выше на той же странице (моя ошибка). */}
+                            {tPro("pro.termRange").replace("{max}", `$${planetPricePerMonth(СРОК_ПО_УМОЛЧАНИЮ)}`).replace("{min}", `$${planetFromPerMonth()}`)}
                           </span>
                           <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, textDecoration: "underline" }}>
                             {tPro("pro.linkPurchase")}

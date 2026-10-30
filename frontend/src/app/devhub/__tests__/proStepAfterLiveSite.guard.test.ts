@@ -31,6 +31,10 @@ describe("DevHub: ступень «Планета» сразу под живым
     expect(block).toMatch(/type: "checkout_start", tier: "studio-pro", source: "devhub-after-live"/);
     expect(block).toContain('href="/devhub/link"');
   });
+  it("цена «без обязательства» — Планеты, не старой базы DevHub (приёмка 30.10: $200 против $250 в баннере)", () => {
+    expect(block).toContain("planetPricePerMonth(СРОК_ПО_УМОЛЧАНИЮ)");
+    expect(block).not.toContain("pricePerMonth(STUDIO_PRO)");
+  });
   it("тариф спрашивается с Bearer, как на /devhub", () => {
     expect(src).toMatch(/fetch\(apiUrl\("\/api\/devhub\/studio\/credits"\), \{ cache: "no-store", headers: токен \? \{ Authorization: "Bearer " \+ токен \} : \{\} \}\)[\s\S]{0,120}setТарифСтудии/);
   });

@@ -24,7 +24,7 @@ afterEach(() => {
 function запрос(адрес: string, устройство?: string) {
   const headers: Record<string, string> = {};
   if (устройство) headers["x-aevion-device"] = устройство;
-  return { headers, get(h: string) { return (this.headers as Record<string, string>)[h.toLowerCase()]; }, socket: { remoteAddress: адрес }, ip: адрес } as never;
+  return { headers, get(h: string) { return headers[h.toLowerCase()]; }, socket: { remoteAddress: адрес }, ip: адрес } as any;
 }
 
 describe("норма на устройство, потолок на адрес", () => {

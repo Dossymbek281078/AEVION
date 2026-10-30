@@ -250,7 +250,7 @@ const MC_UI: Record<string, {
   askAria: string; askPh: string; busyAsk: string;
   // 23.10.2026: строка остатка гостя, стена и подпись «3 агента» были русским литералом и на en/kk
   // показывались по-русски (замер yazyk-devhub.mjs: одна и та же строка не на языке у en и kk).
-  guestLeft: (n: number) => string; guestOut: string; independent: string;
+  guestLeft: (n: number) => string; guestOut: string; guestOutLink: string; independent: string;
 }> = {
   // busyAsk — класс «busy-ярлык быстрее доводчика» (назначение 07.09,
   // рецепт №2 как у GEN_UI.busy*): ярлык живёт секунды и первым видит
@@ -259,14 +259,17 @@ const MC_UI: Record<string, {
   ru: { askAria: "Вопрос совету", askPh: "Например: стоит ли запускать платный тариф до первой продажи?", busyAsk: "Агенты отвечают…",
     guestLeft: (n) => `Бесплатно без входа: осталось ${n} ${n === 1 ? "запрос" : "запроса"}. Дальше — вход по почте.`,
     guestOut: "Бесплатные запросы на сегодня кончились — войдите по почте, и норма продолжится.",
+    guestOutLink: "войдите по почте",
     independent: "3 агента · 3 вызова · ответы независимы" },
   en: { askAria: "Question for the council", askPh: "For example: should we launch a paid tier before the first sale?", busyAsk: "Agents are answering…",
     guestLeft: (n) => `Free without signing in: ${n} ${n === 1 ? "request" : "requests"} left. Then sign in by email.`,
     guestOut: "Free requests for today are used up — sign in by email and the allowance continues.",
+    guestOutLink: "sign in by email",
     independent: "3 agents · 3 calls · independent answers" },
   kk: { askAria: "Кеңеске сұрақ", askPh: "Мысалы: алғашқы сатылымға дейін ақылы тарифті іске қосу керек пе?", busyAsk: "Агенттер жауап беруде…",
     guestLeft: (n) => `Кірусіз тегін: ${n} сұрау қалды. Әрі қарай — пошта арқылы кіру.`,
     guestOut: "Бүгінгі тегін сұраулар таусылды — пошта арқылы кіріңіз, норма жалғасады.",
+    guestOutLink: "пошта арқылы кіріңіз",
     independent: "3 агент · 3 шақыру · жауаптар тәуелсіз" },
 };
 
@@ -484,7 +487,20 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {authed === false
             ? гостьМожет
               ? MC.guestLeft(свободно ?? 0)
-              : MC.guestOut
+              : (() => {
+                  // Стена без выхода (замер 30.10: «войдите по почте» — просто текст при выключенной кнопке):
+                  // сама фраза — ссылка на /auth, после входа человек возвращается сюда.
+                  const [до, после] = MC.guestOut.split(MC.guestOutLink);
+                  return (
+                    <>
+                      {до}
+                      <a href="/auth?next=/multichat-engine" data-mc-signin="guest-out" style={{ color: T.accent, fontWeight: 700 }}>
+                        {MC.guestOutLink}
+                      </a>
+                      {после}
+                    </>
+                  );
+                })()
             : MC.independent}
           </span>
       </div>

@@ -48,6 +48,13 @@ describe("гость и живой консилиум", () => {
     render(<CouncilConsole />);
     await waitFor(() => expect(screen.getByText(/войдите по почте/i)).toBeTruthy());
   });
+  test("норма кончилась — «войдите по почте» ведёт на /auth и возвращает сюда (30.10.2026)", async () => {
+    vi.stubGlobal("fetch", ответыСервера(0));
+    render(<CouncilConsole />);
+    const ссылка = await screen.findByText(/войдите по почте/i);
+    expect(ссылка.tagName, "фраза стены — просто текст, человеку некуда нажать").toBe("A");
+    expect(ссылка.getAttribute("href")).toBe("/auth?next=/multichat-engine");
+  });
   test("запросы гостя несут признак устройства — иначе норма считается по IP", async () => {
     // 🔴 Замер 29.09.2026 (окно роликов, живой браузер): страница не посылала НИ
     // ОДНОГО заголовка устройства, поэтому сервер считал бесплатную норму только

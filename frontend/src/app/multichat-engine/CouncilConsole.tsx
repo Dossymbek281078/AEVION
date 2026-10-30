@@ -279,6 +279,9 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
   const [dissent, setDissent] = useState<Dissent | null>(null);
   const [receipt, setReceipt] = useState<SignedReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 402 upgrade_required — отказ стены, а не сбой агента: рядом с текстом нужна дорога к тарифу
+  // (замер 29.10: на квоту консилиума экран писал «Агент не ответил.» и кнопки не было).
+  const [tarifUrl, setTarifUrl] = useState<string | null>(null);
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [isExample, setIsExample] = useState(false);
 
@@ -332,6 +335,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
     // воронка считает по feature_use (events.ts), канал и пост track() прикладывает сам.
     track({ type: "feature_use", source: "multichat", meta: { feature: "council_ask", app: "multichat", guest: !isAuthenticated(), chars: q.length } });
     setError(null);
+    setTarifUrl(null);
     setIsExample(false);
     // Прошлый результат снимаем ДО запроса, а не после успешного ответа.
     //
@@ -356,6 +360,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         // 402 модульной стены приходит сюда кодом upgrade_required — человеку нужен текст, а
         // кнопки входа и тарифа уже даёт стена (PaywallModal). Замер 13.10.2026: на экране
         // печаталось голое «upgrade_required».
+        if (conv && conv.error === "upgrade_required") setTarifUrl(typeof conv.upgradeUrl === "string" ? conv.upgradeUrl : "/pricing?app=multichat-engine");
         if (conv?.error === "upgrade_required") throw new Error(tm(mcLang, "Бесплатные запросы на сегодня закончились. Войдите под почтой оплаты или откройте тариф — кнопки ниже."));
         throw new Error(conv?.error || tm(mcLang, "не удалось создать беседу"));
       }
@@ -369,6 +374,10 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       if (!r.ok) {
         // retryAfterSec сервер присылает рядом с отказом — не показать его значит
         // заставить человека угадывать, когда пробовать снова.
+        if (r.status === 402 && d?.error === "upgrade_required") {
+          setTarifUrl(typeof d.upgradeUrl === "string" ? d.upgradeUrl : "/pricing?app=multichat-engine");
+          throw new Error(tm(mcLang, "Месячной квоты бесплатного тарифа не хватит на консилиум. Откройте тариф — ссылка ниже."));
+        }
         const f = agentFailure(d?.error || `upstream ${r.status}`);
         throw new Error(f.human + retryHint(d?.retryAfterSec));
       }
@@ -392,6 +401,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
     setBusy(true);
     track({ type: "feature_use", source: "multichat", meta: { feature: "council_example", app: "multichat", guest: !isAuthenticated() } });
     setError(null);
+    setTarifUrl(null);
     // Симметрично ask(): если пример не загрузится, на экране не должен
     // остаться прошлый настоящий прогон — он там уже без своего вопроса.
     setResults(null);
@@ -479,6 +489,11 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           </span>
       </div>
       {error && <p style={{ fontSize: 12, color: T.bad, margin: "8px 0 0" }}>{error}</p>}
+      {error && tarifUrl && (
+        <a href={tarifUrl} data-mc-buy="council-402" style={{ display: "inline-block", marginTop: 8, fontSize: 13, fontWeight: 700, color: T.accent }}>
+          {tm(mcLang, "Открыть тариф →")}
+        </a>
+      )}
 
       {/* Пометка обязательна: принять пример за свой прогон — то же самое, что
           показать нарисованный результат. */}

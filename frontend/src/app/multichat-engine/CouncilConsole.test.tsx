@@ -175,3 +175,34 @@ describe("Консилиум: метка захода в диалоге", () => 
     window.history.replaceState(null, "", "/");
   });
 });
+
+// 29.10.2026: квоты бесплатного не хватает на веер — сервер отвечает 402 upgrade_required
+// (reason monthly_token_quota_insufficient_for_fan). Экран писал «Агент не ответил.» без дороги к тарифу.
+describe("Консилиум: отказ стены — с дорогой к тарифу", () => {
+  test("402 на dispatch: человеческий текст и ссылка «Открыть тариф»", async () => {
+    stubFetch((url) => {
+      if (url.includes("/conversations") && !url.includes("dispatch")) return okJson({ id: "conv_q" });
+      if (url.includes("dispatch")) return { ok: false, status: 402, json: async () => ({ error: "upgrade_required", reason: "monthly_token_quota_insufficient_for_fan" }) };
+      return okJson({});
+    });
+    render(<CouncilConsole />);
+    fireEvent.change(screen.getByPlaceholderText(/стоит ли запускать платный тариф/i), { target: { value: "Вопрос про квоту" } });
+    fireEvent.click(screen.getByText("Спросить консилиум"));
+    await waitFor(() => expect(screen.getByText(/Месячной квоты бесплатного тарифа не хватит/)).toBeTruthy());
+    expect(screen.getByText("Открыть тариф →").closest("a")?.getAttribute("href")).toBe("/pricing?app=multichat-engine");
+    expect(screen.queryByText(/Агент не ответил/)).toBeNull();
+  });
+
+  test("КОНТРОЛЬ: обычный сбой dispatch (500) — без ссылки на тариф", async () => {
+    stubFetch((url) => {
+      if (url.includes("/conversations") && !url.includes("dispatch")) return okJson({ id: "conv_q" });
+      if (url.includes("dispatch")) return { ok: false, status: 500, json: async () => ({ error: "upstream 500" }) };
+      return okJson({});
+    });
+    render(<CouncilConsole />);
+    fireEvent.change(screen.getByPlaceholderText(/стоит ли запускать платный тариф/i), { target: { value: "Вопрос про сбой" } });
+    fireEvent.click(screen.getByText("Спросить консилиум"));
+    await waitFor(() => expect(screen.getByText(/ответил ошибкой|не ответил/)).toBeTruthy());
+    expect(screen.queryByText("Открыть тариф →")).toBeNull();
+  });
+});

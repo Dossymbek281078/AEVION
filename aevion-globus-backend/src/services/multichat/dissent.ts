@@ -34,6 +34,19 @@ export type AgentAnswer = {
 const STOP = new Set([
   "the", "a", "an", "and", "or", "but", "with", "of", "in", "on", "at", "to",
   "for", "from", "is", "are", "be", "as", "by", "that", "this", "it", "its",
+  // 30.10.2026, живой английский ответ на проде (4f71ad70f): «прямое противоречие по «what»»,
+  // «…по «have»» — английские служебные слова и вспомогательные глаголы не были в стоп-списке,
+  // и детектор отрицания брал их как слово решения («that's not what…», «do not have…»). Русский
+  // список полнее с самого начала; английский догоняет: местоимения, вспомогательные и модальные
+  // глаголы, предлоги, союзы, вопросительные слова.
+  "am", "was", "were", "been", "being", "have", "has", "had", "do", "does", "did",
+  "will", "would", "shall", "should", "can", "could", "may", "might", "must",
+  "i", "me", "my", "mine", "you", "your", "yours", "he", "him", "his", "she", "her", "hers",
+  "we", "us", "our", "ours", "they", "them", "their", "theirs", "who", "whom", "whose",
+  "what", "which", "when", "where", "why", "how", "there", "here", "then", "than",
+  "these", "those", "if", "so", "because", "about", "into", "over", "under", "after", "before",
+  "while", "until", "though", "although", "whether", "either", "neither", "nor",
+  "also", "even", "still", "yet", "already", "always", "often", "sometimes", "now",
   "и", "в", "на", "с", "у", "по", "из", "не", "что", "это", "как", "для",
   "то", "же", "бы", "или", "а", "но", "их", "его", "её", "они", "мы", "вы",
 ]);
@@ -354,6 +367,9 @@ const ANTONYMS: Array<[string, string]> = [
 const NEGATION_CANCELS = new Set([
   "только", "просто", "лишь", "менее", "более",
   "only", "just", "merely", "less", "fewer",
+  // 30.10.2026: «that's not what a sales rep fixes» — отрицается придаточное целиком, а не ближайшее
+  // существительное за ним; без этого детектор брал «sales» (живой ответ на проде 4f71ad70f).
+  "what", "which", "how", "where", "why", "when", "who", "whom", "whose",
 ]);
 
 // Отрицание проходит СКВОЗЬ служебные слова и усилители к тому слову, о котором

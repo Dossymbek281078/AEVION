@@ -219,6 +219,11 @@ const RU: Record<string, string> = {
   "QRight Constitution": "Конституция QRight",
   "QRight as an IP institution: rule of law over power and transparency are the main sliders. The law fixes the object's hash, and neither an heir nor a corporate raider can overturn it. That is the «constitutional» guarantee for authors.": "QRight как институт IP: верховенство закона над верхом и прозрачность — главные ползунки. Закон фиксирует hash объекта, и его не отменит ни наследник, ни корпорация-захватчик. Это и есть «конституционная» гарантия для авторов.",
   "Ask about QRight": "Спросить о QRight",
+  // предложение после 402 free_quota_exceeded (30.10.2026, quotaOffer.ts)
+  "Free registrations this month are used up ({used} of {limit}) — the subscription has no limit.":
+    "Бесплатные регистрации в этом месяце исчерпаны ({used} из {limit}) — в подписке предела нет.",
+  "The AEVION Planet plan removes the limit and opens every app — from ${from}/mo on the 12-month term, ${month}/mo with no term.":
+    "План «AEVION Планета» снимает предел и открывает все приложения — от ${from}/мес на сроке 12 месяцев, ${month}/мес без срока.",
 };
 
 /**
@@ -407,6 +412,11 @@ const KK: Record<string, string> = {
   "QRight Constitution": "QRight конституциясы",
   "QRight as an IP institution: rule of law over power and transparency are the main sliders. The law fixes the object's hash, and neither an heir nor a corporate raider can overturn it. That is the «constitutional» guarantee for authors.": "QRight зияткерлік меншік институты ретінде: заңның биліктен үстемдігі мен ашықтық — басты жүгірткілер. Заң объектінің хешін бекітеді, оны мұрагер де, басып алушы корпорация да жоя алмайды. Авторлар үшін «конституциялық» кепілдік — осы.",
   "Ask about QRight": "QRight туралы сұрау",
+  // предложение после 402 free_quota_exceeded (30.10.2026, quotaOffer.ts)
+  "Free registrations this month are used up ({used} of {limit}) — the subscription has no limit.":
+    "Бұл айдағы тегін тіркеулер таусылды ({limit}-ден {used}) — жазылымда шек жоқ.",
+  "The AEVION Planet plan removes the limit and opens every app — from ${from}/mo on the 12-month term, ${month}/mo with no term.":
+    "«AEVION Планета» жоспары шекті алып тастайды және барлық қолданбаны ашады — 12 айлық мерзімде айына ${from} бастап, мерзімсіз айына ${month}.",
 };
 
 export const QRIGHT_DICT: Partial<Record<Lang, Record<string, string>>> = { ru: RU, kk: KK };

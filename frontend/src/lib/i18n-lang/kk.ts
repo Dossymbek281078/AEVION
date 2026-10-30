@@ -7476,6 +7476,8 @@ const kk: Record<string, string> = {
   "moduleChip.buyTitle": "Мерзімді таңдап төлеу — 12 айға төлегенде айына {price} бастап",
   "moduleChip.planetFrom": "бүкіл планета айына {price} бастап",
   "moduleChip.includedInPlanet": "AEVION жазылымына кіреді",
+  "moduleChip.freeQuota": "айына {n} жұмыс тегін",
+  "moduleChip.noLimitInPlanet": "шексіз — айына {price} бастап AEVION жазылымында",
   "moduleChip.buy": "Сатып алу",
   "moduleChip.requestAccess": "Қолжетімділікті талқылау",
   "moduleChip.requestAccessTitle": "Әзірге бөлек сатылмайды — бізге жазыңыз, қолжетімділікті ұйымдастырамыз",

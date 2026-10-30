@@ -7476,6 +7476,8 @@ const en: Record<string, string> = {
   "moduleChip.buyTitle": "Choose a term and pay — from {price}/mo when paying for 12 months",
   "moduleChip.planetFrom": "whole planet from {price}/mo",
   "moduleChip.includedInPlanet": "Included in the AEVION subscription",
+  "moduleChip.freeQuota": "{n} works a month free",
+  "moduleChip.noLimitInPlanet": "no limit with the AEVION subscription from {price}/mo",
   "moduleChip.buy": "Buy",
   "moduleChip.requestAccess": "Request access",
   "moduleChip.requestAccessTitle": "Not sold separately yet — write to us and we will arrange access",

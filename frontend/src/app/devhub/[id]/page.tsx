@@ -20,6 +20,7 @@ import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devh
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { track } from "@/lib/track";
 import { postNow } from "@/lib/channelNow";
+import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { pokazyvatKartochkuSokhraneniya, klyuchSokhraneniya, kanalDlyaLista, DEVHUB_SAVE_SOURCE, DEVHUB_SAVE_FEATURE } from "@/lib/devhubSaveCard";
 import { useI18nOptional } from "@/lib/i18n";
 import { tDevhub, type DevhubKey } from "../i18n";
@@ -1133,7 +1134,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const адресДляПисьма = pagesResult?.liveUrl ?? pagesResult?.pagesUrl ?? buildLiveUrl ?? project?.deployUrl ?? null;
       const siteUrl = адресДляПисьма && /^https:\/\/[a-z0-9.-]+\.pages\.dev\/?$/.test(адресДляПисьма) ? адресДляПисьма : undefined;
       const domain = pagesResult?.domain && /^[a-z0-9-]+\.aevion\.app$/.test(pagesResult.domain) ? pagesResult.domain : undefined;
-      const r = await fetch(apiUrl("/api/constitution/waitlist/subscribe"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: адрес, source: DEVHUB_SAVE_SOURCE, projectId: id, lang: uiLang, ...(канал ? { channel: канал } : {}), ...(siteUrl ? { siteUrl: адресДляПисьма } : {}), ...(domain ? { domain } : {}) }) });
+      // Ключ гостя уходит в письмо ссылкой восстановления: проект откроется из чистого браузера.
+      const guestKey = getDevhubGuestId();
+      const r = await fetch(apiUrl("/api/constitution/waitlist/subscribe"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: адрес, source: DEVHUB_SAVE_SOURCE, projectId: id, lang: uiLang, ...(guestKey ? { guestKey } : {}), ...(канал ? { channel: канал } : {}), ...(siteUrl ? { siteUrl: адресДляПисьма } : {}), ...(domain ? { domain } : {}) }) });
       if (r.ok) { setSaveState("done"); try { localStorage.setItem(klyuchSokhraneniya(id), "1"); } catch { /* приватное окно */ } }
       else setSaveState("error");
     } catch { setSaveState("error"); }

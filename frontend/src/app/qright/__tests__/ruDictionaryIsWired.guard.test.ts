@@ -30,7 +30,7 @@ describe("/qright: русский словарь проведён в разме�
       // 20.10: тексты авторской доли приходят с бэка (routes/pipeline.ts) — проводка одна на все четыре,
       // соответствие строк бэка словарю держит authorShardTextsHaveRussian.guard
       if (ИЗ_БЭКА.test(k)) return !страница.includes("tq(lang, result.authorShard.warning)") || !страница.includes("• {tq(lang, p)}");
-      if (предложениеНормы.includes(`tq(lang, "${k}")`)) return !страница.includes("quotaOfferText(lang, quotaOffer)");
+      if (предложениеНормы.includes(`tq(lang, "${k}")`)) return !страница.includes("quotaOfferText(lang, quotaOffer,");
       return !страница.includes(`tq(lang, "${k}")`) && !страница.includes(`tq(lang, '${k}')`);
     });
     expect(непроведённые, `не проведены ${непроведённые.length} из ${Object.keys(RU).length}`).toEqual([]);

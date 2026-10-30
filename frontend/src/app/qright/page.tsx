@@ -14,6 +14,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
 import { PRICING_TERMS } from "@/lib/products";
+import { planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { track } from "@/lib/track";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -1125,8 +1126,8 @@ export default function QRightPage() {
               {quotaOffer && (
                 <div data-testid="quota-offer" role="status" style={{ fontSize: 13.5, lineHeight: 1.5, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)", color: "#0f172a" }}>
                   {/* 30.10.2026: текст по языку страницы и без «4 of 3» — см. quotaOffer.ts */}
-                  <b>{quotaOfferText(lang, quotaOffer).headline}</b>{" "}
-                  {quotaOfferText(lang, quotaOffer).body}{" "}
+                  <b>{quotaOfferText(lang, quotaOffer, { from: planetFromPerMonth(), month: planetPricePerMonth("lite") }).headline}</b>{" "}
+                  {quotaOfferText(lang, quotaOffer, { from: planetFromPerMonth(), month: planetPricePerMonth("lite") }).body}{" "}
                   <a href={PRICING_TERMS} style={{ color: "#0d9488", fontWeight: 800 }}>{tq(lang, "See plans →")}</a>
                 </div>
               )}

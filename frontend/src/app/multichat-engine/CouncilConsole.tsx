@@ -591,7 +591,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
               <span style={{ color: T.textFaded }}>{tm(mcLang, "Особняком:")} </span>
               <span style={{ color: T.warn }}>{имяАгента(dissent.outlier.agentId, mcLang)}</span>
               <span style={{ fontSize: 12, color: T.textFaded }}>
-                {" "}— его ответ дальше всех от остальных. Это не «неправ», это «прочитать первым».
+                {" "}{tm(mcLang, "— его ответ дальше всех от остальных. Это не «неправ», это «прочитать первым».")}
               </span>
             </p>
           )}

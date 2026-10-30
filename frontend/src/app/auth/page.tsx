@@ -210,6 +210,7 @@ export default function AuthPage() {
 
   // Session-expiry display: decode exp from JWT (UX only, not auth check).
   const exp = useMemo(() => readJwtExp(token), [token]);
+  const вошёл = !!token && !!me?.user;
   const remaining = exp ? formatRemaining(exp * 1000 - nowMs) : null;
 
   useEffect(() => {
@@ -295,6 +296,7 @@ export default function AuthPage() {
   // псевдонимы, под которыми токен читают десятки модулей. Прямая
   // запись оставляла бы их пустыми до следующего старта приложения.
   setAuthToken(nextToken);
+      setPassword(""); // пароль в DOM после успеха не держим
       showToast(t("auth.toast.loggedin"), "success");
       вернутьТуда();
     } catch (e: any) {
@@ -324,6 +326,7 @@ export default function AuthPage() {
   // псевдонимы, под которыми токен читают десятки модулей. Прямая
   // запись оставляла бы их пустыми до следующего старта приложения.
   setAuthToken(nextToken);
+      setPassword(""); // пароль в DOM после успеха не держим
       showToast(t("auth.toast.registered"), "success");
       вернутьТуда();
     } catch (e: any) {
@@ -454,6 +457,12 @@ export default function AuthPage() {
               </div>
             ) : null}
 
+            {/* 30.10.2026: вошедшему форма входа/регистрации не нужна (замер прода: после
+                регистрации под карточкой «вы вошли» оставалась полная форма с введённым
+                паролем). Прячем, пока нет подтверждённой сессии: если токен протух и /me не
+                ответил — форма остаётся, человеку нужно войти заново. */}
+            {!вошёл ? (
+            <>
             <div style={{ display: "inline-flex", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", marginBottom: 20 }}>
               {(["register", "login"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)} disabled={busy} style={{ padding: "10px 20px", border: "none", background: mode === m ? "#0f172a" : "#fff", color: mode === m ? "#fff" : "#64748b", fontWeight: mode === m ? 800 : 600, fontSize: 14, cursor: "pointer" }}>
@@ -686,6 +695,9 @@ export default function AuthPage() {
                 {busy ? t("auth.waiting") : mode === "register" ? t("auth.submit.register") : t("auth.submit.login")}
               </button>
             </div>
+
+            </>
+            ) : null}
 
             {err ? (
               <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(220,38,38,0.25)", background: "rgba(220,38,38,0.06)", color: "#991b1b", fontSize: 13 }}>

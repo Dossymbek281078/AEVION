@@ -319,7 +319,21 @@ qmediaRouter.get("/me/likes", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { rows, failed } = await listMyLikes(auth.sub);
     if (failed) return replyQMediaStorageDown(res);
-    res.json({ items: rows });
+    // 29.10.2026: до этого отдавались только {type,id} — страница /qmedia/likes рисовала строки без названия.
+    // Отдаём сам трек/видео; удалённое и чужое закрытое не показываем (лайк по угаданному id не раскрывает название).
+    const items = [];
+    for (const r of rows) {
+      if (r.type === "track") {
+        const { track, failed: f } = await getTrack(r.id);
+        if (f) return replyQMediaStorageDown(res);
+        if (track && (track.isPublic || track.userId === auth.sub)) items.push({ ...track, type: "track" });
+      } else if (r.type === "video") {
+        const { video, failed: f } = await getVideo(r.id);
+        if (f) return replyQMediaStorageDown(res);
+        if (video && (video.isPublic || video.userId === auth.sub)) items.push({ ...video, type: "video" });
+      }
+    }
+    res.json({ items });
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "list likes failed" }); }
 });
 

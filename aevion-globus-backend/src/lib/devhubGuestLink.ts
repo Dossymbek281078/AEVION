@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { getPool } from "./dbPool";
 import { canSendEmail, send } from "./build/email";
+import { isModuleEntitled, resolvePlanFromPayload } from "./planGate";
 
 /**
  * Связывание анонимного гостя DevHub с его покупкой.
@@ -40,7 +41,13 @@ async function paidTierFor(email: string): Promise<string | null> {
     [email],
   );
   const tier = r.rows[0]?.tier ?? null;
-  return tier && tier !== "free" ? String(tier) : null;
+  if (tier && tier !== "free") return String(tier);
+  // 🔴 30.10.2026: DevHub с 19.10 продаётся ТОЛЬКО планом «Планета», а он в
+  // DevHubEmailTier не пишет — туда пишет лишь прежний товар Studio Pro. Гость,
+  // купивший «Планету», получал здесь «no_purchase»: нейтральный ответ, письма
+  // нет, Pro нет. Спрашиваем то же, что tierFromPlatformPlan после связывания.
+  if (isModuleEntitled(resolvePlanFromPayload({ email }), "devhub")) return "pro";
+  return null;
 }
 
 export async function requestGuestLink(

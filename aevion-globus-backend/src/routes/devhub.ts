@@ -72,7 +72,7 @@ import { проверитьИменаМоделей, проверитьУмол�
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 import { sseHeartbeat } from "../lib/sseHeartbeat";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
-import { ukazanieBezVydumannyhDannyh, yazykZaprosa, tekushchiyGod } from "../lib/devhubNoFakeData";
+import { ukazanieBezVydumannyhDannyh, yazykZaprosa, tekushchiyGod, ochistitFaylyOtZaglushek } from "../lib/devhubNoFakeData";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
 import { ценаПоЕдиницам, тарифЕсть } from "../lib/unitPricing";
 
@@ -2863,7 +2863,8 @@ async function generateCodeWithAI(
   }
 
   return {
-    files,
+    // Заглушка «[your company name]» в title/h1 — брак для читателя (devhubNoFakeData.ts).
+    files: ochistitFaylyOtZaglushek(files, prompt),
     aiGenerated: true,
     provider: provider.id,
     model: provider.defaultModel,
@@ -8881,7 +8882,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     if (нуженБейдж(pagesDeployCredit.tier)) {
       for (const f of файлыКЗагрузке) {
         const путь = String(f.path).replace(/^\.?\//, "").toLowerCase();
-        if (путь === "index.html") f.content = вставитьБейдж(String(f.content));
+        if (путь === "index.html") f.content = вставитьБейдж(String(f.content), undefined, project.id);
       }
     }
 

@@ -34,8 +34,14 @@ function поРусски(html: string): boolean {
   return кириллица > 20;
 }
 
-export function разметкаБейджа(html: string, base = "https://aevion.app"): string {
-  const ссылка = `${base}/devhub?c=${МЕТКА_БЕЙДЖА}`;
+/*
+ * 30.10.2026: ссылка несёт s=<id сайта>, чтобы было видно, какой опубликованный сайт
+ * приводит людей. Идёт через /badge (короткий адрес с меткой канала уже есть): на сайте
+ * /badge пронесёт s до /devhub и до page_view. Невалидный id в ссылку не кладём.
+ */
+export function разметкаБейджа(html: string, base = "https://aevion.app", idСайта?: string | null): string {
+  const s = idСайта && /^[A-Za-z0-9_-]{1,64}$/.test(idСайта) ? `&s=${idСайта}` : "";
+  const ссылка = `${base}/badge?c=${МЕТКА_БЕЙДЖА}${s}`;
   const текст = поРусски(html) ? "Сделано в AEVION" : "Built with AEVION";
   return (
     `<a ${МАРКЕР} href="${ссылка}" target="_blank" rel="noopener noreferrer"` +
@@ -51,10 +57,10 @@ export function разметкаБейджа(html: string, base = "https://aevio
  * Разметку не разбираем и не переписываем: единственная правка — вставка перед
  * последним </body> (или дописывание в конец, если тега нет).
  */
-export function вставитьБейдж(html: string, base = "https://aevion.app"): string {
+export function вставитьБейдж(html: string, base = "https://aevion.app", idСайта?: string | null): string {
   const текст = String(html ?? "");
   if (текст.includes(МАРКЕР)) return текст;
-  const бейдж = разметкаБейджа(текст, base);
+  const бейдж = разметкаБейджа(текст, base, idСайта);
   const i = текст.toLowerCase().lastIndexOf("</body>");
   if (i < 0) return текст + бейдж;
   return текст.slice(0, i) + бейдж + текст.slice(i);

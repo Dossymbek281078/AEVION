@@ -19,13 +19,13 @@ import {
 type Яз = "ru" | "en" | "kk";
 
 const СТРОКИ: Record<Яз, {
-  dialog: string; close: string; title: string; anonHint: string; noPurchase: string;
+  dialog: string; close: string; heading: string; anonHint: string; noPurchase: string;
   opens: (tiers: string) => string; chip: string; login: string; pricing: string; later: string;
 }> = {
   ru: {
     dialog: "Требуется обновление тарифа",
     close: "Закрыть",
-    title: "Доступно на платном тарифе",
+    heading: "Доступно на платном тарифе",
     anonHint: "Если вы уже оплатили — войдите под почтой, которой платили, и доступ откроется. Если ещё нет — этот раздел входит в план «AEVION Планета».",
     noPurchase: "На этом аккаунте покупки нет. Если вы оплачивали другим адресом — войдите под ним. Если ещё не оформляли — этот раздел входит в план «AEVION Планета».",
     opens: (tiers) => `Этот раздел открывает ${tiers}. Оформите план, чтобы продолжить.`,
@@ -37,7 +37,7 @@ const СТРОКИ: Record<Яз, {
   en: {
     dialog: "Paid plan required",
     close: "Close",
-    title: "Available on a paid plan",
+    heading: "Available on a paid plan",
     anonHint: "If you already paid, sign in with the email you paid with and access opens. If not yet, this section is part of the “AEVION Planet” plan.",
     noPurchase: "There is no purchase on this account. If you paid with another email, sign in with it. If not yet, this section is part of the “AEVION Planet” plan.",
     opens: (tiers) => `This section is opened by ${tiers}. Get a plan to continue.`,
@@ -49,7 +49,7 @@ const СТРОКИ: Record<Яз, {
   kk: {
     dialog: "Ақылы жоспар қажет",
     close: "Жабу",
-    title: "Ақылы жоспарда қолжетімді",
+    heading: "Ақылы жоспарда қолжетімді",
     anonHint: "Төлеген болсаңыз — төлеген поштаңызбен кіріңіз, қолжетімділік ашылады. Әлі болмаса — бұл бөлім «AEVION Планета» жоспарына кіреді.",
     noPurchase: "Бұл аккаунтта сатып алу жоқ. Басқа поштамен төлеген болсаңыз — сонымен кіріңіз. Әлі рәсімдемесеңіз — бұл бөлім «AEVION Планета» жоспарына кіреді.",
     opens: (tiers) => `Бұл бөлімді ${tiers} ашады. Жалғастыру үшін жоспар рәсімдеңіз.`,
@@ -188,7 +188,7 @@ export function PaywallModal() {
         </div>
 
         <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 800, lineHeight: 1.25 }}>
-          {СТРОКИ[lang].title}
+          {СТРОКИ[lang].heading}
         </h2>
 
         <p style={{ margin: "0 0 6px", fontSize: 14.5, lineHeight: 1.5, color: "rgba(226,232,240,0.92)" }}>

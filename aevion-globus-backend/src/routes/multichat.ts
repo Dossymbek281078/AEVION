@@ -785,7 +785,8 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
       answers: results as never,
       dissent: dissentCanon,
       askedAt: new Date().toISOString(),
-    })
+    }),
+    dissentLang(req.body?.lang),
   );
   await touchConv(conversationId);
 
@@ -1309,7 +1310,7 @@ multichatPublicRouter.post("/receipt/verify", receiptVerifyLimiter, async (req, 
       receipt: receipt as never,
       hash: typeof body.hash === "string" ? body.hash : undefined,
       signature: body.signature ?? null,
-    });
+    }, dissentLang(req.query?.lang));
     res.json(out);
   } catch (err) {
     captureMultichatError(err, { route: "receipt-verify" });

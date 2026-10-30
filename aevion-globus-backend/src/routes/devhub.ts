@@ -8882,7 +8882,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     if (нуженБейдж(pagesDeployCredit.tier)) {
       for (const f of файлыКЗагрузке) {
         const путь = String(f.path).replace(/^\.?\//, "").toLowerCase();
-        if (путь === "index.html") f.content = вставитьБейдж(String(f.content));
+        if (путь === "index.html") f.content = вставитьБейдж(String(f.content), undefined, project.id);
       }
     }
 

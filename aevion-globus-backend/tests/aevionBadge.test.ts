@@ -20,8 +20,22 @@ describe("бейдж на опубликованном сайте", () => {
   });
 
   it("ссылка несёт метку канала — иначе переход уйдёт в «unattributed»", () => {
-    expect(разметкаБейджа(HTML_EN)).toContain("/devhub?c=" + МЕТКА_БЕЙДЖА);
+    expect(разметкаБейджа(HTML_EN)).toContain("/badge?c=" + МЕТКА_БЕЙДЖА);
     expect(МЕТКА_БЕЙДЖА).toBe("badge");
+  });
+
+  it("с id сайта ссылка несёт &s=<id>, без валидного id — s= нет", () => {
+    const id = "f09d41f3-096e-457f-afc5-b5ad79b96c9e";
+    const m = разметкаБейджа(HTML_EN, undefined, id);
+    expect(m).toContain("/badge?c=badge&s=" + id);
+    expect(m).toContain('target="_blank"');
+    expect(m).toContain('rel="noopener noreferrer"');
+    expect(вставитьБейдж(HTML_RU, undefined, id)).toContain("&s=" + id);
+    for (const плохой of ["<x>", "", null, undefined, "a b", "x".repeat(65)]) {
+      const r = разметкаБейджа(HTML_EN, undefined, плохой as string | null | undefined);
+      expect(r.includes("s="), String(плохой)).toBe(false);
+      expect(r).toContain("/badge?c=badge\"");
+    }
   });
 
   it("открывается в НОВОЙ вкладке и не даёт собой управлять", () => {

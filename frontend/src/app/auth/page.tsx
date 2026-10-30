@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { interpolate, useI18nOptional } from "@/lib/i18n";
+import { interpolate, peekDict, useI18nOptional } from "@/lib/i18n";
+import type { Lang } from "@/lib/i18n-data";
 // Английский словарь — единственный, который можно компилировать в страницу
-// (см. lib/i18n-lang/README.md); нужен только как запас вне провайдера (тесты).
+// (см. lib/i18n-lang/README.md); запас, когда нет ни серверных строк, ни словаря.
 import en from "@/lib/i18n-lang/en";
+import { useAuthServerText } from "./authServerText";
 import { setAuthToken } from "@/lib/auth";
 import { адресВозвратаИлиОткуда } from "./returnTo";
 import { ПОСЛЕДНЯЯ_СТРАНИЦА } from "@/components/LastPageMemory";
@@ -152,19 +154,32 @@ const OAUTH_META: Record<string, { brand: string; gradient: string; envHint: str
 // Поэтому теперь ОДИН механизм — словарь через t(), как на остальном сайте,
 // и таблица AUTH_A11Y снята (её ключи — auth.form.*, auth.tab.*).
 type T = (key: string, vars?: Record<string, string | number>) => string;
-// Вне провайдера (тесты одиночного компонента) — английский из словаря en.
-const tВнеПровайдера: T = (key, vars) => interpolate(en[key] ?? key, vars);
 
 export default function AuthPage() {
   // Язык посетителя нужен дважды: словарю И атрибуту lang на main.
   // Прибитый lang=«ru» при живом доводчике означал: текст переведён на
   // английский, а блок объявлен русским — читалка читает EN-текст русским
   // голосом (класс 28.08, 204 места; доводчик lang-атрибуты не переписывает,
-  // проверено чтением AutoTranslate 07.09). Провайдер стартует с "en" (так
-  // требует гидрация), и SSR-текст теперь английский — lang совпадает с ним.
+  // проверено чтением AutoTranslate 07.09).
+  //
+  // ПЕРВЫЙ КАДР (30.10.2026, решение Оркестратора: ru — основной канал, вход —
+  // денежный экран). I18nProvider стартует с "en" и русский словарь догружает
+  // куском, поэтому словарь через t() дал бы английский SSR-HTML и первый кадр
+  // с перерисовкой. Пока провайдер не определил язык (langReady), страница
+  // рисует строки, выбранные СЕРВЕРОМ в auth/layout.tsx по куке и
+  // Accept-Language (умолчание ru) — SSR, первый кадр и гидрация совпадают.
+  // Когда язык определён, берём словарь провайдера, если он уже скачан; если
+  // ещё нет, а язык тот же, что у сервера, — остаёмся на серверных строках
+  // (без мигания английским); иначе — en до прихода словаря.
   const i18n = useI18nOptional();
-  const визитёрLang = i18n?.lang ?? "en";
-  const t: T = i18n?.t ?? tВнеПровайдера;
+  const серверный = useAuthServerText();
+  const языкОпределён = i18n?.langReady === true;
+  const визитёрLang: Lang = языкОпределён ? i18n!.lang : (серверный?.lang ?? "ru");
+  const t: T = (key, vars) => {
+    if (i18n && языкОпределён && peekDict(визитёрLang)) return i18n.t(key, vars);
+    const серверная = серверный && серверный.lang === визитёрLang ? серверный.strings[key] : undefined;
+    return interpolate(серверная ?? en[key] ?? key, vars);
+  };
   const { showToast } = useToast();
   const [mode, setMode] = useState<"login" | "register">("register");
   const [name, setName] = useState("");

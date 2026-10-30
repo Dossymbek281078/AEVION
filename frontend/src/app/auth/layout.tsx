@@ -1,5 +1,14 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { serverLang } from "@/lib/serverLang";
+import { строкиAuth } from "./authServerStrings";
+import { AuthServerTextProvider } from "./authServerText";
+
+// Кука и Accept-Language читаются на каждый запрос (serverLang) — маршрут /auth
+// отрисовывается динамически (тот же приём, что у /awards с getServerT). Цена —
+// один рендер на сервере на вход; выигрыш — первый кадр входа на языке посетителя
+// без мигания (30.10.2026: для русского гостя первый кадр был английским).
+export const dynamic = "force-dynamic";
 
 const SITE = getSiteUrl();
 
@@ -31,14 +40,18 @@ const breadcrumbJsonLd = {
   ],
 };
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  // Умолчание ru: вход — экран основного канала (решение Оркестратора 30.10.2026).
+  const lang = await serverLang("ru");
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      {children}
+      <AuthServerTextProvider lang={lang} strings={строкиAuth(lang)}>
+        {children}
+      </AuthServerTextProvider>
     </>
   );
 }

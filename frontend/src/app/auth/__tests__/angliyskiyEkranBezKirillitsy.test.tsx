@@ -151,7 +151,9 @@ describe("/auth при lang=en говорит по-английски", () => {
     vi.stubGlobal("fetch", stubFetch());
     withSearch("?lang=ru");
     отрисовать();
-    await waitFor(() => expect(document.body.textContent ?? "").toContain("Вход в AEVION"));
+    // Русский словарь приезжает отдельным куском (loadDict) — под нагрузкой
+    // параллельных файлов дольше секунды по умолчанию; ждём до пяти.
+    await waitFor(() => expect(document.body.textContent ?? "").toContain("Вход в AEVION"), { timeout: 5000 });
     expect(document.body.textContent ?? "").toContain("Что открывает аккаунт AEVION");
     // Заголовок, подзаголовок, вкладки, подписи полей, кнопка, 13 узлов блока — больше 20.
     expect(русскиеУзлы().length).toBeGreaterThan(20);

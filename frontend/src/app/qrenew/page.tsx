@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
-import { PaywallScreen } from "@/components/PaywallScreen";
+import { ServerPaywallScreen } from "@/components/ServerPaywallScreen";
 import QRenewClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
 import { языки } from "@/lib/hreflang";
@@ -56,7 +56,7 @@ export default async function Page({
   }
 
   const r = await fetchOrPaywall("/api/qrenew/health");
-  if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
+  if ("paywall" in r) return <ServerPaywallScreen payload={r.paywall} backHref="/modules" />;
   return (
     <>
       <PageTracking page="qrenew" />

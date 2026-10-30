@@ -1,11 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { serverLang } from "@/lib/serverLang";
-import { ServerLangProvider } from "@/lib/serverLangContext";
-
-// Язык первого кадра платной стены (PaywallScreen) выбирает сервер: кука →
-// Accept-Language → ru. Без этого SSR-кадр стены для русского гостя английский
-// и перерисовывается после гидрации (lib/serverLangContext.tsx, 30.10.2026).
-export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   // Хвост "· AEVION" не пишем: корневой layout добавляет его шаблоном
@@ -37,11 +30,10 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-export default async function HealthAILayout({
+export default function HealthAILayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const lang = await serverLang("ru");
-  return <ServerLangProvider lang={lang}>{children}</ServerLangProvider>;
+  return children;
 }

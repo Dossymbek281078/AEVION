@@ -33,9 +33,11 @@ import { useServerLang, языкКадра } from "@/lib/serverLangContext";
  * язык, выбранный серверным макетом маршрута (ServerLangProvider, кука →
  * Accept-Language → ru). Так SSR-HTML, первый кадр и гидрация совпадают — без
  * английской вспышки перед оплатой у русского гостя (замечание Продукта 30.10).
- * Макеты всех серверных маршрутов со стеной дают провайдер — сторож
- * app/__tests__/paywallScreenServerLang.guard. Вне обоих провайдеров (тест
- * одиночного компонента) — document.lang, как у PaywallModal.
+ * Серверные страницы рисуют стену через ServerPaywallScreen (он даёт провайдер) —
+ * сторож app/__tests__/paywallScreenServerLang.guard. Без серверного языка и до
+ * langReady (клиентские страницы: qai, qmedia, veilnetx…) — document.lang, как у
+ * PaywallModal: i18n.lang там ещё стартовое «en», а inline-скрипт уже выставил
+ * язык документа по пути и куке (вычитка Продукта 30.10).
  */
 
 type Яз = "ru" | "en" | "kk";
@@ -127,7 +129,7 @@ interface Props {
 export function PaywallScreen({ payload, backHref = "/", backLabel }: Props) {
   const i18n = useI18nOptional();
   const серверный = useServerLang();
-  const кадр = языкКадра(i18n, серверный, языкСтены());
+  const кадр = серверный === null && !i18n?.langReady ? языкСтены() : языкКадра(i18n, серверный, языкСтены());
   const lang: Яз = кадр === "ru" || кадр === "kk" ? кадр : "en";
   const с = СТРОКИ[lang];
   const { plan, requiredTiers, upgradeUrl, authState, loginUrl } = payload;

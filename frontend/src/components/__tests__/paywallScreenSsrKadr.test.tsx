@@ -71,9 +71,10 @@ describe("SSR-кадр PaywallScreen под макетом с серверным
     expect(текст(html)).not.toMatch(РУССКИЕ);
   });
 
-  it("КОНТРОЛЬ: без серверного макета SSR идёт с языка провайдера (en) — потому макеты обязательны", () => {
+  it("без серверного языка и до langReady — document.lang (на сервере ru), а не стартовое «en» провайдера", () => {
     const html = ssr(null);
     expect(html).not.toContain("data-server-lang");
-    expect(html).toMatch(/Go to pricing/);
+    expect(html).toMatch(/Перейти к тарифам/);
+    expect(текст(html)).not.toMatch(АНГЛИЙСКИЕ);
   });
 });

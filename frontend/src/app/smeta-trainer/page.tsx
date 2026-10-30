@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { englishUrlWithChannel } from "@/lib/englishPages";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
-import { PaywallScreen } from "@/components/PaywallScreen";
+import { ServerPaywallScreen } from "@/components/ServerPaywallScreen";
 import SmetaTrainerPage from "./_client";
 
 import type { Metadata } from "next";
@@ -53,6 +53,6 @@ export default async function Page({
   }
 
   const r = await fetchOrPaywall("/api/smeta-trainer/health");
-  if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
+  if ("paywall" in r) return <ServerPaywallScreen payload={r.paywall} backHref="/modules" />;
   return <SmetaTrainerPage />;
 }

@@ -3,7 +3,7 @@ import { englishVersionFor } from "@/lib/englishPages";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
-import { PaywallScreen } from "@/components/PaywallScreen";
+import { ServerPaywallScreen } from "@/components/ServerPaywallScreen";
 import { channelFrom, keepChannel, keepChannelOrProbe } from "@/lib/products";
 import LongevityClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
@@ -116,7 +116,7 @@ export default async function Page({
   }
 
   const r = await fetchOrPaywall("/api/longevity/health");
-  if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
+  if ("paywall" in r) return <ServerPaywallScreen payload={r.paywall} backHref="/modules" />;
   return (
     <>
       <PageTracking page="longevity" />

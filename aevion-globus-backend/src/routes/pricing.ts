@@ -126,6 +126,8 @@ interface PricingLead {
   seats?: number;
   message?: string;
   source?: string;
+  /** Метка канала `?c=` (напр. mail-pb340): по ней заявка привязывается к письму. */
+  channel?: string;
   ip?: string;
 }
 
@@ -481,6 +483,10 @@ pricingRouter.post("/lead", (req, res) => {
   const seats = Number.isFinite(body.seats) ? Math.min(10000, Math.max(1, Math.floor(body.seats))) : undefined;
   const message = typeof body.message === "string" ? body.message.trim().slice(0, 4000) : undefined;
   const source = typeof body.source === "string" ? body.source.trim().slice(0, 60) : undefined;
+  // Метка канала: ≤ 80 символов, только [a-z0-9._-]; иначе отбрасываем (не обрезаем).
+  const channel = typeof body.channel === "string" && /^[a-z0-9._-]{1,80}$/.test(body.channel.trim())
+    ? body.channel.trim()
+    : undefined;
   const modules = Array.isArray(body.modules)
     ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string").map((s: string) => s.slice(0, 60))
     : undefined;
@@ -504,6 +510,7 @@ pricingRouter.post("/lead", (req, res) => {
     seats,
     message,
     source,
+    channel,
     ip,
   };
 
@@ -1051,6 +1058,7 @@ async function уведомитьОЗаявке(lead: PricingLead): Promise<void
     ["Мест", lead.seats === undefined ? undefined : String(lead.seats)],
     ["Модули", lead.modules?.join(", ")],
     ["Откуда", lead.source],
+    ["Канал", lead.channel],
   ];
   const видимые = строки.filter(([, v]) => v && v.length > 0) as Array<[string, string]>;
   const html =

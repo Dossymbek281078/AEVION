@@ -111,15 +111,16 @@ export default async function PricingLayout({ children }: { children: React.Reac
  */
 export function ЦеныДляРобота({ приложения, lang = "ru" }: { приложения: Awaited<ReturnType<typeof оплачиваемыеПриложения>>; lang?: string }) {
   if (!приложения.length) return null;
-  // ru/kk — по-русски (как было); любой другой язык — по-английски, тем же правилом, что
+  // ru — по-русски, kk — по-казахски (31.10.2026; раньше kk получал русский блок); любой другой язык — по-английски, тем же правилом, что
   // и остальная страница цен (isEnglish). Числа не меняются — они из каталога.
   const en = isEnglish(lang);
+  const kk = lang === "kk";
   return (
     <section
-      aria-label={en ? "AEVION app prices" : "Цены приложений AEVION"}
+      aria-label={en ? "AEVION app prices" : kk ? "AEVION қосымшаларының бағасы" : "Цены приложений AEVION"}
       style={{ padding: "24px 16px", borderTop: "1px solid rgba(15,23,42,0.08)", fontSize: 13, lineHeight: 1.6 }}
     >
-      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 10px" }}>{en ? "Apps and prices" : "Приложения и цены"}</h2>
+      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 10px" }}>{en ? "Apps and prices" : kk ? "Қосымшалар және бағалар" : "Приложения и цены"}</h2>
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 4 }}>
         {приложения.map((app) => (
           <li key={app.slug}>
@@ -132,10 +133,14 @@ export function ЦеныДляРобота({ приложения, lang = "ru" }
             {app.yearOnlyUsd != null
               ? en
                 ? ` — $${app.yearOnlyUsd.toFixed(2)} per year`
-                : ` — $${app.yearOnlyUsd.toFixed(2)} в год`
+                : kk
+                  ? ` — жылына $${app.yearOnlyUsd.toFixed(2)}`
+                  : ` — $${app.yearOnlyUsd.toFixed(2)} в год`
               : en
                 ? ` — from $${fromPricePerMonth(app.baseMonthly).toFixed(2)} to $${app.baseMonthly.toFixed(2)} per month`
-                : ` — от $${fromPricePerMonth(app.baseMonthly).toFixed(2)} до $${app.baseMonthly.toFixed(2)} в месяц`}
+                : kk
+                  ? ` — айына $${fromPricePerMonth(app.baseMonthly).toFixed(2)} бастап $${app.baseMonthly.toFixed(2)} дейін`
+                  : ` — от $${fromPricePerMonth(app.baseMonthly).toFixed(2)} до $${app.baseMonthly.toFixed(2)} в месяц`}
           </li>
         ))}
       </ul>

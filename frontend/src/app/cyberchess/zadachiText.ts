@@ -70,6 +70,14 @@ export const ZADACHI_TEXT: Record<string, { en: string; kk: string }> = {
   "Король соперника загнан в угол — при точной игре матовый финал неизбежен. Запомни характер позиции!": { en: "The opponent's king is cornered — with accurate play mate is unavoidable. Remember the pattern!", kk: "Қарсыластың королі бұрышқа қамалды — дәл ойында мат сөзсіз. Позицияның сипатын есте сақта!" },
   "Неверно! Стрик сброшен": { en: "Wrong! Streak reset", kk: "Қате! Серия нөлденді" },
   "Неверно. Попробуй ещё": { en: "Wrong. Try again", kk: "Қате. Қайталап көр" },
+  // 31.10.2026: панель живого разбора партии (путь платящего, замер en/kk на проде 2f217a909)
+  "БЛЕСТЯЩЕ!!": { en: "BRILLIANT!!", kk: "КЕРЕМЕТ!!" },
+  "Зевок": { en: "Blunder", kk: "Өрескел қате" },
+  "Ошибка": { en: "Mistake", kk: "Қате" },
+  "Неточность": { en: "Inaccuracy", kk: "Дәлсіздік" },
+  "Точность": { en: "Accuracy", kk: "Дәлдік" },
+  "Оценка по ходам": { en: "Evaluation by move", kk: "Жүрістер бойынша баға" },
+  "Ходы": { en: "Moves", kk: "Жүрістер" },
 };
 
 const FAZA_EN: Record<string, string> = { Opening: "Opening", Middlegame: "Middlegame", Endgame: "Endgame" };

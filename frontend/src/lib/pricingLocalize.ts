@@ -254,6 +254,9 @@ const RULES_EN: Array<[RegExp, (...m: string[]) => string]> = [
 
 /** Строка или примечание расчёта (/api/pricing/quote) на языке страницы; без перевода — русская. */
 export function localizeQuoteText(ru: string, lang: string): string {
+  // 31.10.2026 (путь платящего на kk): калькулятор писал «План «AEVION Планета» — 3 месяца, списание
+  // ежемесячно по $225» по-русски. Правило сайта для kk — без казахского перевода по-английски.
+  if (lang === "kk") return pick(ru, translateBackendText(ru) ?? undefined);
   if (!isEnglish(lang)) return ru;
   return pick(ru, translateBackendText(ru) ?? undefined);
 }
@@ -301,6 +304,10 @@ export function localizeTrustBadge<T extends { id: string; label: string; status
 }
 
 export function localizeModuleOneLiner(moduleId: string, oneLiner: string, lang: string): string {
+  // 31.10.2026, путь платящего CyberChess на kk (прод 2f217a909): таблица «Все модули» на /pricing давала
+  // 43 русских описания — kk считался «не английским» и получал оригинал. Правило сайта (pricingI18n, kk):
+  // чего нет на казахском — по-английски, НЕ по-русски. Числа сверяет тот же pick().
+  if (lang === "kk") return pick(oneLiner, MODULE_ONE_LINER_EN[moduleId]);
   if (!isEnglish(lang)) return oneLiner;
   return pick(oneLiner, MODULE_ONE_LINER_EN[moduleId]);
 }

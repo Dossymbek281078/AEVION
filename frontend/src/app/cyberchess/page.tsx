@@ -2462,7 +2462,7 @@ export default function CyberChessPage(){
   const pn=(k:string,ru:string)=>cc.locale==="ru"?ru:(setText?.[cc.locale]?.[k]??ru);
   // Вкладка «Задачи» на en/kk: тексты и названия тем — лениво (zadachiText.ts), на ru не грузятся вовсе.
   useEffect(()=>{
-    if(cc.locale==="ru"||zt||!(tab==="puzzles"||pzCurrent))return;
+    if(cc.locale==="ru"||zt)return; // 31.10.2026: и в партии — панель разбора тоже из zadachiText
     import("./zadachiText").then(m=>sZt(m)).catch(e=>{console.error("[CyberChess] тексты вкладки «Задачи» не загрузились — остаётся русский",e)});
   },[cc.locale,tab,pzCurrent,zt]);
   const pt=(src:string)=>cc.locale==="ru"||!zt?src:(zt.ZADACHI_TEXT[src]?.[cc.locale==="kk"?"kk":"en"]??src);
@@ -9784,7 +9784,7 @@ export default function CyberChessPage(){
               {qFlash&&(()=>{
                 const qBg=qFlash.quality==="brilliant"?"rgba(6,182,212,0.92)":qFlash.quality==="blunder"?"rgba(220,38,38,0.92)":qFlash.quality==="mistake"?"rgba(234,88,12,0.92)":qFlash.quality==="inacc"?"rgba(99,102,241,0.88)":"rgba(245,158,11,0.92)";
                 const qSym=qFlash.quality==="brilliant"?"!!":qFlash.quality==="blunder"?"??":qFlash.quality==="mistake"?"?":qFlash.quality==="inacc"?"?!":"★";
-                const qLabel=qFlash.quality==="brilliant"?"БЛЕСТЯЩЕ!!":qFlash.quality==="blunder"?"Зевок":qFlash.quality==="mistake"?"Ошибка":qFlash.quality==="inacc"?"Неточность":"Отлично!";
+                const qLabel=qFlash.quality==="brilliant"?pt("БЛЕСТЯЩЕ!!"):qFlash.quality==="blunder"?pt("Зевок"):qFlash.quality==="mistake"?pt("Ошибка"):qFlash.quality==="inacc"?pt("Неточность"):pt("Отлично!");
                 const isBrilliant=qFlash.quality==="brilliant";
                 return <div key={`qf-${qFlash.key}`} style={{
                   position:"absolute",bottom:12,left:"50%",transform:"translateX(-50%)",
@@ -10635,7 +10635,7 @@ export default function CyberChessPage(){
                 }
                 return <div style={{fontSize:10,marginTop:2,display:"flex",flexDirection:"column",gap:2}}>
                   <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <span style={{color:CC.textMute}}>Точность</span>
+                    <span style={{color:CC.textMute}}>{pt("Точность")}</span>
                     <span style={{fontWeight:900,color:accColor,fontFamily:"ui-monospace,monospace"}}>{acc}%</span>
                     {oppMoves.length>=2&&<span style={{color:CC.textMute,fontSize:9}}>vs {oppAcc}%</span>}
                     {blunder>0&&<span style={{color:"#ef4444",fontWeight:700,marginLeft:2}}>·{blunder}??</span>}
@@ -11812,7 +11812,7 @@ export default function CyberChessPage(){
             <div style={{padding:"7px 10px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:10,fontWeight:900,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:5,flex:1,minWidth:0}}>
                 <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2,flexShrink:0}}/>
-                Ходы {hist.length>0&&<span style={{color:T.accent,fontWeight:900}}>{Math.ceil(hist.length/2)}</span>}
+                {pt("Ходы")} {hist.length>0&&<span style={{color:T.accent,fontWeight:900}}>{Math.ceil(hist.length/2)}</span>}
                 {currentOpening&&hist.length>0&&<span style={{
                   marginLeft:4,fontSize:10,fontWeight:700,color:T.accent,
                   letterSpacing:0.3,textTransform:"none" as const,
@@ -12049,7 +12049,7 @@ export default function CyberChessPage(){
               const acClr=(a:number)=>a>=85?"#10b981":a>=65?"#f59e0b":"#ef4444";
               const myAcc=pCol==="w"?wAcc:bAcc;const oppAcc=pCol==="w"?bAcc:wAcc;
               return <div style={{padding:"5px 10px 4px",borderTop:`1px solid ${CC.border}`,display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:10,color:CC.textMute,fontWeight:700,flexShrink:0}}>Точность</span>
+                <span style={{fontSize:10,color:CC.textMute,fontWeight:700,flexShrink:0}}>{pt("Точность")}</span>
                 <div style={{flex:1,display:"flex",flexDirection:"column",gap:2}}>
                   <div style={{display:"flex",alignItems:"center",gap:4}}>
                     <span style={{fontSize:9,color:CC.textMute,width:10,textAlign:"right"}}>{pCol==="w"?"⚪":"⚫"}</span>
@@ -12078,7 +12078,7 @@ export default function CyberChessPage(){
               const cy=pts[Math.min(curPly,pts.length-1)]?.y??mid;
               return <div style={{padding:"6px 10px 8px",borderTop:`1px solid ${CC.border}`}}>
                 <div style={{fontSize:10,color:CC.textMute,fontWeight:700,marginBottom:4,display:"flex",justifyContent:"space-between"}}>
-                  <span>Оценка по ходам</span>
+                  <span>{pt("Оценка по ходам")}</span>
                   <span style={{fontFamily:"ui-monospace,monospace",color:analysis[Math.min(curPly,analysis.length-1)]?.cp>=0?CC.brand:CC.danger}}>{analysis[Math.min(curPly,analysis.length-1)]?.mate?`M${Math.abs(analysis[Math.min(curPly,analysis.length-1)].mate)}`:(analysis[Math.min(curPly,analysis.length-1)]?.cp/100).toFixed(2)}</span>
                 </div>
                 <svg width={W} height={H} style={{display:"block",borderRadius:4,overflow:"visible"}}>

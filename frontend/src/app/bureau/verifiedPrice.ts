@@ -27,9 +27,16 @@ export function ценаТекстом(cents: number | null | undefined = ЦЕН
   return `$${Number.isInteger(usd) ? usd.toFixed(0) : usd.toFixed(2)}`;
 }
 
-/** Сумма вместе с периодом: «$29/month». Для англоязычных экранов бюро. */
-export function ценаСПериодом(cents: number | null | undefined = ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ): string {
-  return `${ценаТекстом(cents)}/month`;
+/**
+ * Сумма вместе с периодом на языке читателя: en «$29/month», ru «$29/мес»,
+ * kk «айына $29». 30.10.2026: внутри русских фраз страницы повышения стояло
+ * «$29/month» — период на чужом языке в самом денежном месте.
+ */
+export function ценаСПериодом(cents: number | null | undefined = ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ, lang: string = "en"): string {
+  const сумма = ценаТекстом(cents);
+  if (lang === "ru") return `${сумма}/мес`;
+  if (lang === "kk") return `айына ${сумма}`;
+  return `${сумма}/month`;
 }
 
 /**
@@ -46,6 +53,8 @@ export function ценаVerifiedДляВитрины(
   lang: string,
   cents?: number | null,
 ): string {
-  if (kycMode === "live") return ценаСПериодом(cents);
-  return lang === "ru" ? "цена появится после проверки личности" : "price appears after identity verification";
+  if (kycMode === "live") return ценаСПериодом(cents, lang);
+  if (lang === "ru") return "цена появится после проверки личности";
+  if (lang === "kk") return "жеке басын тексергеннен кейін баға шығады";
+  return "price appears after identity verification";
 }

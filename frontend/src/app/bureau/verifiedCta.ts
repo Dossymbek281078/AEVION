@@ -35,3 +35,22 @@ export function verifiedContactLabel(lang: string | undefined): string {
   if (lang === "kk") return "Verified — бізге жазыңыз";
   return "Verified — ask us";
 }
+
+export type PaymentModeKnown = "live" | "stub" | "misconfigured" | null | undefined;
+
+/**
+ * Продаёт ли ВИТРИНА /bureau платные уровни (карточки «Verified» и «Notarized»).
+ *
+ * 30.10.2026, решение Оркестратора: не продавать то, чего нет. Пока
+ * /api/bureau/health отвечает kyc или payment = stub (замер прода 30.10: оба stub),
+ * на витрине нет ни цены нотариальной соподписи, ни призыва «выбрать сертификат для повышения» /
+ * «отправьте запрос» — вместо них честная строка и форма раннего доступа.
+ *
+ * Направление умолчания здесь ПРОТИВОПОЛОЖНО verifiedCta(): кнопка у конкретного
+ * сертификата при незнании режима не прячется (сетевой сбой не должен выключать
+ * живой платный путь), а витрина при незнании НЕ обещает — своя неосведомлённость
+ * не повод называть цену. Готово только когда ОБА барьера живые.
+ */
+export function tiersSellable(kyc: KycModeKnown, payment: PaymentModeKnown): boolean {
+  return kyc === "live" && payment === "live";
+}

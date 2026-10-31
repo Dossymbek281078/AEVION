@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { ruOf } from "./_ruSlovar";
 
 /**
  * 🔴 Замер 31.08.2026, воспроизведён НА ПРОДЕ: движок Stockfish не
@@ -89,6 +90,8 @@ describe("поломка движка видна, а не проглочена",
     // Если бы «починили» удалением слова, проверка выше проходила бы, а
     // человек лишился бы полезной информации в исправном случае.
     const s = KOD();
-    expect(s).toContain("Stockfish думает");
+    // 13–19.10.2026: надпись переехала в словарь; StatusBar по-прежнему выбирает её именно при useSF
+    expect(s).toContain('think?(useSF?t("game.thinkingSF"):t("game.thinkingAI"))');
+    expect(ruOf("game.thinkingSF")).toContain("Stockfish думает");
   });
 });

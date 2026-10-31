@@ -64,7 +64,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "rp.explorer": "Дебют",
     "rp.coach": "Коуч",
     "tile.stream": "Стрим",
-    "tile.streamLive": "Live●",
+    "tile.streamLive": "Эфир●",
     "tile.more": "Ещё",
     "tile.video": "Видео",
     "tile.videoOn": "Видео✓",

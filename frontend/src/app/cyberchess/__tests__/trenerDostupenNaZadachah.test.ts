@@ -27,6 +27,8 @@ import { klyuchEstVYazyke } from "./_slovar";
  * чинили.
  */
 
+import { ruOf } from "./_ruSlovar";
+
 const ИСХОДНИК = bezKommentariev(readFileSync(join(__dirname, "..", "page.tsx"), "utf8"));
 
 /** Кусок исходника от якоря до конца обработчика — чтобы судить именно о нём. */
@@ -54,7 +56,9 @@ describe("тренер доступен на задачах", () => {
   });
 
   it("🔴 во вкладке «Задачи» есть вход к тренеру с этой позицией", () => {
-    const i = ИСХОДНИК.indexOf("🎓 Спросить тренера");
+    // 13–19.10.2026: подпись кнопки — ключ pz.askCoach
+    expect(ruOf("pz.askCoach")).toContain("Спросить тренера");
+    const i = ИСХОДНИК.indexOf('{cc.t("pz.askCoach")}</Btn>');
     expect(i, "во вкладке «Задачи» снова нет входа к тренеру").toBeGreaterThan(0);
     const назад = ИСХОДНИК.slice(Math.max(0, i - 900), i);
     // Вход обязан делать три вещи сразу, иначе он бесполезен:

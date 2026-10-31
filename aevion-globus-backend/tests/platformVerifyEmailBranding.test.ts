@@ -27,7 +27,9 @@ describe("подтверждение адреса представляется �
   });
 
   test("тема письма собирается из имени, а не зашита", () => {
-    expect(MAILER).toContain("`Подтвердите email — ${brand}`");
+    // 31.10.2026 письмо стало трёхъязычным: тема = текст языка + имя, а не зашитая строка.
+    expect(MAILER).toContain("`${T.subject} — ${brand}`");
+    expect(MAILER).toContain('subject: "Подтвердите email"');
     expect(MAILER).not.toContain('"Подтвердите email — AEVION QBuild"');
   });
 
@@ -35,12 +37,13 @@ describe("подтверждение адреса представляется �
     // Тема — не всё письмо: в теле логотип и подпись стояли отдельно, и
     // починка только темы оставила бы чужое имя на видном месте.
     expect(MAILER).toContain('<div class="logo">${brand}</div>');
-    expect(MAILER).toContain("уведомление от ${brand}");
+    expect(MAILER).toContain("уведомление от ${b}");
+    expect(MAILER).toContain("LAYOUT_FOOT[lang](brand)");
   });
 
   test("у почтовика модуля имя по умолчанию НЕ изменилось", () => {
     // Он обслуживает QBuild, и его собственные письма должны остаться прежними.
-    expect(MAILER).toContain('function layout(body: string, brand = "AEVION QBuild")');
+    expect(MAILER).toContain('function layout(body: string, brand = "AEVION QBuild"');
     expect(MAILER).toContain('const brand = opts.brand || "AEVION QBuild"');
     // …а платформенный сброс пароля называет платформу ЯВНО — иначе возврат умолчания модулю
     // вернул бы «AEVION QBuild» в тело письма о пароле (волна 79, 12.10.2026).

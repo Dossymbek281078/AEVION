@@ -3,6 +3,7 @@
 // Один компонент на /cyberchess/traps, /en/cyberchess/traps и /kk/cyberchess/traps.
 import { useMemo, useState } from "react";
 import { Chess } from "chess.js";
+import Piece from "../Pieces";
 import { LOVUSHKI, type Lovushka, type Yazyk } from "./traps";
 
 const UI: Record<Yazyk, Record<string, string>> = {
@@ -44,7 +45,6 @@ const UI: Record<Yazyk, Record<string, string>> = {
   },
 };
 
-const GLYPH: Record<string, string> = { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
 const FILES = "abcdefgh";
 
 /** Ссылка на игру: свой языковой адрес шахмат и метка канала. */
@@ -59,7 +59,7 @@ function Board({ fen, last }: { fen: string; last: { from: string; to: string } 
     <div
       role="img"
       aria-label={fen}
-      style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", width: "100%", maxWidth: 360, aspectRatio: "1 / 1", border: "2px solid #3a3a40" }}
+      style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gridTemplateRows: "repeat(8, 1fr)", width: "100%", maxWidth: 360, aspectRatio: "1 / 1", border: "2px solid #3a3a40" }}
     >
       {rows.flatMap((row, r) =>
         row.map((sq, c) => {
@@ -74,13 +74,9 @@ function Board({ fen, last }: { fen: string; last: { from: string; to: string } 
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "clamp(20px, 7vw, 36px)",
-                lineHeight: 1,
-                color: sq?.color === "w" ? "#fff" : "#111",
-                textShadow: sq?.color === "w" ? "0 0 2px #000, 0 0 1px #000" : "none",
               }}
             >
-              {sq ? GLYPH[sq.type] : ""}
+              {sq ? <Piece type={sq.type} color={sq.color} setOverride="cburnett" /> : null}
             </div>
           );
         }),

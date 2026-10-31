@@ -124,7 +124,8 @@ export const MC_TEXT: Record<string, Tr> = {
   "One provider · one model · fastest path": { ru: "Один поставщик · одна модель · самый быстрый путь", kk: "Бір провайдер · бір модель · ең жылдам жол" },
   // 31.10.2026: DeepSeek и Grok убраны — на проде у них нет ключей (/api/qcoreai/providers: configured:false), запрос молча
   // уходил к Claude. Открытые модели через OpenRouter ответили сами (замер 31.10, ?c=probe-multichat).
-  "Classic chat experience. Pick Claude, GPT, Gemini or a free open model, ask a question, get an answer. Best for quick lookups and informal conversation.": { ru: "Классический чат. Выберите Claude, GPT, Gemini или бесплатную открытую модель, задайте вопрос — получите ответ. Лучше всего для быстрых справок и свободной беседы.", kk: "Классикалық чат. Claude, GPT, Gemini немесе тегін ашық модельді таңдап, сұрақ қойыңыз — жауап алыңыз. Жылдам анықтама мен еркін әңгімеге ең қолайлы." },
+  // 31.10.2026, решение Оркестратора: GPT снят до починки ключа OpenAI (прод отвечает openai 401); вернуть, когда заработает.
+  "Classic chat experience. Pick Claude, Gemini or a free open model, ask a question, get an answer. Best for quick lookups and informal conversation.": { ru: "Классический чат. Выберите Claude, Gemini или бесплатную открытую модель, задайте вопрос — получите ответ. Лучше всего для быстрых справок и свободной беседы.", kk: "Классикалық чат. Claude, Gemini немесе тегін ашық модельді таңдап, сұрақ қойыңыз — жауап алыңыз. Жылдам анықтама мен еркін әңгімеге ең қолайлы." },
   "Open single chat →": { ru: "Открыть одиночный чат →", kk: "Жеке чатты ашу →" },
   "New": { ru: "Новое", kk: "Жаңа" },
   "Multi-agent": { ru: "Мультиагент", kk: "Мультиагент" },

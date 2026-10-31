@@ -664,7 +664,7 @@ export default function MultichatEnginePage() {
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 13, color: T.inkOnCardMute, lineHeight: 1.55 }}>
-              {tm(tmLang, "Classic chat experience. Pick Claude, GPT, Gemini or a free open model, ask a question, get an answer. Best for quick lookups and informal conversation.")}
+              {tm(tmLang, "Classic chat experience. Pick Claude, Gemini or a free open model, ask a question, get an answer. Best for quick lookups and informal conversation.")}
             </p>
             <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: T.accentDeeper }}>
               {tm(tmLang, "Open single chat →")}

@@ -112,7 +112,8 @@ const СВОИ_СТРАНИЦЫ_ЯЗЫКА: Record<string, (путь: string) =>
   // страниц под /kk у них нет, и казахский пользователь получал 404.
   // Сверку правила с файлами держит ruKkPrefixRedirect.test.ts.
   // 31.10.2026: + /kk/cyberchess/traps — своя казахская страница ловушек (app/kk/cyberchess/traps).
-  kk: (п) => п === "/kk/cyberchess" || п === "/kk/cyberchess/traps",
+  // 31.10.2026: + /kk/multichat-engine/compare — своя казахская страница сравнения ответов нейросетей.
+  kk: (п) => п === "/kk/cyberchess" || п === "/kk/cyberchess/traps" || п === "/kk/multichat-engine/compare",
 };
 
 export function языковойРедирект(

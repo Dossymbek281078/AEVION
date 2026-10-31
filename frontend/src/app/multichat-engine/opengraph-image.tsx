@@ -6,17 +6,17 @@ export const runtime = "edge";
 // последним английским из трёх. Названия ролей ВНУТРИ картинки намеренно
 // оставлены как есть: чем модуль называет их на самом экране, я не проверил,
 // а переводить надпись, не сверив с интерфейсом, — способ пообещать не то.
-export const alt = "AEVION Мультичат — параллельные ИИ-агенты в одном окне";
+// 31.10.2026 (решение Оркестратора «обещать только то, что есть»): картинка говорила «6 агентов · 5 поставщиков»,
+// а консоль — совет из ТРЁХ агентов (Аналитик, Скептик, Практик; CouncilConsole.tsx PANEL) с основными поставщиками
+// Claude / Gemini / открытая модель через OpenRouter. Роли и подпись приведены к консоли.
+export const alt = "AEVION Мультичат — совет трёх ИИ-агентов: видно, где их ответы расходятся";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 const ROLES: Array<{ name: string; bg: string; fg: string; border: string }> = [
-  { name: "General", bg: "rgba(94,234,212,0.18)", border: "rgba(94,234,212,0.55)", fg: "#5eead4" },
-  { name: "Code", bg: "rgba(125,211,252,0.18)", border: "rgba(125,211,252,0.55)", fg: "#7dd3fc" },
-  { name: "Finance", bg: "rgba(250,204,21,0.18)", border: "rgba(250,204,21,0.55)", fg: "#facc15" },
-  { name: "IP/Legal", bg: "rgba(196,181,253,0.18)", border: "rgba(196,181,253,0.55)", fg: "#c4b5fd" },
-  { name: "Compliance", bg: "rgba(248,113,113,0.18)", border: "rgba(248,113,113,0.55)", fg: "#fca5a5" },
-  { name: "Translator", bg: "rgba(134,239,172,0.18)", border: "rgba(134,239,172,0.55)", fg: "#86efac" },
+  { name: "Analyst", bg: "rgba(94,234,212,0.18)", border: "rgba(94,234,212,0.55)", fg: "#5eead4" },
+  { name: "Skeptic", bg: "rgba(248,113,113,0.18)", border: "rgba(248,113,113,0.55)", fg: "#fca5a5" },
+  { name: "Practitioner", bg: "rgba(250,204,21,0.18)", border: "rgba(250,204,21,0.55)", fg: "#facc15" },
 ];
 
 export default function MultichatOgImage() {
@@ -62,8 +62,8 @@ export default function MultichatOgImage() {
               flexDirection: "column",
             }}
           >
-            <span>Parallel agents,</span>
-            <span style={{ color: "#5eead4" }}>one identity, one window.</span>
+            <span>Three AI agents, one question.</span>
+            <span style={{ color: "#5eead4" }}>See where they disagree.</span>
           </div>
           <div
             style={{
@@ -74,7 +74,7 @@ export default function MultichatOgImage() {
               display: "flex",
             }}
           >
-            6 specialised AI agents · 5 LLM providers · QCoreAI router · Live in production.
+            Claude · Gemini · open models · signed receipt · 2 free questions a day
           </div>
         </div>
 

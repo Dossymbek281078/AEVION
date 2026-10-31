@@ -115,6 +115,8 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qcontract/create", changeFrequency: "weekly", priority: 0.6 },
   // DevHub — AI developer platform
   { path: "/devhub", changeFrequency: "weekly", priority: 0.8 },
+  // 31.10.2026: SEO-страница для разработчиков; язык — serverLang, hreflang через ?lang= на самой странице.
+  { path: "/devhub/guide", changeFrequency: "monthly", priority: 0.7 },
   // Smeta Trainer
   { path: "/smeta-trainer", changeFrequency: "weekly", priority: 0.75 },
   // QTradeOffline

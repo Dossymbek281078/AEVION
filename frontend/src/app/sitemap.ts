@@ -59,6 +59,8 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qright", changeFrequency: "daily", priority: 0.9 },
   { path: "/qright/transparency", changeFrequency: "weekly", priority: 0.6 },
   { path: "/bureau", changeFrequency: "daily", priority: 0.9 },
+  // 31.10.2026: SEO-страница для патентных бюро; язык — serverLang, hreflang через ?lang= на самой странице.
+  { path: "/bureau/guide", changeFrequency: "monthly", priority: 0.7 },
   { path: "/qsign", changeFrequency: "weekly", priority: 0.7 },
   { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
   { path: "/qspace", changeFrequency: "weekly", priority: 0.7 },

@@ -33,6 +33,19 @@ describe("ловушки CyberChess", () => {
     });
   }
 
+  // Проверка Мультичата 31.10 (Stockfish 18, глубина 18): «??» стоит на настоящем зевке, тексты без ложных советов.
+  it("пометка «??» — на настоящем зевке (Ласкер 6.Bxb4, сибирская 9.h3)", () => {
+    const по = (id: string) => LOVUSHKI.find((t) => t.id === id)!;
+    expect(по("lasker").moves[по("lasker").oshibka]).toBe("Bxb4");
+    expect(по("siberian").moves[по("siberian").oshibka]).toBe("h3");
+    for (const l of ["ru", "en", "kk"] as const) {
+      expect(по("siberian").about[l], "после 10.Qd1 тоже мат — советовать нельзя").not.toContain("10.Qd1");
+      expect(по("lasker").about[l]).not.toContain("4.e3??");
+    }
+    expect(по("elephant").about.ru).toContain("конь f6");
+    expect(по("elephant").about.ru).not.toContain("конь d5");
+  });
+
   it("контроль прибора: кириллица в en ловится", () => {
     expect("Légal мат").toMatch(CYR);
   });

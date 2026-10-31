@@ -20,12 +20,15 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { bezKommentariev } from "./bezKommentariev";
+import { ruOf } from "./_ruSlovar";
 
 const СТРАНИЦА = bezKommentariev(readFileSync(join(__dirname, "..", "page.tsx"), "utf8"));
 
 describe("число задач на экране", () => {
   it("в шапке подписано как банк", () => {
-    expect(СТРАНИЦА).toContain('в банке{useSF');
+    // 13–19.10.2026: для не-русских языков подпись — ключ pz.bank; русская осталась с склонением (ccPlural)
+    expect(СТРАНИЦА).toContain('+" в банке":cc.t("pz.bank")}{useSF');
+    expect(ruOf("pz.bank")).toContain("в банке");
   });
 
   it("контроль: счётчик по-прежнему живой, а не зашитое число", () => {

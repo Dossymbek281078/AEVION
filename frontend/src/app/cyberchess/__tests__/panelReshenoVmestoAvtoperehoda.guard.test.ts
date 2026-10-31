@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { strokaTsennosti } from "../panelResheno";
+import { ruOf } from "./_ruSlovar";
 
 /**
  * 🔴 ПРИШЁЛ ПО ССЫЛКЕ НА ЗАДАЧУ — ПОСЛЕ «РЕШЕНО!» НЕТ АВТОПЕРЕХОДА.
@@ -34,13 +35,14 @@ describe("строка ценности", () => {
 
 describe("панель «Решено!» при заходе по ссылке", () => {
   it("🔴 автопереход выключен ровно для захода по ссылке, rush не тронут", () => {
-    expect(КОД).toContain('if(зашёлЗаЗадачей&&pzMode!=="rush")return;');
+    // Позже условие расширено: к заходу по ссылке добавлена «задача дня» (та же панель, тот же rush-запрет).
+    expect(КОД).toContain('if((зашёлЗаЗадачей||этоЗадачаДня)&&pzMode!=="rush")return;');
     // Строка задержки на месте — другие режимы переходят сами, как прежде.
     expect(КОД).toContain('const delay=pzMode==="rush"?550:pzMode==="learn"?1100:1200;');
   });
 
   it("🔴 панель рисуется только под флагом и после верного решения", () => {
-    expect(КОД).toContain('{зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1"');
+    expect(КОД).toContain('{(зашёлЗаЗадачей||этоЗадачаДня)&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1"');
     expect((КОД.match(/data-cc-resheno="1"/g) || []).length, "панель ровно одна").toBe(1);
   });
 
@@ -49,8 +51,10 @@ describe("панель «Решено!» при заходе по ссылке",
     const окно = КОД.slice(i, i + 1400);
     expect(окно).toContain('meta:{feature:"next_clicked",app:"cyberchess"}');
     expect(окно).toContain("loadNextPuzzleRef.current();");
-    expect(окно).toContain("Следующая задача");
-    expect(окно).toContain("{strokaTsennosti(pzTotal)}");
+    // 13–19.10.2026: подпись кнопки — ключ pz.next (ru-значение проверяется в словаре), строка ценности получила язык
+    expect(окно).toContain('{cc.t("pz.next")}');
+    expect(ruOf("pz.next")).toContain("Следующая задача");
+    expect(окно).toContain("{strokaTsennosti(pzTotal,cc.locale)}");
   });
 
   it("🔴 панель — оверлей ВНУТРИ доски, а не под ней", () => {

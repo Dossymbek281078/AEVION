@@ -74,21 +74,21 @@ export const LOVUSHKI: Lovushka[] = [
     mat: false,
     name: { ru: "Слоновая ловушка", en: "Elephant Trap", kk: "Піл тұзағы" },
     about: {
-      ru: "Кажется, конь d5 висит из-за связки. Белые берут 6.Nxd5?? и после 7.Bxd8 Bb4+! отдают ферзя назад, а в итоге остаются без фигуры. Ферзевый гамбит, частая ошибка новичков.",
-      en: "The d5 knight looks pinned and loose. White grabs 6.Nxd5??, and after 7.Bxd8 Bb4+! has to give the queen back and ends up a piece down. A classic beginner mistake in the Queen's Gambit.",
-      kk: "d5-тегі ат байланған сияқты. Ақтар 6.Nxd5?? алады, 7.Bxd8 Bb4+! кейін уәзірді қайтарып, ақыры бір фигура кем қалады. Ферзь гамбитіндегі жаңадан бастаушылардың жиі қатесі.",
+      ru: "Кажется, пешка d5 висит: конь f6 связан слоном g5. Белые берут 6.Nxd5??, но 6...Nxd5! — связка ложная: после 7.Bxd8 Bb4+! белые отдают ферзя назад и остаются без фигуры. Ферзевый гамбит, частая ошибка новичков.",
+      en: "The d5 pawn looks loose because the f6 knight is pinned by the g5 bishop. White grabs 6.Nxd5??, but 6...Nxd5! breaks the pin: after 7.Bxd8 Bb4+! White has to give the queen back and ends up a piece down. A classic beginner mistake in the Queen's Gambit.",
+      kk: "d5 пешкасы қорғаусыз сияқты: f6-тегі атты g5-тегі піл байлап тұр. Ақтар 6.Nxd5?? алады, бірақ 6...Nxd5! — байлау жалған: 7.Bxd8 Bb4+! кейін ақтар уәзірді қайтарып, бір фигура кем қалады. Ферзь гамбитіндегі жаңадан бастаушылардың жиі қатесі.",
     },
   },
   {
     id: "lasker",
     moves: ["d4", "d5", "c4", "e5", "dxe5", "d4", "e3", "Bb4+", "Bd2", "dxe3", "Bxb4", "exf2+", "Ke2", "fxg1=N+"],
-    oshibka: 6,
+    oshibka: 10,
     mat: false,
     name: { ru: "Ловушка Ласкера", en: "Lasker Trap", kk: "Ласкер тұзағы" },
     about: {
-      ru: "Контргамбит Альбина. 4.e3?? открывает игру, и пешка чёрных бежит до первой горизонтали: 7...fxg1=N+! — превращение в коня с шахом. Редкий случай, когда конь лучше ферзя. Правильно 4.Nf3.",
-      en: "Albin Countergambit. 4.e3?? opens the game and Black's pawn runs all the way: 7...fxg1=N+! promotes to a knight with check. A rare case where a knight beats a queen. 4.Nf3 is correct.",
-      kk: "Альбин қарсы гамбиті. 4.e3?? ойынды ашады, қаралардың пешкасы бірінші қатарға дейін жетеді: 7...fxg1=N+! — шахпен атқа айналу. Ат уәзірден жақсы болатын сирек жағдай. Дұрысы 4.Nf3.",
+      ru: "Контргамбит Альбина. После 5...dxe3 белые жадно берут слона 6.Bxb4?? — и пешка чёрных бежит до первой горизонтали: 6...exf2+ 7.Ke2 fxg1=N+! — превращение в коня с шахом. Редкий случай, когда конь лучше ферзя. Раньше было неточно 4.e3 — лучше 4.Nf3.",
+      en: "Albin Countergambit. After 5...dxe3 White greedily takes the bishop with 6.Bxb4??, and Black's pawn runs all the way: 6...exf2+ 7.Ke2 fxg1=N+! promotes to a knight with check. A rare case where a knight beats a queen. Earlier, 4.e3 was already inaccurate; 4.Nf3 is better.",
+      kk: "Альбин қарсы гамбиті. 5...dxe3 кейін ақтар ашкөздікпен 6.Bxb4?? деп пілді алады, ал қаралардың пешкасы бірінші қатарға дейін жетеді: 6...exf2+ 7.Ke2 fxg1=N+! — шахпен атқа айналу. Ат уәзірден жақсы болатын сирек жағдай. Бұған дейін 4.e3 дәл емес еді — 4.Nf3 жақсырақ.",
     },
   },
   {
@@ -118,13 +118,13 @@ export const LOVUSHKI: Lovushka[] = [
   {
     id: "siberian",
     moves: ["e4", "c5", "d4", "cxd4", "c3", "dxc3", "Nxc3", "Nc6", "Nf3", "e6", "Bc4", "Qc7", "O-O", "Nf6", "Qe2", "Ng4", "h3", "Nd4", "Nxd4", "Qh2#"],
-    oshibka: 18,
+    oshibka: 16,
     mat: true,
     name: { ru: "Сибирская ловушка", en: "Siberian Trap", kk: "Сібір тұзағы" },
     about: {
-      ru: "Гамбит Смит-Морра. Белые прогоняют коня 9.h3, а чёрные отвечают 9...Nd4!, нападая на ферзя. Белые бьют 10.Nxd4?? — и ферзь c7 ставит мат на h2. Надо было увести ферзя: 10.Qd1.",
-      en: "Smith-Morra Gambit. White kicks the knight with 9.h3, Black replies 9...Nd4! hitting the queen. White takes 10.Nxd4?? and the c7 queen mates on h2. Moving the queen, 10.Qd1, was necessary.",
-      kk: "Смит-Морра гамбиті. Ақтар 9.h3 деп атты қуады, қаралар 9...Nd4! деп уәзірге шабуыл жасайды. Ақтар 10.Nxd4?? алады — c7-дегі уәзір h2-де мат қояды. Уәзірді шегіндіру керек еді: 10.Qd1.",
+      ru: "Гамбит Смит-Морра. Белые прогоняют коня 9.h3??, а чёрные отвечают 9...Nd4!, нападая на ферзя. После 10.Nxd4 ферзь c7 ставит мат на h2. Лучшее после 9...Nd4 — 10.hxg4, но и тогда чёрные лучше; ошибка — сам ход 9.h3, правильно 9.Rd1.",
+      en: "Smith-Morra Gambit. White kicks the knight with 9.h3??, Black replies 9...Nd4! hitting the queen. After 10.Nxd4 the c7 queen mates on h2. The best try after 9...Nd4 is 10.hxg4, but Black is still better; the real mistake is 9.h3 itself, and 9.Rd1 was correct.",
+      kk: "Смит-Морра гамбиті. Ақтар 9.h3?? деп атты қуады, қаралар 9...Nd4! деп уәзірге шабуыл жасайды. 10.Nxd4 кейін c7-дегі уәзір h2-де мат қояды. 9...Nd4 кейінгі ең жақсы жауап — 10.hxg4, бірақ сонда да қаралар жақсы; қате — 9.h3 жүрісінің өзі, дұрысы 9.Rd1.",
     },
   },
   {

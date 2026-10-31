@@ -4,6 +4,12 @@ import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import MultichatLibraryPage from "../library/page";
 import { setAuthToken, clearAuthToken } from "@/lib/auth";
 
+// 31.10.2026: страница считает заход (<PageTracking page="multichat-library" />, сторож trackingCoverage).
+// Событие page_view уходит своим fetch на /api/pricing/events — проверки ниже про запросы САМОЙ библиотеки,
+// поэтому счётчик подменён.
+const pageTrackingSpy = vi.hoisted(() => vi.fn());
+vi.mock("@/components/PageTracking", () => ({ PageTracking: (p: { page: string }) => { pageTrackingSpy(p.page); return null; } }));
+
 // Библиотека беседы. Главная проверка — та, которую невозможно сделать типами:
 // страница читала токен по имени `aevion_token`, а вход кладёт его в
 // `aevion_auth_token_v1`. Ключ не писала ни одна строка фронтенда, поэтому

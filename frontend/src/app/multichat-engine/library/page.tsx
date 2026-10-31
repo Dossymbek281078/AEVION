@@ -14,6 +14,8 @@ import { getAuthToken } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import { useI18nOptional } from "@/lib/i18n";
 import { tm } from "../mcText";
+import { PageTracking } from "@/components/PageTracking";
+import { useСсылкаВхода } from "@/app/auth/loginHref";
 import Link from "next/link";
 import { T } from "../theme";
 import { agentFailure } from "../failureText";
@@ -106,6 +108,8 @@ export default function MultichatLibraryPage() {
   // 30.10.2026: на /en библиотека бесед была русской — язык из провайдера, подписи и alert/confirm через tm.
   const lang = useI18nOptional()?.lang ?? "ru";
   const t = (s: string) => tm(lang, s);
+  // 31.10.2026: гостю писали «Войдите…» без ссылки на вход — путь к библиотеке обрывался на тексте.
+  const входHref = useСсылкаВхода("/multichat-engine/library");
   const [token, setToken] = useState("");
   const [items, setItems] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -291,16 +295,22 @@ export default function MultichatLibraryPage() {
 
   if (!token) {
     return (
-      <div style={{ minHeight: "100vh", background: T.canvas, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <p style={{ color: T.textMute, fontSize: 15, textAlign: "center", maxWidth: 420, lineHeight: 1.6 }}>
+      <div style={{ minHeight: "100vh", background: T.canvas, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24 }}>
+        {/* 31.10.2026 (сторож trackingCoverage): страница ведёт к тарифу, а заходы не считала — ни гостя, ни вошедшего. */}
+        <PageTracking page="multichat-library" />
+        <p style={{ color: T.textMute, fontSize: 15, textAlign: "center", maxWidth: 420, lineHeight: 1.6, margin: 0 }}>
           {t("Войдите, чтобы увидеть свои беседы. Библиотека хранит вопросы, ответы всех агентов и расход по каждой беседе.")}
         </p>
+        <a href={входHref} data-mc-signin="library-guest" style={{ color: T.accent, fontWeight: 700, fontSize: 15 }}>
+          {t("Войти или создать аккаунт →")}
+        </a>
       </div>
     );
   }
 
   return (
     <div style={{ minHeight: "100vh", background: T.canvas, color: T.text }}>
+      <PageTracking page="multichat-library" />
       <header
         style={{
           borderBottom: `1px solid ${T.lineSoft}`,

@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import { Chess } from "chess.js";
 import Piece from "../Pieces";
+import { GUIDE_PATHS as guidePaths } from "../guide/guide";
 import { LOVUSHKI, type Lovushka, type Yazyk } from "./traps";
 
 const UI: Record<Yazyk, Record<string, string>> = {
@@ -18,6 +19,7 @@ const UI: Record<Yazyk, Record<string, string>> = {
     of: "из",
     mistake: "Здесь ошибка",
     play: "Сыграть с тренером",
+    guide: "Как тренер разбирает ход",
   },
   en: {
     h1: "10 chess opening traps",
@@ -30,6 +32,7 @@ const UI: Record<Yazyk, Record<string, string>> = {
     of: "of",
     mistake: "The mistake",
     play: "Play with the coach",
+    guide: "How the coach reviews a move",
   },
   kk: {
     h1: "Дебюттегі 10 шахмат тұзағы",
@@ -42,6 +45,7 @@ const UI: Record<Yazyk, Record<string, string>> = {
     of: "/",
     mistake: "Қате осында",
     play: "Жаттықтырушымен ойнау",
+    guide: "Жаттықтырушы жүрісті қалай талдайды",
   },
 };
 
@@ -154,6 +158,9 @@ function Trap({ t, lang, n }: { t: Lovushka; lang: Yazyk; n: number }) {
   );
 }
 
+/** Ссылка на страницу о тренере того же языка (31.10.2026). */
+const guidePath = (lang: Yazyk): string => guidePaths[lang];
+
 export default function TrapsView({ yazyk: lang }: { yazyk: Yazyk }) {
   const ui = UI[lang];
   return (
@@ -168,6 +175,9 @@ export default function TrapsView({ yazyk: lang }: { yazyk: Yazyk }) {
             </li>
           ))}
         </ol>
+        <p style={{ margin: "0 0 12px" }}>
+          <a href={guidePath(lang)} data-testid="traps-guide" style={{ color: "#7a5410", fontWeight: 700 }}>{ui.guide} →</a>
+        </p>
         {LOVUSHKI.map((t, i) => (
           <Trap key={t.id} t={t} lang={lang} n={i + 1} />
         ))}

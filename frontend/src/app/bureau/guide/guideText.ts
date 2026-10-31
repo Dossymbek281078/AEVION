@@ -226,8 +226,8 @@ export function guideMetadata(lang: GuideLang): Metadata {
   return {
     title: { absolute: t.title },
     description: t.description,
-    alternates: { canonical: GUIDE_CANONICAL, languages: GUIDE_LANGUAGES },
-    openGraph: { title: t.title, description: t.description, url: GUIDE_CANONICAL, type: "article", locale: t.locale, siteName: "AEVION" },
+    alternates: { canonical: GUIDE_LANGUAGES[lang], languages: GUIDE_LANGUAGES },
+    openGraph: { title: t.title, description: t.description, url: GUIDE_LANGUAGES[lang], type: "article", locale: t.locale, siteName: "AEVION" },
     twitter: { card: "summary", title: t.title, description: t.description },
   };
 }

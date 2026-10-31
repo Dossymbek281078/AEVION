@@ -57,10 +57,11 @@ describe("страница /bureau/guide", () => {
     expect(GUIDE.ru.h1).not.toBe(GUIDE.en.h1);
   });
 
-  it("мета: canonical /bureau/guide и hreflang en/ru/kk + x-default у всех трёх языков", () => {
+  it("мета: canonical свой у каждого языка (= его hreflang) и hreflang en/ru/kk + x-default у всех трёх языков", () => {
     for (const l of ["en", "ru", "kk"] as const) {
       const m = guideMetadata(l);
-      expect(String(m.alternates?.canonical)).toBe("https://aevion.app/bureau/guide");
+      expect(String(m.alternates?.canonical)).toBe(`https://aevion.app/bureau/guide?lang=${l}`);
+      expect(String(m.alternates?.canonical)).toBe(String((m.alternates?.languages as Record<string, string>)[l]));
       expect(Object.keys(m.alternates?.languages ?? {}).sort()).toEqual(["en", "kk", "ru", "x-default"]);
       expect(String(m.title && (m.title as { absolute: string }).absolute).length).toBeGreaterThan(20);
     }

@@ -201,6 +201,7 @@ export const MC_TEXT: Record<string, Tr> = {
   "Скопируйте ссылку вручную:": { en: "Copy the link manually:", kk: "Сілтемені қолмен көшіріңіз:" },
   "Отозвать public-ссылку? Старая перестанет работать.": { en: "Revoke the public link? The old one will stop working.", kk: "Жария сілтемені қайтарып алу керек пе? Ескісі жұмысын тоқтатады." },
   "Не удалось скачать": { en: "Download failed", kk: "Жүктеп алу мүмкін болмады" },
+  "Войти или создать аккаунт →": { en: "Sign in or create an account →", kk: "Кіру немесе аккаунт ашу →" },
   "Войдите, чтобы увидеть свои беседы. Библиотека хранит вопросы, ответы всех агентов и расход по каждой беседе.": { en: "Sign in to see your conversations. The library keeps questions, all agents' answers and the usage of each conversation.", kk: "Әңгімелеріңізді көру үшін кіріңіз. Кітапхана сұрақтарды, барлық агенттердің жауаптарын және әр әңгіменің шығынын сақтайды." },
   "← Мультичат": { en: "← Multichat", kk: "← Мультичат" },
   "Библиотека бесед": { en: "Conversation library", kk: "Әңгімелер кітапханасы" },

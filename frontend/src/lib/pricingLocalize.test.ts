@@ -58,10 +58,20 @@ describe("pricingLocalize: тарифы", () => {
     }
   });
 
-  it("ru и kk: объект возвращается как есть, без копирования", () => {
+  it("ru: объект возвращается как есть, без копирования", () => {
     for (const tier of pricing.tiers) {
       expect(localizeTier(tier, "ru")).toBe(tier);
-      expect(localizeTier(tier, "kk")).toBe(tier);
+    }
+  });
+
+  it("kk: тариф локализован (555f43ff3, 31.10.2026) — числа и цены те же, id и лимиты не тронуты", () => {
+    for (const tier of pricing.tiers) {
+      const kk = localizeTier(tier, "kk");
+      expect(kk.id).toBe(tier.id);
+      expect(kk.priceMonthly).toBe(tier.priceMonthly);
+      expect(kk.limits).toEqual(tier.limits);
+      expect(kk.features.length).toBe(tier.features.length);
+      expect(sameDigits(tier.tagline, kk.tagline), tier.id + ": числа tagline").toBe(true);
     }
   });
 

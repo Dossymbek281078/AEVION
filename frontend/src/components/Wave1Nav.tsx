@@ -5,6 +5,7 @@ import { ldFees, todayRealizedPnl } from "@/app/qtrade/fees";
 import { ldClosed } from "@/app/qtrade/marketSim";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { tNav, useNavLang, type NavKey } from "./navI18n";
+import { useСсылкаАвторизацииШапки } from "@/app/auth/loginHref";
 type Props = {
   hidePlanet?: boolean;
   variant?: "light" | "dark";
@@ -116,6 +117,8 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
   // kk внутри приложений (APP_PREFIXES) они оставались английскими.
   const lang = useNavLang();
   const n = (k: NavKey) => tNav(lang, k);
+  // 2.11.2026: «Авторизация» в полосе модулей вела на голый /auth — вход терял страницу и метку канала ?c=.
+  const ссылкаАвторизации = useСсылкаАвторизацииШапки();
   const sep = variant === "dark" ? "rgba(148,163,184,0.5)" : "#cbd5e1";
   const link = variant === "dark" ? "#e2e8f0" : "#334155";
   // Teal-700 (#0f766e) on slate-50 (#f8fafc) ≈ 5.5:1 — passes WCAG 2 AA.
@@ -135,7 +138,7 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/demo/deep" style={{ color: link, fontWeight: 650 }}>{n("deepDive")}</Link>
       <Link href="/pitch" style={{ color: variant === "dark" ? "#fbbf24" : "#b45309", fontWeight: 800 }}>{n("pitch")}</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
-      <Link href="/auth" style={{ color: link, fontWeight: 600 }}>{n("auth")}</Link>
+      <Link href={ссылкаАвторизации} style={{ color: link, fontWeight: 600 }}>{n("auth")}</Link>
       <Link href="/qright" style={{ color: link, fontWeight: 600 }}>QRight</Link>
       <Link href="/qsign" style={{ color: link, fontWeight: 600 }}>QSign</Link>
       <Link href="/quantum-shield" style={{ color: shield, fontWeight: 700 }}>{n("shield")}</Link>

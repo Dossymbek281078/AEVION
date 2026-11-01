@@ -33,7 +33,7 @@ describe("норма исчерпана — предложение, не оши�
     expect(WIZARD).toContain("href={PRICING_TERMS}");
   });
   it("ссылка предложения ведёт на осмысленный якорь страницы тарифов", () => {
-    expect(PRICING_TERMS).toMatch(/^/pricing#(planet-buy|tiers)$/);
+    expect(["/pricing#planet-buy", "/pricing#tiers"]).toContain(PRICING_TERMS);
   });
   it("цена в предложении — из лесенки плана, не числом", () => {
     for (const [имя, src] of [["qright", QRIGHT], ["wizard", WIZARD]] as const) {

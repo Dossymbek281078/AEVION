@@ -21,8 +21,33 @@
 import type { Request, Response } from "express";
 import { getPool } from "./dbPool";
 import { resolveUserPlan } from "./planGate";
+import { appSubscriptionState } from "./appEntitlements";
 import { clientIp } from "./rateLimit";
 import { адресОтПроксиСайта } from "./siteProxyAddress";
+
+/**
+ * Какие модули, купленные отдельно, снимают норму с действия. Покупка модуля
+ * пишет только AppSubscription, а resolveUserPlan её не читает — без этого
+ * списка купивший бюро оставался на норме 3 в месяц. Регистрация работы идёт
+ * и через бюро, и через QRight, поэтому там оба модуля.
+ */
+const МОДУЛИ_ДЕЙСТВИЯ: Record<string, string[]> = {
+  qright_register: ["aevion-ip-bureau", "qright"],
+  bureau_verify: ["aevion-ip-bureau"],
+};
+
+/** Купил ли человек модуль, открывающий действие. Сбой чтения = «нет подписки». */
+async function купилМодульДействия(почта: string | null | undefined, действие: string): Promise<boolean> {
+  if (!почта) return false;
+  for (const модуль of МОДУЛИ_ДЕЙСТВИЯ[действие] ?? []) {
+    try {
+      if ((await appSubscriptionState(почта, модуль)) === "active") return true;
+    } catch {
+      // читаем как «нет подписки»: норма остаётся, не падаем
+    }
+  }
+  return false;
+}
 
 /** Действия, за которые берём деньги. Пусто = механизм спит целиком. */
 function платныеДействия(): Set<string> {
@@ -139,6 +164,7 @@ export async function учестьДействие(req: Request, действи�
 
   const план = resolveUserPlan(req);
   if (план.tier && план.tier !== "free") return { заблокировано: false, причина: "платящий" };
+  if (await купилМодульДействия(план.email, действие)) return { заблокировано: false, причина: "платящий" };
 
   const норма = пилотныйАккаунт(план.email) ? пилотнаяНорма() : бесплатноВМесяц(действие);
   const кто = ктоЭто(req);

@@ -12,6 +12,7 @@
  * ссылки сайта; второго способа разбора метки здесь не появляется.
  */
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { keepChannel } from "@/lib/products";
 import { channelNow, сыраяМеткаКанала } from "@/lib/channelNow";
 
@@ -35,5 +36,40 @@ export function useСсылкаВхода(куда: string): string {
       setHref(ссылкаВхода(куда));
     }
   }, [куда]);
+  return href;
+}
+
+/** На самой странице входа шапка не зацикливается: /auth и его подстраницы — без next. */
+function этоСтраницаВхода(путь: string | null | undefined): boolean {
+  const п = String(путь ?? "");
+  return п === "/auth" || п.startsWith("/auth/");
+}
+
+/**
+ * Ссылка «Авторизация» в общей шапке: `/auth?next=<текущий путь с query>&c=<метка>`.
+ * 2.11.2026 (прод ad2f92fa1): шапка вела на голый /auth на всех страницах — метка и возврат терялись.
+ * Тот же механизм, что у кнопок «Войти» (ссылкаВхода); на /auth — только метка, без next.
+ */
+export function useСсылкаАвторизацииШапки(): string {
+  const путь = usePathname() || "/";
+  const вход = этоСтраницаВхода(путь);
+  const [href, setHref] = useState(() => (вход ? "/auth" : ссылкаВхода(путь)));
+  useEffect(() => {
+    try {
+      const канал = channelNow();
+      const сырая = сыраяМеткаКанала();
+      if (вход) {
+        setHref(keepChannel("/auth", канал, сырая));
+        return;
+      }
+      // Метку ?c= из адреса убираем из хвоста: ссылкаВхода допишет её сама (иначе c дважды в next).
+      const q = new URLSearchParams(window.location.search);
+      q.delete("c");
+      const хвост = q.toString();
+      setHref(ссылкаВхода(хвост ? `${путь}?${хвост}` : путь, канал, сырая));
+    } catch {
+      setHref(вход ? "/auth" : ссылкаВхода(путь));
+    }
+  }, [путь, вход]);
   return href;
 }

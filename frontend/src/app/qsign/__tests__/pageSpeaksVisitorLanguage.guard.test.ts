@@ -129,7 +129,7 @@ describe("/qsign говорит на языке посетителя (слова
 
   test("гостю на первом экране — кнопка входа с возвратом на /qsign; вошедшему — якорь на форму", () => {
     expect(SRC).toContain('data-qsign-cta="guest"');
-    expect(SRC).toContain('href="/auth?next=/qsign" data-qsign-cta="guest"');
+    expect(SRC).toContain('href={ссылкаВходаВQSign} data-qsign-cta="guest"');
     expect(SRC).toContain('href="#qsign-sign" data-qsign-cta="user"');
     expect(SRC).toContain('id="qsign-sign"');
   });

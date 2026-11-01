@@ -1,7 +1,7 @@
 import type { Lang } from "@/lib/i18n-data";
 
 /**
- * Заголовок вкладки на языке гостя — для /auth, /pricing, /multichat-engine, /bureau.
+ * Заголовок вкладки на языке гостя — для /auth, /pricing, /multichat-engine, /bureau, /qsign.
  *
  * Замер 2.11.2026 (прод 5c84234b1, русский гость): вкладки шли по-английски или
  * двуязычной склейкой («… · Цены и тарифы»). Главная уже решает title по языку
@@ -10,7 +10,7 @@ import type { Lang } from "@/lib/i18n-data";
  * строке, поэтому layout кладёт её как `absolute` (корневой шаблон второй бренд не допишет).
  */
 export type ТитулыЯзык = "ru" | "en" | "kk";
-export type СтраницаТитула = "auth" | "pricing" | "multichat" | "bureau";
+export type СтраницаТитула = "auth" | "pricing" | "multichat" | "bureau" | "qsign";
 
 export const AEVION_TITLES: Record<СтраницаТитула, Record<ТитулыЯзык, string>> = {
   auth: {
@@ -32,6 +32,11 @@ export const AEVION_TITLES: Record<СтраницаТитула, Record<Титу
     ru: "AEVION Бюро — публичный реестр авторов",
     en: "AEVION Bureau — public registry of authors",
     kk: "AEVION Бюро — авторлардың жария тізілімі",
+  },
+  qsign: {
+    ru: "AEVION QSign — подпись и проверка документов",
+    en: "AEVION QSign — canonical-JSON signing and verification",
+    kk: "AEVION QSign — құжаттарға қол қою және тексеру",
   },
 };
 

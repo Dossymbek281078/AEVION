@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 /**
- * 2.11.2026 (прод 5c84234b1): вкладки /auth, /pricing, /multichat-engine, /bureau у русского гостя
+ * 2.11.2026 (прод 5c84234b1): вкладки /auth, /pricing, /multichat-engine, /bureau, /qsign у русского гостя
  * шли английскими или двуязычной склейкой. Теперь generateMetadata layout'а берёт язык запроса.
  */
 const lang = { value: "ru" as string };
@@ -21,6 +21,7 @@ const ПУТИ = {
   pricing: "../pricing/layout",
   multichat: "../multichat-engine/layout",
   bureau: "../bureau/layout",
+  qsign: "../qsign/layout",
 } as const;
 
 describe("заголовки вкладок по языку гостя", () => {

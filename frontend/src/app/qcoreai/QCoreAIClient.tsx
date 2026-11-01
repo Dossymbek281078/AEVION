@@ -244,7 +244,7 @@ export default function QCoreAIPage() {
               </div>
               <div>
                 <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>QCoreAI</h1>
-                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>Multi-model AI assistant for the AEVION ecosystem</p>
+                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>{chatText(lang).subtitle}</p>
                 <div style={{ marginTop: 10 }}>
                   <ModulePricingChip moduleId="qcoreai" />
                 </div>
@@ -290,7 +290,7 @@ export default function QCoreAIPage() {
                         }}
                       />
                     )}
-                    {currentProvider?.name || "Select Provider"}
+                    {currentProvider?.name || chatText(lang).selectProvider}
                   </span>
                   <span style={{ fontSize: 10, opacity: 0.7 }}>▼</span>
                 </button>
@@ -638,8 +638,8 @@ export default function QCoreAIPage() {
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
             // Подсказка исчезает при вводе — поле остаётся безымянным ровно
             // тогда, когда в нём работают. Замер прода 29.08.2026.
-            aria-label="Ask QCoreAI"
-            placeholder="Ask QCoreAI anything..."
+            aria-label={chatText(lang).askLabel}
+            placeholder={chatText(lang).askPlaceholder}
             disabled={busy}
             style={{
               flex: 1,
@@ -680,13 +680,13 @@ export default function QCoreAIPage() {
             background: "rgba(15,23,42,0.02)",
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>QCoreAI capabilities</div>
+          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>{chatText(lang).capsTitle}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
             {[
-              { icon: "🧠", t: "Multi-model", d: "Claude, GPT-4, Gemini, DeepSeek, Grok" },
-              { icon: "🔐", t: "Context-aware", d: "Knows your QRight records, Trust Score, history" },
-              { icon: "⚡", t: "Real-time", d: "Instant responses from 5 AI providers" },
-              { icon: "🌍", t: "Multilingual", d: "English, Russian, and 50+ languages" },
+              { icon: "🧠", ...chatText(lang).caps[0] },
+              { icon: "🔐", ...chatText(lang).caps[1] },
+              { icon: "⚡", ...chatText(lang).caps[2] },
+              { icon: "🌍", ...chatText(lang).caps[3] },
             ].map((f) => (
               <div key={f.t} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <span style={{ fontSize: 16 }}>{f.icon}</span>

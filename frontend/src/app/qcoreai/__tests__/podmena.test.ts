@@ -47,3 +47,30 @@ describe("пометка подмены поставщика", () => {
     expect(src).not.toMatch(/>\s*Not configured\s*</);
   });
 });
+
+describe("тексты шапки и возможностей /qcoreai на языке сайта", () => {
+  const keys = ["subtitle", "selectProvider", "askLabel", "askPlaceholder", "capsTitle"] as const;
+
+  it("ru и kk — без английской шапки, en — как было", () => {
+    for (const k of keys) {
+      expect(chatText("ru")[k]).toMatch(CYR);
+      expect(chatText("kk")[k]).toMatch(CYR);
+      expect(chatText("en")[k]).not.toMatch(CYR);
+    }
+    expect(chatText("kk").askPlaceholder).toMatch(KK);
+    expect(chatText("en").askPlaceholder).toBe("Ask QCoreAI anything...");
+  });
+
+  it("возможности: четыре пункта на каждом языке, поставщики не обещаны сверх подключённых", () => {
+    for (const l of ["ru", "en", "kk"] as const) {
+      const caps = chatText(l).caps;
+      expect(caps).toHaveLength(4);
+      for (const c of caps) {
+        expect(c.t.length).toBeGreaterThan(0);
+        expect(c.d.length).toBeGreaterThan(0);
+      }
+      const all = caps.map((c) => c.t + " " + c.d).join(" ");
+      expect(all).not.toMatch(/DeepSeek|Grok|GPT-4|5 AI providers/);
+    }
+  });
+});

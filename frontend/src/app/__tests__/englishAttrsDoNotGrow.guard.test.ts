@@ -108,6 +108,44 @@ function вМногоязычнойТаблице(src: string, поз: number): 
   return языков >= 2;
 }
 
+/**
+ * Лежит ли находка внутри НЕрусской ветки словаря (en/kk/ar) файла, у которого есть и ветка ru.
+ *
+ * 02.11.2026: окно вМногоязычнойТаблице (600 знаков назад) не достаёт до заголовка ветки, когда
+ * ветка длинная (AgentDock, WaitlistCapture, settingsText, guide*.ts, podmena.ts): английская
+ * строка в «en: {…}» принималась за английскую подсказку на русском экране. Здесь смотрим на
+ * ближайший заголовок ветки выше по файлу: он должен быть en/kk/ar, не закрыт до находки
+ * (скобка на том же отступе), а у файла должна быть и ветка ru — тогда русскому гостю достанется
+ * русская, а английская законно живёт для англоязычного. Без регулярок (см. сноски выше о слэшах).
+ */
+function заголовокВетки(строка: string): { отступ: string; язык: string } | null {
+  const т = строка.trimStart();
+  const отступ = строка.slice(0, строка.length - т.length);
+  for (const язык of ["ru", "en", "kk", "ar"]) {
+    if (!т.startsWith(язык)) continue;
+    const хвост = т.slice(язык.length).trim();
+    if (хвост === ": {") return { отступ, язык };
+    if (хвост.replace(/ /g, "") === ":{") return { отступ, язык };
+  }
+  return null;
+}
+
+function вНерусскойВеткеСловаря(src: string, поз: number): boolean {
+  const все = src.split(String.fromCharCode(10));
+  if (!все.some((l) => заголовокВетки(l)?.язык === "ru")) return false;
+  const строки = src.slice(0, поз).split(String.fromCharCode(10));
+  for (let k = строки.length - 1; k >= 0; k--) {
+    const h = заголовокВетки(строки[k]);
+    if (!h) continue;
+    if (h.язык === "ru") return false;
+    for (let q = k + 1; q < строки.length; q++) {
+      if (строки[q].startsWith(h.отступ + "}")) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 function angliyskie(src: string): string[] {
   const out: string[] = [];
   for (const at of [...ATRIBUTY.map((x) => x + '="'), ...SVOJSTVA.map((x) => x + ': "')]) {
@@ -138,6 +176,7 @@ function angliyskie(src: string): string[] {
        * он достанется англоязычному, а русский русскому.
        */
       if (вМногоязычнойТаблице(src, i)) continue;
+      if (вНерусскойВеткеСловаря(src, i)) continue;
       if (!/[A-Za-z]/.test(v) || /[А-ЯЁа-яё]/.test(v)) continue;
       // Цветовые коды — не текст: извлекатель принимал #fef3c7 за подпись.
       if (v.startsWith("#")) continue;
@@ -201,7 +240,9 @@ function schitat(): Record<string, number> {
       .split(String.fromCharCode(10))
       .filter((l) => !l.trim().startsWith("//"))
       .join(String.fromCharCode(10));
-    if (!/>[^<]*[А-Яа-я]{4}/.test(bezKommentariev)) continue;
+    // 02.11.2026: стрелка =>, закрытие дженерика >( и блок > { — не конец тега; кириллические имена переменных
+    // (поле, адрес) рядом с ними не подпись. Иначе английские компоненты (QStoreNotify, PilotOrderForm) считались русскими.
+    if (!/>[^<]*[А-Яа-я]{4}/.test(bezKommentariev.split("=>").join("=,").split(">(").join("(").split("> {").join(" {"))) continue;
     const n = angliyskie(src).length;
     if (n) itog[relative(KOREN, p).split("\\").join("/")] = n;
   }
@@ -252,6 +293,12 @@ describe("английские подписи в атрибутах не рас�
     // список свойств» проходила молча, пока этой строки не было.
     expect(angliyskie('title: "Describe the deal"')).toEqual(["Describe the deal"]);
     expect(angliyskie('text: "#fef3c7"')).toEqual([]);
+    // 02.11.2026: длинная ветка en словаря с веткой ru в файле — законна; та же строка вне ветки — ловится.
+    const NL2 = String.fromCharCode(10);
+    const таблица = ["const T = {", "  ru: {", '    hint: "Привет",', "  },", "  en: {", '    hint: "Ask for anything and I will help",', "  },", "};"].join(NL2);
+    expect(angliyskie(таблица), "английская ветка словаря принята за подсказку поля").toEqual([]);
+    const безРусской = ["const T = {", "  en: {", '    hint: "Ask for anything and I will help",', "  },", "};"].join(NL2);
+    expect(angliyskie(безРусской), "ветка en без ru перестала ловиться").toEqual(["Ask for anything and I will help"]);
   });
 
   it("ни в одном файле их не стало больше", () => {

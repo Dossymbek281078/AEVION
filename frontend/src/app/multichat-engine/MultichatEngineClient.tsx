@@ -26,6 +26,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { isAuthenticated, getAuthHeaders } from "@/lib/auth";
+import { ТИХАЯ_СТЕНА } from "@/lib/paywall";
 import { CouncilConsole } from "./CouncilConsole";
 import { T } from "./theme";
 import { WaitlistIfMissing } from "@/components/FooterWaitlist";
@@ -83,6 +84,9 @@ function ProviderHealthStrip() {
     try {
       const r = await fetch(apiUrl("/api/multichat/provider-status"), { headers: getAuthHeaders(),
         credentials: "include",
+        // 2.11.2026: вошедший на free получает 402, и глобальный перехватчик поднимал модалку тарифа
+        // поверх бесплатного совета. Страница сама показывает «на платном тарифе» (gated) — модалка не нужна.
+        ...ТИХАЯ_СТЕНА,
       });
       // 402 — это не сбой, а ответ платной стены, и он не изменится от того,
       // что мы спросим ещё сорок раз. Гость сюда вообще не заходит (см.
@@ -328,6 +332,7 @@ function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void
       try {
         const r = await fetch(apiUrl("/api/multichat/presets"), { headers: getAuthHeaders(),
           credentials: "include",
+          ...ТИХАЯ_СТЕНА, // см. provider-status выше: 402 на free — штатное «на платном тарифе», без модалки
         });
         // «Mission presets unavailable: status 402» — не ошибка, а платный
         // тариф. Показываем это как тариф, а не как поломку.

@@ -6,7 +6,7 @@ export type BuildStamp = {
 };
 
 export const BUILD_STAMP: BuildStamp = {
-  commit: "c7db2d5a4e30",
-  branch: "deploy/wave58-1210-1040",
-  builtAt: "2026-10-13T10:05:32Z",
+  commit: "unknown",
+  branch: "unknown",
+  builtAt: null,
 };

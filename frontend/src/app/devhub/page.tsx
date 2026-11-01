@@ -14,6 +14,7 @@ import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./cap
 import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { getAuthToken } from "@/lib/auth";
+import { useСсылкаВхода } from "../auth/loginHref";
 import { TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetPricePerMonth, planetTotal, planetFromPerMonth } from "@/lib/termPricing";
 import { useI18nOptional } from "@/lib/i18n";
 import { useServerLang, языкКадра } from "@/lib/serverLangContext";
@@ -226,6 +227,9 @@ export default function DevHubPage() {
   const serverError = useDevhubServerError();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const ссылкаВходаDevhub = useСсылкаВхода("/devhub");
+  const [гостьБезВхода, setГостьБезВхода] = useState(false);
+  useEffect(() => { try { setГостьБезВхода(!getAuthToken()); } catch { /* хранилище закрыто — кнопку не показываем */ } }, []);
   const [userTier, setUserTier] = useState<"free" | "registered" | "pro" | "enterprise" | null>(null);
   // Ручка остатка отдаёт и ЧИСЛА (`usage: {video:{used,limit}, ...}`), а витрина
   // брала из ответа только тариф. То есть модуль знал, сколько у человека
@@ -783,6 +787,15 @@ export default function DevHubPage() {
               человек читает её ровно в момент решения «нажимать ли». */}
           <div style={{ marginTop: 8, fontSize: 12.5, color: "#99f6e4" }}>
             {t("hero.freeNote")}
+            {/* 2.11.2026: гостю — «Войти» с возвратом сюда и меткой канала (auth/loginHref.ts, как /bureau). */}
+            {гостьБезВхода && (
+              <>
+                {" · "}
+                <a href={ссылкаВходаDevhub} data-devhub-signin="hero" style={{ color: "#5eead4", fontWeight: 700 }}>
+                  {t("hero.signIn")}
+                </a>
+              </>
+            )}
           </div>
           {/* ПОДНЯТО 01.10.2026 по замеру приёмки: на 390x844 верх блока стоял
               на y=764. На настоящем телефоне адресная строка съедает около

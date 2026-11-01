@@ -275,7 +275,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
           boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
           display: "flex", alignItems: "center", gap: 6,
         }}
-        title="Развернуть окно в углу"
+        title={t("attr.pip_expand")}
       >
         <span>📺</span>
         <span>{source ? (source.title || source.kind.toUpperCase()) : "PiP"}</span>
@@ -327,7 +327,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
           </span>
           <button
             onClick={(e) => { e.stopPropagation(); setCollapsed(true); }}
-            title="Свернуть"
+            title={t("attr.pip_collapse")}
             style={{
               border: "none", background: "transparent", color: "#64748b",
               fontSize: 13, cursor: "pointer", padding: "0 4px", lineHeight: 1,
@@ -382,7 +382,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
               display: "flex", flexDirection: "column", alignItems: "center",
               justifyContent: "center", gap: 6, padding: 12, zIndex: 3,
             }}>
-              <input aria-label="Адрес источника"
+              <input aria-label={t("attr.pip_source_url")}
                 autoFocus
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
@@ -436,7 +436,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
           >{muted ? "🔇" : "🔊"}</button>
           <button
             onClick={() => setShowSourceInput(true)}
-            title="Сменить источник"
+            title={t("attr.pip_change_source")}
             style={{
               border: "none", background: "transparent", color: "#94a3b8",
               fontSize: 9.5, fontWeight: 800, cursor: "pointer",
@@ -456,7 +456,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
             const t = e.touches[0];
             if (t) { e.stopPropagation(); onResizeStart(t.clientX, t.clientY); }
           }}
-          title="Изменить размер"
+          title={t("attr.pip_resize")}
           style={{
             position: "absolute", right: 0, bottom: 0, width: 8, height: 8,
             cursor: "nwse-resize", touchAction: "none",

@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PRICING_TERMS } from "@/lib/products";
 
 const root = join(__dirname, "..");
 const QRIGHT = readFileSync(join(root, "qright", "page.tsx"), "utf8");
@@ -21,7 +22,7 @@ describe("норма исчерпана — предложение, не оши�
     expect(j, "402 обрабатывается до общего throw").toBeGreaterThan(i);
     expect(QRIGHT).toContain('data-testid="quota-offer"');
     expect(QRIGHT).toContain("planetFromPerMonth()");
-    expect(QRIGHT).toContain('href="/pricing#tiers"');
+    expect(QRIGHT).toContain("href={PRICING_TERMS}"); // 1.11 23:56: одна цена за платформу, якорь #planet-buy в products.ts
   });
   it("Биржа: ApiError несёт код, визард показывает предложение с ценой плана", () => {
     expect(LIB).toContain("free_quota_exceeded:");
@@ -29,7 +30,10 @@ describe("норма исчерпана — предложение, не оши�
     expect(WIZARD).toContain('e instanceof ApiError && e.code === "free_quota_exceeded"');
     expect(WIZARD).toContain('data-testid="quota-offer"');
     expect(WIZARD).toContain("planetFromPerMonth()");
-    expect(WIZARD).toContain('href="/pricing#tiers"');
+    expect(WIZARD).toContain("href={PRICING_TERMS}");
+  });
+  it("ссылка предложения ведёт на осмысленный якорь страницы тарифов", () => {
+    expect(["/pricing#planet-buy", "/pricing#tiers"]).toContain(PRICING_TERMS);
   });
   it("цена в предложении — из лесенки плана, не числом", () => {
     for (const [имя, src] of [["qright", QRIGHT], ["wizard", WIZARD]] as const) {

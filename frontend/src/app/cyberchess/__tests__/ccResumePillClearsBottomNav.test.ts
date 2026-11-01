@@ -52,7 +52,7 @@ describe("«Вернуться к партии» — только в поток�
     expect(src).toContain('{vwPx>=769&&ccAuth.checked&&(');
     expect(src).toContain('{vwPx>=1700&&!шапкаКомпактна&&<div className="cc-hzone"');
     // …а убранное не пропало: на телефоне оно в меню «Ещё»
-    expect(src).toContain('lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}');
+    expect(src).toContain('lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href=ccLoginHref}');
     expect(src).toContain("lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)");
     expect(src).toContain('lbl:cc.t("nav.sections"),act:()=>sShowSections(true)'); // 13–19.10: подпись — ключ словаря
     expect(ruOf("nav.sections")).toBe("Все разделы");

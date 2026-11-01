@@ -27,7 +27,9 @@ const CANONICAL = ["terms/page.tsx", "privacy/page.tsx"];
 const ORPHANS = ["legal/terms/page.tsx", "legal/privacy/page.tsx", "legal/refund/page.tsx"];
 
 /** Домены без почты. Печатать на них адрес = обещать канал, которого нет. */
-const DEAD_MAIL_DOMAINS = ["@aevion.app"];
+// 02.11.2026: @aevion.app убран — у домена теперь MX (improvmx, подтверждено Почтой 11.10, data@ — волна 127,
+// nslookup -type=MX aevion.app = mx1/mx2.improvmx.com). Остаётся @aevion.com: MX нет.
+const DEAD_MAIL_DOMAINS = ["@aevion.com"];
 
 describe("юридические страницы называют продавца и не врут адресами", () => {
   test("контроль: файлы на месте и не пустые", () => {

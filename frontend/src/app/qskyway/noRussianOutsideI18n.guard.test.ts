@@ -140,6 +140,8 @@ describe("страница не говорит по-русски мимо выб
   const found = files
     .flatMap((f) => stripComments(readFileSync(path.join(__dirname, f), "utf8")))
     .map((l) => decodeEscapes(l))
+    // Кириллическое ИМЯ функции hreflang (языки) — идентификатор, не текст для человека.
+    .map((l) => l.split("{ языки }").join("{ }").split("языки(").join("("))
     .filter((l) => hasCyrillic(l))
     .filter((l) => !l.includes("t(" + String.fromCharCode(34)))
     .filter((l) => !l.includes("ru ?") && !l.includes("ru?"))

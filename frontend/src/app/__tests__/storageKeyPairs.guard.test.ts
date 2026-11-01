@@ -62,7 +62,9 @@ function sources(dir: string): string[] {
     if (name === "node_modules" || name === ".next" || name === "__tests__") continue;
     const p = join(dir, name);
     if (statSync(p).isDirectory()) out.push(...sources(p));
-    else if (/\.(ts|tsx)$/.test(name)) out.push(p);
+    // Файлы *.test.* — не читатели продакшена: они проверяют пробу доступности хранилища
+    // (__aevion_probe__: devhubPreviewStorage пишет и тут же стирает через window[имя]).
+    else if (/\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)) out.push(p);
   }
   return out;
 }

@@ -69,13 +69,17 @@ describe("имя агента", () => {
     expect(имяАгента("x-agent")).toBe("x-agent");
   });
 
-  it("на /en роли названы по-английски, на ru/kk — как прежде; неизвестный id остаётся как есть (30.10.2026)", () => {
+  it("на /en роли названы по-английски, на /kk — по-казахски (31.10.2026), на ru — как прежде; неизвестный id остаётся как есть", () => {
     expect(имяАгента("analyst", "en")).toBe("Analyst");
     expect(имяАгента("skeptic", "en")).toBe("Skeptic");
     expect(имяАгента("practic", "en")).toBe("Practitioner");
     expect(имяАгента("x-agent", "en")).toBe("x-agent");
     expect(имяАгента("analyst", "ru")).toBe("Аналитик");
-    expect(имяАгента("analyst", "kk")).toBe("Аналитик");
+    expect(имяАгента("analyst", "kk")).toBe("Талдаушы");
+    expect(имяАгента("skeptic", "kk")).toBe("Күмәншіл");
+    expect(имяАгента("practic", "kk")).toBe("Тәжірибеші");
+    expect(имяАгента("x-agent", "kk")).toBe("x-agent");
+    expect(сИменами("Сверить число — analyst: 200 против practic: 30", "kk")).toBe("Сверить число — Талдаушы: 200 против Тәжірибеші: 30");
     expect(сИменами("Check the number — analyst: 200 vs practic: 30", "en")).toBe("Check the number — Analyst: 200 vs Practitioner: 30");
   });
   it("роль, уходящая на сервер, русская как была: промпт агента не менялся", () => {

@@ -24,6 +24,7 @@ process.env.LEMON_SQUEEZY_WEBHOOK_SECRET = SECRET;
 process.env.LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO = "9001";
 process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY = "9002";
 process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_LITE = "9003";
+process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_MAX = "9004";
 
 const { mockQuery, mockProvision } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
@@ -313,5 +314,57 @@ describe("Lemon Squeezy: сумма списания оставляет след
     const log = warned.join(" ");
     expect(log, "обычная оплата помечена как бесплатная").not.toContain("БЕСПЛАТНО");
     expect(log, "обычная оплата помечена как переплата").not.toContain("БОЛЬШЕ обещанного");
+  });
+});
+
+/**
+ * 01.11.2026: заплатил CyberChess Max одной почтой (в кассе), а вошёл другой аккаунтом.
+ * Доступ обязан открыться аккаунту, с которого начата оплата (custom_data.accountEmail),
+ * и ещё почте кассы — чтобы гость, позже зарегистрировавшийся с платящей почтой, не остался ни с чем.
+ */
+describe("CyberChess Max: доступ аккаунту, начавшему оплату, и почте кассы", () => {
+  /** Почты, которым записан AppSubscription cyberchess со статусом из запроса. */
+  function appGrants(status: "active" | "cancelled"): string[] {
+    return mockQuery.mock.calls
+      .filter((c) => String(c[0]).includes('INSERT INTO "AppSubscription"'))
+      .filter((c) => (c[1] as unknown[])[1] === "cyberchess" && (c[1] as unknown[])[3] === status)
+      .map((c) => String((c[1] as unknown[])[0]));
+  }
+  function withCustom(name: string, custom: Record<string, string>, userEmail: string) {
+    const e = event(name, "9004", userEmail, 9900);
+    (e.meta as Record<string, unknown>).custom_data = custom;
+    return e;
+  }
+
+  test("accountEmail A ≠ user_email B → active у A и у B", async () => {
+    const res = await post(withCustom("subscription_created", { accountEmail: "Owner@Bureau.kz", accountUserId: "u-1" }, "Card@Gmail.com"));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.action).toBe("app_activated");
+    expect(res.body.appSlug).toBe("cyberchess");
+    expect(res.body.email).toBe("owner@bureau.kz");
+    expect(appGrants("active").sort()).toEqual(["card@gmail.com", "owner@bureau.kz"]);
+  });
+
+  test("КОНТРОЛЬ: одна и та же почта → ровно одна выдача", async () => {
+    const res = await post(withCustom("subscription_created", { accountEmail: "same@bureau.kz" }, "Same@Bureau.kz"));
+    expect(res.status).toBe(200);
+    expect(appGrants("active")).toEqual(["same@bureau.kz"]);
+  });
+
+  test("КОНТРОЛЬ: гость без accountEmail → только почта кассы, как прежде", async () => {
+    const res = await post(withCustom("subscription_created", {}, "guest@mail.test"));
+    expect(res.status).toBe(200);
+    expect(appGrants("active")).toEqual(["guest@mail.test"]);
+  });
+
+  test("КОНТРОЛЬ: битый accountEmail игнорируется, выдача по почте кассы одна", async () => {
+    await post(withCustom("subscription_created", { accountEmail: "not-an-email" }, "guest@mail.test"));
+    expect(appGrants("active")).toEqual(["guest@mail.test"]);
+  });
+
+  test("отмена снимает доступ у обеих почт", async () => {
+    const res = await post(withCustom("subscription_cancelled", { accountEmail: "owner@bureau.kz" }, "card@gmail.com"));
+    expect(res.status).toBe(200);
+    expect(appGrants("cancelled").sort()).toEqual(["card@gmail.com", "owner@bureau.kz"]);
   });
 });

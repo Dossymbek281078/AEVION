@@ -558,12 +558,26 @@ function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void
   );
 }
 
+/**
+ * Вопрос из адреса (?q=) — для примеров со страницы сравнения /multichat-engine/compare.
+ * Только вписывается в поле: отправляет человек сам (вопрос тратит бесплатную норму).
+ * Короче 5 знаков консоль не примет — такой не подставляем; длиннее 500 — обрезаем.
+ */
+export function вопросИзАдреса(search: string): string | null {
+  const q = new URLSearchParams(search).get("q")?.trim() ?? "";
+  return q.length >= 5 ? q.slice(0, 500) : null;
+}
+
 export default function MultichatEnginePage() {
   const tmLang = useI18nOptional()?.lang ?? "ru";
   const origin = getClientApiBase();
   // Выбранное задание живёт на странице, а не в адресной строке: консоль
   // стоит здесь же, уводить человека некуда.
   const [mission, setMission] = useState<string | null>(null);
+  useEffect(() => {
+    const q = вопросИзАдреса(window.location.search);
+    if (q) setMission(q);
+  }, []);
 
   return (
     <main>
@@ -650,7 +664,7 @@ export default function MultichatEnginePage() {
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 13, color: T.inkOnCardMute, lineHeight: 1.55 }}>
-              {tm(tmLang, "Classic chat experience. Pick Claude, GPT, Gemini, DeepSeek or Grok, ask a question, get an answer. Best for quick lookups and informal conversation.")}
+              {tm(tmLang, "Classic chat experience. Pick Claude, Gemini or a free open model, ask a question, get an answer. Best for quick lookups and informal conversation.")}
             </p>
             <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: T.accentDeeper }}>
               {tm(tmLang, "Open single chat →")}

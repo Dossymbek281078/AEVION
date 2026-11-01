@@ -1129,6 +1129,12 @@ export default function PricingPage() {
                     ? t("pricing.home.heroModule.openingCheckout")
                     : t("pricing.home.heroModule.buyButton", { name: имя })}
                 </button>
+                {/* 01.11.2026: доступ привязан к почте входа; гость, заплативший другой, остался бы без него. */}
+                {!вошёл && app.slug === "cyberchess" && (
+                  <p data-testid="pay-email-hint" style={{ fontSize: 15, lineHeight: 1.4, color: "#64748b", margin: "8px 0 0" }}>
+                    {t("pricing.home.payEmailHint")}
+                  </p>
+                )}
               </>
             )}
             {/*
@@ -2016,6 +2022,12 @@ export default function PricingPage() {
                             ? t("pricing.home.tier.openingCheckout")
                             : t("pricing.home.heroModule.buyButton", { name: a.name })}
                         </button>
+                        {/* 01.11.2026: то же, что у верхней кнопки, — гостю, у CyberChess. */}
+                        {!вошёл && a.slug === "cyberchess" && (
+                          <p data-testid="pay-email-hint" style={{ fontSize: 15, lineHeight: 1.4, color: "#64748b", margin: "8px 0 0" }}>
+                            {t("pricing.home.payEmailHint")}
+                          </p>
+                        )}
                       </>
                     )}
                   </div>

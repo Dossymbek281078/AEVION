@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ruOf } from "./_ruSlovar";
 
 const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 // 12.10.2026: условие показа вынесено из разметки в pokazatVozvratVPartiyu —
@@ -53,9 +54,11 @@ describe("«Вернуться к партии» — только в поток�
     // …а убранное не пропало: на телефоне оно в меню «Ещё»
     expect(src).toContain('lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}');
     expect(src).toContain("lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)");
-    expect(src).toContain('lbl:"Все разделы",act:()=>sShowSections(true)');
+    expect(src).toContain('lbl:cc.t("nav.sections"),act:()=>sShowSections(true)'); // 13–19.10: подпись — ключ словаря
+    expect(ruOf("nav.sections")).toBe("Все разделы");
     // одна строка на 390: отступ справа под плавающую «RU ▼», текст логотипа clip, звук только ≥769
-    expect(src).toContain('padding:vwPx<769?"10px 100px 10px 12px":"10px 12px"');
+    // 137: отступ справа остался (место под пилюлю языка), числа уточнены: 72 на телефоне, 84 на десктопе
+    expect(src).toContain('padding:vwPx<769?"3px 72px 3px 12px":"6px 84px 6px 12px"');
     expect(src).toContain('clip:"rect(0 0 0 0)"');
     expect(src).toContain('{vwPx>=769&&<Btn variant={muted?"danger":"secondary"}');
     // ряд чипов режимов на телефоне прокручивается, а не обрезается

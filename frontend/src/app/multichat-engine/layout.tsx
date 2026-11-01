@@ -1,30 +1,27 @@
 import type { Metadata } from "next";
 
+// 31.10.2026, решение Оркестратора «обещать только то, что есть»: здесь стояло «6 агентов, Claude / GPT / Gemini /
+// DeepSeek / Grok, @упоминания», а консоль страницы — совет из ТРЁХ агентов (CouncilConsole.tsx, PANEL): Аналитик,
+// Скептик, Практик; основные поставщики Claude (Anthropic), Gemini (Google), открытая модель через OpenRouter, при сбое —
+// запасной. GPT в совете нет. Чек подписан Ed25519 (замер прода 31.10). Без входа — 2 вопроса в день (замер 30–31.10).
 export const metadata: Metadata = {
-  title: "Multichat Engine — parallel AI agents · совет ИИ-агентов в одном окне",
+  title: "Multichat — a council of three AI agents · совет трёх ИИ-агентов",
   description:
-    "Run 6 specialised AI agents in parallel — General, Code, Finance, IP/Legal, Compliance, Translator — across Claude / GPT / Gemini / DeepSeek / Grok. Cross-agent @mention handoff, broadcast, custom prompts, MD/JSON export. Шесть ИИ-агентов параллельно в одном окне: совет моделей, передача вопроса между агентами, экспорт. Live.",
+    "Ask one question — three AI agents (Analyst, Skeptic, Practitioner) answer independently via Claude, Gemini and open models, and you see where they disagree. Signed receipt, 2 free questions a day. Один вопрос — три независимых ответа ИИ-агентов и карта разногласий.",
   keywords: [
-    "AI agents",
-    "parallel chat",
+    "AI council",
+    "compare AI answers",
     "multi-agent",
     "Claude",
-    "GPT",
     "Gemini",
-    "DeepSeek",
-    "Grok",
+    "OpenRouter",
     "AEVION",
-    "QCoreAI",
-    "AI orchestration",
+    "Мультичат",
   ],
   openGraph: {
-    // 13.09.2026: перевод англоязычного превью (см. qright/layout.tsx).
-    // Число ролей проверено по коду 09.09: их шесть и они названы поимённо;
-    // «три агента» на странице — это пресет, а не предел. locale был "en"
-    // при русском подписчике — тоже поправлен.
-    title: "AEVION Мультичат — параллельные ИИ-агенты в одном окне",
+    title: "AEVION Мультичат — совет трёх ИИ-агентов",
     description:
-      "Шесть ИИ-агентов с разными ролями в одном окне: общий, код, финансы, право, комплаенс, перевод. Пять поставщиков моделей, передача задачи через @упоминание.",
+      "Один вопрос — три агента с разными ролями отвечают независимо (Claude, Gemini, открытая модель), и сразу видно, где ответы расходятся. Подписанный чек, 2 вопроса в день бесплатно.",
     type: "website",
     siteName: "AEVION",
     url: "/multichat-engine",
@@ -32,8 +29,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "AEVION Мультичат — параллельные ИИ-агенты",
-    description: "Шесть агентов в одном окне. Передача через @упоминание. Работает.",
+    title: "AEVION Мультичат — совет трёх ИИ-агентов",
+    description: "Три независимых ответа на один вопрос и карта разногласий. 2 вопроса в день бесплатно.",
   },
   alternates: { canonical: "/multichat-engine" },
 };

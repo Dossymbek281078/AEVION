@@ -17,6 +17,12 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 import MultichatLibraryPage from "./page";
 
+// 31.10.2026: страница считает заход (<PageTracking page="multichat-library" />, сторож trackingCoverage).
+// Событие page_view уходит своим fetch на /api/pricing/events — проверки ниже про запросы САМОЙ библиотеки,
+// поэтому счётчик подменён; что он стоит на экране — проверяет отдельный тест в конце файла.
+const pageTrackingSpy = vi.hoisted(() => vi.fn());
+vi.mock("@/components/PageTracking", () => ({ PageTracking: (p: { page: string }) => { pageTrackingSpy(p.page); return null; } }));
+
 const TOKEN = "test.jwt.token";
 const CANONICAL_KEY = "aevion_auth_token_v1";
 const DEAD_KEY = "aevion_token";
@@ -123,5 +129,26 @@ describe("Библиотека: расход по длинной беседе", 
 
     expect(await screen.findByText(/не менее/)).toBeTruthy();
     expect(screen.getByText(/по части беседы/)).toBeTruthy();
+  });
+});
+
+describe("Библиотека считает заходы и ведёт гостя ко входу (31.10.2026)", () => {
+  test("гость: счётчик multichat-library и ссылка на вход с возвратом в библиотеку", async () => {
+    pageTrackingSpy.mockClear();
+    mockFetchOk();
+    render(<MultichatLibraryPage />);
+    expect(await screen.findByText(/Войдите, чтобы увидеть свои беседы/)).toBeTruthy();
+    expect(pageTrackingSpy).toHaveBeenCalledWith("multichat-library");
+    const link = document.querySelector('[data-mc-signin="library-guest"]') as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/auth?next=%2Fmultichat-engine%2Flibrary");
+  });
+
+  test("вошедший: тот же счётчик multichat-library", async () => {
+    pageTrackingSpy.mockClear();
+    localStorage.setItem(CANONICAL_KEY, TOKEN);
+    mockFetchOk();
+    render(<MultichatLibraryPage />);
+    await waitFor(() => expect(screen.queryByText(/Войдите, чтобы увидеть свои беседы/)).toBeNull());
+    expect(pageTrackingSpy).toHaveBeenCalledWith("multichat-library");
   });
 });

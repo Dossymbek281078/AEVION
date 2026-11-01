@@ -66,7 +66,8 @@ describe("сырой формат банка нормализуется", () => 
   });
   it("фильтр по стороне и подписи — по решающему и по ходам; раш — из годных задач", () => {
     expect(page).toContain('solverSide(p)!==pzFilterSide');
-    expect(page).toContain("const goalLabel=imyaPoResheniyu(pz)||");
+    // 13–19.10.2026: подпись задачи берётся по языку страницы (imyaPoResheniyu(pz,cc.locale)), русская — по умолчанию (проверено выше)
+    expect(page).toContain("const goalLabel=imyaPoResheniyu(pz,cc.locale)||");
     expect(page).toContain("{pzCurrent.side===\"w\"?\"⚪\":\"⚫\"} {pzTitle}");
     expect(page).toContain("if(pzMode===\"rush\"){let k=0;while(k<30&&list[idx]&&!goditsyaDlyaRush(list[idx]))");
     expect(page.match(/ldPz\(rushStartIdx\(\)\)/g)?.length).toBe(2);

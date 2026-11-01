@@ -57,6 +57,12 @@ export const АНГЛИЙСКИЕ_СТРАНИЦЫ_СО_СВОИМ_АДРЕСО�
    * (он обрабатывает только /en), он отвечает своим app/kk/cyberchess.
    */
   "/en/cyberchess",
+  // 31.10.2026: страница дебютных ловушек, свой английский текст (app/en/cyberchess/traps).
+  "/en/cyberchess/traps",
+  // 31.10.2026: страница о тренере, свой английский текст (app/en/cyberchess/guide).
+  "/en/cyberchess/guide",
+  // 31.10.2026: страница сравнения ответов нейросетей, свой английский текст (app/en/multichat-engine/compare).
+  "/en/multichat-engine/compare",
 
   /*
    * 🔴 Короткие входы английских роликов. Заведены 08.10.2026.

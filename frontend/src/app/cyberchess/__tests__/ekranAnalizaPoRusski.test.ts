@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { bezKommentariev } from "./bezKommentariev";
+import { ruOf } from "./_ruSlovar";
 
 /**
  * Обход экрана «Анализ» глазами 01.09.2026. Английское там, где человек читает:
@@ -40,16 +41,24 @@ describe("экран анализа говорит по-русски", () => {
   it("кнопка озвучки названа по-русски, но осталась кнопкой озвучки", () => {
     const s = EKRAN();
     expect(s).not.toContain("🔊 Whisper");
-    expect(s).toContain("🔊 Вслух");
+    // 13–19.10.2026: подпись — ключ pz.aloud, стоит внутри той же кнопки, что зовёт whisperAndSpeak
+    const k = s.indexOf("whisperAndSpeak(game.fen()");
+    expect(k).toBeGreaterThan(0);
+    expect(s.slice(k, k + 700)).toContain('{cc.t("pz.aloud")}');
+    expect(ruOf("pz.aloud")).toBe("🔊 Вслух");
     // Подпись поменяли, а действие — нет: кнопка по-прежнему озвучивает позицию.
     expect(s).toContain("whisperAndSpeak(game.fen()");
-    expect(s).toContain('title="Голосовой анализ позиции"');
+    expect(s).toContain('title={cc.t("attr.voice_analysis_of_the_position")}');
+    expect(ruOf("attr.voice_analysis_of_the_position")).toBe("Голосовой анализ позиции");
   });
 
   it("ввод голосом и озвучка названы РАЗНО", () => {
     // Иначе человек не отличит «сказать ход» от «послушать разбор».
     const s = EKRAN();
-    expect(s).toContain("🎤 Голос");
-    expect(s).toContain("🔊 Вслух");
+    expect(s).toContain('cc.t("btn.voice")'); // ввод голосом
+    expect(s).toContain('{cc.t("pz.aloud")}'); // озвучка
+    expect(ruOf("btn.voice")).toBe("🎤 Голос");
+    expect(ruOf("pz.aloud")).toBe("🔊 Вслух");
+    expect(ruOf("btn.voice")).not.toBe(ruOf("pz.aloud"));
   });
 });

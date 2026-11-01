@@ -19,7 +19,7 @@ export default function VerifyEmailPage() {
 }
 
 function VerifyEmailBody() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const params = useSearchParams();
   const router = useRouter();
   const setUser = useBuildAuth((s) => s.setUser);
@@ -125,7 +125,7 @@ function VerifyEmailBody() {
                   onClick={async () => {
                     setSending(true);
                     try {
-                      const r = await requestEmailVerification();
+                      const r = await requestEmailVerification(lang);
                       // 200 не значит «письмо ушло»: у ответа для этого есть
                       // отдельное поле. Молчаливое «отправлено» стоило бы
                       // человеку ожидания письма, которого нет.

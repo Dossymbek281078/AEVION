@@ -75,6 +75,14 @@ describe("тексты шапки и возможностей /qcoreai на яз
   });
 });
 
+describe("/qcoreai/multi: отказ гостевой нормы показан человеческим текстом", () => {
+  const src = readFileSync(join(__dirname, "../multi/page.tsx"), "utf8");
+  it("402 берёт message и loginUrl сервера, а не код guest_quota_exhausted", () => {
+    expect(src).toMatch(/res\.status === 402 && typeof err\?\.loginUrl === "string"/);
+    expect(src).toMatch(/throw new Error\(humanMsg \? humanMsg \+ signIn : err\?\.error/);
+  });
+});
+
 describe("чат /qcoreai без входа не шлёт модель и показывает отказ сервера", () => {
   const src = readFileSync(join(__dirname, "../QCoreAIClient.tsx"), "utf8");
   it("provider и model уходят только при токене", () => {

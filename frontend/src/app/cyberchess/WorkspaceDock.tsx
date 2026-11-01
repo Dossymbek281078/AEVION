@@ -157,7 +157,7 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
               <textarea aria-label={t("dock.notes")}
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
-                placeholder="Быстрые заметки — сохраняются автоматически…"
+                placeholder={t("dock.notes_placeholder")}
                 style={{
                   width: "100%", height: 200, padding: 10,
                   background: "#020617", color: "#e2e8f0",

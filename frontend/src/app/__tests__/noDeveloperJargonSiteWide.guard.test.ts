@@ -81,7 +81,6 @@ const OZHIDAYUT = new Set([
   "app/fintech/playground/page.tsx",
   "app/fintech/whitepaper/page.tsx",
   "app/launch-status/page.tsx",
-  "app/multichat-engine/MultichatEngineClient.tsx",
   "app/multichat-engine/library/page.test.tsx",
   "app/payments/dashboard/page.tsx",
   "app/payments/status/page.tsx",

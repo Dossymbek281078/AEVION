@@ -15,6 +15,7 @@ import RevenueGoalBadge from "@/components/RevenueGoalBadge";
 import AiOfflineToggle from "@/components/AiOfflineToggle";
 import SkipToContent from "@/components/SkipToContent";
 import { useNavHref } from "@/components/useNavHref";
+import { useСсылкаАвторизацииШапки } from "@/app/auth/loginHref";
 import { useChromeLang, type ChromeKey } from "@/components/siteChromeI18n";
 
 /**
@@ -46,6 +47,8 @@ const РАЗДЕЛЫ: { href: string; key?: ChromeKey; brand?: string }[] = [
 export function SiteHeader() {
   const origin = getBackendOrigin();
   const nav = useNavHref();
+  const ссылкаАвторизации = useСсылкаАвторизацииШапки();
+  const адрес = (h: string) => nav(h === "/auth" ? ссылкаАвторизации : h);
   const { t, own } = useChromeLang();
   // translate="no" — только когда подпись уже на языке посетителя (ru/en/kk);
   // на прочих языках ярлык остаётся живому переводчику.
@@ -185,7 +188,7 @@ export function SiteHeader() {
               </KeepChannelLink>
             ))}
             {РАЗДЕЛЫ.map((x) => (
-              <KeepChannelLink key={x.href} href={nav(x.href)} style={{ padding: "10px 12px", textDecoration: "none", color: "#0f172a", fontSize: 15, fontWeight: 700 }}>
+              <KeepChannelLink key={x.href} href={адрес(x.href)} style={{ padding: "10px 12px", textDecoration: "none", color: "#0f172a", fontSize: 15, fontWeight: 700 }}>
                 <span translate={tr}>{подпись(x)}</span>
               </KeepChannelLink>
             ))}
@@ -207,7 +210,7 @@ export function SiteHeader() {
             </KeepChannelLink>
           ))}
           {РАЗДЕЛЫ.map((x) => (
-            <KeepChannelLink key={x.href} href={nav(x.href)} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
+            <KeepChannelLink key={x.href} href={адрес(x.href)} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
               <span translate={tr}>{подпись(x)}</span>
             </KeepChannelLink>
           ))}

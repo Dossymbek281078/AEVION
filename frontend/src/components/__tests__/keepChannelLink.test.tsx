@@ -107,7 +107,8 @@ describe("ссылка доносит метку канала", () => {
     for (const a of внутр) {
       window.location.href = "";
       fireEvent.click(a);
-      if (window.location.href === "") мимо.push((a.getAttribute("href") || "").slice(0, 22));
+      // «Авторизация» уже несёт метку в самом адресе (loginHref) — перехват клика ей не нужен.
+      if (window.location.href === "" && !/[?&]c=/.test(a.getAttribute("href") || "")) мимо.push((a.getAttribute("href") || "").slice(0, 22));
     }
     expect(мимо, "ссылка шапки не доносит метку: оберните в KeepChannelLink").toEqual([]);
   });

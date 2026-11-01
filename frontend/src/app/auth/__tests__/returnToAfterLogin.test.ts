@@ -48,7 +48,7 @@ describe("адрес возврата после входа", () => {
 
   it("QSign отправляет на вход с обратным адресом", () => {
     const qsign = readFileSync(join(ЗДЕСЬ, "..", "..", "qsign", "page.tsx"), "utf8");
-    expect(qsign).toContain('href="/auth?next=/qsign"');
+    expect(qsign).toContain('useСсылкаВхода("/qsign")');
     expect(qsign).not.toMatch(/href="\/auth"/);
   });
 

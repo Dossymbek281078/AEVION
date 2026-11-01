@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQsignT } from "./i18n";
+import { useСсылкаВхода } from "../auth/loginHref";
 import { MoiPodpisi } from "./MoiPodpisi";
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
@@ -271,6 +272,7 @@ function isNetworkError(e: unknown): boolean {
 
 export default function QSignPage() {
   const t = useQsignT();
+  const ссылкаВходаВQSign = useСсылкаВхода("/qsign");
   const { showToast } = useToast();
 
   // payload + client-side canonical preview
@@ -742,7 +744,7 @@ export default function QSignPage() {
                     {t("hero.ctaUser")}
                   </a>
                 ) : (
-                  <Link href="/auth?next=/qsign" data-qsign-cta="guest" style={heroCta}>
+                  <Link href={ссылкаВходаВQSign} data-qsign-cta="guest" style={heroCta}>
                     {t("hero.ctaGuest")}
                   </Link>
                 )}
@@ -1007,7 +1009,7 @@ export default function QSignPage() {
             </button>
             {!token ? (
               <Link
-                href="/auth?next=/qsign"
+                href={ссылкаВходаВQSign}
                 style={{
                   padding: "8px 12px",
                   borderRadius: 8,

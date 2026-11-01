@@ -83,6 +83,20 @@ describe("/qcoreai/multi: отказ гостевой нормы показан 
   });
 });
 
+describe("гость видит, что отвечает одна модель, а выбор — после входа", () => {
+  it("подсказка есть на ru/en/kk, на своём языке", () => {
+    expect(chatText("ru").guestHint).toMatch(CYR);
+    expect(chatText("ru").guestHint).not.toMatch(KK);
+    expect(chatText("en").guestHint).not.toMatch(CYR);
+    expect(chatText("kk").guestHint).toMatch(KK);
+  });
+  it("клиент показывает её только без токена", () => {
+    const src = readFileSync(join(__dirname, "../QCoreAIClient.tsx"), "utf8");
+    expect(src).toMatch(/setGuest\(!localStorage\.getItem\("aevion_auth_token_v1"\)\)/);
+    expect(src).toMatch(/\{guest && \(\s*<div data-qcore-guest-hint[\s\S]{0,200}chatText\(lang\)\.guestHint/);
+  });
+});
+
 describe("чат /qcoreai без входа не шлёт модель и показывает отказ сервера", () => {
   const src = readFileSync(join(__dirname, "../QCoreAIClient.tsx"), "utf8");
   it("provider и model уходят только при токене", () => {

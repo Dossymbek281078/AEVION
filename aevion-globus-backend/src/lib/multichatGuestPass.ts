@@ -151,10 +151,20 @@ export function этоГость(req: Request): boolean {
   return !req.auth?.sub;
 }
 
-/** Идентификатор устройства, если страница его прислала. Одно место на модуль. */
+/**
+ * Идентификатор устройства, если страница его прислала. Одно место на модуль.
+ *
+ * 🔴 Замер 2.11.2026 (прод, чистый браузер, ?c=probe-apps): /qcoreai/multi шлёт только
+ * x-devhub-guest, без x-aevion-device; адрес гостя от сайта не доходит — ключ падал на адрес
+ * узла Vercel, который меняется, и 3-й анонимный запуск совета (opus, fable) прошёл с 200.
+ * Гостевой id DevHub — тот же устойчивый id браузера, берём его следующим.
+ */
 function устройствоЗапроса(req: Request): string {
   return String(
-    req.get("x-aevion-device") || (req.body as Record<string, unknown> | undefined)?.deviceId || "",
+    req.get("x-aevion-device") ||
+      (req.body as Record<string, unknown> | undefined)?.deviceId ||
+      req.get("x-devhub-guest") ||
+      "",
   ).trim().slice(0, 64);
 }
 

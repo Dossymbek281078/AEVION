@@ -1,4 +1,4 @@
-// Тексты SEO-страницы «ChatGPT vs Claude vs Gemini» (/multichat-engine/compare и /en, /kk).
+// Тексты SEO-страницы «Claude, Gemini и открытая модель» (до 1.11 — «ChatGPT vs Claude vs Gemini»; ChatGPT в совете нет, в заголовках не называем) (/multichat-engine/compare и /en, /kk).
 // Зачем: люди из поиска сравнения моделей → 2 бесплатных вопроса консилиуму → касса «Планеты».
 // Только то, что делает наш продукт (проверено по коду CouncilConsole.tsx и замерам прода 30–31.10.2026):
 //  • совет из трёх агентов, у каждого свой ОСНОВНОЙ поставщик: Anthropic (Claude), Google (Gemini), открытая модель
@@ -33,7 +33,7 @@ export type CompareText = {
 
 export const COMPARE_TEXT: Record<Yazyk, CompareText> = {
   en: {
-    h1: "ChatGPT vs Claude vs Gemini: how to ask several AIs at once and compare the answers",
+    h1: "Claude, Gemini and an open model: how to ask several AIs at once and compare the answers",
     lead: "Asking one chatbot gives you one confident answer. Asking several models the same question shows you where they disagree — and that is exactly the part you should check before you act.",
     honest: "In AEVION Multichat a council of three agents answers your question. Their main providers are Claude (Anthropic), Gemini (Google) and an open model via OpenRouter; if one is unavailable, the agent switches to a spare, and the answer card shows who replied. ChatGPT is not part of the council today. The method below works with any set of models.",
     methodTitle: "How to compare AI answers properly",
@@ -71,7 +71,7 @@ export const COMPARE_TEXT: Record<Yazyk, CompareText> = {
     pricing: "Pricing",
   },
   ru: {
-    h1: "ChatGPT, Claude или Gemini: как спросить несколько нейросетей сразу и сравнить ответы",
+    h1: "Claude, Gemini и открытая модель: как спросить несколько нейросетей сразу и сравнить ответы",
     lead: "Один чат-бот даёт один уверенный ответ. Если задать тот же вопрос нескольким моделям, видно, где они расходятся, — именно это и нужно проверить, прежде чем действовать.",
     honest: "В Мультичате AEVION на вопрос отвечает совет из трёх агентов. Их основные поставщики — Claude (Anthropic), Gemini (Google) и открытая модель через OpenRouter; если поставщик недоступен, агент переходит на запасного, и в карточке ответа видно, кто ответил. ChatGPT сейчас в совет не входит. Способ ниже подходит для любого набора моделей.",
     methodTitle: "Как правильно сравнивать ответы нейросетей",
@@ -109,7 +109,7 @@ export const COMPARE_TEXT: Record<Yazyk, CompareText> = {
     pricing: "Тарифы",
   },
   kk: {
-    h1: "ChatGPT, Claude әлде Gemini: бірнеше нейрожеліден бірден сұрап, жауаптарды қалай салыстыруға болады",
+    h1: "Claude, Gemini және ашық модель: бірнеше нейрожеліден бірден сұрап, жауаптарды қалай салыстыруға болады",
     lead: "Бір чат-бот бір сенімді жауап береді. Бір сұрақты бірнеше модельге қойсаңыз, олардың қай жерде алшақтайтыны көрінеді — әрекет етпес бұрын дәл соны тексеру керек.",
     honest: "AEVION Мультичатында сұраққа үш агенттен тұратын кеңес жауап береді. Олардың негізгі провайдерлері — Claude (Anthropic), Gemini (Google) және OpenRouter арқылы ашық модель; провайдер қолжетімсіз болса, агент қосалқысына ауысады, ал жауап карточкасында кім жауап бергені көрінеді. ChatGPT қазір кеңеске кірмейді. Төмендегі әдіс кез келген модельдер жиынына жарайды.",
     methodTitle: "Нейрожелі жауаптарын қалай дұрыс салыстыру керек",

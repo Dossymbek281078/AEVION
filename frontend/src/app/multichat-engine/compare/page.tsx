@@ -1,4 +1,4 @@
-// /multichat-engine/compare — русская версия страницы «ChatGPT, Claude или Gemini» (en и kk — свои адреса).
+// /multichat-engine/compare — русская версия страницы «Claude, Gemini и открытая модель» (en и kk — свои адреса).
 import CompareView from "./CompareView";
 import type { Metadata } from "next";
 import { compareMetadata, compareUrl, COMPARE_LANGUAGES } from "./meta";

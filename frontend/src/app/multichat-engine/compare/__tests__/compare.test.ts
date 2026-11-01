@@ -36,6 +36,16 @@ describe("страница сравнения Мультичата", () => {
     }
   });
 
+  it("1.11 (Продажи): title и h1 не называют ChatGPT — его в совете нет; названы Claude и Gemini", () => {
+    for (const l of ["ru", "en", "kk"] as const) {
+      const title = String(compareMetadata(l).title);
+      expect(title).not.toMatch(/ChatGPT/);
+      expect(title).toMatch(/Claude/);
+      expect(title).toMatch(/Gemini/);
+      expect(COMPARE_TEXT[l].h1).not.toMatch(/ChatGPT/);
+    }
+  });
+
   it("не обещает лишнего: ChatGPT назван отсутствующим, нет оценок «лучше» и процентов качества", () => {
     // Совет — Claude, Gemini и открытая модель через OpenRouter (CouncilConsole.tsx); OpenAI там нет.
     expect(COMPARE_TEXT.en.honest).toMatch(/ChatGPT is not part of the council/);

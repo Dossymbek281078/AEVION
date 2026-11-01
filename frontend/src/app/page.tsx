@@ -24,6 +24,7 @@ import HomePage from "./_home";
 import { serverLang } from "@/lib/serverLang";
 import { ServerLangProvider } from "@/lib/serverLangContext";
 import { строкиКадра, КЛЮЧИ_ГЛАВНОЙ } from "@/lib/serverFrameStrings";
+import { homeLang, homeMetadata } from "./homeMetadata";
 
 /*
  * 30.10.2026 (замер Приложений, прод 4f71ad70f, ru-RU): сырой HTML главной отдавал
@@ -34,14 +35,41 @@ import { строкиКадра, КЛЮЧИ_ГЛАВНОЙ } from "@/lib/serverF
  */
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  alternates: { canonical: "/" },
-};
+/*
+ * 1.11.2026 (замер Науки, прод dc4a968f8, curl): <title> главной всегда английский
+ * при русском/казахском h1. Страница уже динамическая, значит язык известен и для
+ * метаданных — заголовок, описание и og:* идут на языке гостя (homeMetadata.ts).
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  return homeMetadata(homeLang(await serverLang("ru")));
+}
+
+/*
+ * lang на <html> — ДО первого кадра. Корневой макет держит lang="en" и не читает
+ * запрос (cookies()/headers() там сделали бы динамическим весь сайт, см. макет);
+ * его скрипт в <head> знает только куку и путь, а гостя без куки (первый визит,
+ * робот с Accept-Language ru) оставлял под lang="en" — браузер предлагал машинный
+ * перевод русской страницы. Сервер язык уже выбрал — объявляем его первым узлом
+ * тела, раньше любого текста. data-lang-src="server" стоит ниже выбора человека
+ * (cookie/path) и выше догадки по содержимому: скрипт в конце тела его не перебивает.
+ * В сыром HTML без выполнения скриптов (curl) lang остаётся "en" — честная граница
+ * этого приёма; полная починка = динамический корневой макет, решение отдельное.
+ */
+function HtmlLangScript({ lang }: { lang: string }) {
+  // Имена атрибутов и язык — через JSON.stringify: 1.11 первая версия потеряла кавычки
+  // при записи файла и отдавала невалидный JS; тест homeLangTitle это ловит.
+  const ATTR = JSON.stringify("data-lang-src");
+  const js =
+    "try{var D=document.documentElement;if(!D.getAttribute(" + ATTR + ")){D.lang=" +
+    JSON.stringify(lang) + ";D.setAttribute(" + ATTR + "," + JSON.stringify("server") + ")}}catch(e){}";
+  return <script data-home-lang={lang} dangerouslySetInnerHTML={{ __html: js }} />;
+}
 
 export default async function Page() {
   const lang = await serverLang("ru");
   return (
     <ServerLangProvider lang={lang} frameStrings={строкиКадра(lang, КЛЮЧИ_ГЛАВНОЙ)}>
+      <HtmlLangScript lang={lang} />
       <HomePage />
     </ServerLangProvider>
   );

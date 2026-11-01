@@ -1,3 +1,5 @@
+// 1.11.2026 (от Продаж): заголовок нёс «ChatGPT», которого в совете нет — назван совет как есть,
+// в линии карточки Мультичата (8c45c2ce8): Claude, Gemini и открытая модель. ChatGPT остаётся только в FAQ «есть ли?» — «нет».
 // Мета трёх языковых адресов страницы сравнения: canonical на себя, hreflang на все три (как у /cyberchess/traps).
 import type { Metadata } from "next";
 import type { Yazyk } from "./compareText";
@@ -11,19 +13,19 @@ export const COMPARE_PATHS: Record<Yazyk, string> = {
 
 const TEXT: Record<Yazyk, { title: string; description: string; locale: string }> = {
   ru: {
-    title: "ChatGPT, Claude или Gemini: как спросить несколько нейросетей сразу | Мультичат",
+    title: "Claude, Gemini и открытая модель: как спросить несколько нейросетей сразу | Мультичат",
     description:
       "Задайте один вопрос совету из трёх ИИ-агентов и сразу увидите, где их ответы расходятся: противоречия, разные числа, что проверить. 2 вопроса в день бесплатно.",
     locale: "ru_RU",
   },
   en: {
-    title: "ChatGPT vs Claude vs Gemini: ask several AIs at once and compare | Multichat",
+    title: "Claude, Gemini and an open model: ask several AIs at once and compare | Multichat",
     description:
       "Ask one question to a council of three AI agents and see where their answers disagree: contradictions, different numbers, what to check. 2 free questions a day.",
     locale: "en_US",
   },
   kk: {
-    title: "ChatGPT, Claude әлде Gemini: бірнеше нейрожеліден бірден сұрау | Мультичат",
+    title: "Claude, Gemini және ашық модель: бірнеше нейрожеліден бірден сұрау | Мультичат",
     description:
       "Бір сұрақты үш ЖИ-агенттен тұратын кеңеске қойып, жауаптардың қай жерде алшақтайтынын бірден көріңіз: қайшылықтар, әртүрлі сандар, не тексеру керек. Күніне 2 тегін сұрақ.",
     locale: "kk_KZ",

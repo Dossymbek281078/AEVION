@@ -34,7 +34,7 @@ describe("Страница мультичата", () => {
     // а не за описанием возможностей.
     expect(await screen.findByText("Консилиум")).toBeTruthy();
     expect(screen.getByPlaceholderText(/стоит ли запускать платный тариф/i)).toBeTruthy();
-    expect(screen.getByText("AEVION Multichat Engine")).toBeTruthy();
+    expect(screen.getByText("AEVION Мультичат")).toBeTruthy();
   });
 });
 

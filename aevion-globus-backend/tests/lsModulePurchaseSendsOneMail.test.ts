@@ -29,12 +29,12 @@ import { lemonSqueezyWebhookRouter } from "../src/routes/lemonSqueezyWebhook";
 // eslint-disable-next-line import/first
 import { __resetWebhookDedupCache } from "../src/lib/webhookDedup";
 
-function post(variant: string, id: string, custom: Record<string, string>, renews = "2026-12-01T00:00:00Z") {
+function post(variant: string, id: string, custom: Record<string, string>, renews = "2026-12-01T00:00:00Z", userEmail = "modbuyer@test.aev") {
   const a = express(); a.use(express.json());
   a.use("/api/lemonsqueezy", lemonSqueezyWebhookRouter);
   const raw = JSON.stringify({
     meta: { event_name: "subscription_created", custom_data: custom },
-    data: { id, attributes: { user_email: "modbuyer@test.aev", variant_id: variant, total: 3200, renews_at: renews } },
+    data: { id, attributes: { user_email: userEmail, variant_id: variant, total: 3200, renews_at: renews } },
   });
   const sig = crypto.createHmac("sha256", SECRET).update(raw, "utf8").digest("hex");
   return request(a).post("/api/lemonsqueezy/webhook").set("Content-Type", "application/json").set("X-Signature", sig).send(raw);
@@ -80,5 +80,21 @@ describe("письмо после покупки модуля", () => {
     sendEmailMock.mockRejectedValueOnce(new Error("boom"));
     const r2 = await post("8202", "ls_mod_4", {});
     expect(r2.body).toMatchObject({ ok: true, action: "app_activated", mailed: false });
+  });
+
+  test("две почты (аккаунт и касса): выдача обеим, письмо одно и на почту аккаунта; повтор — без письма", async () => {
+    const custom = { accountEmail: "a@example.com" };
+    const r1 = await post("8202", "ls_mod_5", custom, undefined, "b@example.com");
+    expect(r1.status, JSON.stringify(r1.body)).toBe(200);
+    expect(r1.body).toMatchObject({ action: "app_activated", appSlug: "ip_bureau", mailed: true });
+    const выдано = (адрес: string) =>
+      mockQuery.mock.calls.some(([, params]) => Array.isArray(params) && params.includes(адрес));
+    expect(выдано("a@example.com")).toBe(true);
+    expect(выдано("b@example.com")).toBe(true);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailMock.mock.calls[0][0].to).toBe("a@example.com");
+    const r2 = await post("8202", "ls_mod_5", custom, undefined, "b@example.com");
+    expect(r2.body).toMatchObject({ ok: true, deduped: true });
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
   });
 });

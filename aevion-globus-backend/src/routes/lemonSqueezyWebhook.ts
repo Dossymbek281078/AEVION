@@ -41,6 +41,7 @@ import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   provisionSubscription,
+  sendEmail,
   writeSubscription,
   readLatestSubscription,
   возвратКасаетсяДействующей,
@@ -59,7 +60,7 @@ import {
   expectedPlanetChargeUsd,
   type LemonSqueezyReference,
 } from "../data/lemonSqueezyVariants";
-import { MEDIUM_BUNDLE, TIERS, TERM_MONTHS, isTermTier } from "../data/pricing";
+import { MEDIUM_BUNDLE, TIERS, TERM_MONTHS, isTermTier, STANDALONE_APPS } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
@@ -106,6 +107,49 @@ async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promis
 }
 
 const capture = makeServiceCapture("lemonSqueezyWebhook");
+
+/**
+ * Короткое письмо после покупки отдельного модуля. Раньше обе ветки покупки
+ * модуля писали только AppSubscription и отвечали без письма: человек заплатил
+ * и не получал ни слова. Неудача письма выдачу НЕ валит: доступ уже записан,
+ * а повтор доставки кассы выдал бы его второй раз. Дубль письма исключает
+ * дедупликация вебхука, стоящая до веток.
+ */
+async function письмоОПокупкеМодуля(email: string, slug: string, channel: string | undefined): Promise<boolean> {
+  try {
+    const приложение = STANDALONE_APPS.find((a) => a.slug === slug || a.moduleId === slug);
+    const название = приложение?.name ?? slug;
+    const метка = (channel ?? "").trim().slice(0, 40).replace(/[^A-Za-z0-9_.-]/g, "") || "ls-module";
+    const ссылка = `https://aevion.app/account?c=${метка}`;
+    const r = await sendEmail({
+      to: email,
+      subject: `[AEVION] Модуль куплен · ${название} / Module purchased · ${название}`,
+      html:
+        `<p>Модуль <b>${название}</b> куплен и открыт на этом адресе.</p>` +
+        `<p><a href="${ссылка}">${ссылка}</a></p><hr>` +
+        `<p>The <b>${название}</b> module is purchased and unlocked for this address.</p>` +
+        `<p><a href="${ссылка}">${ссылка}</a></p>`,
+      text:
+        `Модуль ${название} куплен и открыт на этом адресе.
+${ссылка}
+
+` +
+        `The ${название} module is purchased and unlocked for this address.
+${ссылка}
+`,
+    });
+    if (!r.ok) {
+      console.error(`[ls/webhook] письмо о покупке модуля ${slug} не ушло: ${r.error ?? r.degradedReason ?? "?"}`);
+      capture(new Error(`ls_module_mail_failed:${slug}`), { route: "ls/webhook" });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[ls/webhook] письмо о покупке модуля ${slug} упало:`, err instanceof Error ? err.message : err);
+    capture(err instanceof Error ? err : new Error(String(err)), { route: "ls/webhook" });
+    return false;
+  }
+}
 
 /** created_at подписки у кассы, если это дата; иначе — сейчас (первое событие и есть начало). */
 function началоОбязательства(createdAt: unknown): string {
@@ -485,7 +529,8 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
           event,
           email,
         });
-        return res.json({ ok: true, action: "app_activated", appSlug, email });
+        const mailed = await письмоОПокупкеМодуля(email, appSlug, payload.meta?.custom_data?.channel);
+        return res.json({ ok: true, action: "app_activated", appSlug, email, mailed });
       }
       if (DEACTIVATE_EVENTS.has(event)) {
         // ПОРЯДОК ЗДЕСЬ ЗНАЧИМ, и он обратный порядку активации.
@@ -610,7 +655,8 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
           email,
           path: "fallback_single_module",
         });
-        return res.json({ ok: true, action: "app_activated", appSlug: String(customModule), email });
+        const mailed = await письмоОПокупкеМодуля(email, String(customModule), payload.meta?.custom_data?.channel);
+        return res.json({ ok: true, action: "app_activated", appSlug: String(customModule), email, mailed });
       }
 
       const modules = modulesForReference(ref);

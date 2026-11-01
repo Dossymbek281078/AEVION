@@ -65,6 +65,10 @@ describe("касса знает аккаунт покупателя", () => {
     expect(seen.ls?.email).toBe("owner@bureau.kz");
     expect(seen.ls?.customData).toMatchObject({ accountEmail: "owner@bureau.kz", term: "medium", billing: "monthly" });
   });
+  test("01.11.2026: id аккаунта из токена (sub) едет в custom_data.accountUserId — для аудита", async () => {
+    await checkout({ tierId: "lite" }, токен("owner@bureau.kz"));
+    expect(seen.ls?.customData).toMatchObject({ accountEmail: "owner@bureau.kz", accountUserId: "u-1" });
+  });
   test("с Bearer почта аккаунта сильнее адреса из тела", async () => {
     await checkout({ tierId: "lite", email: "typed@elsewhere.test" }, токен("owner@bureau.kz"));
     expect(seen.ls?.email).toBe("owner@bureau.kz");
@@ -73,6 +77,7 @@ describe("касса знает аккаунт покупателя", () => {
     await checkout({ tierId: "lite" });
     expect(seen.ls?.email).toBeNull();
     expect(seen.ls?.customData?.accountEmail).toBeUndefined();
+    expect(seen.ls?.customData?.accountUserId).toBeUndefined();
     await checkout({ tierId: "lite", email: "typed@elsewhere.test" });
     expect(seen.ls?.email).toBe("typed@elsewhere.test");
   });
@@ -86,8 +91,14 @@ describe("вебхук: доступ открывается почте акка�
   test("custom_data.accountEmail есть → подписка на неё, а не на адрес из кассы", async () => {
     const r = await webhook({ accountEmail: "owner@bureau.kz" }, "card-holder@gmail.com");
     expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(mockProvision).toHaveBeenCalledTimes(1);
     expect(mockProvision.mock.calls[0][0]).toMatchObject({ email: "owner@bureau.kz" });
+    // 01.11.2026: и почта кассы получает тот же план (гость, позже зарегистрировавшийся с ней).
+    expect(mockProvision).toHaveBeenCalledTimes(2);
+    expect(mockProvision.mock.calls[1][0]).toMatchObject({ email: "card-holder@gmail.com" });
+  });
+  test("КОНТРОЛЬ 01.11.2026: accountEmail совпал с почтой кассы → одна выдача", async () => {
+    await webhook({ accountEmail: "Same@Bureau.kz" }, "same@bureau.kz");
+    expect(mockProvision).toHaveBeenCalledTimes(1);
   });
   test("КОНТРОЛЬ: accountEmail нет → как прежде, адрес из кассы", async () => {
     await webhook(undefined, "card-holder@gmail.com");

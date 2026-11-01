@@ -5143,6 +5143,8 @@ const en: Record<string, string> = {
   "pricing.home.heroModule.usdNote": "USD via LemonSqueezy.",
   "pricing.home.heroModule.badge": "Standalone app",
   "pricing.home.heroModule.buyButton": "Buy {name}",
+  // 01.11.2026: гостю — платить почтой, с которой войдёт; доступ привязан к ней.
+  "pricing.home.payEmailHint": "Pay with the same email you'll sign in to AEVION with — access is tied to it.",
   "pricing.home.heroModule.badgeIncluded": "Included in every plan",
   "pricing.home.heroModule.includedLine": "{name} — in every paid plan, from {price}/mo",
   "pricing.home.heroModule.seePlans": "See plans",

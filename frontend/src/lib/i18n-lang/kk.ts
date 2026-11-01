@@ -5144,6 +5144,8 @@ const kk: Record<string, string> = {
   "pricing.home.heroModule.usdNote": "USD LemonSqueezy арқылы.",
   "pricing.home.heroModule.badge": "Жеке қосымша",
   "pricing.home.heroModule.buyButton": "{name} сатып алу",
+  // 01.11.2026: гостю — платить почтой, с которой войдёт; доступ привязан к ней.
+  "pricing.home.payEmailHint": "AEVION-ға кіретін поштамен төлеңіз — қолжетімділік соған ашылады.",
   "pricing.home.heroModule.badgeIncluded": "Кез келген тарифке кіреді",
   "pricing.home.heroModule.includedLine": "{name} — кез келген ақылы тарифте, айына {price}-дан",
   "pricing.home.heroModule.seePlans": "Тарифтерді көру",

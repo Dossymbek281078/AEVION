@@ -151,10 +151,20 @@ export function этоГость(req: Request): boolean {
   return !req.auth?.sub;
 }
 
-/** Идентификатор устройства, если страница его прислала. Одно место на модуль. */
+/**
+ * Идентификатор устройства, если страница его прислала. Одно место на модуль.
+ *
+ * 🔴 Замер 2.11.2026 (прод, чистый браузер, ?c=probe-apps): /qcoreai/multi шлёт только
+ * x-devhub-guest, без x-aevion-device; адрес гостя от сайта не доходит — ключ падал на адрес
+ * узла Vercel, который меняется, и 3-й анонимный запуск совета (opus, fable) прошёл с 200.
+ * Гостевой id DevHub — тот же устойчивый id браузера, берём его следующим.
+ */
 function устройствоЗапроса(req: Request): string {
   return String(
-    req.get("x-aevion-device") || (req.body as Record<string, unknown> | undefined)?.deviceId || "",
+    req.get("x-aevion-device") ||
+      (req.body as Record<string, unknown> | undefined)?.deviceId ||
+      req.get("x-devhub-guest") ||
+      "",
   ).trim().slice(0, 64);
 }
 
@@ -260,6 +270,26 @@ export async function засчитатьГостю(req: Request, норма: Н�
   for (const k of нужные) счёт.set(k, (счёт.get(k) ?? 0) + 1);
   await прибавитьСчёт(нужные, к.день);
   return остатокГостя(req, норма);
+}
+
+/**
+ * Общий суточный счёт на всю платформу под своей меткой (1.11.2026, решение Оркестратора: потолок
+ * анонимов с недоверенным адресом). Тот же стор, что у личных норм, ключ plat:<метка>:<день>.
+ * Остаток — сколько ещё можно впустить; база недоступна — считаем по памяти процесса, не запираем.
+ */
+export async function остатокОбщий(метка: string, лимит: number): Promise<number> {
+  const день = сутки();
+  const ключ = `plat:${метка}:${день}`;
+  const изБазы = await прочитатьСчёт([ключ], день);
+  const потрачено = изБазы ? изБазы.get(ключ) ?? 0 : счёт.get(ключ) ?? 0;
+  return Math.max(0, лимит - потрачено);
+}
+
+export async function засчитатьОбщий(метка: string): Promise<void> {
+  const день = сутки();
+  const ключ = `plat:${метка}:${день}`;
+  счёт.set(ключ, (счёт.get(ключ) ?? 0) + 1);
+  await прибавитьСчёт([ключ], день);
 }
 
 /**

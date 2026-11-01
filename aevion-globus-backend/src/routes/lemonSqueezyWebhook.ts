@@ -41,6 +41,7 @@ import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   provisionSubscription,
+  sendEmail,
   writeSubscription,
   readLatestSubscription,
   возвратКасаетсяДействующей,
@@ -59,7 +60,7 @@ import {
   expectedPlanetChargeUsd,
   type LemonSqueezyReference,
 } from "../data/lemonSqueezyVariants";
-import { MEDIUM_BUNDLE, TIERS, TERM_MONTHS, isTermTier } from "../data/pricing";
+import { MEDIUM_BUNDLE, TIERS, TERM_MONTHS, isTermTier, STANDALONE_APPS } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
@@ -107,6 +108,49 @@ async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promis
 
 const capture = makeServiceCapture("lemonSqueezyWebhook");
 
+/**
+ * Короткое письмо после покупки отдельного модуля. Раньше обе ветки покупки
+ * модуля писали только AppSubscription и отвечали без письма: человек заплатил
+ * и не получал ни слова. Неудача письма выдачу НЕ валит: доступ уже записан,
+ * а повтор доставки кассы выдал бы его второй раз. Дубль письма исключает
+ * дедупликация вебхука, стоящая до веток.
+ */
+async function письмоОПокупкеМодуля(email: string, slug: string, channel: string | undefined): Promise<boolean> {
+  try {
+    const приложение = STANDALONE_APPS.find((a) => a.slug === slug || a.moduleId === slug);
+    const название = приложение?.name ?? slug;
+    const метка = (channel ?? "").trim().slice(0, 40).replace(/[^A-Za-z0-9_.-]/g, "") || "ls-module";
+    const ссылка = `https://aevion.app/account?c=${метка}`;
+    const r = await sendEmail({
+      to: email,
+      subject: `[AEVION] Модуль куплен · ${название} / Module purchased · ${название}`,
+      html:
+        `<p>Модуль <b>${название}</b> куплен и открыт на этом адресе.</p>` +
+        `<p><a href="${ссылка}">${ссылка}</a></p><hr>` +
+        `<p>The <b>${название}</b> module is purchased and unlocked for this address.</p>` +
+        `<p><a href="${ссылка}">${ссылка}</a></p>`,
+      text:
+        `Модуль ${название} куплен и открыт на этом адресе.
+${ссылка}
+
+` +
+        `The ${название} module is purchased and unlocked for this address.
+${ссылка}
+`,
+    });
+    if (!r.ok) {
+      console.error(`[ls/webhook] письмо о покупке модуля ${slug} не ушло: ${r.error ?? r.degradedReason ?? "?"}`);
+      capture(new Error(`ls_module_mail_failed:${slug}`), { route: "ls/webhook" });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[ls/webhook] письмо о покупке модуля ${slug} упало:`, err instanceof Error ? err.message : err);
+    capture(err instanceof Error ? err : new Error(String(err)), { route: "ls/webhook" });
+    return false;
+  }
+}
+
 /** created_at подписки у кассы, если это дата; иначе — сейчас (первое событие и есть начало). */
 function началоОбязательства(createdAt: unknown): string {
   const t = typeof createdAt === "string" ? Date.parse(createdAt) : NaN;
@@ -124,6 +168,8 @@ interface LsSubscriptionPayload {
       term?: string; billing?: string;
       /** 19.10.2026: почта вошедшего, которую наша касса положила по Bearer, — доступ выдаётся ей. */
       accountEmail?: string;
+      /** 01.11.2026: id аккаунта из токена — только для аудита, на выдачу не влияет. */
+      accountUserId?: string;
     };
     /** Покупка из тестового режима кассы — не выручка. Добавлено 20.09.2026. */
     test_mode?: boolean;
@@ -289,6 +335,14 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     ? почтаАккаунта
     : String(attrs.user_email ?? payload.meta?.custom_data?.email ?? "")
   ).trim().toLowerCase();
+  // 01.11.2026: заплатил с почтой B, а вошёл аккаунтом A — доступ открыт A (выше), но и B:
+  // гость, который позже зарегистрируется с платящей почтой, иначе остался бы без доступа.
+  // Дубль не создаём: если B совпала с A или аккаунтной почты нет — адрес один.
+  const почтаКассы = String(attrs.user_email ?? "").trim().toLowerCase();
+  const почтыВыдачи: string[] = [email];
+  if (почтаКассы && почтаКассы !== email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(почтаКассы)) {
+    почтыВыдачи.push(почтаКассы);
+  }
 
   if (event === "order_created" || event === "order_refunded") {
     // Возврат ЗАБИРАЕТ то, что выдала покупка. До 13.08.2026 слова «refund» в
@@ -458,13 +512,15 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     if (isAppReference(ref)) {
       const appSlug = appSlugForReference(ref)!;
       if (ACTIVATE_EVENTS.has(event)) {
-        await upsertAppSubscription(
-          email,
-          appSlug,
-          "active",
-          lsSubId,
-          payload.meta?.custom_data?.bureauIntentId,
-        );
+        for (const адрес of почтыВыдачи) {
+          await upsertAppSubscription(
+            адрес,
+            appSlug,
+            "active",
+            lsSubId,
+            payload.meta?.custom_data?.bureauIntentId,
+          );
+        }
         // У DevHub доступ открывает НЕ ТОЛЬКО строка AppSubscription: у него есть
         // свой тариф в DevHubTier/DevHubEmailTier, его и ставим отдельно.
         //
@@ -472,7 +528,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // её читает planGate (hasActiveAppSubscription) и маршрут /api/apps/access.
         // Комментарий, объявляющий живой механизм мёртвым, опаснее отсутствия
         // комментария: по нему следующий заведёт второй такой же.
-        if (appSlug === "devhub") await upgradeDevHubByEmail(email, "pro");
+        if (appSlug === "devhub") for (const адрес of почтыВыдачи) await upgradeDevHubByEmail(адрес, "pro");
         console.log(`[ls/webhook] ${event} → app_sub activated: ${appSlug} for ${email}`);
         // Деньги дошли и купленное выдано — только ТЕПЕРЬ это «оплатили» в
         // воронке. Почту не пишем: в хранилище воронки личных данных нет.
@@ -485,7 +541,8 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
           event,
           email,
         });
-        return res.json({ ok: true, action: "app_activated", appSlug, email });
+        const mailed = await письмоОПокупкеМодуля(email, appSlug, payload.meta?.custom_data?.channel);
+        return res.json({ ok: true, action: "app_activated", appSlug, email, mailed });
       }
       if (DEACTIVATE_EVENTS.has(event)) {
         // ПОРЯДОК ЗДЕСЬ ЗНАЧИМ, и он обратный порядку активации.
@@ -507,8 +564,11 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // На активации порядок остаётся прежним намеренно: там безопасная
         // сторона другая — человек заплатил, и открыть доступ раньше, чем
         // дописать учёт, для него лучше.
-        if (appSlug === "devhub") await upgradeDevHubByEmail(email, "free");
-        await upsertAppSubscription(email, appSlug, "cancelled", lsSubId);
+        // 01.11.2026: снимаем у всех, кому выдали (аккаунтная почта и почта кассы).
+        for (const адрес of почтыВыдачи) {
+          if (appSlug === "devhub") await upgradeDevHubByEmail(адрес, "free");
+          await upsertAppSubscription(адрес, appSlug, "cancelled", lsSubId);
+        }
         console.log(`[ls/webhook] ${event} → app_sub cancelled: ${appSlug} for ${email}`);
         return res.json({ ok: true, action: "app_cancelled", appSlug, email });
       }
@@ -591,14 +651,16 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // Платформенную подписку при этом не создаём вовсе — иначе тариф снова
       // откроет всё. Отмена приходит ниже, в DEACTIVATE, и снимает то же право.
       if (tierId === "lite" && customModule) {
-        await upsertAppSubscription(
-          email,
-          String(customModule),
-          "active",
-          lsSubId,
-          payload.meta?.custom_data?.bureauIntentId,
-        );
-        if (String(customModule) === "devhub") await upgradeDevHubByEmail(email, "pro");
+        for (const адрес of почтыВыдачи) {
+          await upsertAppSubscription(
+            адрес,
+            String(customModule),
+            "active",
+            lsSubId,
+            payload.meta?.custom_data?.bureauIntentId,
+          );
+          if (String(customModule) === "devhub") await upgradeDevHubByEmail(адрес, "pro");
+        }
         console.log(`[ls/webhook] ${event} → один модуль: ${String(customModule)} for ${email}`);
         записатьПодтверждённуюОплату({
           testMode: payload.meta?.test_mode === true,
@@ -610,7 +672,8 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
           email,
           path: "fallback_single_module",
         });
-        return res.json({ ok: true, action: "app_activated", appSlug: String(customModule), email });
+        const mailed = await письмоОПокупкеМодуля(email, String(customModule), payload.meta?.custom_data?.channel);
+        return res.json({ ok: true, action: "app_activated", appSlug: String(customModule), email, mailed });
       }
 
       const modules = modulesForReference(ref);
@@ -649,8 +712,11 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         console.warn("[lemonsqueezy] ТЕСТОВАЯ покупка (meta.test_mode): ref=%s — доступ выдан, в выручку не считать", ref ?? "?");
       }
       const termMonths = планTerm && isTermTier(планTerm) ? TERM_MONTHS[планTerm] : termMonthsForReference(ref ?? "");
-      const result = await provisionSubscription({
-        email,
+      // 01.11.2026: выдача описана один раз и применяется к каждой почте из почтыВыдачи.
+      // Письмо — только почте аккаунта (первой); у второй почты одна запись, как у модулей выше.
+      const выдать = (адрес: string, sendWelcome = true) => provisionSubscription({
+        sendWelcome,
+        email: адрес,
         tierId,
         termMonths,
         modules,
@@ -679,6 +745,16 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         billing: планBilling,
         commitStartedAt: планBilling ? началоОбязательства(attrs.created_at) : null,
       });
+      const result = await выдать(email);
+      // Вторая почта (набранная в кассе) — тем же планом; сбой здесь не отменяет уже выданное основному.
+      for (const адрес of почтыВыдачи.slice(1)) {
+        try {
+          await выдать(адрес, false);
+        } catch (e) {
+          console.error(`[ls/webhook] ${event}: вторая почта кассы не получила план`, e);
+          capture(e, { route: "ls/webhook/second-email" });
+        }
+      }
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
       // То же, что у ветки приложений: ступень «оплатили» двигает подтверждение
       // кассы, а не загрузка страницы «спасибо».
@@ -702,8 +778,10 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       const отменяемыйМодуль = payload.meta?.custom_data?.module;
       if (tierForLemonSqueezyReference(ref) === "lite" && отменяемыйМодуль) {
         // Порядок как в ветке приложений: сперва отнять доступ, потом учёт.
-        if (String(отменяемыйМодуль) === "devhub") await upgradeDevHubByEmail(email, "free");
-        await upsertAppSubscription(email, String(отменяемыйМодуль), "cancelled", lsSubId);
+        for (const адрес of почтыВыдачи) {
+          if (String(отменяемыйМодуль) === "devhub") await upgradeDevHubByEmail(адрес, "free");
+          await upsertAppSubscription(адрес, String(отменяемыйМодуль), "cancelled", lsSubId);
+        }
         console.log(`[ls/webhook] ${event} → один модуль снят: ${String(отменяемыйМодуль)} for ${email}`);
         return res.json({ ok: true, action: "app_cancelled", appSlug: String(отменяемыйМодуль), email });
       }
@@ -737,6 +815,13 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         source: "lemonsqueezy:cancel",
       };
       if (отзываем) writeSubscription(downgrade);
+      // 01.11.2026: почта кассы получила тот же план — и снимаем его, если отменяется именно эта подписка.
+      for (const адрес of почтыВыдачи.slice(1)) {
+        const чужая = readLatestSubscription(адрес);
+        if (возвратКасаетсяДействующей(чужая, lsSubId ?? "")) {
+          writeSubscription({ ...downgrade, id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, email: адрес });
+        }
+      }
       console.log(`[ls/webhook] ${event} → downgraded ${email} to free`);
       return res.json({ ok: true, action: "downgraded" });
     }

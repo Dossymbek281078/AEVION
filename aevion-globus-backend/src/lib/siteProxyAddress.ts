@@ -24,6 +24,23 @@ export function сводкаАдресаГостя(): { edgeKeyConfigured: boole
   return { edgeKeyConfigured: (process.env.AEVION_EDGE_KEY || "").length >= 16, ...счётАдреса };
 }
 
+/**
+ * Пришёл ли адрес гостя от прокси сайта с совпавшим секретом. Тот же суд, что в адресОтПроксиСайта,
+ * но БЕЗ счётчиков: на /health они показывают, как идёт приём адреса, и второй вызов на запрос
+ * удвоил бы их (1.11.2026: проверка общего потолка анонимов зовёт это на каждый анонимный запрос).
+ */
+export function адресСайтаДоверен(req: Pick<Request, "headers">): boolean {
+  const секрет = process.env.AEVION_EDGE_KEY || "";
+  if (секрет.length < 16) return false;
+  const ключ = req.headers["x-aevion-edge-key"];
+  if (typeof ключ !== "string") return false;
+  const а = Buffer.from(ключ);
+  const б = Buffer.from(секрет);
+  if (а.length !== б.length || !timingSafeEqual(а, б)) return false;
+  const адрес = req.headers["x-aevion-client-ip"];
+  return typeof адрес === "string" && /^[0-9a-fA-F.:]{3,45}$/.test(адрес.trim());
+}
+
 /** Адрес гостя от прокси сайта — только при совпавшем секрете AEVION_EDGE_KEY. */
 export function адресОтПроксиСайта(req: Pick<Request, "headers">): string | null {
   const секрет = process.env.AEVION_EDGE_KEY || "";

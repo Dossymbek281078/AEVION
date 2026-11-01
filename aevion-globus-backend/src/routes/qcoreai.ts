@@ -5,6 +5,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 const captureQCoreAIError = makeServiceCapture("qcoreai");
 
 import { verifyBearerOptional } from "../lib/authJwt";
+import { анонимныйЗапускМультиагента } from "../lib/qcoreAnonRunGate";
 import { verifyBearerLive } from "../lib/authLive";
 import {
   enforceFreeTokenQuota,
@@ -2461,7 +2462,7 @@ qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) =>
   }
 });
 
-qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
+qcoreaiRouter.post("/multi-agent", multiAgentLimiter, анонимныйЗапускМультиагента, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
   const auth = verifyBearerOptional(req);
   const userId = qcoreOwner(req, auth);
@@ -3032,7 +3033,7 @@ const SMART_PUBLIC_MAX_CHARS = 6000;
 // still picks single vs light/deep; this just caps the worst case.
 const SMART_DEFAULT_MAX_COST_USD = 0.25;
 
-qcoreaiRouter.post("/smart", multiAgentLimiter, async (req, res) => {
+qcoreaiRouter.post("/smart", multiAgentLimiter, анонимныйЗапускМультиагента, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
 
   const raw: string = typeof req.body?.input === "string" ? req.body.input : "";
@@ -3767,7 +3768,7 @@ const batchLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qcore-bat
 // auto-tag, templates/suggest) не имели предела темпа вовсе.
 const assistLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qcore-assist", message: "Too many AI assist calls. Try again in a minute." });
 
-qcoreaiRouter.post("/batch", batchLimiter, async (req, res) => {
+qcoreaiRouter.post("/batch", batchLimiter, анонимныйЗапускМультиагента, async (req, res) => {
   try {
     if (await enforceFreeTokenQuota(req, res)) return;
     const auth = verifyBearerOptional(req);

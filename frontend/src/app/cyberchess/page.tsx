@@ -72,6 +72,7 @@ import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRu
 import { задачаПоследнегоРолика, записиДляПопытки, датаРоликаПоId, type ЗадачаРолика } from "./rolikiAvi";
 import WaitlistCapture from "@/components/WaitlistCapture";
 import { channelNow } from "@/lib/channelNow";
+import { useСсылкаВхода } from "../auth/loginHref";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
@@ -2547,6 +2548,8 @@ export default function CyberChessPage(){
   // привязываем cyberchess.userId к реальному id аккаунта → серверные данные
   // (CPI/лидерборд/рейтинг, которые ключуются по userId) следуют за игроком между
   // устройствами. Переиспользуем существующий auth платформы, без новых таблиц.
+  // 2.11.2026: «Войти» несёт метку канала (?c=) внутрь next и в /auth — тем же механизмом, что /bureau (auth/loginHref.ts).
+  const ccLoginHref=useСсылкаВхода("/cyberchess");
   const[ccAuth,sCcAuth]=useState<{user:{id:string;email?:string;name?:string}|null;checked:boolean}>({user:null,checked:false});
   // Куплен ли CyberChess КАРТОЙ (Lemon Squeezy → AppSubscription): три состояния, «unknown» не равно «нет».
   // До 22.09.2026 страница знала только про AEV-лестницу магазина (chessy.owned.pro) — заплативший картой
@@ -7755,7 +7758,7 @@ export default function CyberChessPage(){
               <span style={{fontSize:13,lineHeight:1}}>✓</span>
               <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{(ccAuth.user.name||ccAuth.user.email||"Аккаунт").split("@")[0]}</span>
             </a>
-          : <a href="/auth?next=/cyberchess" title={cc.t("attr.sign_in_to_your_aevion")} className="cc-focus-ring"
+          : <a href={ccLoginHref} title={cc.t("attr.sign_in_to_your_aevion")} className="cc-focus-ring"
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 13px",borderRadius:RADIUS.full,
                 border:`1.5px solid ${CC.borderStrong}`,background:CC.surface1,color:CC.textDim,
                 fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",textDecoration:"none"}}>
@@ -7912,7 +7915,7 @@ export default function CyberChessPage(){
                 // вход/аккаунт, рейтинг и Chessy (→ дашборд «Профиль»), «Все разделы».
                 ...(vwPx<769?[
                   {ic:<span style={{fontSize:14}} aria-hidden>💳</span>,lbl:cc.locale==="ru"?`Купить CyberChess · ${ccBuyLabel}`:`${cc.t("buy.card.title")} · ${ccBuyLabelLoc}`,act:()=>{window.location.href=ccBuyHref}},
-                  ...(ccAuth.checked&&!ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}}]:[]),
+                  ...(ccAuth.checked&&!ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href=ccLoginHref}}]:[]),
                   ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
                   {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},
                   {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:cc.t("nav.sections"),act:()=>sShowSections(true)},
@@ -16518,7 +16521,7 @@ ${question.trim()}`;
             ) : (
               <div style={{display:"flex",flexDirection:"column",gap:8,padding:"4px 0"}}>
                 <div style={{fontSize:12,color:CC.textDim}}>{st("acc_signin_d")}</div>
-                <a href="/auth?next=/cyberchess" style={{alignSelf:"flex-start",padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:12,fontWeight:800,textDecoration:"none"}}>{st("acc_signin")}</a>
+                <a href={ccLoginHref} style={{alignSelf:"flex-start",padding:"8px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:12,fontWeight:800,textDecoration:"none"}}>{st("acc_signin")}</a>
               </div>
             )}
           </div>

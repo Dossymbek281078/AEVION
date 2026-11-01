@@ -4,6 +4,7 @@ import { DeepEngine, type DeepEngineState } from "./deepEngine";
 import { checkAppAccess, type AppAccess } from "@/lib/appAccess";
 import { keepChannel } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
+import { useСсылкаВхода } from "../auth/loginHref";
 
 /**
  * Opt-in «Глубокий анализ» (Stockfish 17.1 + полный NNUE, сила уровня lichess).
@@ -44,6 +45,7 @@ export function toWhiteRelative(cp: number, mate: number, fen: string): { cp: nu
 }
 
 export default function DeepAnalysisPanel({ fen }: { fen: string }) {
+  const loginHref = useСсылкаВхода("/cyberchess"); // с меткой канала, как /bureau
   const [on, setOn] = useState(false);
   const [state, setState] = useState<DeepEngineState>("idle");
   const [netFrac, setNetFrac] = useState(0);
@@ -156,7 +158,7 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
         </a>
         {access === "unknown" && (
           <div style={{ marginTop: 8, color: "#7a7a7a", fontSize: 12 }}>
-            Уже оплачивали CyberChess? <a href="/auth?next=/cyberchess" style={{ color: "#5b7a00", fontWeight: 700 }}>Войти</a>
+            Уже оплачивали CyberChess? <a href={loginHref} style={{ color: "#5b7a00", fontWeight: 700 }}>Войти</a>
           </div>
         )}
       </div>

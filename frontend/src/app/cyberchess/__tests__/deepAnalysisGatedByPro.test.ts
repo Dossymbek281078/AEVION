@@ -66,6 +66,6 @@ describe("Глубокий анализ закрыт за CyberChess Pro", () =>
   it("«unknown» не обвиняют в неоплате — предлагают вход (аноним мог купить)", () => {
     // appAccess.ts: unknown ≠ not-owned. Для unknown обязан быть путь входа.
     expect(src()).toMatch(/access\s*===\s*["']unknown["']/);
-    expect(src()).toMatch(/\/auth\?next=\/cyberchess/);
+    expect(src()).toMatch(/useСсылкаВхода\(\"\/cyberchess\"\)/); // 2.11: вход с next и меткой канала (auth/loginHref.ts)
   });
 });

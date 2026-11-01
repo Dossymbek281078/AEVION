@@ -32,7 +32,7 @@ describe("/qspace в карте сайта", () => {
   });
 
   it("адрес не попадает под запреты robots", async () => {
-    const { DISALLOWED_PATHS } = await import("../robots");
+    const { DISALLOWED_PATHS } = await import("../robotsRules");
     const blocked = DISALLOWED_PATHS.some(
       (d: string) => "/qspace" === d || "/qspace".startsWith(d),
     );

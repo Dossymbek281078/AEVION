@@ -15,6 +15,7 @@ type Txt = {
   askLabel: string;
   askPlaceholder: string;
   capsTitle: string;
+  guestHint: string;
   caps: [Cap, Cap, Cap, Cap];
 };
 
@@ -28,6 +29,7 @@ const T: Record<ChatLang, Txt> = {
     askLabel: "Вопрос QCoreAI",
     askPlaceholder: "Спросите QCoreAI о чём угодно…",
     capsTitle: "Возможности QCoreAI",
+    guestHint: "Без входа отвечает одна быстрая модель, выбор модели — после входа по почте.",
     caps: [
       { t: "Несколько моделей", d: "Claude, GPT, Gemini и открытые модели — по подключённым поставщикам; если выбранная недоступна, ответит другая, с пометкой" },
       { t: "Знает контекст", d: "Учитывает ваши записи QRight, Trust Score и историю" },
@@ -44,6 +46,7 @@ const T: Record<ChatLang, Txt> = {
     askLabel: "Ask QCoreAI",
     askPlaceholder: "Ask QCoreAI anything...",
     capsTitle: "QCoreAI capabilities",
+    guestHint: "Without signing in, one fast model answers; choosing a model is available after signing in by email.",
     caps: [
       { t: "Multi-model", d: "Claude, GPT, Gemini and open models, depending on connected providers; if your pick is down, another answers and says so" },
       { t: "Context-aware", d: "Knows your QRight records, Trust Score, history" },
@@ -60,6 +63,7 @@ const T: Record<ChatLang, Txt> = {
     askLabel: "QCoreAI-ға сұрақ",
     askPlaceholder: "QCoreAI-дан кез келген нәрсені сұраңыз…",
     capsTitle: "QCoreAI мүмкіндіктері",
+    guestHint: "Кірмей тұрып бір жылдам модель жауап береді; модельді таңдау — поштамен кіргеннен кейін.",
     caps: [
       { t: "Бірнеше модель", d: "Claude, GPT, Gemini және ашық модельдер — қосылған провайдерлер бойынша; таңдалғаны қолжетімсіз болса, басқасы жауап береді, белгімен" },
       { t: "Контексті біледі", d: "QRight жазбаларыңызды, Trust Score және тарихты ескереді" },

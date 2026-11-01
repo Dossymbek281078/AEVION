@@ -82,6 +82,11 @@ export default function QCoreAIPage() {
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // Без токена отвечает одна модель на сервере (1.11.2026) — шапка с выбором модели должна это сказать.
+  const [guest, setGuest] = useState(false);
+  useEffect(() => {
+    try { setGuest(!localStorage.getItem("aevion_auth_token_v1")); } catch { setGuest(true); }
+  }, []);
   const [err, setErr] = useState<string | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -467,6 +472,12 @@ export default function QCoreAIPage() {
             </div>
           </div>
         </div>
+
+        {guest && (
+          <div data-qcore-guest-hint style={{ marginBottom: 10, fontSize: 12, color: "#94a3b8" }}>
+            {chatText(lang).guestHint}
+          </div>
+        )}
 
         <PitchValueCallout moduleId="qcoreai" variant="dark" />
 

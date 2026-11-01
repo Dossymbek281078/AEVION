@@ -285,6 +285,8 @@ export default function QSignPage() {
 
   // health + live metrics
   const [health, setHealth] = useState<Health | null>(null);
+  // «нет связи» — только когда проба правда упала; пока она идёт, красного чипа нет (замер 2.11: гость видел его ~1 с при живом API).
+  const [healthFailed, setHealthFailed] = useState(false);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [recent, setRecent] = useState<RecentResponse | null>(null);
 
@@ -345,7 +347,7 @@ export default function QSignPage() {
     fetch(apiUrl("/api/qsign/v2/health"))
       .then((r) => r.json())
       .then((d: Health) => setHealth(d))
-      .catch(() => setHealth(null));
+      .catch(() => { setHealth(null); setHealthFailed(true); });
   }, []);
 
 
@@ -773,7 +775,8 @@ export default function QSignPage() {
                       ed25519: {health.activeKeys.ed25519}
                     </span>
                   </>
-                ) : (
+                ) : null}
+                {!health && healthFailed && (
                   <span style={chip("rgba(239,68,68,0.18)", "#fecaca")}>{t("hero.offline")}</span>
                 )}
               </div>

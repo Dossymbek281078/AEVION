@@ -1459,7 +1459,10 @@ export default function QCoreMultiAgentPage() {
         }
         const err = await res.json().catch(() => ({}));
         if (clearedFromInput) setInput(msg);
-        throw new Error(err?.error || `HTTP ${res.status}`);
+        // Guest gate (402 guest_quota_exhausted) carries a human message and a sign-in link.
+        const humanMsg = typeof err?.message === "string" && err.message ? err.message : "";
+        const signIn = res.status === 402 && typeof err?.loginUrl === "string" ? ` ${err.loginUrl}` : "";
+        throw new Error(humanMsg ? humanMsg + signIn : err?.error || `HTTP ${res.status}`);
       }
 
       let realRunId = tempRunId;

@@ -603,11 +603,10 @@ export default function MultichatEnginePage() {
           }}
         >
           <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>
-            AEVION Multichat Engine
+            {tm(tmLang, "AEVION Multichat Engine")}
           </h1>
           <p style={{ margin: "8px 0 0", color: T.neutralVeil82, fontSize: 14, lineHeight: 1.55 }}>
-            One backend, several LLM providers, two modes. Pick a single-model chat for quick answers,
-            or a multi-agent pipeline when you need a second (and third) pair of eyes on the answer.
+            {tm(tmLang, "One backend, several LLM providers, two modes. Pick a single-model chat for quick answers, or a multi-agent pipeline when you need a second (and third) pair of eyes on the answer.")}
           </p>
         </div>
 
@@ -659,7 +658,7 @@ export default function MultichatEnginePage() {
                 S
               </span>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>Single chat</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: T.inkOnCard }}>{tm(tmLang, "Single chat")}</div>
                 <div style={{ fontSize: 11, color: T.textFaded }}>{tm(tmLang, "One provider · one model · fastest path")}</div>
               </div>
             </div>
@@ -815,7 +814,7 @@ export default function MultichatEnginePage() {
               fontWeight: 650,
             }}
           >
-            Backend health
+            {tm(tmLang, "Backend health")}
           </a>
           <a
             href={`${origin}/api/qcoreai/providers`}
@@ -830,7 +829,7 @@ export default function MultichatEnginePage() {
               fontWeight: 650,
             }}
           >
-            Configured providers
+            {tm(tmLang, "Configured providers")}
           </a>
           <a
             href={`${origin}/api/qcoreai/agents`}
@@ -845,7 +844,7 @@ export default function MultichatEnginePage() {
               fontWeight: 650,
             }}
           >
-            Role defaults
+            {tm(tmLang, "Role defaults")}
           </a>
         </div>
 

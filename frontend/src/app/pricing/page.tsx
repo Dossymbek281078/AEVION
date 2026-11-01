@@ -3167,31 +3167,31 @@ export default function PricingPage() {
             href="/pricing/roadmap"
             style={{ color: "#0d9488", fontWeight: 700 }}
           >
-            Public roadmap →
+            {t("pricing.home.notes.roadmapLink")}
           </Link>
           <Link
             href="/pricing/security"
             style={{ color: "#0d9488", fontWeight: 700 }}
           >
-            Security &amp; Compliance →
+            {t("pricing.home.notes.securityLink")}
           </Link>
           <Link
             href="/pricing/refund-policy"
             style={{ color: "#0d9488", fontWeight: 700 }}
           >
-            Refund policy →
+            {t("pricing.home.notes.refundLink")}
           </Link>
           <Link
             href="/pricing/changelog"
             style={{ color: "#0d9488", fontWeight: 700 }}
           >
-            Changelog →
+            {t("pricing.home.notes.changelogLink")}
           </Link>
           <Link
             href="/pricing/api-pricing"
             style={{ color: "#0d9488", fontWeight: 700 }}
           >
-            API pricing →
+            {t("pricing.home.notes.apiPricingLink")}
           </Link>
           <Link
             href="/pricing/affiliate"

@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
+import { serverLang } from "@/lib/serverLang";
+import { AEVION_TITLES, tabTitleLang } from "@/lib/tabTitles";
 
 // 31.10.2026, решение Оркестратора «обещать только то, что есть»: здесь стояло «6 агентов, Claude / GPT / Gemini /
 // DeepSeek / Grok, @упоминания», а консоль страницы — совет из ТРЁХ агентов (CouncilConsole.tsx, PANEL): Аналитик,
 // Скептик, Практик; основные поставщики Claude (Anthropic), Gemini (Google), открытая модель через OpenRouter, при сбое —
 // запасной. GPT в совете нет. Чек подписан Ed25519 (замер прода 31.10). Без входа — 2 вопроса в день (замер 30–31.10).
-export const metadata: Metadata = {
-  title: "Multichat — a council of three AI agents · совет трёх ИИ-агентов",
+// 2.11.2026: заголовок вкладки — на языке гостя (lib/tabTitles.ts).
+export async function generateMetadata(): Promise<Metadata> {
+  const lang = tabTitleLang(await serverLang("ru"));
+  return {
+  title: { absolute: AEVION_TITLES.multichat[lang] },
   description:
     "Ask one question — three AI agents (Analyst, Skeptic, Practitioner) answer independently via Claude, Gemini and open models, and you see where they disagree. Signed receipt, 2 free questions a day. Один вопрос — три независимых ответа ИИ-агентов и карта разногласий.",
   keywords: [
@@ -33,7 +38,8 @@ export const metadata: Metadata = {
     description: "Три независимых ответа на один вопрос и карта разногласий. 2 вопроса в день бесплатно.",
   },
   alternates: { canonical: "/multichat-engine" },
-};
+  };
+}
 
 export default function MultichatLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
 import { serverLang } from "@/lib/serverLang";
+import { AEVION_TITLES, tabTitleLang } from "@/lib/tabTitles";
 import { строкиAuth } from "./authServerStrings";
 import { AuthServerTextProvider } from "./authServerText";
 
@@ -12,8 +13,11 @@ export const dynamic = "force-dynamic";
 
 const SITE = getSiteUrl();
 
-export const metadata: Metadata = {
-  title: "Sign in to AEVION — one identity for the whole Trust OS",
+// 2.11.2026: заголовок вкладки — на языке гостя (lib/tabTitles.ts), как у главной.
+export async function generateMetadata(): Promise<Metadata> {
+  const lang = tabTitleLang(await serverLang("ru"));
+  return {
+  title: { absolute: AEVION_TITLES.auth[lang] },
   description:
     "One AEVION account unlocks QRight authorship, QSign signatures, Bureau certificates, Planet validators, AEVION Bank, Awards, CyberChess and more. Email or social login.",
   openGraph: {
@@ -29,7 +33,8 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: "/auth" },
   robots: { index: true, follow: true },
-};
+  };
+}
 
 const breadcrumbJsonLd = {
   "@context": "https://schema.org",

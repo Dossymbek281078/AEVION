@@ -8,6 +8,7 @@ import { serverLang } from "@/lib/serverLang";
 import { ServerLangProvider } from "@/lib/serverLangContext";
 import { строкиКадра, КЛЮЧИ_ЦЕН } from "@/lib/serverFrameStrings";
 import { isEnglish } from "@/lib/pricingLocalize";
+import { AEVION_TITLES, tabTitleLang } from "@/lib/tabTitles";
 import { moduleTitle } from "@/data/moduleNames";
 
 // 30.10.2026 (замер Науки): первый кадр /pricing шёл по-английски для русского гостя
@@ -15,7 +16,10 @@ import { moduleTitle } from "@/data/moduleNames";
 // Accept-Language → ru) и кладёт его в ServerLangProvider — маршрут рисуется на каждый запрос.
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
+// 2.11.2026: заголовок вкладки — на языке гостя (lib/tabTitles.ts); прежний двуязычный склеенный убран.
+export async function generateMetadata(): Promise<Metadata> {
+  const lang = tabTitleLang(await serverLang("ru"));
+  return {
   // Двуязычный заголовок (образец /qventure, /qright, /bureau): metadata у
   // Next статична на маршрут, языка читателя здесь нет, а доводчик <title>
   // не переводит. Страница цен — та, куда ведут западные ссылки, и в выдаче
@@ -27,7 +31,7 @@ export const metadata: Metadata = {
   // режут около шестидесяти знаков — второй бренд выталкивал оттуда
   // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
   // поэтому корневой файл не тронут.
-  title: { absolute: "AEVION Pricing — one subscription for IP, AI and fintech · Цены и тарифы" },
+  title: { absolute: AEVION_TITLES.pricing[lang] },
   description:
     "A plan is a term of access to the whole AEVION planet: Lite, Medium, Pro, Full "
     + "and Max, billed monthly — the longer the term, the cheaper the month; the whole term up front at a discount. Free to "
@@ -49,7 +53,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/pricing",
   },
-};
+  };
+}
 
 /**
  * 🔴 Замер 23.09.2026 по проду: `/pricing` отдаёт роботу 35 547 знаков и НИ

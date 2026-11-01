@@ -42,7 +42,8 @@ async function купилМодульДействия(почта: string | null 
   for (const модуль of МОДУЛИ_ДЕЙСТВИЯ[действие] ?? []) {
     try {
       if ((await appSubscriptionState(почта, модуль)) === "active") return true;
-    } catch {
+    } catch (err) {
+      console.warn(`[freeActionQuota] подписка на ${модуль} не прочиталась для ${действие}:`, err instanceof Error ? err.message : err);
       // читаем как «нет подписки»: норма остаётся, не падаем
     }
   }

@@ -981,6 +981,8 @@ export async function provisionSubscription(input: {
   /** См. Subscription.billing; undefined — поле не пишется (другие кассы). */
   billing?: "monthly" | "prepaid" | null;
   commitStartedAt?: string | null;
+  /** false — только запись подписки, без приветственного письма (вторая почта той же оплаты). По умолчанию письмо шлётся. */
+  sendWelcome?: boolean;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const termMonths = input.termMonths ?? (isTermTier(input.tierId) ? TERM_MONTHS[input.tierId] : null);
@@ -1008,6 +1010,9 @@ export async function provisionSubscription(input: {
   };
 
   writeSubscription(subscription);
+
+  // 01.11.2026: одна оплата — одно письмо. Вторая почта (набранная в кассе) получает только запись.
+  if (input.sendWelcome === false) return { subscription, emailSent: false, emailMode: "stub" };
 
   const subjPrefix = trialDays > 0 ? "Триал активен" : "Подписка активна";
   const result = await sendEmail({

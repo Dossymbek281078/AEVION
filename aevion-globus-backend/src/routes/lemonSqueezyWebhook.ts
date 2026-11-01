@@ -713,7 +713,9 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       }
       const termMonths = планTerm && isTermTier(планTerm) ? TERM_MONTHS[планTerm] : termMonthsForReference(ref ?? "");
       // 01.11.2026: выдача описана один раз и применяется к каждой почте из почтыВыдачи.
-      const выдать = (адрес: string) => provisionSubscription({
+      // Письмо — только почте аккаунта (первой); у второй почты одна запись, как у модулей выше.
+      const выдать = (адрес: string, sendWelcome = true) => provisionSubscription({
+        sendWelcome,
         email: адрес,
         tierId,
         termMonths,
@@ -747,7 +749,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // Вторая почта (набранная в кассе) — тем же планом; сбой здесь не отменяет уже выданное основному.
       for (const адрес of почтыВыдачи.slice(1)) {
         try {
-          await выдать(адрес);
+          await выдать(адрес, false);
         } catch (e) {
           console.error(`[ls/webhook] ${event}: вторая почта кассы не получила план`, e);
           capture(e, { route: "ls/webhook/second-email" });

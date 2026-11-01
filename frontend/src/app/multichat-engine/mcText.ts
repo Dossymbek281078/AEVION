@@ -125,6 +125,13 @@ export const MC_TEXT: Record<string, Tr> = {
   // 31.10.2026: DeepSeek и Grok убраны — на проде у них нет ключей (/api/qcoreai/providers: configured:false), запрос молча
   // уходил к Claude. Открытые модели через OpenRouter ответили сами (замер 31.10, ?c=probe-multichat).
   // 31.10.2026, решение Оркестратора: GPT снят до починки ключа OpenAI (прод отвечает openai 401); вернуть, когда заработает.
+  // 02.11.2026: шапка страницы была английским блоком посреди русской страницы.
+  "AEVION Multichat Engine": { ru: "AEVION Мультичат", kk: "AEVION Мультичат" },
+  "One backend, several LLM providers, two modes. Pick a single-model chat for quick answers, or a multi-agent pipeline when you need a second (and third) pair of eyes on the answer.": { ru: "Один сервер, несколько поставщиков ИИ-моделей, два режима. Одиночный чат — для быстрых ответов, многоагентный конвейер — когда нужен второй (и третий) взгляд на ответ.", kk: "Бір сервер, бірнеше ЖИ-модель жеткізушісі, екі режим. Жылдам жауап үшін — жеке чат, жауапқа екінші (және үшінші) көзқарас керек болғанда — көпагентті конвейер." },
+  "Backend health": { ru: "Состояние сервера", kk: "Сервер күйі" },
+  "Configured providers": { ru: "Подключённые поставщики", kk: "Қосылған жеткізушілер" },
+  "Role defaults": { ru: "Модели ролей по умолчанию", kk: "Рөлдердің әдепкі модельдері" },
+  "Single chat": { ru: "Одиночный чат", kk: "Жеке чат" },
   "Classic chat experience. Pick Claude, Gemini or a free open model, ask a question, get an answer. Best for quick lookups and informal conversation.": { ru: "Классический чат. Выберите Claude, Gemini или бесплатную открытую модель, задайте вопрос — получите ответ. Лучше всего для быстрых справок и свободной беседы.", kk: "Классикалық чат. Claude, Gemini немесе тегін ашық модельді таңдап, сұрақ қойыңыз — жауап алыңыз. Жылдам анықтама мен еркін әңгімеге ең қолайлы." },
   "Open single chat →": { ru: "Открыть одиночный чат →", kk: "Жеке чатты ашу →" },
   "New": { ru: "Новое", kk: "Жаңа" },

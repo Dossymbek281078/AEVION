@@ -164,14 +164,19 @@ export default function QCoreAIPage() {
 
       try {
         const headers: HeadersInit = { "Content-Type": "application/json" };
+        let signedIn = false;
         try {
           const t = localStorage.getItem("aevion_auth_token_v1");
-          if (t) headers.Authorization = `Bearer ${t}`;
+          if (t) { headers.Authorization = `Bearer ${t}`; signedIn = true; }
         } catch {}
 
         const body: Record<string, unknown> = { messages: nextMsgs.map(({ role, content }) => ({ role, content })) };
-        if (selectedProvider) body.provider = selectedProvider;
-        if (selectedModel) body.model = selectedModel;
+        // Без входа модель одна и выбирается на сервере (1.11.2026: норма 10 в сутки, дешёвая модель);
+        // выбранная в списке дорогая модель дала бы 400 model_requires_sign_in.
+        if (signedIn) {
+          if (selectedProvider) body.provider = selectedProvider;
+          if (selectedModel) body.model = selectedModel;
+        }
 
         const res = await fetch(apiUrl("/api/qcoreai/chat"), {
           method: "POST",
@@ -179,7 +184,14 @@ export default function QCoreAIPage() {
           body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        if (!res.ok) {
+          // Отказ нормы/входа — человеческим текстом сервера, а не «ИИ не отвечает».
+          if ((res.status === 402 || res.status === 400 || res.status === 503) && typeof data?.message === "string" && typeof data?.loginUrl === "string") {
+            setMessages((m) => [...m, { role: "assistant", content: data.message }]);
+            return;
+          }
+          throw new Error(data?.error || `HTTP ${res.status}`);
+        }
 
         const reply = typeof data?.reply === "string" ? data.reply : JSON.stringify(data, null, 2);
 

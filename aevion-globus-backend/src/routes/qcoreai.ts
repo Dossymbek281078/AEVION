@@ -6,6 +6,7 @@ const captureQCoreAIError = makeServiceCapture("qcoreai");
 
 import { verifyBearerOptional } from "../lib/authJwt";
 import { анонимныйЗапускМультиагента } from "../lib/qcoreAnonRunGate";
+import { анонимныйЧат } from "../lib/qcoreAnonChatGate";
 import { verifyBearerLive } from "../lib/authLive";
 import {
   enforceFreeTokenQuota,
@@ -518,7 +519,7 @@ function usageToTokens(u: unknown): { tokensIn: number; tokensOut: number } {
   return { tokensIn, tokensOut };
 }
 
-qcoreaiRouter.post("/chat", anonChatCeiling, exposeCeilingRemaining, chatLimiter, async (req, res) => {
+qcoreaiRouter.post("/chat", anonChatCeiling, exposeCeilingRemaining, chatLimiter, анонимныйЧат, async (req, res) => {
   try {
     if (await enforceFreeTokenQuota(req, res)) return;
     const auth = verifyBearerOptional(req);
@@ -595,7 +596,7 @@ export { clampTemperature, publicErrorCategory };
                                               data: { kind: "error", message }
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/chat-stream", anonChatCeiling, exposeCeilingRemaining, chatLimiter, async (req, res) => {
+qcoreaiRouter.post("/chat-stream", anonChatCeiling, exposeCeilingRemaining, chatLimiter, анонимныйЧат, async (req, res) => {
   if (await enforceFreeTokenQuota(req, res)) return;
   const auth = verifyBearerOptional(req);
   const messages = sanitizeMessages(req.body?.messages);

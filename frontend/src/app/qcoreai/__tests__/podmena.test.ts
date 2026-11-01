@@ -74,3 +74,14 @@ describe("тексты шапки и возможностей /qcoreai на яз
     }
   });
 });
+
+describe("чат /qcoreai без входа не шлёт модель и показывает отказ сервера", () => {
+  const src = readFileSync(join(__dirname, "../QCoreAIClient.tsx"), "utf8");
+  it("provider и model уходят только при токене", () => {
+    expect(src).toMatch(/if \(signedIn\) \{\s*if \(selectedProvider\) body\.provider = selectedProvider;\s*if \(selectedModel\) body\.model = selectedModel;\s*\}/);
+    expect(src.split("body.provider = selectedProvider").length - 1).toBe(1); // одно место — под проверкой входа
+  });
+  it("402/400/503 с message и loginUrl показываются как есть, а не как «ИИ не отвечает»", () => {
+    expect(src).toMatch(/res\.status === 402[\s\S]{0,200}data\?\.loginUrl[\s\S]{0,200}content: data\.message/);
+  });
+});

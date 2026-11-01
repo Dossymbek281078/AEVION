@@ -56,8 +56,9 @@ describe("подписи у полей ввода", () => {
     // не связанными с полями. Форма лидовая: люди вводят туда своё имя.
     const s = readFileSync(join(SRC, "app", "qright", "page.tsx"), "utf8");
     for (const n of ["Name", "Email", "Country", "City"]) {
-      expect(s, `поле «${n}» снова без имени для читалки`)
-        .toContain(`aria-label="${n}"`);
+      // Имя поля теперь идёт через tq(lang, ...) — по языку страницы; принимаем обе формы записи.
+      const названо = s.includes(`aria-label="${n}"`) || s.includes(`aria-label={tq(lang, "${n}")}`);
+      expect(названо, `поле «${n}» снова без имени для читалки`).toBe(true);
     }
   });
 

@@ -292,7 +292,12 @@ function BureauPageInner() {
   // и человек с оплаченными сертификатами видел страницу так, будто их нет.
   const [dashboardFailed, setDashboardFailed] = useState<null | "auth" | "error">(null);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
+  // null = «ещё не загружено». Раньше стояло { total: 0, ... }: в HTML с сервера и у роботов
+  // были «0 Certificates Issued» и «0 Total Verifications», пока браузер не получал числа.
+  const [stats, setStats] = useState<{ total: number; totalVerifications: number } | null>(null);
+  // Малое число выданных сертификатов подрывает доверие, поэтому карточку с ним показываем
+  // только от этого порога (решение Оркестратора 1.11.2026). Проверки показываем всегда, когда загружены.
+  const МИН_СЕРТИФИКАТОВ_ДЛЯ_ПОКАЗА = 10;
 
   // Prior-art search + filter + sort over the public registry.
   const [query, setQuery] = useState("");
@@ -781,8 +786,10 @@ function BureauPageInner() {
         {/* ── Stats ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 28 }}>
           {[
-            { value: stats.total, label: tb("Certificates Issued"), color: "#0d9488" },
-            { value: stats.totalVerifications, label: tb("Total Verifications"), color: "#3b82f6" },
+            ...(stats && !certsFailed && stats.total >= МИН_СЕРТИФИКАТОВ_ДЛЯ_ПОКАЗА
+              ? [{ value: stats.total, label: tb("Certificates Issued"), color: "#0d9488" }]
+              : []),
+            { value: stats && !certsFailed ? stats.totalVerifications : "—", label: tb("Total Verifications"), color: "#3b82f6" },
             { value: LEGAL_FRAMEWORKS.length, label: tb("Legal Frameworks"), color: "#8b5cf6" },
             { value: tb("3-Layer"), label: tb("Cryptographic Protection"), color: "#f59e0b" },
           ].map((s) => (

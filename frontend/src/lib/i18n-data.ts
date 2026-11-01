@@ -197,9 +197,9 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // рядом с английской кнопкой «Create account». Число — счёт по словарям.
   // 30.10: +2 в ru/en/kk — moduleChip.perYear и moduleChip.buyTitleYear: годовая плашка CyberChess показывала сырое «$50moduleChip.perYear» (и подсказку-ключ на кнопке); сторож moduleChipKeysExistInDictionaries.
   // 02.11: +5 в ru/en/kk — pricing.home.notes.roadmap/security/refund/changelog/apiPricingLink (английские ссылки примечаний /pricing).
-  ru: 7545,
-  en: 7545,
-  kk: 7545,
+  ru: 7546,
+  en: 7546,
+  kk: 7546,
 
   de: 134,
   fr: 134,

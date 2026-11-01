@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders } from "@/lib/auth";
 import { reportError } from "@/lib/reporter";
 import { useQMediaT, type QMediaKey } from "./i18n";
 
@@ -14,8 +15,8 @@ type Fetch = typeof fetch;
 export type ActResult = { ok: true; liked?: boolean } | { ok: false; status: number };
 
 function authHeaders(): Record<string, string> {
-  const t = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
-  return t ? { "Content-Type": "application/json", Authorization: `Bearer ${t}` } : { "Content-Type": "application/json" };
+  // Токен — только через @/lib/auth (сторож authTokenDirectReads).
+  return { "Content-Type": "application/json", ...getAuthHeaders() };
 }
 
 async function call(f: Fetch, path: string, init: RequestInit, what: string): Promise<{ ok: boolean; status: number; body: any }> {

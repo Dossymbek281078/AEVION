@@ -140,12 +140,15 @@ function собратьCustomData(
   liteModule: string | undefined,
   channel: string,
   accountEmail?: string | null,
+  accountUserId?: string | null,
 ): Record<string, string> | undefined {
   const out: Record<string, string> = {};
   if (liteModule) out.module = liteModule;
   if (channel) out.channel = channel;
   // 19.10.2026: почта аккаунта едет в кассу — вебхук выдаёт доступ ей, не набранному адресу.
   if (accountEmail) out.accountEmail = accountEmail;
+  // 01.11.2026: id аккаунта — только для аудита («чей это платёж»); вебхук доступ по нему не выдаёт.
+  if (accountEmail && accountUserId) out.accountUserId = accountUserId;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -333,6 +336,8 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         ? аккаунт.email.trim().toLowerCase()
         : null;
     const почтаДляВыдачи = почтаАккаунта ?? body.email;
+    // 01.11.2026: id аккаунта из токена (sub) — для аудита в custom_data; только при валидной почте аккаунта.
+    const idАккаунта = почтаАккаунта && typeof аккаунт?.sub === "string" && аккаунт.sub.trim() ? аккаунт.sub.trim().slice(0, 64) : null;
     // 30.10.2026: почта из тела без проверки формата уходила в кассу, касса её
     // отвергала — и человек получал 503 «попробуйте позже» вместо 400 про адрес
     // (замер прода: {"tierId":"max","email":"not-an-email"} → 503). Неверный
@@ -795,8 +800,8 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
           customPriceCents: totalCents,
           // План: срок и режим едут в custom_data — вебхук по ним выдаёт ступень.
           customData: план
-            ? { ...(собратьCustomData(liteModule, channel, почтаАккаунта) ?? {}), ...план.customData }
-            : собратьCustomData(liteModule, channel, почтаАккаунта),
+            ? { ...(собратьCustomData(liteModule, channel, почтаАккаунта, idАккаунта) ?? {}), ...план.customData }
+            : собратьCustomData(liteModule, channel, почтаАккаунта, idАккаунта),
           // Язык страницы оплаты. Берём его от САМОГО ПОКУПАТЕЛЯ, а не
           // подставляем свой: сперва то, что прислала витрина, иначе язык его
           // браузера. Без этого касса открывалась по-болгарски (замер 09.09).

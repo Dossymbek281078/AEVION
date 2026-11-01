@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { serverLang } from "@/lib/serverLang";
+import { AEVION_TITLES, tabTitleLang } from "@/lib/tabTitles";
 import { AutoTranslate } from "@/components/AutoTranslate";
 
 const SITE = getSiteUrl();
@@ -8,14 +10,17 @@ const SITE = getSiteUrl();
 // sign/verify service), so the OG image falls back to the root
 // app/opengraph-image.tsx. Metadata text is the important SEO win here — the
 // page was previously a bare "use client" route with no title/description.
-export const metadata: Metadata = {
+// 2.11.2026: заголовок вкладки — на языке гостя (lib/tabTitles.ts), как у /auth и /bureau.
+export async function generateMetadata(): Promise<Metadata> {
+  const lang = tabTitleLang(await serverLang("ru"));
+  return {
   // 13.09.2026: absolute, потому что имя платформы уже стоит В САМОМ
   // заголовке, а корневой шаблон добавлял второе. Замер на живом сайте:
   // «... · AEVION» у 14 страниц из 14 в выборке. Вкладка и выдача поиска
   // режут около шестидесяти знаков — второй бренд выталкивал оттуда
   // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
   // поэтому корневой файл не тронут.
-  title: { absolute: "AEVION QSign — canonical-JSON signing · подпись и проверка документов" },
+  title: { absolute: AEVION_TITLES.qsign[lang] },
   description:
     "QSign signs any JSON payload over an RFC 8785-canonical form: deterministic key ordering, HMAC and Ed25519 signatures, offline verification. The signing primitive under QRight receipts, Bureau certificates and Planet attestations. Подпись любого JSON-документа и проверка офлайн — тот же примитив, что заверяет чеки QRight и сертификаты Bureau.",
   openGraph: {
@@ -34,7 +39,8 @@ export const metadata: Metadata = {
       "Подпись канонического JSON (RFC 8785) на HMAC и Ed25519, проверка без сети.",
   },
   alternates: { canonical: "/qsign" },
-};
+  };
+}
 
 const articleJsonLd = {
   "@context": "https://schema.org",

@@ -54,7 +54,9 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
           display: "inline-flex",
           alignItems: "center",
           gap: 5,
-          padding: "4px 9px",
+          padding: "0 9px",
+          height: 28, // CLS: фиксированная высота кнопки языка
+          boxSizing: "border-box",
           borderRadius: 8,
           border: "1px solid rgba(255,255,255,0.15)",
           background: open ? "rgba(255,255,255,0.12)" : "transparent",

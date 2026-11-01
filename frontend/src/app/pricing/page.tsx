@@ -631,6 +631,10 @@ export default function PricingPage() {
 
   useEffect(() => {
     let cancelled = false;
+    /* 2.11.2026 (CLS /pricing 2,87 на 390x844): блоки над тарифами (цифры доверия, экономия ИИ, промо) приходят
+       отдельными запросами и вставлялись выше уже нарисованных тарифов — всё уезжало вниз. Тарифы теперь
+       показываются, когда эти запросы отработали (успехом или сбоем), но не позже 1,2 с. */
+    const вторичные: Promise<unknown>[] = [];
     async function load() {
       try {
         const r = await fetch(apiUrl("/api/pricing"));
@@ -654,6 +658,10 @@ export default function PricingPage() {
         const поля = j as unknown as Record<string, unknown>;
         const нет = обязательные.filter((k) => поля[k] == null);
         if (нет.length > 0) throw new Error(`неполный ответ: нет ${нет.join(", ")}`);
+        await Promise.race([
+          Promise.allSettled(вторичные),
+          new Promise((ok) => setTimeout(ok, 1200)),
+        ]);
         if (!cancelled) {
           setData(j);
           setLoading(false);
@@ -672,27 +680,27 @@ export default function PricingPage() {
       }
     }
     load();
-    fetch(apiUrl("/api/pricing/promo"))
+    вторичные.push(fetch(apiUrl("/api/pricing/promo"))
       .then((r) => r.json())
       .then((j) => {
         if (!cancelled && Array.isArray(j.items)) setActivePromos(j.items);
       })
-      .catch(() => {});
-    fetch(apiUrl("/api/pricing/testimonials"))
+      .catch(() => {}));
+    вторичные.push(fetch(apiUrl("/api/pricing/testimonials"))
       .then((r) => r.json())
       .then((j) => {
         if (!cancelled && Array.isArray(j.items)) setTestimonials(j.items);
       })
-      .catch(() => {});
-    fetch(apiUrl("/api/pricing/trust"))
+      .catch(() => {}));
+    вторичные.push(fetch(apiUrl("/api/pricing/trust"))
       .then((r) => r.json())
       .then((j) => {
         if (!cancelled && j) setTrust(j);
       })
-      .catch(() => {});
+      .catch(() => {}));
     // Тот же счётчик уже просит виджет в шапке (PlatformAiSavings). Через
     // общий загрузчик оба получают одно значение за один запрос — issue #1016.
-    fetchAiSavings()
+    вторичные.push(fetchAiSavings()
       .then((j) => {
         /*
          * Тот же порог охвата, что у значка в шапке, и по той же причине.
@@ -704,7 +712,7 @@ export default function PricingPage() {
          */
         if (!cancelled && j && j.runs > 0 && счётчикГоденДляПоказа(j)) setAiSavings(j);
       })
-      .catch(() => {});
+      .catch(() => {}));
     return () => {
       cancelled = true;
     };
@@ -897,7 +905,7 @@ export default function PricingPage() {
   if (loading) {
     return (
       <ProductPageShell>
-        <div style={{ padding: 60, textAlign: "center", color: "#64748b" }}>
+        <div style={{ padding: 60, textAlign: "center", color: "#64748b", minHeight: "200vh" }}>
           {tp("loading.pricing")}
         </div>
       </ProductPageShell>

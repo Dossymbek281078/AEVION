@@ -10,8 +10,6 @@ import type { CSSProperties } from "react";
  * крестик, — но НЕ модально: доска и кнопки под полоской нажимаются сразу,
  * фокус не запирается, фона-затемнения нет. Показ один раз (ключ прежний,
  * ONBOARDING_KEY) — это решает страница, полоска только зовёт обработчики.
- *
- * Подписи — из словаря шахмат (ru/en/kk), новых ключей не заведено.
  */
 export type NamerenieStarta = "play" | "learn" | "puzzles";
 
@@ -67,11 +65,11 @@ export default function PoloskaStarta({ t, onDaily, onIntent, onClose, width, mo
       }}
     >
       <div style={{ fontWeight: 900, fontSize: 14, marginRight: 4 }}>{t("start.title")}</div>
-      {onDaily && (
+      {onDaily ? (
         <button type="button" className="cc-touch" style={КНОПКА} onClick={onDaily} data-cc-start="daily">
           ☀ {t("start.daily.title")}
         </button>
-      )}
+      ) : <span aria-hidden="true" style={{ ...КНОПКА, visibility: "hidden" }}>☀ {t("start.daily.title")}</span>}
       <button type="button" className="cc-touch" style={КНОПКА} onClick={() => onIntent("play")} data-cc-start="play">
         ▶ {t("start.game.title")}
       </button>

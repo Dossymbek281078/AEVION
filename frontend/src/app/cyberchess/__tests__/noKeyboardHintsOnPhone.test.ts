@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ruOf } from "./_ruSlovar";
 
 const PAGE = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "page.tsx"),
@@ -43,11 +44,14 @@ describe("подсказки клавиш на телефоне", () => {
     // клавиатуры в нотации» — невыполнимый совет: там ходят касанием.
     // Найдено чтением живой страницы, а не кода: подпись собирается в одну
     // строку и глазами в исходнике не бросается.
-    const i = PAGE.indexOf("Шахматная доска. ${state}");
+    // 13–19.10.2026: фразы переехали в словарь — ключи a11y.howtoTouch / a11y.howtoKeyboard.
+    const i = PAGE.indexOf('${cc.t("a11y.boardPrefix")} ${state}');
     expect(i, "контроль: подпись доски не найдена").toBeGreaterThan(-1);
     const блок = PAGE.slice(Math.max(0, i - 600), i + 100);
-    expect(блок, "совет про клавиатуру звучит и на телефоне").toContain("isMobileLayout");
-    expect(блок, "нет варианта для касания").toContain("касанием");
+    expect(блок, "совет про клавиатуру звучит и на телефоне").toMatch(/isMobileLayout\s*\?\s*cc\.t\("a11y\.howtoTouch"\)\s*:\s*cc\.t\("a11y\.howtoKeyboard"\)/);
+    expect(ruOf("a11y.howtoTouch"), "нет варианта для касания").toContain("касанием");
+    expect(ruOf("a11y.howtoKeyboard")).toContain("клавиатуры");
+    expect(ruOf("a11y.boardPrefix")).toContain("Шахматная доска");
   });
 
   it("ширина окна измеряется ДО первого кадра", () => {

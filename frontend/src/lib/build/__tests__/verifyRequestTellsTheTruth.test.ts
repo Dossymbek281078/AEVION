@@ -56,3 +56,26 @@ describe("requestEmailVerification — правда о факте отправк
     await expect(requestEmailVerification()).rejects.toBeInstanceOf(BuildApiError);
   });
 });
+
+describe("requestEmailVerification — язык сайта уходит в теле", () => {
+  beforeEach(() => fetchMock.mockReset());
+
+  for (const lang of ["ru", "en", "kk"]) {
+    test(`lang=${lang} -> body.lang`, async () => {
+      fetchMock.mockReturnValue(reply(200, { ok: true, emailSent: true }));
+      await requestEmailVerification(lang);
+      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(String(init.body))).toEqual({ lang });
+      expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    });
+  }
+
+  for (const lang of ["de", "", undefined]) {
+    test(`lang=${String(lang)} -> поля нет`, async () => {
+      fetchMock.mockReturnValue(reply(200, { ok: true, emailSent: true }));
+      await requestEmailVerification(lang);
+      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect(init.body).toBeUndefined();
+    });
+  }
+});

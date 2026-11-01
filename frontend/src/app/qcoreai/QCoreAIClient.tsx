@@ -9,11 +9,13 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
+import { chatText, пометкаПодмены } from "./podmena";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { WaitlistIfMissing } from "@/components/FooterWaitlist";
 
-type Msg = { role: "user" | "assistant" | "system"; content: string };
+/** note — пометка над ответом «ответил другой поставщик» (podmena.ts); на сервер не уходит. */
+type Msg = { role: "user" | "assistant" | "system"; content: string; note?: string };
 
 type ProviderInfo = {
   id: string;
@@ -70,7 +72,7 @@ const prettyModel = (m: string) => {
 };
 
 export default function QCoreAIPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "system",
@@ -167,7 +169,7 @@ export default function QCoreAIPage() {
           if (t) headers.Authorization = `Bearer ${t}`;
         } catch {}
 
-        const body: Record<string, unknown> = { messages: nextMsgs };
+        const body: Record<string, unknown> = { messages: nextMsgs.map(({ role, content }) => ({ role, content })) };
         if (selectedProvider) body.provider = selectedProvider;
         if (selectedModel) body.model = selectedModel;
 
@@ -184,21 +186,21 @@ export default function QCoreAIPage() {
         if (data?.provider) setActiveProviderName(data.provider);
         if (data?.model) setActiveModel(data.model);
 
-        setMessages((m) => [...m, { role: "assistant", content: reply }]);
+        const note = пометкаПодмены(selectedProvider, data?.mode, data?.provider, providers, lang) ?? undefined;
+        setMessages((m) => [...m, { role: "assistant", content: reply, note }]);
       } catch {
         setMessages((m) => [
           ...m,
           {
             role: "assistant",
-            content:
-              "I am currently offline. The AI engine needs an API key configured on the backend. Try again later or explore the platform modules directly.",
+            content: chatText(lang).offline,
           },
         ]);
       } finally {
         setBusy(false);
       }
     },
-    [busy, input, messages, selectedProvider, selectedModel]
+    [busy, input, messages, selectedProvider, selectedModel, providers, lang]
   );
 
   const visible = messages.filter((m) => m.role !== "system");
@@ -242,7 +244,7 @@ export default function QCoreAIPage() {
               </div>
               <div>
                 <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>QCoreAI</h1>
-                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>Multi-model AI assistant for the AEVION ecosystem</p>
+                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>{chatText(lang).subtitle}</p>
                 <div style={{ marginTop: 10 }}>
                   <ModulePricingChip moduleId="qcoreai" />
                 </div>
@@ -288,7 +290,7 @@ export default function QCoreAIPage() {
                         }}
                       />
                     )}
-                    {currentProvider?.name || "Select Provider"}
+                    {currentProvider?.name || chatText(lang).selectProvider}
                   </span>
                   <span style={{ fontSize: 10, opacity: 0.7 }}>▼</span>
                 </button>
@@ -346,7 +348,7 @@ export default function QCoreAIPage() {
                       <>
                         <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
                         <div style={{ padding: "8px 12px 4px", fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
-                          Not configured
+                          {chatText(lang).notConfigured}
                         </div>
                         {unconfiguredProviders.map((p) => (
                           <div
@@ -524,7 +526,13 @@ export default function QCoreAIPage() {
             <>
             <AiBadge />
             {visible.map((m, i) => (
-              <div key={i} style={{ marginBottom: 14, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+              <div key={i}>
+              {m.note ? (
+                <div data-qcore-podmena="1" style={{ margin: "0 0 4px 36px", fontSize: 12, fontWeight: 600, color: "#92400e" }}>
+                  ⚠ {m.note}
+                </div>
+              ) : null}
+              <div style={{ marginBottom: 14, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                 {m.role === "assistant" ? (
                   <div
                     style={{
@@ -568,6 +576,7 @@ export default function QCoreAIPage() {
                     ? { dangerouslySetInnerHTML: { __html: renderMarkdown(m.content) } }
                     : { children: m.content })}
                 />
+              </div>
               </div>
             ))}
           </>
@@ -629,8 +638,8 @@ export default function QCoreAIPage() {
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
             // Подсказка исчезает при вводе — поле остаётся безымянным ровно
             // тогда, когда в нём работают. Замер прода 29.08.2026.
-            aria-label="Ask QCoreAI"
-            placeholder="Ask QCoreAI anything..."
+            aria-label={chatText(lang).askLabel}
+            placeholder={chatText(lang).askPlaceholder}
             disabled={busy}
             style={{
               flex: 1,
@@ -671,13 +680,13 @@ export default function QCoreAIPage() {
             background: "rgba(15,23,42,0.02)",
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>QCoreAI capabilities</div>
+          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>{chatText(lang).capsTitle}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
             {[
-              { icon: "🧠", t: "Multi-model", d: "Claude, GPT-4, Gemini, DeepSeek, Grok" },
-              { icon: "🔐", t: "Context-aware", d: "Knows your QRight records, Trust Score, history" },
-              { icon: "⚡", t: "Real-time", d: "Instant responses from 5 AI providers" },
-              { icon: "🌍", t: "Multilingual", d: "English, Russian, and 50+ languages" },
+              { icon: "🧠", ...chatText(lang).caps[0] },
+              { icon: "🔐", ...chatText(lang).caps[1] },
+              { icon: "⚡", ...chatText(lang).caps[2] },
+              { icon: "🌍", ...chatText(lang).caps[3] },
             ].map((f) => (
               <div key={f.t} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <span style={{ fontSize: 16 }}>{f.icon}</span>

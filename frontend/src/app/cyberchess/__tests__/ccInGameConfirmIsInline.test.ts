@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ruOf } from "./_ruSlovar";
 
 const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 
@@ -16,12 +17,17 @@ describe("подтверждение в партии — встроенное, �
   });
   it("«Сдаться»: первый тап взводит, второй выполняет; подпись меняется", () => {
     expect(src).toContain('onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);');
-    expect(src).toContain('{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}');
+    // 13–19.10.2026: подписи переехали в словарь; сторожим вызов ключей в том же условии armed и их русский смысл
+    expect(src).toContain('{armed==="resign"?cc.t("btn.resignConfirm"):cc.t("btn.resign")}');
+    expect(ruOf("btn.resignConfirm")).toBe("Точно сдаться? ✓");
+    expect(ruOf("btn.resign")).toContain("Сдаться");
     expect(src).not.toContain('confirm("Сдаться?")');
   });
   it("«Ничья»: то же", () => {
     expect(src).toContain('onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);');
-    expect(src).toContain('{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}');
+    expect(src).toContain('{armed==="draw"?cc.t("btn.drawConfirm"):cc.t("btn.draw")}');
+    expect(ruOf("btn.drawConfirm")).toBe("Предложить ничью? ✓");
+    expect(ruOf("btn.draw")).toContain("Ничья");
     expect(src).not.toContain('confirm("Предложить ничью?")');
   });
   it("тест-активатор тарифа отсутствует в production-сборке", () => {

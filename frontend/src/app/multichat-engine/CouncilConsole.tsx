@@ -89,9 +89,12 @@ export function имяАгента(id: string, lang?: string): string {
 /** Подписи ролей на экране /en (решение Оркестратора 30.10.2026). На сервер уходит прежняя русская роль из PANEL —
  *  промпт агента не меняется, переводится только то, что видит человек. */
 const ИМЕНА_НА_ENGLISH: Record<string, string> = { analyst: "Analyst", skeptic: "Skeptic", practic: "Practitioner" };
+/** 31.10.2026, решение Оркестратора: на /kk имена ролей были русскими («Аналитик», «Скептик», «Практик»). */
+const ИМЕНА_НА_KAZAKH: Record<string, string> = { analyst: "Талдаушы", skeptic: "Күмәншіл", practic: "Тәжірибеші" };
 
 export function названиеАгента(role: string | undefined, id: string, lang?: string): string {
-  return (lang === "en" ? ИМЕНА_НА_ENGLISH[id] : undefined) || agentTitle(role, id);
+  const перевод = lang === "en" ? ИМЕНА_НА_ENGLISH[id] : lang === "kk" ? ИМЕНА_НА_KAZAKH[id] : undefined;
+  return перевод || agentTitle(role, id);
 }
 
 /** Текст проверки собирает сервер (services/multichat/dissent.ts) — с id агентов:

@@ -122,7 +122,10 @@ export const MC_TEXT: Record<string, Tr> = {
   "Взять в консилиум →": { en: "Use in the council →", kk: "Кеңеске алу →" },
   // ── карточки режимов ──
   "One provider · one model · fastest path": { ru: "Один поставщик · одна модель · самый быстрый путь", kk: "Бір провайдер · бір модель · ең жылдам жол" },
-  "Classic chat experience. Pick Claude, GPT, Gemini, DeepSeek or Grok, ask a question, get an answer. Best for quick lookups and informal conversation.": { ru: "Классический чат. Выберите Claude, GPT, Gemini, DeepSeek или Grok, задайте вопрос — получите ответ. Лучше всего для быстрых справок и свободной беседы.", kk: "Классикалық чат. Claude, GPT, Gemini, DeepSeek немесе Grok таңдап, сұрақ қойыңыз — жауап алыңыз. Жылдам анықтама мен еркін әңгімеге ең қолайлы." },
+  // 31.10.2026: DeepSeek и Grok убраны — на проде у них нет ключей (/api/qcoreai/providers: configured:false), запрос молча
+  // уходил к Claude. Открытые модели через OpenRouter ответили сами (замер 31.10, ?c=probe-multichat).
+  // 31.10.2026, решение Оркестратора: GPT снят до починки ключа OpenAI (прод отвечает openai 401); вернуть, когда заработает.
+  "Classic chat experience. Pick Claude, Gemini or a free open model, ask a question, get an answer. Best for quick lookups and informal conversation.": { ru: "Классический чат. Выберите Claude, Gemini или бесплатную открытую модель, задайте вопрос — получите ответ. Лучше всего для быстрых справок и свободной беседы.", kk: "Классикалық чат. Claude, Gemini немесе тегін ашық модельді таңдап, сұрақ қойыңыз — жауап алыңыз. Жылдам анықтама мен еркін әңгімеге ең қолайлы." },
   "Open single chat →": { ru: "Открыть одиночный чат →", kk: "Жеке чатты ашу →" },
   "New": { ru: "Новое", kk: "Жаңа" },
   "Multi-agent": { ru: "Мультиагент", kk: "Мультиагент" },
@@ -198,6 +201,7 @@ export const MC_TEXT: Record<string, Tr> = {
   "Скопируйте ссылку вручную:": { en: "Copy the link manually:", kk: "Сілтемені қолмен көшіріңіз:" },
   "Отозвать public-ссылку? Старая перестанет работать.": { en: "Revoke the public link? The old one will stop working.", kk: "Жария сілтемені қайтарып алу керек пе? Ескісі жұмысын тоқтатады." },
   "Не удалось скачать": { en: "Download failed", kk: "Жүктеп алу мүмкін болмады" },
+  "Войти или создать аккаунт →": { en: "Sign in or create an account →", kk: "Кіру немесе аккаунт ашу →" },
   "Войдите, чтобы увидеть свои беседы. Библиотека хранит вопросы, ответы всех агентов и расход по каждой беседе.": { en: "Sign in to see your conversations. The library keeps questions, all agents' answers and the usage of each conversation.", kk: "Әңгімелеріңізді көру үшін кіріңіз. Кітапхана сұрақтарды, барлық агенттердің жауаптарын және әр әңгіменің шығынын сақтайды." },
   "← Мультичат": { en: "← Multichat", kk: "← Мультичат" },
   "Библиотека бесед": { en: "Conversation library", kk: "Әңгімелер кітапханасы" },

@@ -1,5 +1,6 @@
 "use client";
 
+import { verifyRequestBody } from "@/lib/verifyRequestLang";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthToken } from "./auth";
 import type { WorkMode, EducationLevel } from "./geo";
@@ -1929,13 +1930,16 @@ export type EmailVerifyRequestResult = {
   email: string | null;
 };
 
-export async function requestEmailVerification(): Promise<EmailVerifyRequestResult> {
+/** `lang` — язык интерфейса от вызывающего; письмо уйдёт на нём (ru|en|kk), иное не шлём. */
+export async function requestEmailVerification(lang?: string): Promise<EmailVerifyRequestResult> {
   const token = typeof window !== "undefined"
     ? getAuthToken()
     : null;
+  const langPart = verifyRequestBody(lang);
   const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...langPart.headers },
+    ...(langPart.body ? { body: langPart.body } : {}),
     cache: "no-store",
   });
   const json = await res.json().catch(() => ({} as Record<string, unknown>));

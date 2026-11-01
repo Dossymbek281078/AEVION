@@ -132,7 +132,7 @@ export default function BureauPage() {
   //
   // Их работа по скорости живёт в других местах файла и пришла БЕЗ конфликта.
   return (
-    <Suspense fallback={<div style={{ minHeight: "60vh", padding: 24, color: "#64748b", fontSize: 16 }}>Загрузка…</div>}>
+    <Suspense fallback={<div style={{ minHeight: "200vh", padding: 24, color: "#64748b", fontSize: 16 }}>Загрузка…</div>}>
       {/* Stripe возвращает сюда с ?paid=1 — без этой отметки оплата не
           связывается с каналом, из которого пришёл человек. */}
       <PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />

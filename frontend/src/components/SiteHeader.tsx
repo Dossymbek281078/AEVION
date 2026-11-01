@@ -112,7 +112,8 @@ export function SiteHeader() {
       .aev-hdr-menu { display: none; }
       .aev-hdr-menu > summary {
         list-style: none; cursor: pointer; user-select: none;
-        padding: 6px 12px; border-radius: 10px; font-size: 20px; line-height: 1;
+        padding: 0 12px; border-radius: 10px; font-size: 20px; line-height: 1;
+        box-sizing: border-box; height: 34px; display: flex; align-items: center;
         border: 1px solid rgba(15,23,42,0.12); background: #fff; color: #0f172a;
       }
       .aev-hdr-menu > summary::-webkit-details-marker { display: none; }
@@ -147,6 +148,8 @@ export function SiteHeader() {
           maxWidth: 1280,
           margin: "0 auto",
           padding: "10px 20px",
+          minHeight: 55,
+          boxSizing: "border-box",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",

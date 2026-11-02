@@ -1101,7 +1101,11 @@ export default function QRightPage() {
                 />
               </div>
 
-              <details style={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", padding: "12px 16px" }}>
+              {/* 02.11.2026 (Продукт, проход письма pb376, гость en 390 px): кабинет подбирает гостевую запись
+                  ТОЛЬКО по почте (bureau.ts: ownerUserId IS NULL AND ownerEmail = почта токена), а поле почты
+                  было спрятано в свёрнутом блоке — гость по короткому пути получал запись, которую никакой
+                  аккаунт потом не увидит. Гостю блок открыт сразу; вошедшему — свёрнут, его почта подставится. */}
+              <details open={!hasAuth} style={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", padding: "12px 16px" }}>
                 <summary style={{ fontSize: 13, fontWeight: 700, color: "#475569", cursor: "pointer" }}>{tq(lang, "Author details (optional — auto-filled if logged in) · bureau / organisation shown on the verification page")}</summary>
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
                   <div>
@@ -1193,7 +1197,9 @@ export default function QRightPage() {
                   сохранена тем же keepChannel, что у остальных внутренних ссылок (auth/loginHref.ts). */}
               {!hasAuth && (
                 <p data-qright-guest-account-hint style={{ margin: "14px auto 0", maxWidth: 560, fontSize: 13, color: "#334155", lineHeight: 1.55 }}>
-                  {tq(lang, "Create an account with this same email — the work will appear in your dashboard.")}{" "}
+                  {ownerEmail.trim()
+                    ? tq(lang, "Create an account with this same email — the work will appear in your dashboard.")
+                    : tq(lang, "This record was saved without an email, so no dashboard can pick it up — download the PDF and the bundle below. Create an account before your next work:")}{" "}
                   <Link href={ссылкаВходаВБюро} style={{ color: "#0f766e", fontWeight: 800, textDecoration: "underline" }}>
                     {tq(lang, "Create account or sign in →")}
                   </Link>

@@ -33,7 +33,8 @@ describe("PipelineSteps", () => {
     const { container } = render(<PipelineSteps current="qright" />);
     const anchors = container.querySelectorAll("a");
     expect(anchors).toHaveLength(6);
-    expect(anchors[0].getAttribute("href")).toBe("/auth");
+    // 2.11.2026: шаг «Авторизация» несёт возврат и метку канала — /auth?next=…
+    expect(anchors[0].getAttribute("href")).toMatch(/^\/auth\?next=/);
     expect(anchors[3].getAttribute("href")).toBe("/quantum-shield");
     expect(anchors[5].getAttribute("href")).toBe("/planet");
   });

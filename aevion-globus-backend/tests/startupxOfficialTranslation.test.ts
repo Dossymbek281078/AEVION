@@ -39,7 +39,7 @@ describe("официальный перевод заявки AEVION", () => {
 
   it("все выдачи ленты и карточки пропускают перевод через withOfficialTranslation", () => {
     const src = readFileSync(join(__dirname, "../src/routes/startupExchange.ts"), "utf8");
-    expect((src.match(/(?<!function )listingResponse(/g) ?? []).length).toBe(4);
+    expect((src.match(/(?<!function )listingResponse\(/g) ?? []).length).toBe(4);
     expect((src.match(/withOfficialTranslation\(publicView\(/g) ?? []).length).toBe(0);
   });
 });

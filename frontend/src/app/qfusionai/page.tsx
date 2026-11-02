@@ -213,7 +213,7 @@ export default function QFusionAIPage() {
             {[
               { id: "speed", color: "#00ccff", desc: "Первый быстрый провайдер (Gemini→OpenAI→...)" },
               { id: "quality", color: "#cc88ff", desc: "Лучший для рассуждений (Anthropic→...)" },
-              { id: "cost", color: "#ffcc00", desc: "Самый дешёвый (DeepSeek→Gemini→...)" },
+              { id: "cost", color: "#ffcc00", desc: "Самый дешёвый из подключённых (Gemini→OpenAI→...)" },
               { id: "auto", color: "#00ff88", desc: "Авто: короткий→speed, длинный→quality" },
             ].map((s) => (
               <div key={s.id} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>

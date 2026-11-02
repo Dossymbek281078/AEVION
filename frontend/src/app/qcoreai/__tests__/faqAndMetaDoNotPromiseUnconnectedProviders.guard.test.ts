@@ -16,5 +16,6 @@ describe("FAQ цен и meta QFusionAI не обещают неподключё�
   }
   it("meta /qfusionai без DeepSeek/Grok/«пять провайдеров»", () => {
     expect(read("app/qfusionai/layout.tsx")).not.toMatch(/DeepSeek|Grok|пять провайдеров|5 LLM/);
+    expect(read("app/qfusionai/page.tsx")).not.toMatch(/Самый дешёвый .{0,30}DeepSeek/);
   });
 });

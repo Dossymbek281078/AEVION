@@ -5,6 +5,9 @@ import { apiUrl } from "@/lib/apiBase";
 // Один форматтер денег на модуль: локальная копия здесь разошлась с карточкой
 // ("$30.0K" против "$30K") ровно в тот момент, когда формат поменяли в одном месте.
 import { usd } from "../lib";
+import { serverLang } from "@/lib/serverLang";
+import { tabTitleLang } from "@/lib/tabTitles";
+import { sx } from "../sxText";
 
 /**
  * Link preview for a single listing.
@@ -36,16 +39,16 @@ interface DealTerms {
 }
 
 /** The one line an investor should see in the preview: what is on offer. */
-function dealLine(deal: DealTerms | null | undefined): string | null {
+function dealLine(deal: DealTerms | null | undefined, lang: string): string | null {
   if (!deal) return null;
   if (deal.intent === "raise" && deal.askUsd && deal.equityOfferedPct) {
-    return `${usd(deal.askUsd)} за ${deal.equityOfferedPct}%`;
+    return sx(lang, "{price} за {pct}%", { price: usd(deal.askUsd), pct: deal.equityOfferedPct });
   }
   if (deal.intent === "sell_stake" && deal.stakePriceUsd && deal.stakeForSalePct) {
-    return `${deal.stakeForSalePct}% за ${usd(deal.stakePriceUsd)}`;
+    return sx(lang, "{pct}% за {price}", { pct: deal.stakeForSalePct, price: usd(deal.stakePriceUsd) });
   }
   if (deal.intent === "sell_full" && deal.askingPriceUsd) {
-    return `Продажа целиком — ${usd(deal.askingPriceUsd)}`;
+    return sx(lang, "Продажа целиком — {price}", { price: usd(deal.askingPriceUsd) });
   }
   return null;
 }
@@ -64,9 +67,10 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
+  const lang = tabTitleLang(await serverLang("ru"));
   const url = `${SITE}/startup-exchange/${id}`;
   const fallback: Metadata = {
-    title: "Заявка на бирже стартапов · AEVION",
+    title: sx(lang, "Заявка на бирже стартапов · AEVION"),
     // canonical записан литералом, а не переменной: сторож
     // layoutCanonicalDoesNotHideChildren читает исходник текстом и
     // переменную не видит — страница числилась бы спрятанной.
@@ -88,15 +92,15 @@ export async function generateMetadata({
     // hasOwnProperty, not `?? `: TIER_LABEL["constructor"] is a function, and a
     // function interpolated into a <title> renders as its source code.
     const tierKey = String(l.tier);
-    const tier = Object.prototype.hasOwnProperty.call(TIER_LABEL, tierKey) ? TIER_LABEL[tierKey] : "Заявка";
-    const deal = dealLine(l.deal as DealTerms | null);
+    const tier = Object.prototype.hasOwnProperty.call(TIER_LABEL, tierKey) ? sx(lang, TIER_LABEL[tierKey]) : sx(lang, "Заявка");
+    const deal = dealLine(l.deal as DealTerms | null, lang);
     const score = typeof l.assessment_score === "number" ? `${l.assessment_score}/100` : null;
     // Обрезка по границе слова: "…транспортные компании. М" в превью выглядит
     // как сломанная страница, а не как сокращённый текст.
     const summary = typeof l.description === "string" ? clip(l.description.replace(/\s+/g, " "), 180) : "";
 
-    const title = `${l.title} — ${tier}${deal ? `, ${deal}` : ""} · Биржа стартапов AEVION`;
-    const description = [deal, score ? `балл разбора ${score}` : null, summary]
+    const title = `${l.title} — ${tier}${deal ? `, ${deal}` : ""} · ${sx(lang, "Биржа стартапов AEVION")}`;
+    const description = [deal, score ? `${sx(lang, "балл разбора")} ${score}` : null, summary]
       .filter(Boolean)
       .join(" · ")
       .slice(0, 300);

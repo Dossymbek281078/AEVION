@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useI18nOptional } from "@/lib/i18n";
+import { useSxLang } from "./useSxLang";
+import { sx } from "./sxText";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
@@ -77,8 +78,9 @@ const SX_UI: Record<string, { searchAria: string; searchPh: string; ideaPh: stri
 };
 
 export default function StartupExchangePage() {
-  const sxLang = useI18nOptional()?.lang ?? "ru";
-  const SX = SX_UI[sxLang] ?? SX_UI.ru;
+  const sxLang = useSxLang();
+  const SX = SX_UI[sxLang] ?? SX_UI.en;
+  const t = (s: string, v?: Record<string, string | number>) => sx(sxLang, s, v);
   const [tiers, setTiers] = useState<TierSpec[]>([]);
   const [sectors, setSectors] = useState<Array<{ id: string; label: string }>>([]);
   const [listings, setListings] = useState<Listing[]>([]);
@@ -151,7 +153,7 @@ export default function StartupExchangePage() {
   }, [fetchStats]);
 
   function handlePublished(listing: Listing) {
-    setToast(`Опубликовано: «${listing.title}» — заявка №${listing.id}`);
+    setToast(t("Опубликовано: «{title}» — заявка №{id}", { title: listing.title, id: listing.id }));
     // The wizard stays mounted on purpose. It has just been handed the founder's
     // one-time link to their offers, and collapsing the form here would take that
     // link off the screen before it could be copied.
@@ -179,8 +181,8 @@ export default function StartupExchangePage() {
   })();
 
   const tabs: Array<{ id: TierFilter; label: string; count?: number }> = [
-    { id: "", label: "Все", count: stats?.total },
-    ...tiers.map((t) => ({ id: t.id as TierFilter, label: t.label, count: stats?.byTier?.[t.id] })),
+    { id: "", label: t("Все"), count: stats?.total },
+    ...tiers.map((tr) => ({ id: tr.id as TierFilter, label: t(tr.label), count: stats?.byTier?.[tr.id] })),
   ];
 
   return (
@@ -214,10 +216,10 @@ export default function StartupExchangePage() {
               marginBottom: 12,
             }}
           >
-            Биржа стартапов
+            {t("Биржа стартапов")}
           </div>
           <h1 style={{ margin: "0 0 10px", fontSize: 32, fontWeight: 800, color: "#0f172a", lineHeight: 1.2, maxWidth: 760 }}>
-            Идея, MVP или готовый продукт — с ценой, долей и бесплатным разбором
+            {t("Идея, MVP или готовый продукт — с ценой, долей и бесплатным разбором")}
           </h1>
           {/* 144 (18.10.2026): действие гостя — сразу под заголовком, абзац и плашка цены ниже. Замер на проде
               eaca8fb62, 390×844: плашка 262, заголовок 467..659, кнопка за кадром (844); в кадре были только
@@ -239,13 +241,11 @@ export default function StartupExchangePage() {
                 cursor: "pointer",
               }}
             >
-              Опишите проект — покажу бесплатный разбор
+              {t("Опишите проект — покажу бесплатный разбор")}
             </button>
           )}
           <p style={{ margin: 0, fontSize: 14.5, color: "#475569", lineHeight: 1.65, maxWidth: 720 }}>
-            Хорошие идеи гибнут не потому, что они плохие, а потому, что их не с чем сравнить: инвестор
-            видит текст без условий и не понимает, о чём разговор. Здесь у каждой заявки есть уровень,
-            названные условия сделки и бесплатный разбор, который сравнивает эти условия с рынком.
+            {t("Хорошие идеи гибнут не потому, что они плохие, а потому, что их не с чем сравнить: инвестор видит текст без условий и не понимает, о чём разговор. Здесь у каждой заявки есть уровень, названные условия сделки и бесплатный разбор, который сравнивает эти условия с рынком.")}
           </p>
         </header>
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
@@ -255,12 +255,12 @@ export default function StartupExchangePage() {
         {/* ── Tier explainer ───────────────────────────────────────────────── */}
         {tiers.length > 0 && !showWizard && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12, marginBottom: 24 }}>
-            {tiers.map((t) => (
-              <div key={t.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16, borderTop: `3px solid ${TIER_ACCENT[t.id]}` }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 5 }}>{t.label}</div>
-                <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>{t.offer}</p>
+            {tiers.map((tr) => (
+              <div key={tr.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16, borderTop: `3px solid ${TIER_ACCENT[tr.id]}` }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 5 }}>{t(tr.label)}</div>
+                <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>{t(tr.offer)}</p>
                 <div style={{ fontSize: 11.5, color: "#64748b" }}>
-                  Вход инвестора: {usd(t.ticketUsd.low)} – {usd(t.ticketUsd.high)}
+                  {t("Вход инвестора:")} {usd(tr.ticketUsd.low)} – {usd(tr.ticketUsd.high)}
                 </div>
               </div>
             ))}
@@ -271,13 +271,13 @@ export default function StartupExchangePage() {
         {showWizard && (
           <section style={{ marginBottom: 28 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: "#0f172a" }}>Подать заявку</h2>
+              <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: "#0f172a" }}>{t("Подать заявку")}</h2>
               <button
                 type="button"
                 onClick={() => setShowWizard(false)}
                 style={{ background: "none", border: "none", color: "#64748b", fontSize: 13, cursor: "pointer", fontWeight: 600, minHeight: 36, padding: "8px 6px" }}
               >
-                Свернуть
+                {t("Свернуть")}
               </button>
             </div>
             <ListingWizard tiers={tiers} sectors={sectors} onPublished={handlePublished} />
@@ -287,10 +287,10 @@ export default function StartupExchangePage() {
         {/* ── Stats ────────────────────────────────────────────────────────── */}
         {stats && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>
-            <StatTile label="Заявок" value={num(stats.total)} accent="#0f172a" />
-            <StatTile label="За 7 дней" value={num(stats.recentCount)} accent="#0d9488" />
-            <StatTile label="С разбором" value={num(stats.assessed)} accent="#7c3aed" />
-            <StatTile label="Средний балл" value={(stats.assessed ?? 0) > 0 ? num(stats.avgScore) : "—"} accent="#b45309" />
+            <StatTile label={t("Заявок")} value={num(stats.total)} accent="#0f172a" />
+            <StatTile label={t("За 7 дней")} value={num(stats.recentCount)} accent="#0d9488" />
+            <StatTile label={t("С разбором")} value={num(stats.assessed)} accent="#7c3aed" />
+            <StatTile label={t("Средний балл")} value={(stats.assessed ?? 0) > 0 ? num(stats.avgScore) : "—"} accent="#b45309" />
           </div>
         )}
 
@@ -303,7 +303,7 @@ export default function StartupExchangePage() {
             id="startupx-feed-heading"
             style={{ margin: "0 0 12px", fontSize: 19, fontWeight: 800, color: "#0f172a" }}
           >
-            Заявки на бирже
+            {t("Заявки на бирже")}
           </h2>
 
           {/* Инвестор ищет словами из заявки — «логистика», «юристы», «подписка», —
@@ -337,7 +337,7 @@ export default function StartupExchangePage() {
               type="submit"
               style={{ padding: "9px 16px", borderRadius: 9, border: "none", background: "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
             >
-              Найти
+              {t("Найти")}
             </button>
             {searchApplied && (
               <button
@@ -349,7 +349,7 @@ export default function StartupExchangePage() {
                 }}
                 style={{ padding: "9px 14px", borderRadius: 9, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
               >
-                Сбросить
+                {t("Сбросить")}
               </button>
             )}
           </form>
@@ -387,22 +387,22 @@ export default function StartupExchangePage() {
                   setSectorFilter(e.target.value);
                   setOffset(0);
                 }}
-                aria-label="Отрасль"
+                aria-label={t("Отрасль")}
                 style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12.5, fontWeight: 600, color: "#334155", cursor: "pointer" }}
               >
-                <option value="">Все отрасли</option>
+                <option value="">{t("Все отрасли")}</option>
                 {sectors.map((s) => (
                   <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
               </select>
               <a
                 href={rssHref}
-                title="Подписаться на этот срез заявок в читалке — без аккаунта и без писем"
+                title={t("Подписаться на этот срез заявок в читалке — без аккаунта и без писем")}
                 style={{ display: "inline-flex", alignItems: "center", minHeight: 34, padding: "6px 4px", fontSize: 12.5, fontWeight: 600, color: "#7c3aed", textDecoration: "none" }}
               >
-                RSS этого среза
+                {t("RSS этого среза")}
               </a>
-              <span style={{ fontSize: 12, color: "#64748b" }}>Сортировка:</span>
+              <span style={{ fontSize: 12, color: "#64748b" }}>{t("Сортировка:")}</span>
               <button
                 type="button"
                 onClick={() => {
@@ -411,23 +411,23 @@ export default function StartupExchangePage() {
                 }}
                 style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12.5, fontWeight: 600, color: "#334155", cursor: "pointer" }}
               >
-                {sort === "recent" ? "сначала новые" : "по баллу разбора"}
+                {sort === "recent" ? t("сначала новые") : t("по баллу разбора")}
               </button>
             </div>
           </div>
 
-          {loading && <p style={{ color: "#64748b", textAlign: "center", padding: 36 }}>Загружаю заявки…</p>}
+          {loading && <p style={{ color: "#64748b", textAlign: "center", padding: 36 }}>{t("Загружаю заявки…")}</p>}
 
           {!loading && loadError && (
             <div style={{ background: "#fff", border: "1px solid #fecaca", borderRadius: 14, padding: 28, textAlign: "center", color: "#7f1d1d" }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Лента не загрузилась</div>
-              <div style={{ fontSize: 13.5, color: "#334155" }}>{loadError}</div>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>{t("Лента не загрузилась")}</div>
+              <div style={{ fontSize: 13.5, color: "#334155" }}>{t(loadError)}</div>
               <button
                 type="button"
                 onClick={() => fetchListings(tierFilter, offset, sort, sectorFilter, searchApplied)}
                 style={{ marginTop: 14, padding: "9px 18px", borderRadius: 9, border: "none", background: "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
               >
-                Попробовать снова
+                {t("Попробовать снова")}
               </button>
             </div>
           )}
@@ -447,15 +447,15 @@ export default function StartupExchangePage() {
               */}
               <div>
                 {tierFilter || sectorFilter
-                  ? "В этой категории пока пусто."
-                  : "Заявок пока нет — биржа только открывается."}
+                  ? t("В этой категории пока пусто.")
+                  : t("Заявок пока нет — биржа только открывается.")}
               </div>
               <button
                 type="button"
                 onClick={() => setShowWizard(true)}
                 style={{ marginTop: 12, padding: "9px 18px", borderRadius: 9, border: "none", background: "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
               >
-                Стать первым
+                {t("Стать первым")}
               </button>
             </div>
           )}
@@ -470,11 +470,11 @@ export default function StartupExchangePage() {
 
           {total > PAGE_SIZE && (
             <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 16 }}>
-              <PageBtn disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>← Назад</PageBtn>
+              <PageBtn disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>{t("← Назад")}</PageBtn>
               <span style={{ alignSelf: "center", fontSize: 12, color: "#64748b" }}>
-                {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} из {total}
+                {t("{from}–{to} из {total}", { from: offset + 1, to: Math.min(offset + PAGE_SIZE, total), total })}
               </span>
-              <PageBtn disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}>Вперёд →</PageBtn>
+              <PageBtn disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}>{t("Вперёд →")}</PageBtn>
             </div>
           )}
         </section>
@@ -492,10 +492,9 @@ export default function StartupExchangePage() {
           }}
         >
           <div style={{ padding: "0 18px 4px" }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>Что достроить на бирже</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{t("Что достроить на бирже")}</div>
             <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#94a3b8", lineHeight: 1.55, maxWidth: 620 }}>
-              Это не заявка и не отклик — сюда пишут, чего не хватает самой площадке. Читаем и
-              достраиваем.
+              {t("Это не заявка и не отклик — сюда пишут, чего не хватает самой площадке. Читаем и достраиваем.")}
             </p>
           </div>
           <MvpConceptBoard
@@ -508,8 +507,8 @@ export default function StartupExchangePage() {
             // увидит готовое «Пока пусто. Стань первым, кто поделится».
             hideAuthors={["ci"]}
             accent="amber"
-            sectionTitle="Предложения по площадке"
-            sectionHint="Каких данных не хватает инвестору? Что мешает основателю подать заявку?"
+            sectionTitle={t("Предложения по площадке")}
+            sectionHint={t("Каких данных не хватает инвестору? Что мешает основателю подать заявку?")}
             titleField="idea"
             summaryField="rationale"
             fields={[
@@ -527,7 +526,7 @@ export default function StartupExchangePage() {
           onClose={() => setInterestFor(null)}
           onSubmitted={(id) => {
             setInterestFor(null);
-            setToast(`Предложение отправлено основателю заявки №${id}`);
+            setToast(t("Предложение отправлено основателю заявки №{id}", { id }));
             fetchListings(tierFilter, offset, sort, sectorFilter, searchApplied);
           }}
         />

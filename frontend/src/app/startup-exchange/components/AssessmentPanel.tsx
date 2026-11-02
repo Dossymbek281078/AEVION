@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useSxLang } from "../useSxLang";
+import { sx } from "../sxText";
 import { BAND_STYLE, usd, type Assessment, type RedFlag } from "../lib";
 
 /**
@@ -26,6 +28,8 @@ const SEVERITY_STYLE: Record<RedFlag["severity"], { bg: string; border: string; 
 };
 
 export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact?: boolean }) {
+  const lang = useSxLang();
+  const t = (s: string, v?: Record<string, string | number>) => sx(lang, s, v);
   const [showMethod, setShowMethod] = useState(false);
   const band = BAND_STYLE[a.band];
   const ratio = a.deal.implied.ratioToBandHigh;
@@ -36,18 +40,18 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
       <div style={{ padding: "18px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ minWidth: 92 }}>
           <div style={{ fontSize: 40, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{a.score}</div>
-          <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, letterSpacing: "0.04em" }}>ИЗ 100</div>
+          <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, letterSpacing: "0.04em" }}>{t("ИЗ 100")}</div>
         </div>
         <div style={{ flex: 1, minWidth: 220 }}>
           <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, background: band.bg, color: band.color, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
-            {band.label}
+            {t(band.label)}
           </span>
           <p style={{ margin: 0, fontSize: 14, color: "#334155", lineHeight: 1.55 }}>{a.headline}</p>
           <p style={{ margin: "8px 0 0", fontSize: 12, color: a.sector.origin === "fallback" ? "#b45309" : "#64748b" }}>
             {a.sector.label}
-            {a.sector.origin === "detected" && " (определена по описанию)"}
-            {a.sector.origin === "fallback" && " — отрасль не распознана, цифры рынка общие"}
-            {" · доля оценки на фактических цифрах: "}
+            {a.sector.origin === "detected" && ` ${t("(определена по описанию)")}`}
+            {a.sector.origin === "fallback" && ` ${t("— отрасль не распознана, цифры рынка общие")}`}
+            {` · ${t("доля оценки на фактических цифрах:")} `}
             {Math.round(a.evidenceCoverage * 100)}%
           </p>
         </div>
@@ -55,12 +59,12 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
 
       {/* Deal band — the part an investor actually reads */}
       <div style={{ padding: "18px 20px", borderBottom: "1px solid #f1f5f9", background: "#fcfcfd" }}>
-        <SectionTitle>Сделка против рынка</SectionTitle>
+        <SectionTitle>{t("Сделка против рынка")}</SectionTitle>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 10 }}>
-          <Cell label="Просят по факту" value={a.deal.implied.postMoneyUsd !== null ? usd(a.deal.implied.postMoneyUsd) : "—"} hint={a.deal.implied.formula ?? "условия не позволяют посчитать"} />
-          <Cell label="Рыночный диапазон" value={`${usd(a.deal.band.low)} – ${usd(a.deal.band.high)}`} hint={a.deal.band.basis} />
+          <Cell label={t("Просят по факту")} value={a.deal.implied.postMoneyUsd !== null ? usd(a.deal.implied.postMoneyUsd) : "—"} hint={a.deal.implied.formula ?? t("условия не позволяют посчитать")} />
+          <Cell label={t("Рыночный диапазон")} value={`${usd(a.deal.band.low)} – ${usd(a.deal.band.high)}`} hint={a.deal.band.basis} />
           <Cell
-            label="Чек инвестора"
+            label={t("Чек инвестора")}
             value={a.deal.ticket.low === a.deal.ticket.high ? usd(a.deal.ticket.low) : `${usd(a.deal.ticket.low)} – ${usd(a.deal.ticket.high)}`}
             hint={a.deal.ticket.note}
           />
@@ -78,15 +82,15 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
             }}
           >
             {ratio <= 1
-              ? `Запрос внутри диапазона — ${Math.round(ratio * 100)}% от верхней границы.`
-              : `Запрос выше верхней границы рынка в ${ratio.toFixed(1)}×. Это не запрет, но переговоры начнутся с этого.`}
+              ? t("Запрос внутри диапазона — {pct}% от верхней границы.", { pct: Math.round(ratio * 100) })
+              : t("Запрос выше верхней границы рынка в {n}×. Это не запрет, но переговоры начнутся с этого.", { n: ratio.toFixed(1) })}
           </div>
         )}
       </div>
 
       {/* Factors */}
       <div style={{ padding: "18px 20px", borderBottom: "1px solid #f1f5f9" }}>
-        <SectionTitle>Из чего сложился балл</SectionTitle>
+        <SectionTitle>{t("Из чего сложился балл")}</SectionTitle>
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
           {a.factors.map((f) => (
             <div key={f.key}>
@@ -94,7 +98,7 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
                   {f.label}
                   <span style={{ fontWeight: 500, color: "#64748b", fontSize: 11, marginLeft: 6 }}>
-                    вес {Math.round(f.weight * 100)}% · {BASIS_LABEL[f.basis] ?? f.basis}
+                    {t("вес {pct}%", { pct: Math.round(f.weight * 100) })} · {BASIS_LABEL[f.basis] ? t(BASIS_LABEL[f.basis]) : f.basis}
                   </span>
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{f.score}</span>
@@ -111,13 +115,13 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
       {/* Red flags */}
       {a.redFlags.length > 0 && (
         <div style={{ padding: "18px 20px", borderBottom: "1px solid #f1f5f9" }}>
-          <SectionTitle>Что мешает сделке ({a.redFlags.length})</SectionTitle>
+          <SectionTitle>{t("Что мешает сделке")} ({a.redFlags.length})</SectionTitle>
           <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
             {a.redFlags.map((f, i) => {
               const s = SEVERITY_STYLE[f.severity];
               return (
                 <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "10px 12px" }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: s.color, letterSpacing: "0.06em", textTransform: "uppercase" }}>{s.label}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: s.color, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t(s.label)}</span>
                   <p style={{ margin: "4px 0 0", fontSize: 13, color: "#334155", lineHeight: 1.55 }}>{f.message}</p>
                 </div>
               );
@@ -128,7 +132,7 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
 
       {/* Blind spots — the honest half */}
       <div style={{ padding: "18px 20px", background: "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
-        <SectionTitle>Чего этот анализ не видел</SectionTitle>
+        <SectionTitle>{t("Чего этот анализ не видел")}</SectionTitle>
         <ul style={{ margin: "10px 0 0", paddingLeft: 18, display: "grid", gap: 6 }}>
           {a.blindSpots.map((b, i) => (
             <li key={i} style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.55 }}>{b}</li>
@@ -143,14 +147,13 @@ export function AssessmentPanel({ a, compact = false }: { a: Assessment; compact
           onClick={() => setShowMethod((v) => !v)}
           style={{ background: "none", border: "none", padding: "8px 0", minHeight: 36, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#7c3aed", textAlign: "left" }}
         >
-          {showMethod ? "Скрыть методику" : "Откуда взяты рыночные цифры"}
+          {showMethod ? t("Скрыть методику") : t("Откуда взяты рыночные цифры")}
         </button>
         {showMethod && (
           <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
             <p style={{ margin: 0, fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
-              Диапазоны — это published market conventions, а не наш замер. Балл считается формулой без участия языковой
-              модели: одинаковая заявка всегда даёт одинаковый результат, поэтому два проекта можно сравнивать между собой.
-              Версия правил: {a.version}.
+              {t("Диапазоны — это published market conventions, а не наш замер. Балл считается формулой без участия языковой модели: одинаковая заявка всегда даёт одинаковый результат, поэтому два проекта можно сравнивать между собой.")}{" "}
+              {t("Версия правил: {n}.", { n: a.version })}
             </p>
             {a.sources.map((s) => (
               <a

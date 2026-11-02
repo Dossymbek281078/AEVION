@@ -6,6 +6,8 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { EditTermsForm } from "../../components/EditTermsForm";
+import { useSxLang } from "../../useSxLang";
+import { sx, sxLocale } from "../../sxText";
 import { AssessmentPanel } from "../../components/AssessmentPanel";
 import { INTENT_LABEL, dealHeadline, labelOf, startupxApi, usd, type Listing, type Offer } from "../../lib";
 
@@ -18,6 +20,8 @@ import { INTENT_LABEL, dealHeadline, labelOf, startupxApi, usd, type Listing, ty
  */
 export default function OffersPage() {
   const params = useParams<{ id: string }>();
+  const lang = useSxLang();
+  const t = (s: string, v?: Record<string, string | number>) => sx(lang, s, v);
   const search = useSearchParams();
   const id = Number(params?.id);
   const token = search?.get("token") ?? "";
@@ -73,7 +77,7 @@ export default function OffersPage() {
       <>
         <Wave1Nav />
         <ProductPageShell>
-          <p style={{ color: "#64748b", padding: 40, textAlign: "center" }}>Открываю предложения…</p>
+          <p style={{ color: "#64748b", padding: 40, textAlign: "center" }}>{t("Открываю предложения…")}</p>
         </ProductPageShell>
       </>
     );
@@ -86,15 +90,13 @@ export default function OffersPage() {
         <ProductPageShell>
           <div style={{ maxWidth: 560, margin: "40px auto", textAlign: "center" }}>
             <h1 style={{ fontSize: 21, fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>
-              Ссылка не открывает эту заявку
+              {t("Ссылка не открывает эту заявку")}
             </h1>
             <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
-              Предложения видны только по личной ссылке, которую биржа выдала один раз — сразу после
-              публикации заявки. Мы не храним её у себя: в базе лежит только отпечаток, поэтому
-              восстановить ссылку нельзя даже нам. Если она потеряна, подайте заявку заново.
+              {t("Предложения видны только по личной ссылке, которую биржа выдала один раз — сразу после публикации заявки. Мы не храним её у себя: в базе лежит только отпечаток, поэтому восстановить ссылку нельзя даже нам. Если она потеряна, подайте заявку заново.")}
             </p>
             <Link href="/startup-exchange" style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "none" }}>
-              ← К бирже
+              {t("← К бирже")}
             </Link>
           </div>
         </ProductPageShell>
@@ -112,31 +114,27 @@ export default function OffersPage() {
           href={`/startup-exchange/${listing.id}`}
           style={{ display: "inline-flex", alignItems: "center", minHeight: 36, padding: "6px 2px", fontSize: 13, color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}
         >
-          ← К заявке
+          {t("← К заявке")}
         </Link>
 
         <header style={{ margin: "14px 0 22px" }}>
           <h1 style={{ margin: "0 0 6px", fontSize: 26, fontWeight: 800, color: "#0f172a" }}>
-            Предложения по «{listing.title}»
+            {t("Предложения по «{title}»", { title: listing.title })}
           </h1>
           <p style={{ margin: 0, fontSize: 13.5, color: "#64748b" }}>
-            Вы просите: {dealHeadline(listing.deal)} · страницу открывали {listing.views ?? 0} раз ·
-            предложений: {offers.length}
+            {t("Вы просите:")} {dealHeadline(listing.deal, lang)} · {t("страницу открывали {n} раз", { n: listing.views ?? 0 })} · {t("предложений:")} {offers.length}
           </p>
           {/* Два нуля лечатся противоположным, и без этой строки основатель будет
               лечить не то: правит текст, когда его просто не видят, или гонит
               охват, когда проблема в цене. */}
           {(listing.views ?? 0) >= 20 && offers.length === 0 && (
             <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#92400e", lineHeight: 1.55, maxWidth: 640 }}>
-              Заявку смотрят, но не откликаются — значит вопрос не в охвате, а в том, что видит
-              открывший: чаще всего это цена относительно рыночного диапазона или нераскрытые цифры.
-              И то и другое правится здесь же, ниже.
+              {t("Заявку смотрят, но не откликаются — значит вопрос не в охвате, а в том, что видит открывший: чаще всего это цена относительно рыночного диапазона или нераскрытые цифры. И то и другое правится здесь же, ниже.")}
             </p>
           )}
           {(listing.views ?? 0) < 5 && (
             <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#64748b", lineHeight: 1.55, maxWidth: 640 }}>
-              Показов пока почти нет — текст и цена тут ни при чём, вопрос в том, что ссылку никто
-              не видел. Заявка уже в ленте и в поиске; дальше работает то, куда вы её отправите сами.
+              {t("Показов пока почти нет — текст и цена тут ни при чём, вопрос в том, что ссылку никто не видел. Заявка уже в ленте и в поиске; дальше работает то, куда вы её отправите сами.")}
             </p>
           )}
         </header>
@@ -145,8 +143,7 @@ export default function OffersPage() {
           <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 32, textAlign: "center", color: "#64748b" }}>
             <div style={{ fontSize: 26, marginBottom: 8 }}>○</div>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>
-              Пока никто не откликнулся. Балл разбора и ясность описания вы можете улучшить сами —
-              остальное решают время и охват.
+              {t("Пока никто не откликнулся. Балл разбора и ясность описания вы можете улучшить сами — остальное решают время и охват.")}
             </p>
           </div>
         ) : (
@@ -159,19 +156,19 @@ export default function OffersPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a" }}>
-                        {o.ticketUsd ? usd(o.ticketUsd) : "Чек не назван"}
-                        {o.equityPct ? <span style={{ color: "#475569", fontWeight: 700 }}> за {o.equityPct}%</span> : null}
+                        {o.ticketUsd ? usd(o.ticketUsd) : t("Чек не назван")}
+                        {o.equityPct ? <span style={{ color: "#475569", fontWeight: 700 }}> {t("за")} {o.equityPct}%</span> : null}
                       </div>
                       <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 2 }}>
-                        {labelOf(INTENT_LABEL, o.intent, "Тип сделки не указан")}
+                        {t(labelOf(INTENT_LABEL, o.intent, "Тип сделки не указан"))}
                         {/* Не «оценка» — это арифметика самого инвестора: чек делить
                             на предложенную долю. Мы проект не оцениваем и говорим это
                             на каждом экране, значит и подпись должна называть вещи так. */}
-                        {implied !== null && ` · по его условиям — ${usd(implied)} за всё`}
+                        {implied !== null && ` · ${t("по его условиям — {price} за всё", { price: usd(implied) })}`}
                       </div>
                     </div>
                     <div style={{ fontSize: 11.5, color: "#64748b", textAlign: "right" }}>
-                      {new Date(o.createdAt).toLocaleString("ru-RU")}
+                      {new Date(o.createdAt).toLocaleString(sxLocale(lang))}
                     </div>
                   </div>
 
@@ -200,7 +197,7 @@ export default function OffersPage() {
                       textDecoration: "none",
                     }}
                   >
-                    Ответить: {o.investorEmail} ↗
+                    {t("Ответить:")} {o.investorEmail} ↗
                   </a>
                 </article>
               );
@@ -211,12 +208,10 @@ export default function OffersPage() {
         {listing.removed_reason && (
           <div style={{ marginTop: 22, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: "14px 16px" }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: "#991b1b", marginBottom: 4 }}>
-              Заявка снята площадкой
+              {t("Заявка снята площадкой")}
             </div>
             <p style={{ margin: 0, fontSize: 13, color: "#7f1d1d", lineHeight: 1.6 }}>
-              Причина: {listing.removed_reason}. Эта страница и полученные предложения остаются у вас,
-              но в ленте заявки больше нет, и вернуть её кнопкой нельзя — сначала нужно устранить
-              причину и написать нам.
+              {t("Причина:")} {listing.removed_reason}. {t("Эта страница и полученные предложения остаются у вас, но в ленте заявки больше нет, и вернуть её кнопкой нельзя — сначала нужно устранить причину и написать нам.")}
             </p>
           </div>
         )}
@@ -237,13 +232,12 @@ export default function OffersPage() {
         <div style={{ marginTop: 26, paddingTop: 18, borderTop: "1px solid #e2e8f0" }}>
           {listing.qright_protected && (
             <p style={{ margin: "0 0 12px", fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
-              Нашли инвестора или передумали? Снимите заявку — она исчезнет из ленты, но запись и
-              полученные предложения останутся у вас, вместе с отпечатком авторства на дату подачи.
+              {t("Нашли инвестора или передумали? Снимите заявку — она исчезнет из ленты, но запись и полученные предложения останутся у вас, вместе с отпечатком авторства на дату подачи.")}
             </p>
           )}
           {withdrawn ? (
             <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>
-              Заявка снята с публикации. Эта страница по-прежнему открывается по вашей ссылке.
+              {t("Заявка снята с публикации. Эта страница по-прежнему открывается по вашей ссылке.")}
             </div>
           ) : (
             <button
@@ -261,15 +255,13 @@ export default function OffersPage() {
                 cursor: busy ? "wait" : "pointer",
               }}
             >
-              {confirming ? "Точно снять? Нажмите ещё раз" : "Снять заявку с публикации"}
+              {confirming ? t("Точно снять? Нажмите ещё раз") : t("Снять заявку с публикации")}
             </button>
           )}
         </div>
 
         <p style={{ margin: "22px 0 0", fontSize: 11.5, color: "#64748b", lineHeight: 1.6, maxWidth: 640 }}>
-          Отклик — заявка на разговор с названными условиями, а не оферта и не обязательство ни для
-          одной из сторон. Проверять инвестора, обсуждать цену и оформлять сделку вы будете сами;
-          биржа в этом не участвует и денег не держит.
+          {t("Отклик — заявка на разговор с названными условиями, а не оферта и не обязательство ни для одной из сторон. Проверять инвестора, обсуждать цену и оформлять сделку вы будете сами; биржа в этом не участвует и денег не держит.")}
         </p>
       </ProductPageShell>
     </>

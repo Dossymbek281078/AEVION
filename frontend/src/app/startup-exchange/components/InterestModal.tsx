@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useI18nOptional } from "@/lib/i18n";
+import { useSxLang } from "../useSxLang";
+import { sx } from "../sxText";
 import { SX_BUSY } from "./busyUi";
 import { ApiError, INTENT_LABEL, dealHeadline, startupxApi, usd, type DealIntent, type Listing } from "../lib";
 
@@ -20,8 +21,9 @@ export function InterestModal({
   onClose: () => void;
   onSubmitted: (id: number) => void;
 }) {
-  const sxLang = useI18nOptional()?.lang ?? "ru";
-  const SX = SX_BUSY[sxLang] ?? SX_BUSY.ru;
+  const sxLang = useSxLang();
+  const SX = SX_BUSY[sxLang] ?? SX_BUSY.en;
+  const t = (s: string, v?: Record<string, string | number>) => sx(sxLang, s, v);
   const suggested = listing.assessment?.deal.ticket;
   const defaultIntent: DealIntent = listing.deal?.intent ?? "raise";
 
@@ -80,7 +82,7 @@ export function InterestModal({
 
   async function submit() {
     if (!email.trim()) {
-      setError("Укажите email — иначе основатель не сможет ответить.");
+      setError(t("Укажите email — иначе основатель не сможет ответить."));
       return;
     }
     setBusy(true);
@@ -99,7 +101,7 @@ export function InterestModal({
       // которому нельзя ответить); показывать вместо него код ошибки —
       // значит заставлять инвестора гадать.
       const human = e instanceof ApiError ? e.issues[0]?.message ?? null : null;
-      setError(human ?? (e instanceof ApiError ? e.message : "Не удалось отправить отклик."));
+      setError(t(human ?? (e instanceof ApiError ? e.message : "Не удалось отправить отклик.")));
     } finally {
       setBusy(false);
     }
@@ -109,7 +111,7 @@ export function InterestModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Предложение по заявке «${listing.title}»`}
+      aria-label={t("Предложение по заявке «{title}»", { title: listing.title })}
       onClick={onClose}
       style={{
         position: "fixed",
@@ -136,14 +138,14 @@ export function InterestModal({
         }}
       >
         <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800, color: "#0f172a" }}>
-          Предложение по «{listing.title}»
+          {t("Предложение по «{title}»", { title: listing.title })}
         </h3>
         <p style={{ margin: "0 0 16px", fontSize: 12.5, color: "#64748b" }}>
-          Основатель просит: {dealHeadline(listing.deal)}
-          {suggested && ` · ориентир чека ${usd(suggested.low)} – ${usd(suggested.high)}`}
+          {t("Основатель просит:")} {dealHeadline(listing.deal, sxLang)}
+          {suggested && ` · ${t("ориентир чека")} ${usd(suggested.low)} – ${usd(suggested.high)}`}
         </p>
 
-        <SmallLabel>Что предлагаете</SmallLabel>
+        <SmallLabel>{t("Что предлагаете")}</SmallLabel>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
           {(["raise", "sell_stake", "sell_full"] as DealIntent[]).map((i) => (
             <button
@@ -161,40 +163,39 @@ export function InterestModal({
                 cursor: "pointer",
               }}
             >
-              {i === "raise" ? "Вложить за долю" : i === "sell_stake" ? "Выкупить долю" : "Купить целиком"}
+              {i === "raise" ? t("Вложить за долю") : i === "sell_stake" ? t("Выкупить долю") : t("Купить целиком")}
             </button>
           ))}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div>
-            <SmallLabel>Ваш чек, USD</SmallLabel>
-            <input aria-label="Ваш чек в долларах" value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="30000" style={input} inputMode="numeric" />
+            <SmallLabel>{t("Ваш чек, USD")}</SmallLabel>
+            <input aria-label={t("Ваш чек в долларах")} value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="30000" style={input} inputMode="numeric" />
           </div>
           <div>
-            <SmallLabel>Ожидаемая доля, %</SmallLabel>
-            <input aria-label="Ожидаемая доля в процентах" value={equity} onChange={(e) => setEquity(e.target.value)} placeholder="15" style={input} inputMode="decimal" />
+            <SmallLabel>{t("Ожидаемая доля, %")}</SmallLabel>
+            <input aria-label={t("Ожидаемая доля в процентах")} value={equity} onChange={(e) => setEquity(e.target.value)} placeholder="15" style={input} inputMode="decimal" />
           </div>
         </div>
 
-        <SmallLabel>Ваш email</SmallLabel>
-        <input ref={emailRef} aria-label="Ваш email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="investor@fund.com" style={input} type="email" />
+        <SmallLabel>{t("Ваш email")}</SmallLabel>
+        <input ref={emailRef} aria-label={t("Ваш email")} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="investor@fund.com" style={input} type="email" />
 
-        <SmallLabel>Сообщение (необязательно)</SmallLabel>
+        <SmallLabel>{t("Сообщение (необязательно)")}</SmallLabel>
         <textarea
-          aria-label="Сообщение основателю"
+          aria-label={t("Сообщение основателю")}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           rows={3}
-          placeholder="Что вам понравилось и что хотите уточнить"
+          placeholder={t("Что вам понравилось и что хотите уточнить")}
           style={{ ...input, resize: "vertical" }}
         />
 
         {error && <p style={{ color: "#dc2626", fontSize: 12.5, margin: "0 0 10px" }}>{error}</p>}
 
         <p style={{ margin: "0 0 12px", fontSize: 11.5, color: "#64748b", lineHeight: 1.5 }}>
-          Отклик — не оферта и не обязательство. Это заявка на разговор с названными условиями, чтобы
-          основатель понимал, о чём речь, до первого письма. {INTENT_LABEL[intent]}.
+          {t("Отклик — не оферта и не обязательство. Это заявка на разговор с названными условиями, чтобы основатель понимал, о чём речь, до первого письма.")} {t(INTENT_LABEL[intent])}.
         </p>
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -203,7 +204,7 @@ export function InterestModal({
             onClick={onClose}
             style={{ padding: "10px 16px", borderRadius: 9, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
           >
-            Отмена
+            {t("Отмена")}
           </button>
           <button
             type="button"
@@ -211,7 +212,7 @@ export function InterestModal({
             disabled={busy}
             style={{ padding: "10px 18px", borderRadius: 9, border: "none", background: busy ? "#64748b" : "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: busy ? "wait" : "pointer" }}
           >
-            {busy ? SX.sending : "Отправить основателю"}
+            {busy ? SX.sending : t("Отправить основателю")}
           </button>
         </div>
       </div>

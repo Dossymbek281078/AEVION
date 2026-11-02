@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AssessmentPanel } from "./AssessmentPanel";
+import { useSxLang } from "../useSxLang";
+import { sx } from "../sxText";
 import { TIER_ACCENT, dealHeadline, startupxApi, usd, type Assessment, type ListingDraft } from "../lib";
 
 /**
@@ -31,14 +33,36 @@ const EXAMPLE: ListingDraft = {
   deal: { intent: "raise", askUsd: 30_000, equityOfferedPct: 15, buildBy: "founder" },
 };
 
+/**
+ * Тот же пример по-английски: гость на /en читает и заявку, и разбор на своём
+ * языке. Смысл, отрасль и условия те же, что у русского, — сравнение не сдвигается.
+ */
+const EXAMPLE_EN: ListingDraft = {
+  title: "Backhaul loads for small carriers",
+  tier: "idea",
+  sector: "logistics",
+  geography: "KZ",
+  description:
+    "Problem: carriers with a fleet of 1–5 trucks look for a backhaul load by hand, through WhatsApp chats, " +
+    "and lose up to a third of their trips to empty mileage. For whom: small transport companies and " +
+    "owner-drivers. We are building a platform that automatically matches a load to the route of a " +
+    "truck that has just been freed up and shows it before the truck leaves empty. We earn a " +
+    "5% commission on every completed trip. Unlike classified boards, matching happens when a truck " +
+    "becomes free, not through a request the driver has to remember to post.",
+  deal: { intent: "raise", askUsd: 30_000, equityOfferedPct: 15, buildBy: "founder" },
+};
+
 export function ExampleListing() {
+  const lang = useSxLang();
+  const t = (s: string, v?: Record<string, string | number>) => sx(lang, s, v);
+  const example = lang === "ru" || lang === "kk" ? EXAMPLE : EXAMPLE_EN;
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     startupxApi
-      .assess(EXAMPLE)
+      .assess(example)
       .then((r) => {
         if (!cancelled) setAssessment(r.assessment);
       })
@@ -48,13 +72,13 @@ export function ExampleListing() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [example]);
 
   // If the analysis cannot be produced, showing the card without it would
   // advertise a number we did not compute. Better to show nothing.
   if (failed) return null;
 
-  const accent = TIER_ACCENT[EXAMPLE.tier];
+  const accent = TIER_ACCENT[example.tier];
 
   return (
     <section style={{ marginTop: 8 }}>
@@ -72,35 +96,34 @@ export function ExampleListing() {
           marginBottom: 10,
         }}
       >
-        Пример · не настоящая заявка
+        {t("Пример · не настоящая заявка")}
       </div>
       <p style={{ margin: "0 0 14px", fontSize: 13, color: "#64748b", lineHeight: 1.6, maxWidth: 640 }}>
-        Так выглядит заявка на бирже. Разбор ниже посчитан прямо сейчас тем же движком, что работает
-        с настоящими заявками, — это не картинка и не заранее написанные цифры.
+        {t("Так выглядит заявка на бирже. Разбор ниже посчитан прямо сейчас тем же движком, что работает с настоящими заявками, — это не картинка и не заранее написанные цифры.")}
       </p>
 
       <article style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 18, marginBottom: 12 }}>
         <span style={{ padding: "2px 9px", borderRadius: 20, background: `${accent}14`, color: accent, fontSize: 11, fontWeight: 800 }}>
-          Только идея
+          {t("Только идея")}
         </span>
         <h3 style={{ margin: "8px 0 4px", fontSize: 17, fontWeight: 800, color: "#0f172a", lineHeight: 1.3 }}>
-          {EXAMPLE.title}
+          {example.title}
         </h3>
         <div style={{ fontSize: 13.5, fontWeight: 700, color: accent, marginBottom: 8 }}>
-          {dealHeadline(EXAMPLE.deal)}
+          {dealHeadline(example.deal, lang)}
           {assessment?.deal.implied.postMoneyUsd && (
             <span style={{ fontWeight: 500, color: "#64748b", fontSize: 12 }}>
-              {" "}· оценка {usd(assessment.deal.implied.postMoneyUsd)}
+              {" "}· {t("оценка")} {usd(assessment.deal.implied.postMoneyUsd)}
             </span>
           )}
         </div>
-        <p style={{ margin: 0, fontSize: 13, color: "#475569", lineHeight: 1.6 }}>{EXAMPLE.description}</p>
+        <p style={{ margin: 0, fontSize: 13, color: "#475569", lineHeight: 1.6 }}>{example.description}</p>
       </article>
 
       {assessment ? (
         <AssessmentPanel a={assessment} />
       ) : (
-        <p style={{ color: "#64748b", fontSize: 13 }}>Считаю разбор примера…</p>
+        <p style={{ color: "#64748b", fontSize: 13 }}>{t("Считаю разбор примера…")}</p>
       )}
     </section>
   );

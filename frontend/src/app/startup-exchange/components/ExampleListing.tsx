@@ -18,7 +18,8 @@ import { TIER_ACCENT, dealHeadline, startupxApi, usd, type Assessment, type List
  * says plainly that this is an example rather than someone's actual company.
  */
 
-const EXAMPLE: ListingDraft = {
+const EXAMPLES: Record<"ru" | "en", ListingDraft> = {
+  ru: {
   title: "Обратный груз для мелких перевозчиков",
   tier: "idea",
   sector: "logistics",
@@ -31,13 +32,10 @@ const EXAMPLE: ListingDraft = {
     "комиссии 5% с каждого закрытого рейса. В отличие от досок объявлений, подбор идёт по факту " +
     "освободившейся машины, а не по заявке, которую водитель должен не забыть оставить.",
   deal: { intent: "raise", askUsd: 30_000, equityOfferedPct: 15, buildBy: "founder" },
-};
-
-/**
- * Тот же пример по-английски: гость на /en читает и заявку, и разбор на своём
- * языке. Смысл, отрасль и условия те же, что у русского, — сравнение не сдвигается.
- */
-const EXAMPLE_EN: ListingDraft = {
+  },
+  // Тот же пример по-английски: гость на /en читает и заявку, и разбор на своём
+  // языке. Смысл, отрасль и условия те же, что у русского, — сравнение не сдвигается.
+  en: {
   title: "Backhaul loads for small carriers",
   tier: "idea",
   sector: "logistics",
@@ -50,12 +48,13 @@ const EXAMPLE_EN: ListingDraft = {
     "5% commission on every completed trip. Unlike classified boards, matching happens when a truck " +
     "becomes free, not through a request the driver has to remember to post.",
   deal: { intent: "raise", askUsd: 30_000, equityOfferedPct: 15, buildBy: "founder" },
+  },
 };
 
 export function ExampleListing() {
   const lang = useSxLang();
   const t = (s: string, v?: Record<string, string | number>) => sx(lang, s, v);
-  const example = lang === "ru" || lang === "kk" ? EXAMPLE : EXAMPLE_EN;
+  const example = lang === "ru" || lang === "kk" ? EXAMPLES.ru : EXAMPLES.en;
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [failed, setFailed] = useState(false);
 

@@ -16,11 +16,6 @@ const DESC = {
   en: "Three listing tiers: idea only (a stake for funding development), idea + MVP (a stake for funding the finish), finished product (a full or partial buyout). Every listing has named deal terms, a free analysis with a market price range and a SHA-256 authorship fingerprint.",
   kk: "Өтінімнің үш деңгейі: тек идея (әзірлеуге салым үшін үлес), идея + MVP (жетілдіруге салым үшін үлес), дайын өнім (толық немесе үлесін сатып алу). Әр өтініште аталған мәміле шарттары, нарықтық баға аймағы бар тегін талдау және SHA-256 авторлық таңбасы бар.",
 } as const;
-const OG_DESC = {
-  ru: "Идея, MVP или работающий продукт — с ценой, долей и бесплатным разбором, который сравнивает запрос с рынком.",
-  en: "An idea, an MVP or a working product — with a price, a stake and a free analysis that compares the ask with the market.",
-  kk: "Идея, MVP немесе жұмыс істейтін өнім — бағасымен, үлесімен және сұрауды нарықпен салыстыратын тегін талдаумен.",
-} as const;
 const TW_DESC = {
   ru: "Идея, MVP или работающий продукт — с ценой, долей и разбором.",
   en: "An idea, an MVP or a working product — with a price, a stake and an analysis.",
@@ -42,7 +37,9 @@ export async function generateMetadata(): Promise<Metadata> {
     type: "website",
     url: `${SITE}/startup-exchange`,
     title,
-    description: OG_DESC[lang],
+    // Превью ссылки — по-русски у каждого модуля волны (pageMetadata.guard): обходчики соцсетей
+    // приходят без куки языка, им и так отдаётся ru.
+    description: "Идея, MVP или работающий продукт — с ценой, долей и бесплатным разбором, который сравнивает запрос с рынком.",
     siteName: "AEVION",
   },
   // 13.09.2026: без своего блока страница наследовала корневой twitter, и на X

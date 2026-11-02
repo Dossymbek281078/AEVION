@@ -131,7 +131,10 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
     // 144 (18.10.2026): на телефоне (≤768) этот блок переносился в 7 строк и занимал 162 px первого экрана
     // (замер /startup-exchange 390×844 на проде eaca8fb62: nav 55..217), действие гостя уезжало за кадр.
     // Класс aevion-wave1nav (globals.css): одна строка с боковой прокруткой — все ссылки на месте, высота ~26 px.
-    <nav className="aevion-wave1nav" translate="no" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, fontSize: 13, alignItems: "center" }} aria-label={n("ariaNav")}>
+    // 02.11.2026 (Продукт, CLS /bureau 0,164 на 390 px): до гидратации ряд был 21,5 px, после — 26 px:
+    // AevPill на сервере не рисуется, а в браузере появляется с padding 2 px и рамкой, и всё ниже
+    // уезжало на 4,5 px. minHeight 26 = высота ряда с пилюлей — первый кадр уже той же высоты.
+    <nav className="aevion-wave1nav" translate="no" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, fontSize: 13, alignItems: "center", minHeight: 26 }} aria-label={n("ariaNav")}>
       <Link href="/" style={{ color: globus, fontWeight: 800 }}>{n("globus")}</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
       <Link href="/demo" style={{ color: demoLink, fontWeight: 800 }}>{n("demo")}</Link>

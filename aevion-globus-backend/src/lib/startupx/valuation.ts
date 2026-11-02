@@ -59,6 +59,21 @@ export const MARKET_SOURCES: MarketSource[] = [
   },
 ];
 
+const MARKET_SOURCES_EN_CLAIMS: string[] = [
+  "Public SaaS listings: median 2.6× annual revenue; average ask $484K on $203K TTM revenue.",
+  "Median closed deal in 2026 is 3.7× EBITDA; deals under $100K close around 1.68× profit, above $1M around 4.3×.",
+  "Micro-SaaS under $1M ARR trades at 2.5–4× ARR (versus 4–5× for larger ones).",
+  "Micro-acquisition marketplace: 2000+ closed deals, $500M+ volume; pre-revenue projects and MVPs sell in the $5K–$50K range.",
+];
+
+export type MarketLang = "ru" | "en";
+
+/** Sources with the claim text in the requested language; "ru" returns the constant itself. */
+export function marketSourcesFor(lang: MarketLang = "ru"): MarketSource[] {
+  if (lang !== "en") return MARKET_SOURCES;
+  return MARKET_SOURCES.map((m, i) => ({ ...m, claim: MARKET_SOURCES_EN_CLAIMS[i] ?? m.claim }));
+}
+
 // ── Pre-revenue bands ────────────────────────────────────────────────────────
 //
 // Idea and MVP tiers have no revenue to multiply, so the band comes from what
@@ -137,8 +152,10 @@ export function valuationBand(args: {
   score: number;
   annualRevenueUsd: number | null;
   metrics?: ListingMetrics;
+  lang?: MarketLang;
 }): ValuationBand {
   const { tier, score, annualRevenueUsd, metrics } = args;
+  const en = args.lang === "en";
   const pos = Math.max(0, Math.min(1, score / 100));
 
   if (tier === "product" && annualRevenueUsd !== null && annualRevenueUsd > 0) {
@@ -157,9 +174,10 @@ export function valuationBand(args: {
       base: Math.round(annualRevenueUsd * baseMult),
       high: Math.round(annualRevenueUsd * mult.high),
       method: "revenue-multiple",
-      basis:
-        `Годовая выручка $${fmt(annualRevenueUsd)} × ${mult.low}–${mult.high} — диапазон, ` +
-        `в котором в 2026 торгуются продукты этого размера (см. источники).`,
+      basis: en
+        ? `Annual revenue $${fmt(annualRevenueUsd)} × ${mult.low}–${mult.high} — the range in which products of this size trade in 2026 (see sources).`
+        : `Годовая выручка $${fmt(annualRevenueUsd)} × ${mult.low}–${mult.high} — диапазон, ` +
+          `в котором в 2026 торгуются продукты этого размера (см. источники).`,
     };
   }
 
@@ -176,13 +194,19 @@ export function valuationBand(args: {
 
   let basis: string;
   if (tier === "product") {
-    basis = "Выручка не раскрыта, поэтому оценка идёт по диапазону MVP: покупатель платит за то, что может проверить.";
+    basis = en
+      ? "Revenue is not disclosed, so the valuation uses the MVP range: a buyer pays for what they can verify."
+      : "Выручка не раскрыта, поэтому оценка идёт по диапазону MVP: покупатель платит за то, что может проверить.";
   } else if (hasRevenue) {
-    basis =
-      `Годовая выручка ~$${fmt(annualRevenueUsd)} учтена в баллах, но цену на этом уровне определяет не она: ` +
+    basis = en
+      ? `Annual revenue ~$${fmt(annualRevenueUsd)} is counted in the score, but the price at this level is not set by it: ` +
+        `the range is taken from the deal market for "${tier === "idea" ? "idea only" : "idea + MVP"}".`
+      : `Годовая выручка ~$${fmt(annualRevenueUsd)} учтена в баллах, но цену на этом уровне определяет не она: ` +
       `диапазон взят из рынка сделок «${tier === "idea" ? "только идея" : "идея + MVP"}».`;
   } else {
-    basis = "Выручки нет — диапазон взят из рынка сделок этого уровня, а не рассчитан по вашему проекту.";
+    basis = en
+      ? "There is no revenue — the range is taken from the deal market at this level, not calculated for your project."
+      : "Выручки нет — диапазон взят из рынка сделок этого уровня, а не рассчитан по вашему проекту.";
   }
 
   return { low: band.low, base, high: band.high, method: "stage-band", basis };
@@ -206,19 +230,20 @@ export interface ImpliedTerms {
  * sell_stake:  $60k for 20%  → implied whole-company value $300k
  * sell_full:   asking price is the whole-company value
  */
-export function impliedTerms(deal: DealTerms, band: ValuationBand): ImpliedTerms {
+export function impliedTerms(deal: DealTerms, band: ValuationBand, lang: MarketLang = "ru"): ImpliedTerms {
+  const en = lang === "en";
   let post: number | null = null;
   let formula: string | null = null;
 
   if (deal.intent === "raise" && deal.askUsd && deal.equityOfferedPct && deal.equityOfferedPct > 0) {
     post = deal.askUsd / (deal.equityOfferedPct / 100);
-    formula = `$${fmt(deal.askUsd)} ÷ ${deal.equityOfferedPct}% = пост-оценка $${fmt(post)}`;
+    formula = `$${fmt(deal.askUsd)} ÷ ${deal.equityOfferedPct}% = ${en ? "post-money" : "пост-оценка"} $${fmt(post)}`;
   } else if (deal.intent === "sell_stake" && deal.stakePriceUsd && deal.stakeForSalePct && deal.stakeForSalePct > 0) {
     post = deal.stakePriceUsd / (deal.stakeForSalePct / 100);
-    formula = `$${fmt(deal.stakePriceUsd)} ÷ ${deal.stakeForSalePct}% = оценка всей компании $${fmt(post)}`;
+    formula = `$${fmt(deal.stakePriceUsd)} ÷ ${deal.stakeForSalePct}% = ${en ? "whole-company valuation" : "оценка всей компании"} $${fmt(post)}`;
   } else if (deal.intent === "sell_full" && deal.askingPriceUsd) {
     post = deal.askingPriceUsd;
-    formula = `Цена продажи целиком: $${fmt(post)}`;
+    formula = en ? `Full-sale price: $${fmt(post)}` : `Цена продажи целиком: $${fmt(post)}`;
   }
 
   return {
@@ -229,27 +254,28 @@ export function impliedTerms(deal: DealTerms, band: ValuationBand): ImpliedTerms
 }
 
 /** Investor entry ticket suggested for this listing, inside the tier's norm. */
-export function suggestedTicketUsd(tier: Tier, deal: DealTerms, ticketNorm: { low: number; high: number }): {
+export function suggestedTicketUsd(tier: Tier, deal: DealTerms, ticketNorm: { low: number; high: number }, lang: MarketLang = "ru"): {
   low: number;
   high: number;
   note: string;
 } {
+  const en = lang === "en";
   // When the founder states an ask, the ticket range is anchored to it: a lead
   // taking a third of the round, up to the whole round.
   if (deal.intent === "raise" && deal.askUsd && deal.askUsd > 0) {
     return {
       low: Math.max(1_000, Math.round(deal.askUsd / 3)),
       high: Math.round(deal.askUsd),
-      note: "От трети раунда (лид-инвестор) до полного закрытия запроса.",
+      note: en ? "From a third of the round (lead investor) to fully closing the ask." : "От трети раунда (лид-инвестор) до полного закрытия запроса.",
     };
   }
   if (deal.intent === "sell_stake" && deal.stakePriceUsd && deal.stakePriceUsd > 0) {
-    return { low: Math.round(deal.stakePriceUsd), high: Math.round(deal.stakePriceUsd), note: "Цена доли зафиксирована продавцом." };
+    return { low: Math.round(deal.stakePriceUsd), high: Math.round(deal.stakePriceUsd), note: en ? "The stake price is fixed by the seller." : "Цена доли зафиксирована продавцом." };
   }
   if (deal.intent === "sell_full" && deal.askingPriceUsd && deal.askingPriceUsd > 0) {
-    return { low: Math.round(deal.askingPriceUsd), high: Math.round(deal.askingPriceUsd), note: "Цена выкупа целиком." };
+    return { low: Math.round(deal.askingPriceUsd), high: Math.round(deal.askingPriceUsd), note: en ? "Price of buying the whole company." : "Цена выкупа целиком." };
   }
-  return { low: ticketNorm.low, high: ticketNorm.high, note: `Типичный чек на уровне «${tier}».` };
+  return { low: ticketNorm.low, high: ticketNorm.high, note: en ? `Typical cheque at the "${tier}" level.` : `Типичный чек на уровне «${tier}».` };
 }
 
 /**

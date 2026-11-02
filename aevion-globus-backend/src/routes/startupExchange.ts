@@ -50,8 +50,36 @@ import {
   type ListingMetrics,
   type Tier,
 } from "../lib/startupx/model";
-import { assessListing, ASSESSMENT_VERSION, DISCLAIMER, type Assessment } from "../lib/startupx/assess";
-import { MARKET_SOURCES, fmt as fmtMoney } from "../lib/startupx/valuation";
+import {
+  assessListing,
+  ASSESSMENT_VERSION,
+  disclaimerFor,
+  normalizeAssessLang,
+  tierLabel,
+  type AssessLang,
+  type Assessment,
+} from "../lib/startupx/assess";
+import { marketSourcesFor, fmt as fmtMoney } from "../lib/startupx/valuation";
+
+/** Language of the human-readable assessment text: body.lang first, then ?lang=; unknown means ru. */
+function requestLang(req: Request): AssessLang {
+  const body = req.body as { lang?: unknown } | undefined;
+  const fromBody = body && typeof body === "object" ? body.lang : undefined;
+  if (typeof fromBody === "string" && fromBody.trim()) return normalizeAssessLang(fromBody);
+  const q = req.query?.lang;
+  return normalizeAssessLang(Array.isArray(q) ? q[0] : q);
+}
+
+const TIER_OFFER_EN: Record<Tier, string> = {
+  idea: "Nothing is built. The founder gives up a stake, the investor funds development.",
+  mvp: "A working prototype exists. The founder gives up a stake, the investor funds the finishing work.",
+  product: "The app works. A conversation about buying the whole company or buying out a stake.",
+};
+
+/** The stored assessment is always Russian; the response may be in the page's language. */
+function assessmentFor(listing: ListingInput, lang: AssessLang, stored: Assessment): Assessment {
+  return lang === "en" ? assessListing(listing, "en") : stored;
+}
 import { timingSafeHexEq } from "../lib/qrightHelpers";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
@@ -59,6 +87,7 @@ import { listSectors } from "../lib/qventure/sectors";
 import { safeResolveSector } from "../lib/startupx/sectorDetect";
 import { escapeLikePattern } from "../lib/startupx/likePattern";
 import { sendOfferNotice } from "../lib/startupx/notifyFounder";
+import { sendPublishNotices, detectLang } from "../lib/startupx/notifyPublish";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -402,16 +431,19 @@ startupExchangeRouter.get("/health", (req: Request, res: Response) => {
 // ─── GET /api/startupx/tiers ─────────────────────────────────────────────────
 // The UI renders tier rules, ticket norms and market sources from here, so the
 // screen and the scoring can never describe two different products.
-startupExchangeRouter.get("/tiers", (_req: Request, res: Response) => {
+startupExchangeRouter.get("/tiers", (req: Request, res: Response) => {
+  const lang = requestLang(req);
   ok(res, {
-    tiers: TIERS.map((t) => TIER_SPECS[t]),
+    tiers: TIERS.map((t) =>
+      lang === "en" ? { ...TIER_SPECS[t], label: tierLabel(t, "en"), offer: TIER_OFFER_EN[t] } : TIER_SPECS[t],
+    ),
     intents: DEAL_INTENTS,
     // The sector list the assessment actually scores against — so the form can
     // never offer a sector the engine does not know.
     sectors: listSectors(),
-    sources: MARKET_SOURCES,
+    sources: marketSourcesFor(lang),
     assessmentVersion: ASSESSMENT_VERSION,
-    disclaimer: DISCLAIMER,
+    disclaimer: disclaimerFor(lang),
   });
 });
 
@@ -768,7 +800,7 @@ startupExchangeRouter.post("/assess", assessLimiter, (req: Request, res: Respons
   const { listing, issues } = normalizeListing(req.body, { requireDeal: false });
   if (!listing) return fail(res, "validation_failed", 400, { issues });
   try {
-    return ok(res, { assessment: assessListing(listing), stored: false });
+    return ok(res, { assessment: assessListing(listing, requestLang(req)), stored: false });
   } catch (e) {
     captureStartupXError(e);
     console.error("[StartupX] POST /assess failed", e);
@@ -789,6 +821,7 @@ startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Reque
     return отказПоНорме(res, "startup-exchange", норма);
   }
   let assessment: Assessment;
+  const lang = requestLang(req);
   try {
     assessment = assessListing(listing);
   } catch (e) {
@@ -796,6 +829,8 @@ startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Reque
     console.error("[StartupX] assessment failed on submit", e);
     return fail(res, "assessment_failed", 500);
   }
+  // What the stored row keeps stays Russian; only the response follows the page.
+  const shownAssessment = assessmentFor(listing, lang, assessment);
 
   const contentHash = computeContentHash({
     title: listing.title,
@@ -816,6 +851,23 @@ startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Reque
   const protection = "content-hash" as const;
 
   const created = (row: ListingRow, storage: "db" | "memory" = "db") => {
+    // Письма в фоне: основателю — ключ от кабинета (токен виден только здесь),
+    // команде — карточка без токена. Пробы команду не беспокоят.
+    sendPublishNotices({
+      listingId: row.id,
+      listingTitle: row.title,
+      tier: row.tier,
+      sector: row.sector,
+      geography: row.geography,
+      intent: row.deal?.intent ?? null,
+      askUsd: row.deal?.askUsd ?? row.deal?.askingPriceUsd ?? row.deal?.stakePriceUsd ?? null,
+      equityPct: row.deal?.equityOfferedPct ?? row.deal?.stakeForSalePct ?? null,
+      founderEmail: row.founder_email,
+      contactMethod: row.contact_method,
+      manageToken: manage.token,
+      lang: detectLang(row.title, row.description),
+      isSmoke: isSmokeListing(row.title),
+    });
     const left = publishQuota.check(ip);
     res.setHeader("X-Publish-Quota-Remaining", String(left.remaining));
     return ok(res, {
@@ -834,8 +886,8 @@ startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Reque
       // offers on this listing — the UI has to say so at the moment it is
       // handed over, not in a help page.
       manageToken: manage.token,
-      listing: publicView(row),
-      assessment,
+      listing: { ...publicView(row), assessment: shownAssessment },
+      assessment: shownAssessment,
       // Какой путь записи сработал: запасной не переживёт перезапуск.
       storage,
     }, 201);
@@ -962,7 +1014,7 @@ startupExchangeRouter.post("/ideas/:id/reassess", assessLimiter, async (req: Req
       existing.assessment_version = assessment.version;
     }
   }
-  return ok(res, { id, assessment });
+  return ok(res, { id, assessment: assessmentFor(rebuilt, requestLang(req), assessment) });
 });
 
 // ─── POST /api/startupx/ideas/:id/interest ──────────────────────────────────

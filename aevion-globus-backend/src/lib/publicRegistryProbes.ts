@@ -42,6 +42,15 @@ export const ПРОБЫ_БЕЗ_МЕТКИ = new Set<string>([
 ]);
 
 /** Название или автор помечены как наш прогон — по соглашению §19. */
+/**
+ * 02.11.2026 (Продукт, проход письма pb376): то же правило для SQL. Числа
+ * /api/qright/transparency считались только без ownerName = 'smoke-test', и две
+ * пробы `probe-produkt …` подняли публичный счётчик 64 → 66 за минуту. Регулярка
+ * POSIX: \m и \M — границы слова в PostgreSQL. Применять к
+ * lower(coalesce(title,'') || ' ' || coalesce(ownerName,'')).
+ */
+export const ПРОБА_РЕГЕКС_SQL = "\\mprobe\\M|probe-|\\msmoke\\M|smoke-|smoke test|\\mqa-cycle\\M";
+
 export function этоНашаПроба(запись: { id?: unknown; title?: unknown; author?: unknown }): boolean {
   const id = String(запись.id ?? "");
   if (ПРОБЫ_БЕЗ_МЕТКИ.has(id)) return true;

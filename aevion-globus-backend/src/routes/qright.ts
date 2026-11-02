@@ -10,7 +10,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { deliverWebhook } from "../lib/webhookDelivery";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { csvNeutralizeFormula } from "../lib/csv";
-import { этоНашаПроба, скрытоИзСписков } from "../lib/publicRegistryProbes";
+import { этоНашаПроба, скрытоИзСписков, ПРОБА_РЕГЕКС_SQL } from "../lib/publicRegistryProbes";
 
 const QRIGHT_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "QRightWebhook",
@@ -1509,6 +1509,9 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
     // 25», из которых 20 были следами собственных проверок, то есть публичное
     // число завышало реестр впятеро. Страница прозрачности, завышающая счёт,
     // хуже отсутствия страницы: её показывают как доказательство.
+    // 02.11.2026: пробы по названию/автору (probe-/smoke-, правило 157) тоже вне счёта —
+    // иначе каждый наш проход пути поднимает публичное «зарегистрировано» (64 → 66 за минуту).
+    const БЕЗ_ПРОБ_SQL = `lower(coalesce("title", '') || ' ' || coalesce("ownerName", '')) ~ $2`;
     const [totals, byCode, byKind] = await Promise.all([
       pool.query(
         `SELECT
@@ -1517,25 +1520,25 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
           MIN("createdAt") AS "first",
           MAX("createdAt") AS "last"
          FROM "QRightObject"
-         WHERE "ownerName" IS DISTINCT FROM $1`,
-        [SMOKE_OWNER],
+         WHERE "ownerName" IS DISTINCT FROM $1 AND NOT (${БЕЗ_ПРОБ_SQL})`,
+        [SMOKE_OWNER, ПРОБА_РЕГЕКС_SQL],
       ),
       pool.query(
         `SELECT COALESCE("revokeReasonCode", 'unspecified') AS code, COUNT(*) AS n
          FROM "QRightObject"
-         WHERE "revokedAt" IS NOT NULL AND "ownerName" IS DISTINCT FROM $1
+         WHERE "revokedAt" IS NOT NULL AND "ownerName" IS DISTINCT FROM $1 AND NOT (${БЕЗ_ПРОБ_SQL})
          GROUP BY 1
          ORDER BY 2 DESC`,
-        [SMOKE_OWNER],
+        [SMOKE_OWNER, ПРОБА_РЕГЕКС_SQL],
       ),
       pool.query(
         `SELECT "kind", COUNT(*) AS n
          FROM "QRightObject"
-         WHERE "ownerName" IS DISTINCT FROM $1
+         WHERE "ownerName" IS DISTINCT FROM $1 AND NOT (${БЕЗ_ПРОБ_SQL})
          GROUP BY 1
          ORDER BY 2 DESC
          LIMIT 12`,
-        [SMOKE_OWNER],
+        [SMOKE_OWNER, ПРОБА_РЕГЕКС_SQL],
       ),
     ]);
 

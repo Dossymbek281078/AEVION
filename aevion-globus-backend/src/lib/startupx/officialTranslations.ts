@@ -21,9 +21,9 @@ export const OFFICIAL_TRANSLATIONS: Record<number, { en: OfficialTranslation }> 
         "authorship (QRight), signature (QSign), registry and certificates (Bureau), apps from a description (DevHub), " +
         "parallel AI agents (Multichat), idea analysis (QVenture), air corridors (QSkyway). " +
         "On September 20, 2026 eight modules open at once. " +
-        "Monetization: subscription — Lite $19, Medium $29, Full $49, Universe $149 per month, and Enterprise plans; " +
+        "Monetization: subscription — Lite $19, Medium $29, Full $49, Universe $149 per month, and Enterprise; " +
         "paid add-on modules from $9 per month (32 of 44 modules). " +
-        "Unlike a set of scattered competitor services, the modules rest on a single circuit: " +
+        "Unlike a set of scattered competitor services, the modules rest on one shared core: " +
         "the author's record, signature and certificate are verified through one link. " +
         "We are looking for an investor to launch the modules and enter the Central Asian markets. " +
         "Every number on the site comes from the module's own response, not from a presentation.",

@@ -59,6 +59,7 @@ import { listSectors } from "../lib/qventure/sectors";
 import { safeResolveSector } from "../lib/startupx/sectorDetect";
 import { escapeLikePattern } from "../lib/startupx/likePattern";
 import { sendOfferNotice } from "../lib/startupx/notifyFounder";
+import { sendPublishNotices, detectLang } from "../lib/startupx/notifyPublish";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -816,6 +817,23 @@ startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Reque
   const protection = "content-hash" as const;
 
   const created = (row: ListingRow, storage: "db" | "memory" = "db") => {
+    // Письма в фоне: основателю — ключ от кабинета (токен виден только здесь),
+    // команде — карточка без токена. Пробы команду не беспокоят.
+    sendPublishNotices({
+      listingId: row.id,
+      listingTitle: row.title,
+      tier: row.tier,
+      sector: row.sector,
+      geography: row.geography,
+      intent: row.deal?.intent ?? null,
+      askUsd: row.deal?.askUsd ?? row.deal?.askingPriceUsd ?? row.deal?.stakePriceUsd ?? null,
+      equityPct: row.deal?.equityOfferedPct ?? row.deal?.stakeForSalePct ?? null,
+      founderEmail: row.founder_email,
+      contactMethod: row.contact_method,
+      manageToken: manage.token,
+      lang: detectLang(row.title, row.description),
+      isSmoke: isSmokeListing(row.title),
+    });
     const left = publishQuota.check(ip);
     res.setHeader("X-Publish-Quota-Remaining", String(left.remaining));
     return ok(res, {

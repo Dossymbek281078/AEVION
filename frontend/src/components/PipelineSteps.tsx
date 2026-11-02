@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { tNav, useNavLang, type NavKey } from "./navI18n";
+import { useСсылкаАвторизацииШапки } from "@/app/auth/loginHref";
 
 type Step = {
   id: string;
@@ -26,6 +27,8 @@ const PIPELINE_STEPS: Step[] = [
 export function PipelineSteps({ current }: { current: string }) {
   const idx = PIPELINE_STEPS.findIndex((s) => s.id === current);
   const lang = useNavLang();
+  // 2.11.2026: шаг «Авторизация» вёл на голый /auth — вход терял страницу и метку канала ?c=.
+  const ссылкаАвторизации = useСсылкаАвторизацииШапки();
 
   return (
     <div
@@ -61,7 +64,7 @@ export function PipelineSteps({ current }: { current: string }) {
         return (
           <div key={step.id} style={{ display: "flex", alignItems: "center" }}>
             <Link
-              href={step.href}
+              href={step.id === "auth" ? ссылкаАвторизации : step.href}
               style={{
                 display: "flex",
                 alignItems: "center",

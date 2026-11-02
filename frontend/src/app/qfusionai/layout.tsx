@@ -14,14 +14,14 @@ export const metadata: Metadata = {
     url: `${SITE}/qfusionai`,
     title: "QFusionAI — Hybrid AI Router",
     description:
-      "5 LLM-провайдеров в одном API · автоматический routing по cost/latency/quality · fallback chain · кэш ответов.",
+      "Claude, GPT, Gemini и OpenRouter в одном API · автоматический routing по cost/latency/quality · fallback chain · кэш ответов.",
     siteName: "AEVION",
     images: [{ url: `${SITE}/qfusionai/opengraph-image`, width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "QFusionAI · Hybrid AI Router",
-    description: "5 LLM providers, 1 API. Auto-routing + fallback + cache.",
+    description: "Claude, GPT, Gemini, OpenRouter — 1 API. Auto-routing + fallback + cache.",
   },
   robots: { index: true, follow: true },
 };

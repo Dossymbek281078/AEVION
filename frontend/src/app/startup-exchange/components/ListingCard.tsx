@@ -48,6 +48,7 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
               {listing.title}
             </Link>
           </h3>
+          {listing.translated && <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>{t("Переведено AEVION")}</div>}
 
           <div style={{ fontSize: 13.5, fontWeight: 700, color: accent, marginBottom: 6 }}>
             {dealHeadline(listing.deal, lang)}

@@ -42,12 +42,12 @@ export default function ListingDetailPage() {
       return;
     }
     try {
-      setListing(await startupxApi.get(id));
+      setListing(await startupxApi.get(id, lang));
       setState("ready");
     } catch {
       setState("missing");
     }
-  }, [id]);
+  }, [id, lang]);
 
   useEffect(() => {
     load();
@@ -110,6 +110,7 @@ export default function ListingDetailPage() {
           <h1 style={{ margin: "10px 0 8px", fontSize: 28, fontWeight: 800, color: "#0f172a", lineHeight: 1.25 }}>
             {listing.title}
           </h1>
+          {listing.translated && <div style={{ fontSize: 11.5, color: "#64748b", marginBottom: 6 }}>{t("Переведено AEVION")}</div>}
           <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{dealHeadline(deal, lang)}</div>
           <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 6 }}>
             {t("Опубликовано")} {new Date(listing.created_at).toLocaleDateString(sxLocale(lang))}

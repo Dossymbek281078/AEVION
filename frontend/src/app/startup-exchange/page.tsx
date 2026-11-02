@@ -111,7 +111,7 @@ export default function StartupExchangePage() {
   const fetchListings = useCallback(async (tier: TierFilter, off: number, s: "recent" | "score", sector: string, q: string) => {
     setLoading(true);
     try {
-      const data = await startupxApi.list({ tier, sector: sector || undefined, q: q || undefined, limit: PAGE_SIZE, offset: off, sort: s });
+      const data = await startupxApi.list({ tier, sector: sector || undefined, q: q || undefined, limit: PAGE_SIZE, offset: off, sort: s, lang: sxLang });
       setListings(data.listings ?? []);
       setTotal(data.total ?? 0);
       setLoadError(null);
@@ -124,7 +124,7 @@ export default function StartupExchangePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sxLang]);
 
   const fetchStats = useCallback(async () => {
     try {

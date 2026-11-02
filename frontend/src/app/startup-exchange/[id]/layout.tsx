@@ -79,7 +79,7 @@ export async function generateMetadata({
   };
 
   try {
-    const resp = await fetch(apiUrl(`/api/startupx/ideas/${encodeURIComponent(id)}`), {
+    const resp = await fetch(apiUrl(`/api/startupx/ideas/${encodeURIComponent(id)}${lang === "en" ? "?lang=en" : ""}`), {
       // 2.11.2026: был час — снятая заявка ещё час отдавала 200 со старым названием и описанием
       // (пробы 25 и 27 после DELETE). Минута: превью почти не отстаёт, бэкенд не дёргается на каждом обходе.
       next: { revalidate: 60 },

@@ -8,6 +8,7 @@
  */
 
 import { apiUrl } from "@/lib/apiBase";
+import { sx } from "./sxText";
 
 export type Tier = "idea" | "mvp" | "product";
 export type DealIntent = "raise" | "sell_stake" | "sell_full";
@@ -360,19 +361,20 @@ export const BUILD_BY_LABEL: Record<BuildBy, string> = {
 };
 
 /** One line describing what the founder is asking for, from the deal terms. */
-export function dealHeadline(deal: DealTerms | null): string {
-  if (!deal) return "Условия сделки не указаны";
+export function dealHeadline(deal: DealTerms | null, lang: string = "ru"): string {
+  const t = (s: string, v?: Record<string, string | number>) => sx(lang, s, v);
+  if (!deal) return t("Условия сделки не указаны");
   if (deal.intent === "raise") {
     if (deal.askUsd && deal.equityOfferedPct) {
-      return `${usd(deal.askUsd)} за ${deal.equityOfferedPct}%`;
+      return t("{price} за {pct}%", { price: usd(deal.askUsd), pct: deal.equityOfferedPct });
     }
-    return "Привлекает инвестиции";
+    return t("Привлекает инвестиции");
   }
   if (deal.intent === "sell_stake") {
     if (deal.stakePriceUsd && deal.stakeForSalePct) {
-      return `${deal.stakeForSalePct}% за ${usd(deal.stakePriceUsd)}`;
+      return t("{pct}% за {price}", { pct: deal.stakeForSalePct, price: usd(deal.stakePriceUsd) });
     }
-    return "Продаёт долю";
+    return t("Продаёт долю");
   }
-  return deal.askingPriceUsd ? `Продажа целиком — ${usd(deal.askingPriceUsd)}` : "Продажа целиком";
+  return deal.askingPriceUsd ? t("Продажа целиком — {price}", { price: usd(deal.askingPriceUsd) }) : t("Продажа целиком");
 }

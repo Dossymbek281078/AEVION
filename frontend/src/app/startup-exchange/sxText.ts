@@ -298,6 +298,7 @@ export const SX_TEXT: Record<string, Tr> = {
   "{n} мес.": { en: "{n} mo." },
   "← Все заявки": { en: "← All listings" },
   "Опубликовано": { en: "Published" },
+  "Переведено AEVION": { en: "Translated by AEVION" },
   "откликов:": { en: "offers:" },
   "Описание": { en: "Description" },
   "Открыть продукт ↗": { en: "Open the product ↗" },

@@ -79,7 +79,7 @@ export async function generateMetadata({
   };
 
   try {
-    const resp = await fetch(apiUrl(`/api/startupx/ideas/${encodeURIComponent(id)}`), {
+    const resp = await fetch(apiUrl(`/api/startupx/ideas/${encodeURIComponent(id)}${lang === "en" ? "?lang=en" : ""}`), {
       // A listing changes when the founder edits terms; an hour-old preview is
       // fine and keeps this off the backend on every crawl.
       next: { revalidate: 3600 },

@@ -123,6 +123,9 @@ export interface Listing {
   visibility: string;
   created_at: string;
   interest_count?: number;
+  /** The server replaced title and description with the official translation (AEVION own listing only). */
+  translated?: boolean;
+  originalLang?: string;
 }
 
 export interface ListingDraft {
@@ -238,7 +241,7 @@ export const startupxApi = {
       avgScore: number;
     }>("/stats"),
 
-  list: (params: { tier?: Tier | ""; sector?: string; q?: string; limit: number; offset: number; sort?: "recent" | "score" }) => {
+  list: (params: { tier?: Tier | ""; sector?: string; q?: string; limit: number; offset: number; sort?: "recent" | "score"; lang?: string }) => {
     const q = new URLSearchParams();
     q.set("limit", String(params.limit));
     q.set("offset", String(params.offset));
@@ -246,10 +249,12 @@ export const startupxApi = {
     if (params.sector) q.set("sector", params.sector);
     if (params.q) q.set("q", params.q);
     if (params.sort) q.set("sort", params.sort);
+    // Official English text of AEVION own listing; other listings are returned as written.
+    if (params.lang === "en") q.set("lang", "en");
     return call<{ listings: Listing[]; total: number }>(`/ideas?${q.toString()}`);
   },
 
-  get: (id: number) => call<Listing>(`/ideas/${id}`),
+  get: (id: number, lang?: string) => call<Listing>(lang === "en" ? `/ideas/${id}?lang=en` : `/ideas/${id}`),
 
   /** Free analysis of a draft — nothing is stored. */
   assess: (draft: ListingDraft, lang?: string) =>

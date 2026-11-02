@@ -197,6 +197,18 @@ interface LsSubscriptionPayload {
   };
 }
 
+/**
+ * 02.11.2026, решение оркестратора: `subscription_cancelled` у LemonSqueezy значит «не продлится»,
+ * а НЕ «доступ кончился»: человек заплатил за период и пользуется им до `ends_at`. Доступ снимает
+ * `subscription_expired` (касса шлёт его в момент ends_at) либо cancelled, у которого ends_at уже
+ * прошёл или не пришёл. `subscription_paused` оставлен как был — снимает сразу.
+ */
+function отмененаНоДоступЕщёЕсть(event: string, endsAt: unknown): string | null {
+  if (event !== "subscription_cancelled" || typeof endsAt !== "string") return null;
+  const t = Date.parse(endsAt);
+  return Number.isFinite(t) && t > Date.now() ? new Date(t).toISOString() : null;
+}
+
 const ACTIVATE_EVENTS = new Set([
   "subscription_created",
   "subscription_updated",
@@ -545,6 +557,12 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         return res.json({ ok: true, action: "app_activated", appSlug, email, mailed });
       }
       if (DEACTIVATE_EVENTS.has(event)) {
+        const доКонца = отмененаНоДоступЕщёЕсть(event, attrs.ends_at);
+        if (доКонца) {
+          // Доступ остаётся до ends_at; снимет subscription_expired.
+          console.log(`[ls/webhook] ${event} → app_sub ${appSlug} for ${email} остаётся активной до ${доКонца}`);
+          return res.json({ ok: true, action: "cancel_pending", appSlug, email, accessUntil: доКонца });
+        }
         // ПОРЯДОК ЗДЕСЬ ЗНАЧИМ, и он обратный порядку активации.
         //
         // Записей две: строка прав (AppSubscription) и тариф, который РЕАЛЬНО
@@ -777,6 +795,11 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // — ровно тот дефект, который 12.08.2026 уже находили у DevHub Studio Pro.
       const отменяемыйМодуль = payload.meta?.custom_data?.module;
       if (tierForLemonSqueezyReference(ref) === "lite" && отменяемыйМодуль) {
+        const доКонца = отмененаНоДоступЕщёЕсть(event, attrs.ends_at);
+        if (доКонца) {
+          console.log(`[ls/webhook] ${event} → модуль ${String(отменяемыйМодуль)} for ${email} остаётся активным до ${доКонца}`);
+          return res.json({ ok: true, action: "cancel_pending", appSlug: String(отменяемыйМодуль), email, accessUntil: доКонца });
+        }
         // Порядок как в ветке приложений: сперва отнять доступ, потом учёт.
         for (const адрес of почтыВыдачи) {
           if (String(отменяемыйМодуль) === "devhub") await upgradeDevHubByEmail(адрес, "free");
@@ -802,6 +825,21 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
           event,
           currentTier: действующая?.tierId,
         });
+      }
+      const доКонца = отмененаНоДоступЕщёЕсть(event, attrs.ends_at);
+      if (доКонца) {
+        // Срок уже моделируется полем validUntil (его читают planGate и getActivePlan): сжимаем его до ends_at.
+        if (отзываем && действующая && действующая.tierId !== "free") {
+          writeSubscription({
+            ...действующая,
+            id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            ts: new Date().toISOString(),
+            validUntil: доКонца,
+            source: "lemonsqueezy:cancel-pending",
+          });
+        }
+        console.log(`[ls/webhook] ${event} → ${email} сохраняет план до ${доКонца}`);
+        return res.json({ ok: true, action: "cancel_pending", accessUntil: доКонца });
       }
       const downgrade: Subscription = {
         id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,

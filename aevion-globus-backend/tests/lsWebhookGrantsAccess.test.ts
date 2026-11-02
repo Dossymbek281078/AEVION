@@ -218,7 +218,7 @@ function tokenFor(sub: string, email: string): string {
 let subSeq = 0;
 function lsPayload(opts: {
   event: string; variantId: string; email: string; total?: number; customData?: Record<string, string>;
-  subId: string; createdAt?: string; renewsAt?: string;
+  subId: string; createdAt?: string; renewsAt?: string; endsAt?: string | null;
 }) {
   return {
     meta: { event_name: opts.event, ...(opts.customData ? { custom_data: opts.customData } : {}), test_mode: true },
@@ -231,6 +231,7 @@ function lsPayload(opts: {
         created_at: opts.createdAt ?? new Date().toISOString(),
         renews_at: opts.renewsAt ?? new Date(Date.now() + 30 * 864e5).toISOString(),
         ...(opts.total === undefined ? {} : { total: opts.total }),
+        ...(opts.endsAt ? { ends_at: opts.endsAt } : {}),
       },
     },
   };
@@ -536,6 +537,107 @@ describe("4) модуль Бюро (IP Bureau): уже оплаченное уз
     const q1 = await учестьДействие(fakeReq(token), "bureau_verify");
     expect(q1.заблокировано).toBe(true);
     expect((await request(app).get("/api/apps/access/check?app=ip_bureau").set(authed(token))).body.active).toBe(false);
+  });
+});
+
+
+/* ═══ Политика отмены (02.11.2026): cancelled держит доступ до ends_at; снимают expired и cancelled с прошедшим/отсутствующим ends_at ═══ */
+
+const DAY = 864e5;
+type Probe = { product: () => Promise<boolean>; cabinet: () => Promise<boolean>; hook: (event: string, endsAt?: string | null) => Promise<request.Response> };
+
+async function buyChess(): Promise<Probe> {
+  const b = newBuyer("pol-chess");
+  await checkout(b.token, { tierId: "max", app: "cyberchess", seats: 1, currency: "USD" });
+  const o = opened[opened.length - 1];
+  const variantId = resolveLemonSqueezyVariant(o.reference)!;
+  const hook = (event: string, endsAt?: string | null) =>
+    sendHook(lsPayload({ event, variantId, email: b.email, total: o.customPriceCents, customData: o.customData, subId: "ls_pol_chess", endsAt }));
+  expect((await hook("subscription_created")).status).toBe(200);
+  return {
+    hook,
+    product: async () => { resetAppEntitlementsCache(); return (await request(app).get("/api/apps/access/check?app=cyberchess").set(authed(b.token))).body.active === true; },
+    cabinet: async () => ((await request(app).get("/api/apps/access").set(authed(b.token))).body.apps as string[]).includes("cyberchess"),
+  };
+}
+async function buyPlanet(kind: "devhub" | "multichat"): Promise<Probe> {
+  const b = newBuyer("pol-" + kind);
+  const co = await checkout(b.token, { tierId: "max", seats: 1, billing: "monthly", currency: "USD" });
+  expect(co.status).toBe(200);
+  const o = opened[opened.length - 1];
+  const variantId = resolveLemonSqueezyVariant(o.reference)!;
+  const hook = (event: string, endsAt?: string | null) =>
+    sendHook(lsPayload({ event, variantId, email: b.email, total: o.customPriceCents, customData: o.customData, subId: "ls_pol_" + kind, endsAt }));
+  expect((await hook("subscription_created")).status).toBe(200);
+  return {
+    hook,
+    product: async () => kind === "devhub"
+      ? (await request(app).get("/api/devhub/studio/credits").set(authed(b.token))).body.tier === "pro"
+      : (await request(app).get("/api/multichat/presets").set(authed(b.token))).status === 200,
+    cabinet: async () => (await request(app).get("/api/pricing/subscription/me").set(authed(b.token))).body.subscription?.tierId === "max"
+      && getActive(b.email),
+  };
+}
+function getActive(email: string): boolean {
+  const lines = fs.readFileSync(process.env.SUBSCRIPTIONS_FILE!, "utf8").trim().split(String.fromCharCode(10)).map((l) => JSON.parse(l));
+  const last = [...lines].reverse().find((x) => x.email === email);
+  return !!last && last.tierId !== "free" && (!last.validUntil || Date.parse(last.validUntil) > Date.now());
+}
+async function buyBureau(): Promise<Probe> {
+  const email = "pol-bureau@test.aev";
+  db.users.set("user-pol-bureau", email);
+  const token = tokenFor("user-pol-bureau", email);
+  const variantId = fallbackVariantForReference("app_ip_bureau_lite")!;
+  const hook = (event: string, endsAt?: string | null) =>
+    sendHook(lsPayload({ event, variantId, email, total: 3200, customData: { module: "ip_bureau", accountEmail: email }, subId: "ls_pol_bureau", endsAt }));
+  expect((await hook("subscription_created")).status).toBe(200);
+  return {
+    hook,
+    product: async () => { resetAppEntitlementsCache(); return (await учестьДействие(fakeReq(token), "bureau_verify")).причина === "платящий"; },
+    cabinet: async () => ((await request(app).get("/api/apps/access").set(authed(token))).body.apps as string[]).includes("ip_bureau"),
+  };
+}
+
+describe.each([
+  ["CyberChess", buyChess],
+  ["DevHub (План Max)", () => buyPlanet("devhub")],
+  ["Мультичат (План Max)", () => buyPlanet("multichat")],
+  ["Бюро (модуль)", buyBureau],
+])("политика отмены: %s", (_name, buy) => {
+  test("cancelled с ends_at в будущем — доступ остаётся (кабинет и гейт продукта)", async () => {
+    const p = await buy();
+    expect(await p.product()).toBe(true);
+    const r = await p.hook("subscription_cancelled", new Date(Date.now() + 10 * DAY).toISOString());
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.action).toBe("cancel_pending");
+    expect(await p.cabinet(), "кабинет потерял оплаченный период").toBe(true);
+    expect(await p.product(), "гейт продукта закрыт до конца оплаченного периода").toBe(true);
+  });
+
+  test("cancelled с ends_at в прошлом — доступа нет", async () => {
+    const p = await buy();
+    const r = await p.hook("subscription_cancelled", new Date(Date.now() - DAY).toISOString());
+    expect(r.status).toBe(200);
+    expect(r.body.action).not.toBe("cancel_pending");
+    expect(await p.cabinet()).toBe(false);
+    expect(await p.product()).toBe(false);
+  });
+
+  test("cancelled без ends_at — доступа нет", async () => {
+    const p = await buy();
+    await p.hook("subscription_cancelled", null);
+    expect(await p.cabinet()).toBe(false);
+    expect(await p.product()).toBe(false);
+  });
+
+  test("cancelled (будущее), затем expired — доступа нет", async () => {
+    const p = await buy();
+    await p.hook("subscription_cancelled", new Date(Date.now() + 10 * DAY).toISOString());
+    expect(await p.product()).toBe(true);
+    const r = await p.hook("subscription_expired", new Date(Date.now() - 1000).toISOString());
+    expect(r.status).toBe(200);
+    expect(await p.cabinet()).toBe(false);
+    expect(await p.product()).toBe(false);
   });
 });
 

@@ -2067,7 +2067,7 @@ const kk: Record<string, string> = {
   "constitution.pricing.compare.feature.pdfWatermark": "Су таңбасыз PDF",
   "constitution.pricing.compare.feature.saved": "Сақталған сценарийлер",
   "constitution.pricing.compare.feature.themes": "Реттелетін тақырыптар",
-  "constitution.pricing.faq.aiNotWorking.a": "Constitution QCoreAI негізінде жұмыс істейді, 5 провайдермен (Claude, GPT-4, Gemini, DeepSeek, Grok) бапталған. Ешқайсысы бапталмаса, эвристикалық stub қосылады. Pro-да жылдамдық пен сапаға басымдық берілген барлық провайдерлер қолжетімді.",
+  "constitution.pricing.faq.aiNotWorking.a": "Constitution QCoreAI негізінде жұмыс істейді, Claude, GPT, Gemini және OpenRouter модельдерімен қосылған. Ешқайсысы бапталмаса, эвристикалық stub қосылады. Pro-да жылдамдық пен сапаға басымдық берілген барлық провайдерлер қолжетімді.",
   "constitution.pricing.faq.aiNotWorking.q": "AI-кеңесші жұмыс істемесе не істеу керек?",
   "constitution.pricing.faq.cancelAnytime.a": "Pro AEVION жазылымына кіреді — таңдалған мерзімге міндеттеме: 1, 3, 6, 9 немесе 12 ай. Мерзім бағасы бойынша ай сайын есептен шығарылады; бүкіл мерзімді жеңілдікпен алдын ала төлеуге болады — жазылым сіз бас тартқанша сол мерзімге ұзартылады. Мерзімінен бұрын бас тарту шарттары — қайтару бетінде.",
   "constitution.pricing.faq.cancelAnytime.q": "Жазылымды кез келген уақытта тоқтата аламын ба?",

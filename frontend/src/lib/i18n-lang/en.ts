@@ -2066,7 +2066,7 @@ const en: Record<string, string> = {
   "constitution.pricing.compare.feature.pdfWatermark": "PDF without watermark",
   "constitution.pricing.compare.feature.saved": "Saved scenarios",
   "constitution.pricing.compare.feature.themes": "Custom themes",
-  "constitution.pricing.faq.aiNotWorking.a": "Constitution runs on QCoreAI, configured with 5 providers (Claude, GPT-4, Gemini, DeepSeek, Grok). If none are configured, it falls back to a heuristic stub. Pro gets all providers with priority on speed and quality.",
+  "constitution.pricing.faq.aiNotWorking.a": "Constitution runs on QCoreAI, connected to Claude, GPT, Gemini and OpenRouter models. If none are configured, it falls back to a heuristic stub. Pro gets all providers with priority on speed and quality.",
   "constitution.pricing.faq.aiNotWorking.q": "What if the AI advisor isn't working?",
   "constitution.pricing.faq.cancelAnytime.a": "Pro comes with the AEVION subscription — a commitment to the term you choose: 1, 3, 6, 9 or 12 months. You are billed monthly at the term's price; you can also pay the whole term up front at a discount — it renews for the same term until you cancel it. Early-cancellation terms are on the refund page.",
   "constitution.pricing.faq.cancelAnytime.q": "Can I cancel my subscription at any time?",

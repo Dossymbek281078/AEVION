@@ -2066,7 +2066,7 @@ const ru: Record<string, string> = {
   "constitution.pricing.compare.feature.pdfWatermark": "PDF без watermark",
   "constitution.pricing.compare.feature.saved": "Сохранённые сценарии",
   "constitution.pricing.compare.feature.themes": "Custom темы",
-  "constitution.pricing.faq.aiNotWorking.a": "Constitution использует QCoreAI с настройкой 5 провайдеров (Claude, GPT-4, Gemini, DeepSeek, Grok). Если ни один не настроен — возвращается эвристический stub. На Pro доступны все провайдеры с приоритетом скорости и качества.",
+  "constitution.pricing.faq.aiNotWorking.a": "Constitution использует QCoreAI с подключёнными Claude, GPT, Gemini и моделями OpenRouter. Если ни один не настроен — возвращается эвристический stub. На Pro доступны все провайдеры с приоритетом скорости и качества.",
   "constitution.pricing.faq.aiNotWorking.q": "Что делать если AI-советник не работает?",
   "constitution.pricing.faq.cancelAnytime.a": "Pro входит в подписку AEVION — обязательство на выбранный срок: 1, 3, 6, 9 или 12 месяцев. Списание ежемесячно по цене срока; весь срок можно оплатить вперёд со скидкой — подписка продлевается на тот же срок, пока вы её не отмените. Условия досрочной отмены — на странице возвратов.",
   "constitution.pricing.faq.cancelAnytime.q": "Можно ли отменить подписку в любой момент?",

@@ -7,7 +7,7 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://a
 export const metadata: Metadata = {
   title: "QFusionAI — Hybrid AI Router",
   description:
-    "Гибридный AI-движок, объединяющий лучшие LLM (OpenAI, Anthropic, Gemini, DeepSeek, Grok) с автоматическим routing по цене/скорости/качеству. Один API — пять провайдеров.",
+    "Гибридный AI-движок, объединяющий лучшие LLM (OpenAI, Anthropic, Gemini, OpenRouter) с автоматическим routing по цене/скорости/качеству. Один API — несколько провайдеров.",
   alternates: { canonical: `${SITE}/qfusionai` },
   openGraph: {
     type: "website",

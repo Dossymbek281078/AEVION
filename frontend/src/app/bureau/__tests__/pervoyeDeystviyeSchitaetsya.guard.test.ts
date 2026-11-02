@@ -25,11 +25,11 @@ describe("первое действие Бюро/QRight считается", () 
     expect(QRIGHT.slice(i - 60, i)).toContain('type: "feature_use"');
   });
 
-  // 02.11.2026: ссылки ведут на /qright#protect-form (сразу к форме) — считаются те же.
+  // 02.11.2026: ссылки — href={ссылкаФормыЗащиты} (/qright#protect-form с меткой канала); считаются те же.
   it("🔴 /bureau: каждая ссылка на /qright шлёт cta_click (знаменатель — число ссылок)", () => {
     expect(BUREAU).toContain('import { track } from "@/lib/track";');
-    const ссылок = (BUREAU.match(/<Link href="\/qright(#protect-form)?"/g) || []).length;
-    const сСобытием = (BUREAU.match(/<Link href="\/qright(#protect-form)?" onClick=\{\(\) => track\(\{ type: "cta_click", source: "bureau", meta: \{ product: "qright" \} \}\)\}/g) || []).length;
+    const ссылок = (BUREAU.match(/<Link href=\{ссылкаФормыЗащиты\}/g) || []).length;
+    const сСобытием = (BUREAU.match(/<Link href=\{ссылкаФормыЗащиты\} onClick=\{\(\) => track\(\{ type: "cta_click", source: "bureau", meta: \{ product: "qright" \} \}\)\}/g) || []).length;
     expect(ссылок, "знаменатель: ссылок на /qright").toBeGreaterThanOrEqual(4);
     expect(сСобытием).toBe(ссылок);
   });

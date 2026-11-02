@@ -10,6 +10,7 @@ const PAGE = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 describe("кнопки «защитить» на /bureau ведут сразу к форме", () => {
   test("ни одной ссылки cta_click→qright на голый /qright", () => {
     expect(PAGE).not.toMatch(/href="\/qright" onClick=\{\(\) => track\(\{ type: "cta_click"/);
-    expect((PAGE.match(/href="\/qright#protect-form"/g) || []).length).toBeGreaterThanOrEqual(5);
+    expect((PAGE.match(/href=\{ссылкаФормыЗащиты\}/g) || []).length).toBeGreaterThanOrEqual(5);
+    expect(PAGE).toContain('useСсылкаСМеткой("/qright#protect-form")');
   });
 });

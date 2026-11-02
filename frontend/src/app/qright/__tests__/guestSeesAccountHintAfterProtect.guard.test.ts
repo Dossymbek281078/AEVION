@@ -40,4 +40,14 @@ describe("гость после защиты видит подсказку пр�
     }
     expect(tq("ru", ПОДСКАЗКА)).toBe("Создайте аккаунт на эту же почту — работа появится в вашем кабинете.");
   });
+  // 02.11.2026 (проход письма pb376): кабинет подбирает гостевую запись только по почте,
+  // поэтому гостю блок «Author details» открыт сразу, а подсказка без почты не обещает кабинет.
+  test("гостю блок с почтой открыт, подсказка без почты честная", () => {
+    expect(PAGE).toContain("<details open={!hasAuth}");
+    expect(PAGE).toContain("{ownerEmail.trim()");
+    const БЕЗ_ПОЧТЫ = "This record was saved without an email, so no dashboard can pick it up — download the PDF and the bundle below. Create an account before your next work:";
+    expect(PAGE).toContain(БЕЗ_ПОЧТЫ);
+    expect(tq("ru", БЕЗ_ПОЧТЫ)).not.toBe(БЕЗ_ПОЧТЫ);
+    expect(tq("kk", БЕЗ_ПОЧТЫ)).not.toBe(БЕЗ_ПОЧТЫ);
+  });
 });

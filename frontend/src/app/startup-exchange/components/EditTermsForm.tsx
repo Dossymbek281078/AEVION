@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useI18nOptional } from "@/lib/i18n";
+import { useSxLang } from "../useSxLang";
+import { sx } from "../sxText";
 import { SX_BUSY } from "./busyUi";
 import {
   ApiError,
@@ -33,8 +34,9 @@ export function EditTermsForm({
   token: string;
   onSaved: (listing: Listing, assessment: Assessment) => void;
 }) {
-  const sxLang = useI18nOptional()?.lang ?? "ru";
-  const SX = SX_BUSY[sxLang] ?? SX_BUSY.ru;
+  const sxLang = useSxLang();
+  const SX = SX_BUSY[sxLang] ?? SX_BUSY.en;
+  const t = (s: string, v?: Record<string, string | number>) => sx(sxLang, s, v);
   const deal = listing.deal;
   const [intent] = useState<DealIntent>(deal?.intent ?? "raise");
   const [askUsd, setAskUsd] = useState(deal?.askUsd ? String(deal.askUsd) : "");
@@ -97,7 +99,7 @@ export function EditTermsForm({
       setSaved(true);
       onSaved(r.listing, r.assessment);
     } catch (e) {
-      setIssues(e instanceof ApiError && e.issues.length ? e.issues : [{ field: "", message: "Не удалось сохранить условия." }]);
+      setIssues(e instanceof ApiError && e.issues.length ? e.issues : [{ field: "", message: t("Не удалось сохранить условия.") }]);
     } finally {
       setBusy(false);
     }
@@ -105,63 +107,60 @@ export function EditTermsForm({
 
   return (
     <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 18 }}>
-      <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>Исправить условия</div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>{t("Исправить условия")}</div>
       <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "#64748b", lineHeight: 1.55 }}>
-        {INTENT_LABEL[intent]}. Балл пересчитается сразу. Название и описание менять здесь нельзя:
-        отпечаток авторства зафиксировал именно тот текст на дату подачи.
+        {t(INTENT_LABEL[intent])}. {t("Балл пересчитается сразу. Название и описание менять здесь нельзя: отпечаток авторства зафиксировал именно тот текст на дату подачи.")}
       </p>
 
       {intent === "raise" && (
         <div style={row}>
-          <Field label="Сколько нужно, USD" value={askUsd} onChange={setAskUsd} />
-          <Field label="Отдаёте долю, %" value={equityPct} onChange={setEquityPct} />
+          <Field label={t("Сколько нужно, USD")} value={askUsd} onChange={setAskUsd} />
+          <Field label={t("Отдаёте долю, %")} value={equityPct} onChange={setEquityPct} />
         </div>
       )}
-      {intent === "sell_full" && <Field label="Цена продажи целиком, USD" value={askingPrice} onChange={setAskingPrice} />}
+      {intent === "sell_full" && <Field label={t("Цена продажи целиком, USD")} value={askingPrice} onChange={setAskingPrice} />}
       {intent === "sell_stake" && (
         <div style={row}>
-          <Field label="Размер доли, %" value={stakePct} onChange={setStakePct} />
-          <Field label="Цена доли, USD" value={stakePrice} onChange={setStakePrice} />
+          <Field label={t("Размер доли, %")} value={stakePct} onChange={setStakePct} />
+          <Field label={t("Цена доли, USD")} value={stakePrice} onChange={setStakePrice} />
         </div>
       )}
 
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: "#64748b", margin: "4px 0" }}>Дополнительные условия</div>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: "#64748b", margin: "4px 0" }}>{t("Дополнительные условия")}</div>
       <textarea
-        aria-label="Дополнительные условия"
+        aria-label={t("Дополнительные условия")}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         rows={2}
         style={{ ...input, resize: "vertical" }}
-        placeholder="Например: готов остаться в проекте на 6 месяцев после сделки"
+        placeholder={t("Например: готов остаться в проекте на 6 месяцев после сделки")}
       />
 
-      <div style={{ fontSize: 13.5, fontWeight: 800, color: "#0f172a", margin: "18px 0 4px" }}>Цифры проекта</div>
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: "#0f172a", margin: "18px 0 4px" }}>{t("Цифры проекта")}</div>
       <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "#64748b", lineHeight: 1.55 }}>
-        Именно они переводят балл с «по отрасли» на «по данным заявки» — и именно их просит разбор.
-        Заполняйте только то, что можете показать: биржа цифры не проверяет и честно об этом пишет,
-        но сверяет их между собой.
+        {t("Именно они переводят балл с «по отрасли» на «по данным заявки» — и именно их просит разбор. Заполняйте только то, что можете показать: биржа цифры не проверяет и честно об этом пишет, но сверяет их между собой.")}
       </p>
       <div style={row}>
-        <Field label="MRR, USD" value={mrr} onChange={setMrr} />
-        <Field label="ARR, USD" value={arr} onChange={setArr} />
+        <Field label={t("MRR, USD")} value={mrr} onChange={setMrr} />
+        <Field label={t("ARR, USD")} value={arr} onChange={setArr} />
       </div>
       <div style={row}>
-        <Field label="Пользователей" value={users} onChange={setUsers} />
-        <Field label="Платящих клиентов" value={paying} onChange={setPaying} />
+        <Field label={t("Пользователей")} value={users} onChange={setUsers} />
+        <Field label={t("Платящих клиентов")} value={paying} onChange={setPaying} />
       </div>
       <div style={row}>
-        <Field label="Рост, %/мес" value={growth} onChange={setGrowth} />
-        <Field label="Отток, %/мес" value={churn} onChange={setChurn} />
+        <Field label={t("Рост, %/мес")} value={growth} onChange={setGrowth} />
+        <Field label={t("Отток, %/мес")} value={churn} onChange={setChurn} />
       </div>
       <div style={row}>
-        <Field label="Валовая маржа, %" value={margin} onChange={setMargin} />
-        <Field label="Команда, человек" value={team} onChange={setTeam} />
+        <Field label={t("Валовая маржа, %")} value={margin} onChange={setMargin} />
+        <Field label={t("Команда, человек")} value={team} onChange={setTeam} />
       </div>
 
       {issues.length > 0 && (
         <ul style={{ margin: "6px 0 10px", paddingLeft: 18 }}>
           {issues.map((i, n) => (
-            <li key={n} style={{ fontSize: 12.5, color: "#b91c1c", lineHeight: 1.5 }}>{i.message}</li>
+            <li key={n} style={{ fontSize: 12.5, color: "#b91c1c", lineHeight: 1.5 }}>{t(i.message)}</li>
           ))}
         </ul>
       )}
@@ -182,9 +181,9 @@ export function EditTermsForm({
             cursor: busy ? "wait" : "pointer",
           }}
         >
-          {busy ? SX.saving : "Сохранить и пересчитать"}
+          {busy ? SX.saving : t("Сохранить и пересчитать")}
         </button>
-        {saved && <span style={{ fontSize: 12.5, fontWeight: 700, color: "#166534" }}>Сохранено, балл обновлён</span>}
+        {saved && <span style={{ fontSize: 12.5, fontWeight: 700, color: "#166534" }}>{t("Сохранено, балл обновлён")}</span>}
       </div>
     </div>
   );

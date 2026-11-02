@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useSxLang } from "../useSxLang";
+import { sx } from "../sxText";
 import { BAND_STYLE, TIER_ACCENT, dealHeadline, usd, type Listing } from "../lib";
 
 /**
@@ -9,6 +11,8 @@ import { BAND_STYLE, TIER_ACCENT, dealHeadline, usd, type Listing } from "../lib
  * and how did the free assessment rate it.
  */
 export function ListingCard({ listing, onInterest }: { listing: Listing; onInterest: (l: Listing) => void }) {
+  const lang = useSxLang();
+  const t = (s: string, v?: Record<string, string | number>) => sx(lang, s, v);
   const accent = TIER_ACCENT[listing.tier];
   const a = listing.assessment;
   const band = a ? BAND_STYLE[a.band] : null;
@@ -29,10 +33,10 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
         <div style={{ flex: 1, minWidth: 240 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
             <span style={{ padding: "2px 9px", borderRadius: 20, background: `${accent}14`, color: accent, fontSize: 11, fontWeight: 800 }}>
-              {listing.tierLabel}
+              {t(listing.tierLabel)}
             </span>
             {listing.qright_protected && (
-              <span style={{ fontSize: 10.5, color: "#64748b", fontFamily: "monospace" }} title="SHA-256 отпечаток текста заявки">
+              <span style={{ fontSize: 10.5, color: "#64748b", fontFamily: "monospace" }} title={t("SHA-256 отпечаток текста заявки")}>
                 sha256:{listing.content_hash?.slice(0, 10)}
               </span>
             )}
@@ -46,14 +50,14 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
           </h3>
 
           <div style={{ fontSize: 13.5, fontWeight: 700, color: accent, marginBottom: 6 }}>
-            {dealHeadline(listing.deal)}
+            {dealHeadline(listing.deal, lang)}
             {listing.deal?.intent === "raise" && a?.deal.implied.postMoneyUsd && (
               // «Оценка» на карточке читалась как наша оценка проекта — а биржа
               // ровно этого не делает и говорит об этом на каждом экране. Число
               // здесь — арифметика самого основателя: сколько просит за какую
               // долю. Подпись должна называть именно это.
-              <span style={{ fontWeight: 500, color: "#64748b", fontSize: 12 }} title="Пост-оценка по условиям самого основателя: сколько он просит за какую долю">
-                {" "}· по его условиям — {usd(a.deal.implied.postMoneyUsd)}
+              <span style={{ fontWeight: 500, color: "#64748b", fontSize: 12 }} title={t("Пост-оценка по условиям самого основателя: сколько он просит за какую долю")}>
+                {" "}· {t("по его условиям —")} {usd(a.deal.implied.postMoneyUsd)}
               </span>
             )}
           </div>
@@ -64,8 +68,8 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
 
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11.5, color: "#64748b" }}>
             {listing.metrics?.mrrUsd ? <span>MRR {usd(listing.metrics.mrrUsd)}</span> : null}
-            {listing.metrics?.users ? <span>{listing.metrics.users} польз.</span> : null}
-            {listing.metrics?.growthMomPct ? <span>рост {listing.metrics.growthMomPct}%/мес</span> : null}
+            {listing.metrics?.users ? <span>{t("{n} польз.", { n: listing.metrics.users })}</span> : null}
+            {listing.metrics?.growthMomPct ? <span>{t("рост {n}%/мес", { n: listing.metrics.growthMomPct })}</span> : null}
             {listing.demo_url && (
               <a
                 href={listing.demo_url}
@@ -73,10 +77,10 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
                 rel="noopener noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", minHeight: 34, padding: "6px 2px", color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}
               >
-                демо ↗
+                {t("демо ↗")}
               </a>
             )}
-            {listing.interest_count !== undefined && <span>{listing.interest_count} откликов</span>}
+            {listing.interest_count !== undefined && <span>{t("{n} откликов", { n: listing.interest_count })}</span>}
           </div>
         </div>
 
@@ -85,20 +89,20 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
           {a && band ? (
             <div style={{ border: "1px solid #f1f5f9", borderRadius: 12, padding: "10px 12px", background: "#fcfcfd" }}>
               <div style={{ fontSize: 26, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{a.score}</div>
-              <div style={{ fontSize: 10, color: band.color, fontWeight: 700, marginTop: 3 }}>{band.label}</div>
+              <div style={{ fontSize: 10, color: band.color, fontWeight: 700, marginTop: 3 }}>{t(band.label)}</div>
               {ratio !== null && ratio > 1 && (
                 <div style={{ fontSize: 10.5, color: "#b45309", marginTop: 5, lineHeight: 1.35 }}>
-                  цена выше рынка в {ratio.toFixed(1)}×
+                  {t("цена выше рынка в {n}×", { n: ratio.toFixed(1) })}
                 </div>
               )}
               {highFlags > 0 && (
                 <div style={{ fontSize: 10.5, color: "#991b1b", marginTop: 4, lineHeight: 1.35 }}>
-                  {highFlags} серьёзн. замечани{highFlags === 1 ? "е" : "я"}
+                  {t(highFlags === 1 ? "{n} серьёзн. замечание" : "{n} серьёзн. замечания", { n: highFlags })}
                 </div>
               )}
             </div>
           ) : (
-            <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.4 }}>Анализ не проводился</div>
+            <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.4 }}>{t("Анализ не проводился")}</div>
           )}
 
           <button
@@ -117,13 +121,13 @@ export function ListingCard({ listing, onInterest }: { listing: Listing; onInter
               cursor: "pointer",
             }}
           >
-            Предложить сделку
+            {t("Предложить сделку")}
           </button>
           <Link
             href={`/startup-exchange/${listing.id}`}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 34, marginTop: 4, fontSize: 12, color: "#7c3aed", textDecoration: "none", fontWeight: 600 }}
           >
-            Разбор целиком
+            {t("Разбор целиком")}
           </Link>
         </div>
       </div>

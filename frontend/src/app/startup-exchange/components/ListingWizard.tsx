@@ -144,7 +144,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
     setIssues([]);
     setError(null);
     try {
-      const r = await startupxApi.assess(buildDraft());
+      const r = await startupxApi.assess(buildDraft(), sxLang);
       setAssessment(r.assessment);
       setPhase(next);
     } catch (e) {
@@ -164,7 +164,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
     setIssues([]);
     setError(null);
     try {
-      const r = await startupxApi.publish(buildDraft());
+      const r = await startupxApi.publish(buildDraft(), sxLang);
       setAssessment(r.assessment);
       // The token is returned exactly once. Show it before anything else can
       // navigate away — losing it means losing access to the offers.

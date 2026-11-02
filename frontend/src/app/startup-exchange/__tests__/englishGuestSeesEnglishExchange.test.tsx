@@ -198,6 +198,12 @@ describe("биржа на английском: кириллицы в отрис
     await screen.findByText("Publish on the exchange");
     expect(screen.getByLabelText("Your email (not published)")).toBeTruthy();
     expect(cyrillicLeft(), "кириллица на шаге условий /en").toEqual([]);
+    // Разбор считает сервер: запрос с /en обязан просить английский текст (замер 02.11: 19 русских строк).
+    const calls = (fetch as unknown as { mock: { calls: Array<[RequestInfo | URL, RequestInit | undefined]> } }).mock.calls;
+    const assessCall = calls.find(([u]) => String(u).includes("/assess"));
+    expect(assessCall, "запрос /assess не отправлен").toBeTruthy();
+    expect(JSON.parse(String(assessCall![1]?.body)).lang).toBe("en");
+    expect(calls.some(([u]) => String(u).includes("/tiers?lang=en"))).toBe(true);
   });
 
   it("карточка отдельно и модалка отклика", async () => {

@@ -42,3 +42,15 @@ export const НЕ_ПРОДАЁТСЯ_ОТДЕЛЬНО: Record<string, string> = 
 export function predlagaemOtdelno(slug: string): boolean {
   return !(slug in НЕ_ПРОДАЁТСЯ_ОТДЕЛЬНО);
 }
+
+/**
+ * Входит ли приложение в «Планету» (снято с отдельной продажи ради одного плана).
+ *
+ * 🔴 2.11.2026, замер Приложений на проде 107eb0f3c: `/pricing?app=qright` (devhub, qventure, qsign,
+ * qskyway) рисовал наверху «Multichat — в любом платном тарифе» — пришедший за QRight видел чужое имя.
+ * Таким приложениям верхний блок честно говорит «входит в план» их собственным именем. Бюро сюда не
+ * попадает: оно бесплатно, «входит в тариф» про него было бы неправдой.
+ */
+export function vkhoditVPlanetu(slug: string): boolean {
+  return НЕ_ПРОДАЁТСЯ_ОТДЕЛЬНО[slug] === ОДИН_ПЛАН_19_10;
+}

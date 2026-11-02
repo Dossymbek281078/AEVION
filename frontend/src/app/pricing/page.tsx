@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
-import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
+import { predlagaemOtdelno, vkhoditVPlanetu } from "@/lib/neProdayotsyaOtdelno";
 import { vybratVhod, nuzhnaProkrutkaKKartochke } from "@/lib/vhodNaStranitseTsen";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
@@ -778,6 +778,7 @@ export default function PricingPage() {
       app: params.get("app"),
       естьМодуль: (id) => Boolean(standaloneApp(id)) || Boolean(data?.modules?.some((m) => m.id === id)),
       prodayotsyaOtdelno: predlagaemOtdelno,
+      vkhoditVPlanetu,
     });
     if (вход) {
       setHeroModule(вход);

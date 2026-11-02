@@ -136,13 +136,13 @@ export default function StartupExchangePage() {
 
   useEffect(() => {
     startupxApi
-      .tiers()
+      .tiers(sxLang)
       .then((r) => {
         setTiers(r.tiers);
         setSectors(r.sectors ?? []);
       })
       .catch(() => {});
-  }, []);
+  }, [sxLang]);
 
   useEffect(() => {
     fetchListings(tierFilter, offset, sort, sectorFilter, searchApplied);

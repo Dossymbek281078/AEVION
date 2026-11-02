@@ -80,9 +80,9 @@ export async function generateMetadata({
 
   try {
     const resp = await fetch(apiUrl(`/api/startupx/ideas/${encodeURIComponent(id)}`), {
-      // A listing changes when the founder edits terms; an hour-old preview is
-      // fine and keeps this off the backend on every crawl.
-      next: { revalidate: 3600 },
+      // 2.11.2026: был час — снятая заявка ещё час отдавала 200 со старым названием и описанием
+      // (пробы 25 и 27 после DELETE). Минута: превью почти не отстаёт, бэкенд не дёргается на каждом обходе.
+      next: { revalidate: 60 },
     });
     if (!resp.ok) return fallback;
     const body = (await resp.json()) as { success?: boolean; data?: Record<string, unknown> };
@@ -122,7 +122,7 @@ export async function generateMetadata({
  * `/startup-exchange/qqq-no-such-987` отвечал 200 — страница клиентская и сама рисует «Заявка не
  * найдена», но статус уже 200. Нечисловой id и 404 от бэкенда → `notFound()`; бэкенд не ответил —
  * пропускаем к странице (она покажет свой отказ), чтобы наша сеть не превращала живую заявку в 404.
- * Запрос тот же и с тем же кэшем, что у превью выше, — лишней нагрузки на бэкенд нет.
+ * 2.11.2026: запрос без кэша — снятая заявка (DELETE) сразу 404, а не через час.
  */
 export const dynamic = "force-dynamic";
 
@@ -131,7 +131,8 @@ export default async function ListingLayout({ children, params }: { children: Re
   if (!/^[1-9][0-9]{0,12}$/.test(id)) notFound();
   let status = 0;
   try {
-    const resp = await fetch(apiUrl(`/api/startupx/ideas/${encodeURIComponent(id)}`), { next: { revalidate: 3600 } });
+    // Решение «есть ли заявка» — только по живому ответу: из кэша снятая заявка открывалась бы ещё час.
+    const resp = await fetch(apiUrl(`/api/startupx/ideas/${encodeURIComponent(id)}`), { cache: "no-store" });
     status = resp.status;
   } catch {
     status = 0;

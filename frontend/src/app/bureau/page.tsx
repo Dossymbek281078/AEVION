@@ -8,6 +8,7 @@ import { useI18nOptional } from "@/lib/i18n";
 import { useServerLang, языкКадра } from "@/lib/serverLangContext";
 import { useBureauText } from "./bureauText";
 import { useСсылкаВхода } from "../auth/loginHref";
+import { useСсылкаСМеткой } from "@/lib/useKeepChannelHref";
 import { MyCertificates } from "./MyCertificates";
 import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
@@ -380,6 +381,8 @@ function BureauPageInner() {
   // метка канала сохранена (auth/loginHref.ts). До этого в main не было своей кнопки «Войти».
   const [guest, setGuest] = useState(false);
   const ссылкаВходаВБюро = useСсылкаВхода("/bureau");
+  // 02.11.2026: кнопки «защитить» — к форме и с меткой канала из адреса (/bureau?c=mail-… → /qright?c=mail-…#protect-form).
+  const ссылкаФормыЗащиты = useСсылкаСМеткой("/qright#protect-form");
 
   // Notarized tier waitlist.
   const [waitlistEmail, setWaitlistEmail] = useState("");
@@ -629,7 +632,7 @@ function BureauPageInner() {
               {/* 02.11.2026 (Продукт, проход письма pb376): кнопки «защитить» ведут сразу к форме /qright#protect-form —
                   до этого человек попадал на верх /qright и нажимал второй раз, мимо блока «напишите мне, когда откроется Verified».
                   Якорь срабатывает при загрузке (замер 10:5x: форма в кадре на 390 px). */}
-              <Link href="/qright#protect-form" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Link href={ссылкаФормыЗащиты} onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
                 {ctaProtect}
               </Link>
               <Link href="#registry" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15.5 }}>
@@ -707,7 +710,7 @@ function BureauPageInner() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Link href="/qright#protect-form" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
+                  <Link href={ссылкаФормыЗащиты} onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
                     {tb("Protect another work")}
                   </Link>
                 </div>
@@ -994,7 +997,7 @@ function BureauPageInner() {
                 ({filtersActive ? `${filteredCerts.length} of ${certificates.length}` : certificates.length})
               </span>
             </div>
-            <Link href="/qright#protect-form" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>{tb("+ New Certificate")}</Link>
+            <Link href={ссылкаФормыЗащиты} onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>{tb("+ New Certificate")}</Link>
           </div>
           <div style={{ fontSize: 15, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
             {tb("Public prior-art lookup — search by title, author, or paste a SHA-256 hash. Or")} <strong>{tb("drop a file below")}</strong> {tb("to check it instantly.")}
@@ -1163,7 +1166,7 @@ function BureauPageInner() {
               <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>{tb("No certificates yet")}</div>
               <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 16 }}>{tb("Protect your first work to see it here")}</div>
-              <Link href="/qright#protect-form" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16 }}>{ctaProtect}</Link>
+              <Link href={ссылкаФормыЗащиты} onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16 }}>{ctaProtect}</Link>
             </div>
           ) : filteredCerts.length === 0 ? (
             <div style={{ textAlign: "center", padding: "32px 20px", borderRadius: 16, border: "1px dashed rgba(15,23,42,0.12)", background: "#fff" }}>
@@ -1177,7 +1180,7 @@ function BureauPageInner() {
                   : tb("Try a different search term or reset filters.")}
               </div>
               {hashLooksLikeSha256 ? (
-                <Link href="/qright#protect-form" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
+                <Link href={ссылкаФормыЗащиты} onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
                   {tb("🛡️ Register this work")}
                 </Link>
               ) : (

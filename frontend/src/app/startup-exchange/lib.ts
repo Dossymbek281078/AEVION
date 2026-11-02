@@ -218,7 +218,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const startupxApi = {
-  tiers: () =>
+  tiers: (lang?: string) =>
     call<{
       tiers: TierSpec[];
       intents: DealIntent[];
@@ -227,7 +227,7 @@ export const startupxApi = {
       sources: Assessment["sources"];
       assessmentVersion: number;
       disclaimer: string;
-    }>("/tiers"),
+    }>(lang ? `/tiers?lang=${encodeURIComponent(lang)}` : "/tiers"),
 
   stats: () =>
     call<{
@@ -252,13 +252,14 @@ export const startupxApi = {
   get: (id: number) => call<Listing>(`/ideas/${id}`),
 
   /** Free analysis of a draft — nothing is stored. */
-  assess: (draft: ListingDraft) =>
+  assess: (draft: ListingDraft, lang?: string) =>
     call<{ assessment: Assessment; stored: boolean }>("/assess", {
       method: "POST",
-      body: JSON.stringify(draft),
+      // lang: the server writes the analysis text in the page's language.
+      body: JSON.stringify(lang ? { ...draft, lang } : draft),
     }),
 
-  publish: (draft: ListingDraft) =>
+  publish: (draft: ListingDraft, lang?: string) =>
     call<{
       id: number;
       contentHash: string;
@@ -275,7 +276,7 @@ export const startupxApi = {
       storage?: "db" | "memory";
     }>("/ideas", {
       method: "POST",
-      body: JSON.stringify(draft),
+      body: JSON.stringify(lang ? { ...draft, lang } : draft),
     }),
 
   /** The founder's inbox for one listing. Requires the token issued on publish. */

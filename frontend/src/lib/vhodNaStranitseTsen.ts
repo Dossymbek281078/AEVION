@@ -22,6 +22,8 @@ export type ВходСтраницыЦен = {
   естьМодуль: (id: string) => boolean;
   /** Продаётся ли такое приложение отдельно (bureau — нет). */
   prodayotsyaOtdelno: (слаг: string) => boolean;
+  /** Входит ли в «Планету» — тогда наверху блок «входит в план» его именем (2.11.2026). */
+  vkhoditVPlanetu?: (слаг: string) => boolean;
 };
 
 /**
@@ -35,7 +37,7 @@ export function vybratVhod(о: ВходСтраницыЦен): string {
   const модуль = (о.module ?? "").trim();
   if (модуль && о.естьМодуль(модуль)) return модуль;
   const прил = (о.app ?? "").trim();
-  if (прил && о.естьМодуль(прил) && о.prodayotsyaOtdelno(прил)) return прил;
+  if (прил && о.естьМодуль(прил) && (о.prodayotsyaOtdelno(прил) || о.vkhoditVPlanetu?.(прил))) return прил;
   return "";
 }
 

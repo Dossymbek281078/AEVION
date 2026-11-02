@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { vybratVhod, nuzhnaProkrutkaKKartochke } from "../vhodNaStranitseTsen";
 import { STANDALONE_APPS, standaloneApp } from "../termPricing";
-import { predlagaemOtdelno } from "../neProdayotsyaOtdelno";
+import { predlagaemOtdelno, vkhoditVPlanetu } from "../neProdayotsyaOtdelno";
 
 /**
  * 🔴 ПРИШЁЛ ЗА ПРИЛОЖЕНИЕМ — ВИДИТ ЕГО ПЕРВЫМ ЭКРАНОМ.
@@ -41,6 +41,16 @@ describe("что показывать первым экраном на /pricing"
     // его карточку значит пообещать покупку, которой нет.
     expect(predlagaemOtdelno("ip_bureau"), "контроль: бюро всё ещё снято").toBe(false);
     expect(о({ app: "ip_bureau" })).toBe("");
+  });
+
+  it("🔴 2.11: входящее в «Планету» поднимается своим именем, бюро — нет", () => {
+    // Замер прода 107eb0f3c: /pricing?app=qright рисовал наверху «Multichat — в любом платном тарифе».
+    const сПланетой = (app: string) =>
+      vybratVhod({ app, естьМодуль: () => true, prodayotsyaOtdelno: predlagaemOtdelno, vkhoditVPlanetu });
+    for (const слаг of ["qright", "devhub", "qventure", "qsign", "qskyway"]) expect(сПланетой(слаг), слаг).toBe(слаг);
+    expect(сПланетой("ip_bureau"), "бюро бесплатно — «входит в тариф» было бы неправдой").toBe("");
+    const стр = readFileSync(join(process.cwd(), "src/app/pricing/page.tsx"), "utf8");
+    expect(стр, "страница не передаёт vkhoditVPlanetu в vybratVhod").toMatch(/vybratVhod\(\{[\s\S]{0,300}vkhoditVPlanetu/);
   });
 
   it("мусор и пустота дают обычный холодный вход", () => {

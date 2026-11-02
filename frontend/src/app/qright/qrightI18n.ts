@@ -175,6 +175,7 @@ const RU: Record<string, string> = {
   "Export JSON": "Экспорт JSON",
   // подсказка гостю на карточке результата (30.10.2026)
   "Create an account with this same email — the work will appear in your dashboard.": "Создайте аккаунт на эту же почту — работа появится в вашем кабинете.",
+  "This record was saved without an email, so no dashboard can pick it up — download the PDF and the bundle below. Create an account before your next work:": "Эта запись сохранена без почты, и ни один кабинет её не подберёт — скачайте PDF и пакет проверки ниже. Перед следующей работой создайте аккаунт:",
   "Create account or sign in →": "Создать аккаунт или войти →",
   // реестр
   "Sign in to see your works": "Войдите, чтобы увидеть свои работы",
@@ -391,6 +392,7 @@ const KK: Record<string, string> = {
   "Shield Dashboard →": "Shield панелі →",
   "Export JSON": "JSON экспорттау",
   "Create an account with this same email — the work will appear in your dashboard.": "Осы электрондық поштамен аккаунт жасаңыз — жұмыс сіздің кабинетіңізде көрінеді.",
+  "This record was saved without an email, so no dashboard can pick it up — download the PDF and the bundle below. Create an account before your next work:": "Бұл жазба поштасыз сақталды, оны ешбір кабинет таба алмайды — төмендегі PDF пен тексеру пакетін жүктеп алыңыз. Келесі жұмыстың алдында аккаунт жасаңыз:",
   "Create account or sign in →": "Аккаунт жасау немесе кіру →",
   "Sign in to see your works": "Жұмыстарыңызды көру үшін кіріңіз",
   "Search by title (≥ 2 chars)…": "Атауы бойынша іздеу (≥ 2 таңба)…",

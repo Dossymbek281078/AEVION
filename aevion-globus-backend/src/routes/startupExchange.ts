@@ -59,6 +59,7 @@ import {
   type AssessLang,
   type Assessment,
 } from "../lib/startupx/assess";
+import { withOfficialTranslation } from "../lib/startupx/officialTranslations";
 import { marketSourcesFor, fmt as fmtMoney } from "../lib/startupx/valuation";
 
 /** Language of the human-readable assessment text: body.lang first, then ?lang=; unknown means ru. */
@@ -586,7 +587,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
       const { rows: cnt } = await pool.query(`SELECT COUNT(*)::int AS n FROM startup_ideas ${where}`, args);
       const typedRows = rows as ListingRow[];
       return ok(res, {
-        listings: typedRows.map((r) => publicView(r)),
+        listings: typedRows.map((r) => withOfficialTranslation(publicView(r), requestLang(req))),
         total: (cnt as Array<{ n: number }>)[0]?.n ?? typedRows.length,
         limit,
         offset,
@@ -613,7 +614,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
       : b.created_at.localeCompare(a.created_at),
   );
   return ok(res, {
-    listings: all.slice(offset, offset + limit).map((r) => publicView(r)),
+    listings: all.slice(offset, offset + limit).map((r) => withOfficialTranslation(publicView(r), requestLang(req))),
     total: all.length,
     limit,
     offset,
@@ -778,7 +779,7 @@ startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
         `SELECT COUNT(*)::int AS n FROM startup_interests WHERE idea_id=$1`,
         [id],
       );
-      return ok(res, publicView(row, (cnt as Array<{ n: number }>)[0]?.n ?? 0));
+      return ok(res, withOfficialTranslation(publicView(row, (cnt as Array<{ n: number }>)[0]?.n ?? 0), requestLang(req)));
     }
   } catch (e) {
     if (isStartupExchangeDbReady()) return dbOutage(res, e, "GET /ideas/:id");
@@ -789,7 +790,7 @@ startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
   if (!row || row.visibility !== "public") return fail(res, "not_found", 404);
   if (shouldCountView(id, req)) row.views = (row.views ?? 0) + 1;
   const interest_count = Array.from(memInterests.values()).filter((i) => i.idea_id === id).length;
-  return ok(res, publicView(row, interest_count));
+  return ok(res, withOfficialTranslation(publicView(row, interest_count), requestLang(req)));
 });
 
 // ─── POST /api/startupx/assess ───────────────────────────────────────────────

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { isAuthenticated } from "@/lib/auth";
 import { tNav, useNavLang, type NavKey } from "./navI18n";
 import { useСсылкаАвторизацииШапки } from "@/app/auth/loginHref";
 
@@ -29,6 +31,10 @@ export function PipelineSteps({ current }: { current: string }) {
   const lang = useNavLang();
   // 2.11.2026: шаг «Авторизация» вёл на голый /auth — вход терял страницу и метку канала ?c=.
   const ссылкаАвторизации = useСсылкаАвторизацииШапки();
+  // 2.11.2026: ✓ у «Авторизация»/«QRight» горели гостю по позиции, а не по факту (прод, /qsign, чистый браузер).
+  // Галочки — только вошедшему; гость видит номера. Токен читаем после монтирования: на сервере его нет.
+  const [вошёл, setВошёл] = useState(false);
+  useEffect(() => { setВошёл(isAuthenticated()); }, []);
 
   return (
     <div
@@ -48,7 +54,7 @@ export function PipelineSteps({ current }: { current: string }) {
     >
       {PIPELINE_STEPS.map((step, i) => {
         const isActive = step.id === current;
-        const isDone = i < idx;
+        const isDone = вошёл && i < idx;
         const bg = isActive
           ? "#0f172a"
           : isDone

@@ -23,10 +23,23 @@ describe("PipelineSteps", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("marks completed steps with ✓ when current is mid-pipeline", () => {
-    render(<PipelineSteps current="bureau" />);
-    const checks = screen.getAllByText("✓");
-    expect(checks.length).toBeGreaterThanOrEqual(2);
+  it("marks completed steps with ✓ for a signed-in visitor mid-pipeline", () => {
+    window.localStorage.setItem("aevion_auth_token_v1", "t");
+    try {
+      render(<PipelineSteps current="bureau" />);
+      const checks = screen.getAllByText("✓");
+      expect(checks.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      window.localStorage.removeItem("aevion_auth_token_v1");
+    }
+  });
+
+  it("shows no ✓ to a guest: steps before the current one are numbers, not done", () => {
+    window.localStorage.removeItem("aevion_auth_token_v1");
+    render(<PipelineSteps current="qsign" />);
+    expect(screen.queryByText("✓")).toBeNull();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
   });
 
   it("renders 6 anchors with hrefs to correct routes", () => {

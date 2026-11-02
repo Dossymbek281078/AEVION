@@ -423,14 +423,14 @@ export const launchedModules: PitchModule[] = [
     href: "/qcoreai",
     stage: "live",
     bucket: "intelligence",
-    tagline: "One AI surface across Claude, GPT-4o, Gemini, DeepSeek, Grok — knows every AEVION module.",
+    tagline: "One AI surface across Claude, GPT-4o, Gemini and open models — knows every AEVION module.",
     problem:
       "Users juggle 4–5 AI products and lose context. Building yet another wrapper is meaningless — what's missing is a domain-aware AI that knows your IP portfolio, your wallet and your tier.",
     killerFeature:
       "Live provider/model switching, suggested prompts seeded with AEVION concepts, graceful 'all-providers-down' fallback, OPEX savings via centralised model routing.",
     networkRole:
       "QCoreAI is the intelligence backbone for Multichat, Bank Advisor, Bank Copilot and every future agent. Centralised model usage accounting → predictable per-token economics.",
-    proof: ["5 production providers wired", "Suggestion deck explains the ecosystem", "/api/qcoreai/providers live"],
+    proof: ["Claude, GPT, Gemini and open models wired", "Suggestion deck explains the ecosystem", "/api/qcoreai/providers live"],
     valueLine: `Centralised LLM spend across ${MODULE_NODES} nodes vs. 27 separate API contracts — single biggest OPEX win in the company.`,
   },
   {
@@ -717,7 +717,7 @@ export const press = {
     { kind: "partner", label: "Standards body · advisory engagement" },
   ],
   integrations: [
-    { kind: "integration", label: "5 LLM providers (Claude, GPT, Gemini, DeepSeek, Grok) — live" },
+    { kind: "integration", label: "LLM providers (Claude, GPT, Gemini, open models) — live" },
     { kind: "integration", label: "Stripe-style payment rails — embedded in Bank" },
     { kind: "integration", label: "WebAuthn biometric — production" },
     { kind: "integration", label: "PostgreSQL + Node + Next.js 16 — full stack live" },

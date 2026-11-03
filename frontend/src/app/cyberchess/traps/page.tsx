@@ -1,6 +1,7 @@
 // /cyberchess/traps — русская версия страницы ловушек (en и kk — свои адреса).
 import TrapsView from "./TrapsView";
 import type { Metadata } from "next";
+import { PageTracking } from "@/components/PageTracking";
 import { trapsMetadata, trapsUrl, TRAPS_LANGUAGES } from "./meta";
 
 // canonical объявлен на самой странице: сторож canonicalNotInherited читает page.tsx.
@@ -10,5 +11,10 @@ export const metadata: Metadata = {
 };
 
 export default function TrapsPageRu() {
-  return <TrapsView yazyk="ru" />;
+  return (
+    <>
+      <PageTracking page="cyberchess-traps" />
+      <TrapsView yazyk="ru" />
+    </>
+  );
 }

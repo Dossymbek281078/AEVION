@@ -1,6 +1,7 @@
 // /devhub/guide — страница для разработчиков из поиска («AI app builder»), ведёт в студию DevHub и в цены.
 // Язык — serverLang (?lang=, кука, Accept-Language); en/ru/kk (kk — черновик).
 import type { Metadata } from "next";
+import { PageTracking } from "@/components/PageTracking";
 import { serverLang } from "@/lib/serverLang";
 import { GuideView } from "./GuideView";
 import { GUIDE_LANGUAGES, guideLang, guideMetadata } from "./guideText";
@@ -20,5 +21,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function DevhubGuidePage() {
   const lang = guideLang(await serverLang("ru"));
-  return <GuideView lang={lang} />;
+  return (
+    <>
+      <PageTracking page="devhub-guide" />
+      <GuideView lang={lang} />
+    </>
+  );
 }

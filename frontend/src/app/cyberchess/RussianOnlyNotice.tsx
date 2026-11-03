@@ -22,17 +22,33 @@ import { loadLocale } from './i18n';
 // Страницы, которые ДЕЙСТВИТЕЛЬНО переведены: на них полоса не нужна.
 const PEREVEDENY = ['/cyberchess'];
 
+/*
+ * Страницы, у которых перевод живёт по СВОЕМУ адресу (/en/…, /kk/…). 3.11.2026, замер
+ * Приложений перед роликами: человек с английским браузером по ссылке из Shorts
+ * (aevion.app/cyberchess/traps) читал «available in Russian only», хотя
+ * /en/cyberchess/traps переведена целиком. Здесь полоса ведёт на неё, с той же
+ * строкой запроса — метка ролика (?c=yt-…) не теряется.
+ */
+const PEREVOD_PO_ADRESU = ['/cyberchess/traps', '/cyberchess/guide'];
+
 export default function RussianOnlyNotice() {
   const put = usePathname();
   const [pokazat, setPokazat] = useState(false);
+  const [perevod, setPerevod] = useState<string | null>(null);
 
   useEffect(() => {
     // Язык читаем только здесь: чтение браузера при отрисовке даёт
     // расхождение разметки сервера и клиента.
     try {
-      const ne_ru = loadLocale() !== 'ru';
+      const yazyk = loadLocale();
+      const ne_ru = yazyk !== 'ru';
       const perevedena = PEREVEDENY.includes(put ?? '');
       setPokazat(ne_ru && !perevedena);
+      setPerevod(
+        ne_ru && PEREVOD_PO_ADRESU.includes(put ?? '')
+          ? `/${yazyk}${put}${window.location.search}`
+          : null,
+      );
     } catch {}
   }, [put]);
 
@@ -46,8 +62,16 @@ export default function RussianOnlyNotice() {
         padding: '8px 16px', fontSize: 13, textAlign: 'center',
       }}
     >
-      This page is available in Russian only for now — the main CyberChess
-      screen is translated.
+      {perevod ? (
+        <a href={perevod} style={{ color: '#f0b429', fontWeight: 700 }}>
+          {perevod.startsWith('/kk/') ? 'Бұл беттің қазақша нұсқасы →' : 'Read this page in English →'}
+        </a>
+      ) : (
+        <>
+          This page is available in Russian only for now — the main CyberChess
+          screen is translated.
+        </>
+      )}
     </div>
   );
 }

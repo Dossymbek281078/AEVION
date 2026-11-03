@@ -8,7 +8,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PageTracking } from "@/components/PageTracking";
-import { GuestQuotaWall, guestWallFrom, type GuestWall } from "./GuestQuotaWall";
+import { GuestQuotaWall, GuestLimitChip, guestWallFrom, type GuestWall } from "./GuestQuotaWall";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -96,6 +96,8 @@ type RunState = {
   finalContent?: string;
   error?: string;
   status: "running" | "done" | "error" | "stopped";
+  /** 402 guest_quota_exhausted: лимит гостя, не сбой — чип нейтральный, красной плашки нет (3.11). */
+  guestLimit?: boolean;
   startedAt: number;
   totalDurationMs?: number;
   totalCostUsd?: number;
@@ -1688,6 +1690,7 @@ export default function QCoreMultiAgentPage() {
         ...r,
         status: isAbort ? "stopped" : "error",
         error: isAbort ? undefined : msgText,
+        guestLimit: !isAbort && !!e?.guestWall,
       } : r)));
     } finally {
       abortRef.current = null;
@@ -5537,7 +5540,7 @@ function RunCard({
       )}
 
       {/* Error */}
-      {run.error && !run.finalContent && (
+      {run.error && !run.finalContent && !run.guestLimit && (
         <div
           style={{
             padding: "10px 14px", borderRadius: 10,
@@ -5598,7 +5601,8 @@ function RunCard({
               ⭐ PREMIUM QUOTA
             </span>
           )}
-          {run.status === "error" && (
+          {run.guestLimit && <GuestLimitChip />}
+          {run.status === "error" && !run.guestLimit && (
             <span
               style={{
                 padding: "2px 8px", borderRadius: 999,

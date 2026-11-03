@@ -80,3 +80,23 @@ export function GuestQuotaWall({ wall }: { wall: GuestWall }) {
     </div>
   );
 }
+
+/** Чип в шапке прогона вместо красного «ERROR», когда прогон упёрся в лимит гостя (3.11). */
+export const GUEST_LIMIT_CHIP = { ru: "Лимит гостя", en: "Guest limit" };
+
+export function GuestLimitChip() {
+  const lang = useI18nOptional()?.lang;
+  const text = lang === "ru" || lang === "kk" ? GUEST_LIMIT_CHIP.ru : GUEST_LIMIT_CHIP.en;
+  return (
+    <span
+      data-guest-limit-chip
+      style={{
+        padding: "2px 8px", borderRadius: 999,
+        background: "rgba(13,148,136,0.08)", color: "#0f766e",
+        fontSize: 10, fontWeight: 800, border: "1px solid rgba(13,148,136,0.3)",
+      }}
+    >
+      {text}
+    </span>
+  );
+}

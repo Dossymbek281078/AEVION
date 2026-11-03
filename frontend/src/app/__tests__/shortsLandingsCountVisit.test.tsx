@@ -30,6 +30,7 @@ const ПОСАДОЧНЫЕ: Array<[string, string]> = [
   ["devhub/guide", "devhub-guide"],
   ["bureau/guide", "bureau-guide"],
   ["qcoreai/multi", "qcoreai-multi"],
+  ["agency/primer", "agency-primer"],
 ];
 
 describe("посадочные роликов объявляют учёт ровно один раз", () => {

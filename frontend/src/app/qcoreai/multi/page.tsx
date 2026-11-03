@@ -7,6 +7,7 @@ import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PageTracking } from "@/components/PageTracking";
 import { GuestQuotaWall, guestWallFrom, type GuestWall } from "./GuestQuotaWall";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
@@ -2005,6 +2006,8 @@ export default function QCoreMultiAgentPage() {
   return (
     <main>
       <ProductPageShell maxWidth={1200}>
+        {/* Сюда ведёт Shorts 4.11 — до 3.11 заход не считался вовсе (0 page_view на 7 заходов). */}
+        <PageTracking page="qcoreai-multi" />
         <Wave1Nav />
         {partial.length > 0 && (
           <div

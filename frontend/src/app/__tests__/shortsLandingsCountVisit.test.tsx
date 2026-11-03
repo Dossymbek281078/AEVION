@@ -29,6 +29,7 @@ const ПОСАДОЧНЫЕ: Array<[string, string]> = [
   ["kk/cyberchess/guide", "kk-cyberchess-guide"],
   ["devhub/guide", "devhub-guide"],
   ["bureau/guide", "bureau-guide"],
+  ["qcoreai/multi", "qcoreai-multi"],
 ];
 
 describe("посадочные роликов объявляют учёт ровно один раз", () => {

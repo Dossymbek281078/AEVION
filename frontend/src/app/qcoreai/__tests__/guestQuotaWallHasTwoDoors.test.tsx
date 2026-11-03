@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
-import { GuestQuotaWall, guestWallFrom, PRICING_HREF } from "../multi/GuestQuotaWall";
+import { GuestQuotaWall, GuestLimitChip, guestWallFrom, PRICING_HREF } from "../multi/GuestQuotaWall";
 
 /**
  * Гость /qcoreai/multi после квоты видит две двери — вход и тарифы, а не
@@ -60,5 +60,25 @@ describe("страница подключает стену и не пугает 
   test("401 личных персон и шаблонов у гостя — не «часть данных не загрузилась»", () => {
     expect(src).toMatch(/if \(!pRes\.ok && pRes\.status !== 401\) setPartial/);
     expect(src).toMatch(/if \(!tmplRes\.ok && tmplRes\.status !== 401\) setPartial/);
+  });
+});
+
+describe("чип прогона при лимите гостя (3.11, замер прода: при 402 в шапке оставался красный ERROR)", () => {
+  const page = fs.readFileSync(path.join(__dirname, "../multi/page.tsx"), "utf8");
+
+  test("GuestLimitChip — нейтральный «Лимит гостя», не красный", () => {
+    const { container } = render(<GuestLimitChip />);
+    const chip = container.querySelector("[data-guest-limit-chip]") as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(["Лимит гостя", "Guest limit"]).toContain(chip.textContent);
+    expect(chip.style.color).not.toMatch(/991b1b|#ef4444/);
+    expect(chip.style.background).not.toMatch(/fee2e2/);
+  });
+
+  test("page.tsx: красный ERROR и красная плашка run.error не показываются при guestLimit", () => {
+    expect(page).toMatch(/run\.status === "error" && !run\.guestLimit && \(/);
+    expect(page).toMatch(/\{run\.guestLimit && <GuestLimitChip \/>\}/);
+    expect(page).toMatch(/run\.error && !run\.finalContent && !run\.guestLimit && \(/);
+    expect(page).toMatch(/guestLimit: !isAbort && !!e\?\.guestWall/);
   });
 });

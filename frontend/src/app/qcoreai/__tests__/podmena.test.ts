@@ -79,7 +79,7 @@ describe("/qcoreai/multi: отказ гостевой нормы показан 
   const src = readFileSync(join(__dirname, "../multi/page.tsx"), "utf8");
   it("402 берёт message и loginUrl сервера, а не код guest_quota_exhausted", () => {
     expect(src).toMatch(/res\.status === 402 && typeof err\?\.loginUrl === "string"/);
-    expect(src).toMatch(/throw new Error\(humanMsg \? humanMsg \+ signIn : err\?\.error/);
+    expect(src).toMatch(/new Error\(humanMsg \? humanMsg \+ signIn : err\?\.error/);
   });
 });
 

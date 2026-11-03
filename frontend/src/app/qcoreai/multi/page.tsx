@@ -7,6 +7,7 @@ import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { GuestQuotaWall, guestWallFrom, type GuestWall } from "./GuestQuotaWall";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -513,6 +514,7 @@ export default function QCoreMultiAgentPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [guestWall, setGuestWall] = useState<GuestWall | null>(null);
   // Sidebar quick-find + tag chip strip (feat/qcore-extras 2026-04-29).
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchResults, setSearchResults] = useState<Array<{
@@ -703,7 +705,7 @@ export default function QCoreMultiAgentPage() {
         try {
           const pRes = await fetch(apiUrl("/api/qcoreai/me/personas"), { headers: bearerHeader() });
           const pData = await pRes.json().catch(() => ({}));
-          if (!pRes.ok) setPartial((p) => p.includes("персоны агентов") ? p : [...p, "персоны агентов"]);
+          if (!pRes.ok && pRes.status !== 401) setPartial((p) => p.includes("персоны агентов") ? p : [...p, "персоны агентов"]);
           if (Array.isArray(pData?.personas)) {
             const map: Record<string, { name: string; emoji?: string; color?: string }> = {};
             for (const p of pData.personas) map[p.roleId] = { name: p.name, emoji: p.emoji, color: p.color };
@@ -718,7 +720,7 @@ export default function QCoreMultiAgentPage() {
             fetch(apiUrl("/api/qcoreai/templates/public?limit=20")),
           ]);
           const tmplData = await tmplRes.json().catch(() => ({}));
-          if (!tmplRes.ok) setPartial((p) => p.includes("мои шаблоны") ? p : [...p, "мои шаблоны"]);
+          if (!tmplRes.ok && tmplRes.status !== 401) setPartial((p) => p.includes("мои шаблоны") ? p : [...p, "мои шаблоны"]);
           const pubData = await pubTmplRes.json().catch(() => ({}));
           if (!pubTmplRes.ok) setPartial((p) => p.includes("общие шаблоны") ? p : [...p, "общие шаблоны"]);
           if (Array.isArray(tmplData?.items)) setTemplates(tmplData.items);
@@ -1461,8 +1463,11 @@ export default function QCoreMultiAgentPage() {
         if (clearedFromInput) setInput(msg);
         // Guest gate (402 guest_quota_exhausted) carries a human message and a sign-in link.
         const humanMsg = typeof err?.message === "string" && err.message ? err.message : "";
-        const signIn = res.status === 402 && typeof err?.loginUrl === "string" ? ` ${err.loginUrl}` : "";
-        throw new Error(humanMsg ? humanMsg + signIn : err?.error || `HTTP ${res.status}`);
+        // Стена гостя — не сбой: вместо адреса сырым текстом две двери, вход и тарифы (3.11).
+        const wall = guestWallFrom(res.status, err, window.location.pathname + window.location.search);
+        if (wall) setGuestWall(wall);
+        const signIn = !wall && res.status === 402 && typeof err?.loginUrl === "string" ? ` ${err.loginUrl}` : "";
+        throw Object.assign(new Error(humanMsg ? humanMsg + signIn : err?.error || `HTTP ${res.status}`), { guestWall: !!wall });
       }
 
       let realRunId = tempRunId;
@@ -1676,7 +1681,8 @@ export default function QCoreMultiAgentPage() {
     } catch (e: any) {
       const isAbort = e?.name === "AbortError";
       const msgText = isAbort ? "Stopped by user." : e?.message || "Stream failed";
-      if (!isAbort) setGlobalError(msgText);
+      // Стену гостя показывает GuestQuotaWall — второй красной плашкой её не дублируем.
+      if (!isAbort && !e?.guestWall) setGlobalError(msgText);
       setRuns((prev) => prev.map((r) => (r.status === "running" ? {
         ...r,
         status: isAbort ? "stopped" : "error",
@@ -4034,6 +4040,8 @@ export default function QCoreMultiAgentPage() {
                 </button>
               </div>
             )}
+
+            {guestWall && <GuestQuotaWall wall={guestWall} />}
 
             {globalError && (
               <div

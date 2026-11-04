@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DeepEngine, type DeepEngineState } from "./deepEngine";
 import { checkAppAccess, type AppAccess } from "@/lib/appAccess";
-import { keepChannel } from "@/lib/products";
+import { keepChannel, PRICING_APP } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useСсылкаВхода } from "../auth/loginHref";
 
@@ -148,7 +148,7 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
           // рекламы, и если она теряется здесь, покупка Pro запишется в
           // direct — а именно этот переход мы и хотим считать (сторож
           // channelSurvivesInternalLinks поймал потерю сразу).
-          href={keepChannel("/pricing", channelNow())}
+          href={keepChannel(PRICING_APP("cyberchess"), channelNow())}
           style={{
             display: "inline-block", marginTop: 10, padding: "8px 14px", borderRadius: 8,
             background: "#5b7a00", color: "#fff", fontWeight: 700, textDecoration: "none",

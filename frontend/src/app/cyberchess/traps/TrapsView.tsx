@@ -6,6 +6,7 @@ import { Chess } from "chess.js";
 import Piece from "../Pieces";
 import { GUIDE_PATHS as guidePaths } from "../guide/guide";
 import { LOVUSHKI, type Lovushka, type Yazyk } from "./traps";
+import { BuyCyberChessButton } from "../BuyCyberChessButton";
 
 const UI: Record<Yazyk, Record<string, string>> = {
   ru: {
@@ -167,7 +168,11 @@ export default function TrapsView({ yazyk: lang }: { yazyk: Yazyk }) {
     <main lang={lang} style={{ background: "#f7f6f2", color: "#16161a", minHeight: "100vh" }}>
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 16px 64px", boxSizing: "border-box" }}>
         <h1 style={{ fontSize: "clamp(26px, 6vw, 38px)", margin: "0 0 12px" }}>{ui.h1}</h1>
-        <p style={{ fontSize: 17, lineHeight: 1.55, color: "#3d3f46", margin: "0 0 20px" }}>{ui.lead}</p>
+        <p style={{ fontSize: 17, lineHeight: 1.55, color: "#3d3f46", margin: "0 0 16px" }}>{ui.lead}</p>
+        {/* 4.11: касса в одно нажатие прямо на первом экране (задача Оркестратора). */}
+        <p style={{ margin: "0 0 20px" }}>
+          <BuyCyberChessButton lang={lang} source="traps" fallbackChannel="seo-traps" />
+        </p>
         <ol style={{ columns: "2 200px", margin: "0 0 12px", paddingLeft: 20, lineHeight: 1.8 }}>
           {LOVUSHKI.map((t) => (
             <li key={t.id}>

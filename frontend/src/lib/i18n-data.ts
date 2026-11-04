@@ -77,6 +77,7 @@ export const LANG_COOKIE = "aevion_lang_v1";
  * машине не гонялся несколько дней, а CI запускается лишь на четырёх ветках.
  */
 export const LANG_KEY_COUNT: Record<Lang, number> = {
+  // 04.11: +6 в ru/en/kk — согласие на письма (auth.marketingConsent.*), ветка feat/marketing-consent-site-0411.
   // 27.10: ещё +4 — constitution.nav.academy/blog/pricing, pricing.tier.pro.cta (английские подписи на ru/kk).
   // 27.10: ещё +4 — constitution.err.sign/pdf/publish/comment (сырое «HTTP 4xx: тело» на экране).
   // 27.10: +2 в ru/en/kk — constitution.ai.errorDailyLimit / errorFailed: ошибка ИИ-совета
@@ -197,9 +198,9 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // рядом с английской кнопкой «Create account». Число — счёт по словарям.
   // 30.10: +2 в ru/en/kk — moduleChip.perYear и moduleChip.buyTitleYear: годовая плашка CyberChess показывала сырое «$50moduleChip.perYear» (и подсказку-ключ на кнопке); сторож moduleChipKeysExistInDictionaries.
   // 02.11: +5 в ru/en/kk — pricing.home.notes.roadmap/security/refund/changelog/apiPricingLink (английские ссылки примечаний /pricing).
-  ru: 7546,
-  en: 7546,
-  kk: 7546,
+  ru: 7552,
+  en: 7552,
+  kk: 7552,
 
   de: 134,
   fr: 134,

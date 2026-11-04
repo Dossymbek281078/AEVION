@@ -4449,8 +4449,7 @@ export default function QCoreMultiAgentPage() {
             gap: 10px;
           }
           @media (max-width: 880px) {
-            /* 4.11: minmax(0,1fr) + min-width:0 — иначе колонка растёт до min-content
-               карточек ответов и на 390 страница становилась 672 (замер прода). */
+            /* 4.11: minmax(0,1fr) + min-width:0 — see multiFitsPhoneWidth.guard.test (390px overflow). */
             .qc-layout { grid-template-columns: minmax(0, 1fr); }
             .qc-layout > * { min-width: 0; max-width: 100%; }
             .qc-pair-grid { grid-template-columns: 1fr; }

@@ -80,7 +80,7 @@ function русскиеУзлы(): string[] {
 
 /** Страница отрисована: три поля формы регистрации на месте (контроль прибора, не пустота). */
 async function дождатьсяФормы() {
-  await waitFor(() => expect(document.body.querySelectorAll("input").length).toBe(3));
+  await waitFor(() => expect(document.body.querySelectorAll("input:not([type=checkbox])").length).toBe(3));
 }
 
 function отрисовать() {

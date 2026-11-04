@@ -295,6 +295,15 @@ const prettyModel = (m: string) => {
    Helpers
    ═══════════════════════════════════════════════════════════════════════ */
 
+/** Гость без токена: личные ручки (personas, templates, presence) не зовём — иначе 401 каждые 20 с (замер Продаж 4.11). */
+function hasAuthToken(): boolean {
+  try {
+    return typeof window !== "undefined" && !!getAuthToken();
+  } catch {
+    return false;
+  }
+}
+
 function bearerHeader(): HeadersInit {
   try {
     const t = typeof window !== "undefined" ? getAuthToken() : null;
@@ -636,7 +645,7 @@ export default function QCoreMultiAgentPage() {
 
   /* ── V35: Presence ping — heartbeat every 20s when a session is active ── */
   useEffect(() => {
-    if (!activeSessionId) { setPresenceCount(0); return; }
+    if (!activeSessionId || !hasAuthToken()) { setPresenceCount(0); return; }
     const ping = async () => {
       try {
         const r = await fetch(apiUrl(`/api/qcoreai/sessions/${activeSessionId}/presence/ping`), {
@@ -704,8 +713,8 @@ export default function QCoreMultiAgentPage() {
         }
         if (Array.isArray(sessData?.items)) setSessions(sessData.items);
 
-        // V19: load agent personas
-        try {
+        // V19: load agent personas (только с токеном — гостю 401 не нужен)
+        if (hasAuthToken()) try {
           const pRes = await fetch(apiUrl("/api/qcoreai/me/personas"), { headers: bearerHeader() });
           const pData = await pRes.json().catch(() => ({}));
           if (!pRes.ok && pRes.status !== 401) setPartial((p) => p.includes("персоны агентов") ? p : [...p, "персоны агентов"]);
@@ -719,7 +728,7 @@ export default function QCoreMultiAgentPage() {
         // V7-Tmpl: load user's own templates in the background.
         try {
           const [tmplRes, pubTmplRes] = await Promise.all([
-            fetch(apiUrl("/api/qcoreai/templates"), { headers: bearerHeader() }),
+            hasAuthToken() ? fetch(apiUrl("/api/qcoreai/templates"), { headers: bearerHeader() }) : Promise.resolve(new Response("{}", { status: 401 })),
             fetch(apiUrl("/api/qcoreai/templates/public?limit=20")),
           ]);
           const tmplData = await tmplRes.json().catch(() => ({}));

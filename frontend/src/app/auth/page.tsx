@@ -185,6 +185,8 @@ export default function AuthPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Согласие на письма с новостями и предложениями: по умолчанию ВЫКЛЮЧЕНО, только явная галочка.
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [token, setToken] = useState<string>("");
   const [me, setMe] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -316,7 +318,7 @@ export default function AuthPage() {
       const res = await fetch(apiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, marketingConsent }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || t("auth.err.registerFailed"));
@@ -691,6 +693,12 @@ export default function AuthPage() {
                   {t("auth.form.forgot")}
                 </Link>
               ) : null}
+              {mode === "register" && (
+                <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "#334155", cursor: "pointer" }}>
+                  <input type="checkbox" checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)} disabled={busy} style={{ marginTop: 3 }} />
+                  <span>{t("auth.form.marketingConsent")}</span>
+                </label>
+              )}
               <button onClick={mode === "login" ? signIn : register} disabled={submitDisabled} style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: submitDisabled ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #0ea5e9)", color: "#fff", cursor: submitDisabled ? "default" : "pointer", fontWeight: 900, fontSize: 15, boxShadow: submitDisabled ? "none" : "0 4px 14px rgba(13,148,136,0.35)" }}>
                 {busy ? t("auth.waiting") : mode === "register" ? t("auth.submit.register") : t("auth.submit.login")}
               </button>

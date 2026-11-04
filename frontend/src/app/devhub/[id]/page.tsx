@@ -19,13 +19,13 @@ import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSn
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { track } from "@/lib/track";
-import { postNow } from "@/lib/channelNow";
+import { postNow, channelNow } from "@/lib/channelNow";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { pokazyvatKartochkuSokhraneniya, klyuchSokhraneniya, kanalDlyaLista, DEVHUB_SAVE_SOURCE, DEVHUB_SAVE_FEATURE } from "@/lib/devhubSaveCard";
 import { useI18nOptional } from "@/lib/i18n";
 import { tDevhub, type DevhubKey } from "../i18n";
 import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
-import { productById, PRICING_TIERS_LIST } from "@/lib/products";
+import { productById, PRICING_TIERS_LIST, keepChannel, сМодулем } from "@/lib/products";
 
 /**
  * A write whose result the UI is about to act on.
@@ -1327,6 +1327,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   // Вне провайдера языка (тесты) — русский, как и раньше.
   const uiLang = useI18nOptional()?.lang ?? "ru";
+  // 4.11.2026: ссылки «Планеты» несут модуль и метку захода (см. сМодулем); канал — после гидратации.
+  const [канал, setКанал] = useState<string | null>(null);
+  useEffect(() => { setКанал(channelNow()); }, []);
+  const PLANET_TERMS_HREF = keepChannel(сМодулем(PLANET_TERMS_LIST, "devhub"), канал);
   const GL = GEN_UI[uiLang] ?? GEN_UI.ru;
   const AL = useAttrL();
   // Денежная плашка берёт подписи из СЛОВАРЯ МОДУЛЯ, а не из своих литералов:
@@ -5573,7 +5577,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           <a
-                            href={PLANET_TERMS_LIST}
+                            href={PLANET_TERMS_HREF}
                             onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub-after-live", meta: { processor: "lemonsqueezy" } })}
                             style={{ padding: "7px 14px", background: "#fff", color: "#0d9488", borderRadius: 8, fontWeight: 800, fontSize: 13, textDecoration: "none", whiteSpace: "nowrap" }}
                           >
@@ -7483,7 +7487,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
           <span style={{ fontSize: 13, lineHeight: 1.45, flex: "1 1 260px" }}>{upgradeNudge}</span>
           {STUDIO_PRO && (
             <a
-              href={PLANET_TERMS_LIST}
+              href={PLANET_TERMS_HREF}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub-ide", meta: { processor: "lemonsqueezy" } })}

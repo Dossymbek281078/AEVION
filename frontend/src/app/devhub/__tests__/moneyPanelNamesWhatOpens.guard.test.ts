@@ -82,7 +82,9 @@ describe("плашка называет то, что откроется", () => 
       expect(код).toContain("const PLANET_TERMS_LIST = PRICING_TIERS_LIST");
       expect(PRICING_TIERS_LIST).toBe("/pricing#tiers");
       // 30.10.2026: ссылка может нести язык страницы (pricingHrefWithLang) — цель та же, список сроков #tiers.
-      expect(код).toMatch(/href=\{(?:pricingHrefWithLang\()?PLANET_TERMS_LIST\)?\}/);
+      // 4.11.2026: в [id] ссылка собирается в PLANET_TERMS_HREF (модуль + метка захода) из того же PLANET_TERMS_LIST.
+      expect(код).toMatch(/href=\{(?:(?:pricingHrefWithLang\()?PLANET_TERMS_LIST\)?|PLANET_TERMS_HREF)\}/);
+      if (код.includes("PLANET_TERMS_HREF")) expect(код).toContain("keepChannel(сМодулем(PLANET_TERMS_LIST, \"devhub\"), канал)");
       expect(код, "кнопка снова ведёт к кнопке Max, минуя выбор срока").not.toContain("href={STUDIO_PRO.href}");
       expect(код).toMatch(/pro\.fromPrice"\)\.replace\("\{p\}", `\$\$\{planetFromPerMonth\(\)\}`\)/);
       expect(код).toMatch(/pro\.termRange"\)\.replace\("\{max\}"/);

@@ -1323,6 +1323,35 @@ function FileContextMenu({
 
 // Promise-only: Next 16 rejects the `T | Promise<T>` union in generated route
 // types (build-only error — see the note in src/app/[id]/page.tsx).
+/**
+ * 4.11.2026 (замер Ниш на проде, гость, 2 из 2): кнопка ZIP открывала адрес
+ * экспорта через window.open — браузер шёл без гостевого заголовка и без
+ * Authorization, бэк отвечал {"error":"project not found"}. Качаем через
+ * fetch: обёртка installDevhubGuestHeader кладёт личность и токен, ответ —
+ * в файл. Отказ показываем словами, а не молчим.
+ */
+async function скачатьZip(projectId: string, name: string): Promise<void> {
+  try {
+    const r = await fetch(apiUrl(`/api/devhub/projects/${projectId}/export`));
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(`ZIP: ${j?.error || `HTTP ${r.status}`}`);
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(name || "project").replace(/[^w.-]+/g, "_")}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  } catch (e: any) {
+    alert(`ZIP: ${e?.message || "network error"}`);
+  }
+}
+
 export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   // Вне провайдера языка (тесты) — русский, как и раньше.
@@ -4607,7 +4636,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 title={AL.upZip}
               >{zipImporting ? "..." : "📦"}</button>
               <button
-                onClick={() => { if (project) window.open(apiUrl(`/api/devhub/projects/${project.id}/export`), "_blank"); }}
+                onClick={() => { if (project) void скачатьZip(project.id, project.name); }}
                 disabled={!project || files.length === 0}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
                 title={AL.dlZip}

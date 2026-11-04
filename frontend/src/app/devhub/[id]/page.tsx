@@ -1335,7 +1335,7 @@ async function скачатьZip(projectId: string, name: string): Promise<void>
     const r = await fetch(apiUrl(`/api/devhub/projects/${projectId}/export`));
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
-      alert(`ZIP: ${j?.error || `HTTP ${r.status}`}`);
+      alert(devhubServerError(j?.error, `Не удалось скачать ZIP (ответ ${r.status})`));
       return;
     }
     const blob = await r.blob();
@@ -1348,7 +1348,7 @@ async function скачатьZip(projectId: string, name: string): Promise<void>
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   } catch (e: any) {
-    alert(`ZIP: ${e?.message || "network error"}`);
+    alert(devhubServerError(e?.message, "Не удалось скачать ZIP: нет связи с сервером"));
   }
 }
 

@@ -90,6 +90,9 @@ export const DISALLOWED_PATHS = [
   "/tt",
   "/ig",
   "/yt",
+  // 4.11.2026: входы безликих YouTube-каналов A и B (метки ch-a-*/ch-b-*, решение Оркестратора).
+  "/ch-a",
+  "/ch-b",
   // 15.09.2026: li/bs — метки из выкатки 970e30d1d72e, входы заведены вместе с этой строкой.
   "/li",
   "/bs",
@@ -134,7 +137,7 @@ export const DISALLOWED_PATHS = [
  */
 export const EXACT_ONLY_PATHS: readonly string[] = [
   "/tt", "/ig", "/yt", "/dz", "/vk", "/tg",
-  "/th", "/fb", "/x", "/qr", "/li", "/bs",
+  "/th", "/fb", "/x", "/qr", "/li", "/bs", "/ch-a", "/ch-b",
   "/en/tt", "/en/ig", "/en/yt",
 ];
 

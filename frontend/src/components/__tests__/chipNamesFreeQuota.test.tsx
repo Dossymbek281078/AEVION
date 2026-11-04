@@ -58,7 +58,7 @@ describe("ModulePricingChip — бюро и QRight называют норму 3
     expect(text).toContain(`${FREE_ACTIONS_PER_MONTH} работы в месяц бесплатно`);
     expect(text).toContain(`без предела — в подписке AEVION от $${planetFromPerMonth()}/мес`);
     expect(text, "старая пустая формула осталась").not.toContain("Входит в подписку AEVION");
-    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#planet-buy");
+    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe(`/pricing?module=${moduleId}#planet-buy`);
   });
 
   it.each(["bureau", "qright"])("en (%s): «3 works a month free», без кириллицы", async (moduleId) => {

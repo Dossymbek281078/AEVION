@@ -27,7 +27,9 @@ describe("DevHub: ступень «Планета» сразу под живым
     expect(block).toContain("pagesResult?.liveUrl");
   });
   it("кнопка ведёт к срокам «Планеты» и пишет checkout_start со своим источником", () => {
-    expect(block).toContain("href={PLANET_TERMS_LIST}");
+    // 4.11.2026: ссылка — PLANET_TERMS_HREF = keepChannel(сМодулем(PLANET_TERMS_LIST, "devhub"), канал): тот же список сроков + модуль и метка.
+    expect(block).toContain("href={PLANET_TERMS_HREF}");
+    expect(src).toContain("const PLANET_TERMS_HREF = keepChannel(сМодулем(PLANET_TERMS_LIST, \"devhub\"), канал);");
     expect(block).toMatch(/type: "checkout_start", tier: "studio-pro", source: "devhub-after-live"/);
     expect(block).toContain('href="/devhub/link"');
   });

@@ -122,6 +122,23 @@ export const PRICING_TERMS = "/pricing#planet-buy";
 export const PRICING_TIERS_LIST = "/pricing#tiers";
 
 /**
+ * Та же ссылка на цены, но с модулем, с которого человек пошёл покупать (`?module=<id>`).
+ *
+ * 4.11.2026 (окно «Приложения», путь покупателя на проде 390 ru/en): «Купить» на /bureau и
+ * «Цены и покупка» на /devhub вели на /pricing#planet-buy без модуля, и верхняя плашка цен
+ * показывала вход по умолчанию — «Multichat — в любом платном тарифе». Человек из бюро читал
+ * про чужое приложение. С `?module=` плашка называет его модуль (vybratVhod на /pricing).
+ * Параметр — до хеша: после `#` браузер его не отправит.
+ */
+export function сМодулем(path: string, moduleId: string): string {
+  const хеш = path.indexOf("#");
+  const без = хеш < 0 ? path : path.slice(0, хеш);
+  const хвост = хеш < 0 ? "" : path.slice(хеш);
+  if (/[?&]module=/.test(без)) return path;
+  return без + (без.includes("?") ? "&" : "?") + "module=" + encodeURIComponent(moduleId) + хвост;
+}
+
+/**
  * Покупка отдельного приложения: страница цен с выбранным приложением.
  * Хеш — в самом конце: параметры после `#` браузер не отправляет, и метка
  * канала, дописанная туда, потерялась бы (см. keepChannel ниже).

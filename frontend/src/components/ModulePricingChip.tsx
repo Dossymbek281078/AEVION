@@ -5,7 +5,7 @@ import { фонСветлыйПод } from "@/lib/fonPodElementom";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
-import { PRICING_APP, PRICING_TERMS, keepChannel } from "@/lib/products";
+import { PRICING_APP, PRICING_TERMS, keepChannel, сМодулем } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useI18nOptional } from "@/lib/i18n";
 import { RazrabotkaPreduprezhdenie } from "./RazrabotkaPreduprezhdenie";
@@ -179,7 +179,8 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
   };
   const appFromЧисло = дешевейшийПродаваемый();
   const appFrom = appFromЧисло === null ? null : `$${appFromЧисло}`;
-  const href = keepChannel(app ? PRICING_APP(app.slug) : PRICING_TERMS, channel);
+  // Модуль едет в ссылку: без него /pricing рисует плашку Мультичата (замер 4.11, см. сМодулем).
+  const href = keepChannel(app ? PRICING_APP(app.slug) : сМодулем(PRICING_TERMS, moduleId), channel);
 
   const palette =
     theme === "dark" && !фонСветлый

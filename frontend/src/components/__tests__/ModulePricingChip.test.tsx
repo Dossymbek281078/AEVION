@@ -113,7 +113,7 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     expect(text).toContain("Входит в подписку AEVION");
     expect(text).toContain(`$${planetFromPerMonth()}`);
     expect(text).not.toContain("отдельно");
-    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#planet-buy");
+    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing?module=qlearn#planet-buy");
   });
 
   /*
@@ -139,7 +139,7 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     expect(text).toContain("в подписке AEVION");
     expect(text, "на плашке осталась отдельная цена бюро").not.toContain("$32");
     expect(text, "бюро всё ещё подаётся как отдельный товар").not.toContain("IP Bureau");
-    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#planet-buy");
+    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing?module=bureau#planet-buy");
   });
 
   it("снятые цены и имена тарифов на плашке не появляются", () => {

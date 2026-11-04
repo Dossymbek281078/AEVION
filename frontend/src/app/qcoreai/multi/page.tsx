@@ -4449,7 +4449,10 @@ export default function QCoreMultiAgentPage() {
             gap: 10px;
           }
           @media (max-width: 880px) {
-            .qc-layout { grid-template-columns: 1fr; }
+            /* 4.11: minmax(0,1fr) + min-width:0 — иначе колонка растёт до min-content
+               карточек ответов и на 390 страница становилась 672 (замер прода). */
+            .qc-layout { grid-template-columns: minmax(0, 1fr); }
+            .qc-layout > * { min-width: 0; max-width: 100%; }
             .qc-pair-grid { grid-template-columns: 1fr; }
             .qc-sidebar { max-height: none !important; position: static !important; }
             .qc-sidebar-toggle { display: flex !important; }
@@ -6206,7 +6209,7 @@ function FinalCard({
             </span>
           );
         })()}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button
             onClick={toggleBookmark}
             title={bookmarked ? "Remove bookmark" : "Bookmark this run"}

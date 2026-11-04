@@ -9,6 +9,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PageTracking } from "@/components/PageTracking";
 import { GuestQuotaWall, GuestLimitChip, guestWallFrom, type GuestWall } from "./GuestQuotaWall";
+import { exampleFor, startStrategy } from "./guestExamples";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -398,6 +399,13 @@ export default function QCoreMultiAgentPage() {
   // plain factual lookups to a single flagship call, so users don't overpay for
   // trivia. They can still pin a specific strategy via the pills.
   const [strategy, setStrategy] = useState<Strategy>("auto");
+  // Гость с ролика «один вопрос — несколько моделей» открывает страницу сразу в Parallel (после монтирования — без расхождения SSR).
+  const [signedIn, setSignedIn] = useState(true);
+  useEffect(() => {
+    const t = hasAuthToken();
+    setSignedIn(t);
+    setStrategy((cur) => (cur === "auto" ? (startStrategy(t) as Strategy) : cur));
+  }, []);
   // council mode: how many crowd members to convene (2–6).
   const [councilSize, setCouncilSize] = useState<number>(3);
   // council mode: Mixture-of-Agents refinement layers (1=fast, 2-3=deeper/slower).
@@ -3936,6 +3944,7 @@ export default function QCoreMultiAgentPage() {
                   onPickStrategy={(s) => setStrategy(s)}
                   currentStrategy={strategy}
                   canSend={anyConfigured}
+                  signedIn={signedIn}
                 />
               ) : (
                 runs.map((run) => (
@@ -5029,12 +5038,14 @@ function EmptyState({
   onPickStrategy,
   currentStrategy,
   canSend,
+  signedIn,
 }: {
   strategies: StrategyInfo[];
   onSuggest: (s: string, strategy?: Strategy) => void;
   onPickStrategy: (s: Strategy) => void;
   currentStrategy: Strategy;
   canSend: boolean;
+  signedIn: boolean;
 }) {
   const CARDS: { id: Strategy; title: string; blurb: string; example: string; accent: string }[] = [
     {
@@ -5115,7 +5126,7 @@ function EmptyState({
               </div>
               <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5 }}>{meta?.description || c.blurb}</div>
               <button
-                onClick={() => canSend && onSuggest(c.example, c.id)}
+                onClick={() => canSend && onSuggest(exampleFor(c.id, c.example, signedIn), c.id)}
                 disabled={!canSend}
                 style={{
                   textAlign: "left",
@@ -5126,7 +5137,7 @@ function EmptyState({
                   lineHeight: 1.45,
                 }}
               >
-                "{c.example}"
+                "{exampleFor(c.id, c.example, signedIn)}"
               </button>
               <button
                 onClick={() => onPickStrategy(c.id)}

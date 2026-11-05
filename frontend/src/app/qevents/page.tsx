@@ -6,6 +6,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { useQeventsT, type Key } from "./i18n";
+import { useСсылкаВхода } from "@/app/auth/loginHref";
 import { catalog } from "@/lib/aevionCatalog";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
@@ -456,6 +457,28 @@ type WhenFilter = "upcoming" | "past";
 // (RSVP / ICS reused). Monday-first week.
 
 /** Пн…Вс на языке страницы: 1–7 января 2024 — понедельник…воскресенье. */
+/*
+ * 5.11.2026, прод: у гостя кнопки создания не было вовсе, а пустая лента говорила «Станьте первым — создайте
+ * событие!» — путь в никуда. Гостю та же кнопка ведёт на вход с возвратом сюда.
+ */
+function CreateEventAction({ signedIn, onCreate, label }: { signedIn: boolean; onCreate: () => void; label: string }) {
+  const входHref = useСсылкаВхода("/qevents");
+  const style: React.CSSProperties = {
+    display: "inline-block",
+    background: "#6366f1",
+    color: "#fff",
+    border: "none",
+    borderRadius: 10,
+    padding: "10px 24px",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontSize: 15,
+    textDecoration: "none",
+  };
+  if (signedIn) return <button onClick={onCreate} style={style}>{label}</button>;
+  return <a href={входHref} style={style}>{label}</a>;
+}
+
 const заглавная = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 const weekdays = (locale: string) => Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(locale, { weekday: "short" }));
 
@@ -683,23 +706,7 @@ export default function QEventsPage() {
               <ModulePricingChip moduleId="qevents" />
             </div>
           </div>
-          {currentUserId && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              style={{
-                background: "#6366f1",
-                color: "#fff",
-                border: "none",
-                borderRadius: 10,
-                padding: "10px 24px",
-                fontWeight: 700,
-                cursor: "pointer",
-                fontSize: 15,
-              }}
-            >
-              {t("hero.create")}
-            </button>
-          )}
+          <CreateEventAction signedIn={Boolean(currentUserId)} onCreate={() => setShowCreateModal(true)} label={t("hero.create")} />
         </div>
 
         {/* View toggle: List ⇄ Calendar */}
@@ -802,6 +809,11 @@ export default function QEventsPage() {
                 ? t("empty.upcoming")
                 : t("empty.past")}
             </div>
+            {when === "upcoming" && (
+              <div style={{ marginTop: 20 }}>
+                <CreateEventAction signedIn={Boolean(currentUserId)} onCreate={() => setShowCreateModal(true)} label={t("hero.create")} />
+              </div>
+            )}
           </div>
         )}
         <div

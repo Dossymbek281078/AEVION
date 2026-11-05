@@ -32,7 +32,9 @@ const ЗАКРЕПЛЕНО: Array<[string, string[]]> = [
   ["qcoreai/search/page.tsx", ["Поиск по сессиям"]],
   ["qcoreai/compare/page.tsx", ["Прогон A", "Прогон B"]],
   ["ventures/IdeaMarket.tsx", ["Название идеи", "Питч идеи", "Модель бизнеса", "Потолок рынка"]],
-  ["qnews/page.tsx", ["В закладки:"]],
+  // 05.11.2026: строки переехали в словарь (qnews/i18n.ts). Страница обязана звать ключ в aria-label,
+  // а словарь обязан хранить само имя — см. СЛОВАРЬ_СТРАНИЦЫ ниже.
+  ["qnews/page.tsx", ["aria-label={t(bookmarked.has(article.id) ? \"bookmark.removeAria\" : \"bookmark.addAria\"", "В закладки:"]],
   // 28.10.2026: PsyApp на словаре ru/en/kk — имя в i18n.ts, кнопка берёт его ключом
   ["psyapp-deps/i18n.ts", ["Сгенерировать новый псевдоним", "Generate a new alias"]],
   ["psyapp-deps/components/Onboarding.tsx", ["aria-label={t(\"onb.regen\")}"]],
@@ -51,6 +53,11 @@ const ЗАКРЕПЛЕНО: Array<[string, string[]]> = [
   ["smeta-trainer/drawings-practice/timeline/page.tsx", ["Название этапа ${s.id}", "Удалить этап ${s.id}"]],
 ];
 
+/** Страница, чьи строки живут в словаре: признаки ищем в паре «страница + словарь». */
+const СЛОВАРЬ_СТРАНИЦЫ: Record<string, string> = {
+  "qnews/page.tsx": "qnews/i18n.ts",
+};
+
 describe("доступные имена не исчезают из органов управления", () => {
   it("прибор умеет краснеть: на файле без признака даёт провал", () => {
     const текст = "<input placeholder=\"Поиск\" />";
@@ -61,7 +68,9 @@ describe("доступные имена не исчезают из органо�
     it("имена на месте: " + файл, () => {
       const п = path.join(КОРЕНЬ, файл);
       expect(fs.existsSync(п)).toBe(true);
-      const s = fs.readFileSync(п, "utf8");
+      let s = fs.readFileSync(п, "utf8");
+      const сл = СЛОВАРЬ_СТРАНИЦЫ[файл];
+      if (сл) s += "\n" + fs.readFileSync(path.join(КОРЕНЬ, сл), "utf8");
       for (const пр of признаки) expect(s).toContain(пр);
     });
   }

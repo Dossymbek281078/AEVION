@@ -187,7 +187,7 @@ export default function AccountPage() {
   // «Список пуст» и «узнать не удалось» — РАЗНЫЕ вещи, и на денежном пути
   // разница дороже всего (21.08.2026).
   const [ownedUnknown, setOwnedUnknown] = useState(false);
-  // Lite = 1 продукт на выбор: список доступных модулей + выбор + busy
+  // Free = 1 продукт на выбор (у Lite с 15.09 — вся планета): список модулей + выбор + busy
   const [allModules, setAllModules] = useState<{ id: string; name: string }[]>([]);
   const [liteChoice, setLiteChoice] = useState<string>("");
   const [liteBusy, setLiteBusy] = useState(false);
@@ -803,9 +803,12 @@ export default function AccountPage() {
                       <span>{formatDate(sub.createdAt)}</span>
                     </div>
                   </div>
-                  {(sub.tierId === "lite" || sub.tierId === "free") && (
+                  {/* 5.11.2026: выбор «1 продукта» остался только у Free. Lite с 15.09 — месяц ВСЕЙ планеты
+                      (/pricing: «Все продукты AEVION в одной подписке»; бэк: normalizeTier lite → full), и
+                      предлагать оплатившему $250 выбрать один модуль — обещать меньше проданного (проба 5.11). */}
+                  {sub.tierId === "free" && (
                     <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(15,23,42,0.08)" }}>
-                      <div style={labelStyle}>Продукт {sub.tierId === "lite" ? "(Lite — 1 на выбор)" : "(Free — 1 на выбор)"}</div>
+                      <div style={labelStyle}>Продукт (Free — 1 на выбор)</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         <select
                           value={liteChoice}

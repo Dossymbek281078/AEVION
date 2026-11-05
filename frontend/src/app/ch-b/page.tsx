@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 // /ch-b — короткий вход безликого YouTube-канала B (Shorts), 4.11.2026, решение Оркестратора.
-// Устроен как /yt: только перенаправление на /go с меткой канала; ch-b-NN едет дальше как пост.
+// Устроен как /yt, но ведёт на /devhub (5.11), не на /go; ch-b-NN едет дальше как пост.
 export const dynamic = "force-dynamic";
 
 export default async function Page({
@@ -26,6 +26,7 @@ export default async function Page({
   const параметры = await searchParams;
   const метка = меткаДляПерехода(параметры.c, "ch-b");
   const хвост = хвостПерехода(параметры);
-  if (метка !== "ch-b" || хвост) redirect(`/go?c=${метка}${хвост}`);
-  redirect("/go?c=ch-b");
+  // 5.11.2026 (Оркестратор): не общий /go, а /devhub — зритель канала B про ИИ-инструменты — сразу DevHub; метка ch-b(-NN) едет дальше.
+  if (метка !== "ch-b" || хвост) redirect(`/devhub?c=${метка}${хвост}`);
+  redirect("/devhub?c=ch-b");
 }

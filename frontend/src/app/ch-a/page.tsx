@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 // /ch-a — короткий вход безликого YouTube-канала A (Shorts), 4.11.2026, решение Оркестратора.
-// Устроен как /yt: только перенаправление на /go с меткой канала; ch-a-NN едет дальше как пост.
+// Устроен как /yt, но ведёт на /cyberchess/traps (5.11), не на /go; ch-a-NN едет дальше как пост.
 export const dynamic = "force-dynamic";
 
 export default async function Page({
@@ -26,6 +26,7 @@ export default async function Page({
   const параметры = await searchParams;
   const метка = меткаДляПерехода(параметры.c, "ch-a");
   const хвост = хвостПерехода(параметры);
-  if (метка !== "ch-a" || хвост) redirect(`/go?c=${метка}${хвост}`);
-  redirect("/go?c=ch-a");
+  // 5.11.2026 (Оркестратор): не общий /go, а /cyberchess/traps — шахматный зритель Shorts должен сразу видеть шахматы; метка ch-a(-NN) едет дальше.
+  if (метка !== "ch-a" || хвост) redirect(`/cyberchess/traps?c=${метка}${хвост}`);
+  redirect("/cyberchess/traps?c=ch-a");
 }

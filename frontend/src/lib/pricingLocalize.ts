@@ -135,7 +135,7 @@ export const MODULE_ONE_LINER_EN: Record<string, string> = {
   "smeta-trainer": "AI trainer for construction estimating in Kazakhstan",
   qai: "General-purpose AI assistant",
   qlearn: "Learning platform with AI",
-  qnews: "News and AI digest",
+  qnews: "Free tech news feed (Hacker News); AI digest in Planet",
   qstore: "Marketplace of digital products",
   qmedia: "Media hosting and streaming",
   qlife: "Longevity and healthy-habit scenarios",

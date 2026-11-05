@@ -53,7 +53,7 @@ export const MODULE_NAMES: Record<string, { brand: string; sub?: Tr }> = {
   qbuild: { brand: "QBuild", sub: { en: "Construction Hiring Platform", ru: "Платформа найма в строительстве", kk: "Құрылыста жұмысқа алу платформасы" } },
   qchaingov: { brand: "QChainGov", sub: { en: "DAO Governance", ru: "Управление DAO", kk: "DAO басқаруы" } },
   "smeta-trainer": { brand: "Smeta Trainer", sub: { en: "AI Cost-Estimate Trainer (Kazakhstan)", ru: "ИИ-тренажёр сметного дела РК", kk: "ҚР смета ісінің ЖИ-тренажері" } },
-  qnews: { brand: "QNews", sub: { en: "Industry News Aggregator", ru: "Отраслевой агрегатор новостей", kk: "Салалық жаңалықтар агрегаторы" } },
+  qnews: { brand: "QNews", sub: { en: "Free tech news feed (Hacker News)", ru: "Бесплатная лента технических новостей (Hacker News)", kk: "Hacker News техникалық жаңалықтарының тегін лентасы" } },
   qmedia: { brand: "QMedia", sub: { en: "Music, Video & Creative AI", ru: "Музыка, видео и творческий ИИ", kk: "Музыка, бейне және шығармашылық ЖИ" } },
   qai: { brand: "QAI", sub: { en: "Real-time Streaming AI", ru: "Потоковый ИИ в реальном времени", kk: "Нақты уақыттағы ағынды ЖИ" } },
   qlearn: { brand: "QLearn", sub: { en: "Learning Platform", ru: "Платформа обучения", kk: "Оқу платформасы" } },

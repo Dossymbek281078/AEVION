@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION QNEWS — Новости в виде выжимок";
+export const alt = "AEVION QNEWS — Бесплатная лента новостей";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -36,10 +36,10 @@ export default async function Image() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <div style={{ fontSize: 70, fontWeight: 700, lineHeight: 1.05 }}>
-            Новости в виде выжимок
+            Бесплатная лента новостей
           </div>
           <div style={{ fontSize: 32, lineHeight: 1.4, color: "#374151" }}>
-            Технологии, финансы и наука — коротким пересказом вместо ленты заголовков.
+            Технические новости Hacker News со ссылкой на оригинал.
           </div>
         </div>
 

@@ -57,6 +57,16 @@ function CategoryBadge({ category }: { category: string }) {
 
 // ─── Article Card ─────────────────────────────────────────────────────────────
 
+// Записи Hacker News приходят с нейтральным summary «▲ N · 💬 M · host · ссылка»:
+// подпись собираем на языке интерфейса, чужой текст не копируем.
+function parseHnSummary(a: { source: string; summary: string }): { points: number; comments: number; discussion: string | null } | null {
+  if (a.source !== "Hacker News") return null;
+  const m = /▲\s*(\d+)\s*·\s*💬\s*(\d+)/.exec(a.summary);
+  if (!m) return null;
+  const d = /(https:\/\/news\.ycombinator\.com\/item\?id=\d+)/.exec(a.summary);
+  return { points: Number(m[1]), comments: Number(m[2]), discussion: d ? d[1] : null };
+}
+
 function ArticleCard({
   article,
   expanded,
@@ -73,6 +83,7 @@ function ArticleCard({
   aiLoading: boolean;
 }) {
   const { t, lang } = useQnewsT();
+  const hn = parseHnSummary(article);
   return (
     <div
       style={{
@@ -92,14 +103,19 @@ function ArticleCard({
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
             <CategoryBadge category={article.category} />
-            <span style={{ fontSize: 12, color: "#94a3b8" }}>{article.source}</span>
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>{t("card.source", { name: article.source })}</span>
             <span style={{ fontSize: 12, color: "#94a3b8" }}>{relativeTimeLang(lang, article.publishedAt)}</span>
           </div>
           <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.4, marginBottom: 8 }}>
             {article.title}
           </div>
           <p style={{ margin: 0, fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
-            {expanded ? article.summary : `${article.summary.slice(0, 120)}${article.summary.length > 120 ? "..." : ""}`}
+            {hn
+              ? (<>
+                  {t("card.hnStats", { points: hn.points, comments: hn.comments })}
+                  {hn.discussion ? (<> · <a href={hn.discussion} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#0d9488" }}>{t("card.discussion")}</a></>) : null}
+                </>)
+              : expanded ? article.summary : `${article.summary.slice(0, 120)}${article.summary.length > 120 ? "..." : ""}`}
           </p>
         </div>
         <div style={{ color: "#94a3b8", fontSize: 18, flexShrink: 0, marginTop: 4 }}>

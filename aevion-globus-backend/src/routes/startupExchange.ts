@@ -59,7 +59,7 @@ import {
   type AssessLang,
   type Assessment,
 } from "../lib/startupx/assess";
-import { withOfficialTranslation } from "../lib/startupx/officialTranslations";
+import { withOfficialTranslation, officialTranslationFor } from "../lib/startupx/officialTranslations";
 import { marketSourcesFor, fmt as fmtMoney } from "../lib/startupx/valuation";
 
 /** Language of the human-readable assessment text: body.lang first, then ?lang=; unknown means ru. */
@@ -334,6 +334,45 @@ function isStartupXAdmin(auth: { role?: string; email?: string } | null): boolea
   return allow.has(auth.email.toLowerCase());
 }
 
+/** Сборка ListingInput из строки базы: одна для reassess и для английского показа сохранённого разбора. */
+function listingInputFromRow(row: ListingRow): ListingInput {
+  const tier = isTier(row.tier) ? row.tier : tierFromLegacyStage(row.stage);
+  return {
+    title: row.title,
+    description: row.description,
+    tier,
+    sector: row.sector ?? undefined,
+    geography: row.geography ?? undefined,
+    demoUrl: row.demo_url ?? undefined,
+    repoUrl: row.repo_url ?? undefined,
+    // Pre-tier rows have no deal terms at all. They get assessed as a raise with
+    // unstated numbers, which is exactly what they are — the deal factor then
+    // reports "условия не позволяют посчитать оценку" instead of inventing one.
+    deal: row.deal ?? { intent: "raise" },
+    metrics: row.metrics ?? undefined,
+  };
+}
+
+/**
+ * Ответ GET: публичный вид + язык страницы. При lang=en сохранённый (русский) разбор
+ * пересчитывается из той же строки в память ответа, в базу ничего не пишется.
+ * Версия строки не равна текущей или балл разошёлся — остаётся сохранённый разбор.
+ */
+function listingResponse(row: ListingRow, lang: AssessLang, interest_count?: number) {
+  const view = publicView(row, interest_count);
+  if (lang === "en" && view.assessment && row.assessment_version === ASSESSMENT_VERSION) {
+    try {
+      const geo = officialTranslationFor(row.id, "en")?.geography;
+      const input = listingInputFromRow(row);
+      const en = assessListing(geo ? { ...input, geography: geo } : input, "en");
+      if (en.score === row.assessment_score) view.assessment = en;
+    } catch (e) {
+      console.error("[StartupX] en assessment view failed, serving stored", e);
+    }
+  }
+  return withOfficialTranslation(view, lang);
+}
+
 /** Public projection: founder_email never leaves the server. */
 function publicView(row: ListingRow, interest_count?: number) {
   const tier = isTier(row.tier) ? row.tier : tierFromLegacyStage(row.stage);
@@ -587,7 +626,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
       const { rows: cnt } = await pool.query(`SELECT COUNT(*)::int AS n FROM startup_ideas ${where}`, args);
       const typedRows = rows as ListingRow[];
       return ok(res, {
-        listings: typedRows.map((r) => withOfficialTranslation(publicView(r), requestLang(req))),
+        listings: typedRows.map((r) => listingResponse(r, requestLang(req))),
         total: (cnt as Array<{ n: number }>)[0]?.n ?? typedRows.length,
         limit,
         offset,
@@ -614,7 +653,7 @@ startupExchangeRouter.get("/ideas", async (req: Request, res: Response) => {
       : b.created_at.localeCompare(a.created_at),
   );
   return ok(res, {
-    listings: all.slice(offset, offset + limit).map((r) => withOfficialTranslation(publicView(r), requestLang(req))),
+    listings: all.slice(offset, offset + limit).map((r) => listingResponse(r, requestLang(req))),
     total: all.length,
     limit,
     offset,
@@ -779,7 +818,7 @@ startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
         `SELECT COUNT(*)::int AS n FROM startup_interests WHERE idea_id=$1`,
         [id],
       );
-      return ok(res, withOfficialTranslation(publicView(row, (cnt as Array<{ n: number }>)[0]?.n ?? 0), requestLang(req)));
+      return ok(res, listingResponse(row, requestLang(req), (cnt as Array<{ n: number }>)[0]?.n ?? 0));
     }
   } catch (e) {
     if (isStartupExchangeDbReady()) return dbOutage(res, e, "GET /ideas/:id");
@@ -790,7 +829,7 @@ startupExchangeRouter.get("/ideas/:id", async (req: Request, res: Response) => {
   if (!row || row.visibility !== "public") return fail(res, "not_found", 404);
   if (shouldCountView(id, req)) row.views = (row.views ?? 0) + 1;
   const interest_count = Array.from(memInterests.values()).filter((i) => i.idea_id === id).length;
-  return ok(res, withOfficialTranslation(publicView(row, interest_count), requestLang(req)));
+  return ok(res, listingResponse(row, requestLang(req), interest_count));
 });
 
 // ─── POST /api/startupx/assess ───────────────────────────────────────────────
@@ -974,21 +1013,7 @@ startupExchangeRouter.post("/ideas/:id/reassess", assessLimiter, async (req: Req
   }
   if (!row) return fail(res, "not_found", 404);
 
-  const tier = isTier(row.tier) ? row.tier : tierFromLegacyStage(row.stage);
-  const rebuilt: ListingInput = {
-    title: row.title,
-    description: row.description,
-    tier,
-    sector: row.sector ?? undefined,
-    geography: row.geography ?? undefined,
-    demoUrl: row.demo_url ?? undefined,
-    repoUrl: row.repo_url ?? undefined,
-    // Pre-tier rows have no deal terms at all. They get assessed as a raise with
-    // unstated numbers, which is exactly what they are — the deal factor then
-    // reports "условия не позволяют посчитать оценку" instead of inventing one.
-    deal: row.deal ?? { intent: "raise" },
-    metrics: row.metrics ?? undefined,
-  };
+  const rebuilt = listingInputFromRow(row);
 
   let assessment: Assessment;
   try {

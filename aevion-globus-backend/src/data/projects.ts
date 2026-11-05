@@ -8,8 +8,9 @@ export const projects: GlobusProject[] = [
     id: "revenue-hub",
     code: "REVENUE",
     name: "Revenue Hub — Monetization Central",
+    // 5.11.2026: Stripe в src/routes/revenue.ts нет — убран; описание приведено к реальным каналам (см. moduleRuntime.ts).
     description:
-      "Centralized monetization: Stripe balance/payments, YouTube AdSense, Twitch affiliate — 12 AEVION apps tracked. Real Stripe connected (test mode). 15/15 prod smoke ✅.",
+      "Centralized monetization: Gumroad (primary) and LemonSqueezy sales/subscriptions, plus PayBox, PayPal, YouTube and Twitch — 12 AEVION apps tracked.",
     kind: "service",
     status: "live",
     priority: 1,

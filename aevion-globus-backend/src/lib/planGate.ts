@@ -90,7 +90,11 @@ const НАШИ_ДОМЕНЫ = ["aevion.app", "aevion.dev"];
  * ни один человек не платит с такого адреса.
  */
 const ДОМЕНЫ_ПРИМЕРОВ = ["example.test", "example.com", "example.org", "example.net", "test", "invalid", "localhost"];
-const ПРОБНЫЕ_ПРЕФИКСЫ = ["smoke-", "probe-", "qa-", "e2e"];
+// 02.11.2026 (Продукт, слово Оркестратора): смоук вебхука LS 30.10 писал оплаты с адресов
+// ls-smoke-<время>-<сценарий>@test.aevion.dev, и они считались ЖИВЫМИ: префикс «ls-smoke-» не
+// начинается со «smoke-», а поддомен test.aevion.dev не равен aevion.dev. Два события 30.10
+// помечены рукой через /events/mark-ours; дальше — правилом: префикс и поддомены наших доменов.
+const ПРОБНЫЕ_ПРЕФИКСЫ = ["smoke-", "probe-", "qa-", "e2e", "ls-smoke-"];
 /**
  * 🔴 20.10.2026: все 10 «живых» лидов оказались нашими — ящик основателя, пять его
  * +алиасов gmail и четыре e2e…@primer.ru («пример» по-русски — домен наших прогонов).
@@ -148,7 +152,7 @@ export function нашВнутреннийАдрес(email: string | null | unde
   const e = String(email ?? "").trim().toLowerCase();
   if (!e) return false;
   if (ALLOWLIST.includes(e)) return true;
-  if (НАШИ_ДОМЕНЫ.some((d) => e.endsWith(`@${d}`))) return true;
+  if (НАШИ_ДОМЕНЫ.some((d) => e.endsWith(`@${d}`) || e.endsWith(`.${d}`))) return true;
   if (ДОМЕНЫ_ПРИМЕРОВ.some((d) => e.endsWith(`@${d}`) || e.endsWith(`.${d}`))) return true;
   if (НАШИ_ДОМЕНЫ_ПРОГОНОВ.some((d) => e.endsWith(`@${d}`))) return true;
   if (ящикОснователя(e)) return true;

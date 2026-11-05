@@ -879,7 +879,8 @@ export const MODULES_PRICING: ModulePrice[] = [
     id: "mapreality",
     addonMonthly: null,
     includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
-    availability: "soon",
+    // 5.11.2026: "soon" → "beta": страница /mapreality и API работают (данных пока нет).
+    availability: "beta",
     oneLiner: "Карта реальных потребностей сообществ",
   },
   {

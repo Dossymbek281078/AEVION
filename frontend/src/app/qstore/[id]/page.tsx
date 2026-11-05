@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { QStoreNotify } from "../QStoreNotify";
+import { useQstoreT } from "../i18n";
 
 interface Product {
   id: string;
@@ -45,8 +46,8 @@ const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
   other: { bg: "#f1f5f9", fg: "#475569" },
 };
 
-function priceLabel(price: number, currency: string): string {
-  if (price === 0) return "Free";
+function priceLabel(price: number, currency: string, free: string): string {
+  if (price === 0) return free;
   const sym = currency === "usd" ? "$" : currency.toUpperCase() + " ";
   return `${sym}${(price / 100).toFixed(2)}`;
 }
@@ -68,6 +69,7 @@ function StarRating({ value, size = 14 }: { value: number; size?: number }) {
 }
 
 export default function QStoreItemPage() {
+  const { t, count, catName, locale } = useQstoreT();
   const params = useParams();
   const router = useRouter();
   const id = String(params?.id ?? "");
@@ -118,7 +120,7 @@ export default function QStoreItemPage() {
     if (!product) return;
     const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
-      setNotice("Sign in to purchase products.");
+      setNotice(t("n.signInBuy"));
       return;
     }
     setPurchasing(true);
@@ -128,14 +130,14 @@ export default function QStoreItemPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        setNotice(product.price === 0 ? "Added to your library!" : "Purchase successful!");
+        setNotice(product.price === 0 ? t("n.added") : t("n.bought"));
         fetchAll();
       } else {
         const d = await res.json();
-        setNotice(d.error || "Purchase failed");
+        setNotice(d.error || t("n.buyFailed"));
       }
     } catch {
-      setNotice("Network error");
+      setNotice(t("n.network"));
     } finally {
       setPurchasing(false);
     }
@@ -146,7 +148,7 @@ export default function QStoreItemPage() {
     if (!product) return;
     const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
-      setNotice("Sign in to leave a review.");
+      setNotice(t("n.signInReview"));
       return;
     }
     setReviewSubmitting(true);
@@ -157,16 +159,16 @@ export default function QStoreItemPage() {
         body: JSON.stringify({ rating: reviewRating, comment: reviewComment.trim() || null }),
       });
       if (res.ok) {
-        setNotice("Review posted!");
+        setNotice(t("n.reviewPosted"));
         setReviewComment("");
         setReviewRating(5);
         fetchAll();
       } else {
         const d = await res.json();
-        setNotice(d.error || "Failed to post review");
+        setNotice(d.error || t("n.reviewFailed"));
       }
     } catch {
-      setNotice("Network error");
+      setNotice(t("n.network"));
     } finally {
       setReviewSubmitting(false);
     }
@@ -178,7 +180,7 @@ export default function QStoreItemPage() {
         <Wave1Nav />
         <ProductPageShell>
           <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px", color: "#94a3b8", textAlign: "center" }}>
-            Loading product...
+            {t("d.loading")}
           </div>
         </ProductPageShell>
       </>
@@ -192,9 +194,9 @@ export default function QStoreItemPage() {
         <ProductPageShell>
           <div style={{ maxWidth: 900, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
-            <h1 style={{ fontSize: 24, color: "#0f172a", margin: "0 0 8px" }}>Product not found</h1>
+            <h1 style={{ fontSize: 24, color: "#0f172a", margin: "0 0 8px" }}>{t("d.nfH")}</h1>
             <p style={{ color: "#64748b", marginBottom: 24 }}>
-              The product you&apos;re looking for doesn&apos;t exist or has been removed.
+              {t("d.nfP")}
             </p>
             <Link
               href="/qstore"
@@ -209,7 +211,7 @@ export default function QStoreItemPage() {
                 textDecoration: "none",
               }}
             >
-              Back to QStore
+              {t("d.back")}
             </Link>
           </div>
         </ProductPageShell>
@@ -232,7 +234,7 @@ export default function QStoreItemPage() {
               ← QStore
             </Link>
             <span style={{ margin: "0 8px" }}>/</span>
-            <span style={{ textTransform: "capitalize" }}>{product.category}</span>
+            <span style={{ textTransform: "capitalize" }}>{catName(product.category)}</span>
           </div>
 
           {/* Notice */}
@@ -251,7 +253,7 @@ export default function QStoreItemPage() {
               }}
             >
               {notice}
-              <button onClick={() => setNotice(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontWeight: 700 }}>×</button>
+              <button onClick={() => setNotice(null)} aria-label={t("close")} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontWeight: 700 }}>×</button>
             </div>
           )}
 
@@ -314,13 +316,13 @@ export default function QStoreItemPage() {
                     textTransform: "capitalize",
                   }}
                 >
-                  {product.category}
+                  {catName(product.category)}
                 </span>
                 {avgRating > 0 && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#64748b" }}>
                     <StarRating value={avgRating} />
                     <span style={{ fontWeight: 600, color: "#374151" }}>{avgRating.toFixed(1)}</span>
-                    <span>({reviewCount} {reviewCount === 1 ? "review" : "reviews"})</span>
+                    <span>({count("d.reviews", reviewCount)})</span>
                   </span>
                 )}
               </div>
@@ -381,10 +383,10 @@ export default function QStoreItemPage() {
                     marginBottom: 4,
                   }}
                 >
-                  {priceLabel(product.price, product.currency)}
+                  {priceLabel(product.price, product.currency, t("free"))}
                 </div>
                 <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 20 }}>
-                  Listed {new Date(product.createdAt).toLocaleDateString()}
+                  {t("d.listed", { date: new Date(product.createdAt).toLocaleDateString(locale) })}
                 </div>
 
                 {product.price > 0 ? (
@@ -410,13 +412,13 @@ export default function QStoreItemPage() {
                     marginBottom: 14,
                   }}
                 >
-                  {purchasing ? "Processing..." : product.price === 0 ? "Get free" : "Buy now"}
+                  {purchasing ? t("d.processing") : product.price === 0 ? t("getFree") : t("buyNow")}
                 </button>
                 )}
 
                 <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14, fontSize: 13, color: "#64748b" }}>
                   <div style={{ marginBottom: 6 }}>
-                    <span style={{ color: "#94a3b8" }}>Seller:</span>{" "}
+                    <span style={{ color: "#94a3b8" }}>{t("d.seller")}</span>{" "}
                     <Link
                       href={`/qstore/seller/${encodeURIComponent(product.sellerId)}`}
                       style={{ color: "#0d9488", fontWeight: 600, textDecoration: "none" }}
@@ -441,7 +443,7 @@ export default function QStoreItemPage() {
                       boxSizing: "border-box",
                     }}
                   >
-                    View seller profile →
+                    {t("d.viewSeller")}
                   </Link>
                 </div>
               </div>
@@ -451,7 +453,7 @@ export default function QStoreItemPage() {
           {/* Reviews section */}
           <section>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 16px" }}>
-              Reviews ({reviewCount})
+              {t("d.reviews", { n: reviewCount })}
             </h2>
 
             {/* Review form */}
@@ -466,7 +468,7 @@ export default function QStoreItemPage() {
               }}
             >
               <div style={{ fontWeight: 700, fontSize: 14, color: "#374151", marginBottom: 12 }}>
-                Leave a review
+                {t("d.leave")}
               </div>
               <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
                 {[1, 2, 3, 4, 5].map((n) => (
@@ -482,7 +484,7 @@ export default function QStoreItemPage() {
                       color: n <= reviewRating ? "#f59e0b" : "#e2e8f0",
                       padding: 0,
                     }}
-                    aria-label={`${n} stars`}
+                    aria-label={t("d.stars", { n })}
                   >
                     ★
                   </button>
@@ -494,7 +496,8 @@ export default function QStoreItemPage() {
               <textarea
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="Share your experience (optional)"
+                placeholder={t("d.reviewPh")}
+                aria-label={t("d.reviewPh")}
                 rows={3}
                 style={{
                   width: "100%",
@@ -522,7 +525,7 @@ export default function QStoreItemPage() {
                   cursor: reviewSubmitting ? "not-allowed" : "pointer",
                 }}
               >
-                {reviewSubmitting ? "Posting..." : "Post review"}
+                {reviewSubmitting ? t("d.posting") : t("d.post")}
               </button>
             </form>
 
@@ -539,7 +542,7 @@ export default function QStoreItemPage() {
                   fontSize: 14,
                 }}
               >
-                No reviews yet. Be the first to share your thoughts!
+                {t("d.noReviews")}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -561,7 +564,7 @@ export default function QStoreItemPage() {
                         </span>
                       </div>
                       <span style={{ fontSize: 12, color: "#94a3b8" }}>
-                        {new Date(r.createdAt).toLocaleDateString()}
+                        {new Date(r.createdAt).toLocaleDateString(locale)}
                       </span>
                     </div>
                     {r.comment && (

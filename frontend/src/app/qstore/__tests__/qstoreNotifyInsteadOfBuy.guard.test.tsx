@@ -54,6 +54,9 @@ describe("поверхности магазина", () => {
   });
   it("у платных товаров — форма почты на странице товара и метка в ленте", () => {
     expect(файлы[1][1]).toContain("<QStoreNotify productId={product.id} productTitle={product.title} />");
-    expect(файлы[0][1]).toContain("Payment soon — leave your email");
+    // 05.11.2026: подпись переехала в словарь ./i18n.ts; страница берёт её по ключу paySoon.
+    expect(файлы[0][1]).toContain('data-qstore-payment-soon');
+    expect(файлы[0][1]).toContain('{t("paySoon")}');
+    expect(readFileSync(join(D, "i18n.ts"), "utf8")).toContain('"paySoon": "Payment soon — leave your email"');
   });
 });

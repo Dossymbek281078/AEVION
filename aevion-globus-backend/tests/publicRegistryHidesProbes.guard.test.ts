@@ -48,6 +48,8 @@ describe("публичный реестр прячет наши прогоны",
 
   it("список записей без метки — точные id, а не правило", () => {
     expect(ПРОБЫ_БЕЗ_МЕТКИ.size).toBeGreaterThan(0);
+    // 02.11: проба Продукта с нейтральным названием (порог «аноним → verify 200») скрыта по id
+    expect(этоНашаПроба({ id: "cert-df052d16448e710c", title: "Put proverki 2.11 Produkt", author: "Anonymous" })).toBe(true);
     for (const id of ПРОБЫ_БЕЗ_МЕТКИ) expect(id.startsWith("cert-")).toBe(true);
   });
 

@@ -13,7 +13,6 @@ export const metadata: Metadata = {
     "creator economy",
     "digital identity",
     "authorship & prior-art bureau",
-    "quantum-resistant",
     "Trust OS",
   ],
   openGraph: {

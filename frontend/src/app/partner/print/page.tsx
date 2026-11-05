@@ -106,7 +106,7 @@ export default function PartnerPrintPage() {
         <div className="grid2">
           <div className="card">
             <div className="card-label">QSign</div>
-            <h3>Post-quantum e-signature infrastructure</h3>
+            <h3>E-signature infrastructure (post-quantum signature in preview)</h3>
             <p style={{ fontSize: "10pt", color: "#444", margin: "4pt 0 6pt" }}>
               ML-DSA-65, FIPS 204 — implemented, key-activated.
               National infrastructure potential: KZ, UAE, Saudi Arabia.

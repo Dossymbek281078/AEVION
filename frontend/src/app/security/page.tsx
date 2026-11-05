@@ -5,11 +5,11 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 export const metadata: Metadata = {
   title: "AEVION Security — how we protect data, authorship and payments",
   description:
-    "Platform-wide security overview: Quantum Shield key management, Ed25519 signatures, post-quantum readiness, eIDAS / ESIGN / Berne compliance, audit trails and vulnerability disclosure.",
+    "Platform-wide security overview: Quantum Shield key management, Ed25519 signatures, post-quantum roadmap, eIDAS / ESIGN / Berne compliance, audit trails and vulnerability disclosure.",
   alternates: { canonical: "/security" },
   openGraph: {
     title: "AEVION Security",
-    description: "Quantum Shield · Ed25519 · audit trails · eIDAS/ESIGN compliance · post-quantum readiness.",
+    description: "Quantum Shield · Ed25519 · audit trails · eIDAS/ESIGN compliance · post-quantum roadmap.",
     type: "article",
     siteName: "AEVION",
   },
@@ -22,7 +22,7 @@ const LAYERS = [
     title: "Quantum Shield — cryptographic floor",
     accent: "#5eead4",
     body:
-      "Master keys split via Shamir's Secret Sharing (k of n). Ed25519 signatures everywhere. Key derivation designed to remain credible after the post-quantum transition.",
+      "Master keys split via Shamir's Secret Sharing (k of n). Ed25519 signatures everywhere. The post-quantum signature is in preview.",
     href: "/quantum-shield",
   },
   {
@@ -87,7 +87,7 @@ const FAQ = [
   },
   {
     q: "Are you ready for post-quantum?",
-    a: "The signature stack today is Ed25519, the same as Signal, GitHub and most major secure platforms. Quantum Shield's KDF is post-quantum-ready — key derivation can swap to a PQ-safe primitive (e.g. ML-KEM) without re-issuing existing receipts. Dilithium preview is already in the QSign repository.",
+    a: "The signature stack today is Ed25519, the same as Signal, GitHub and most major secure platforms. Quantum Shield's key derivation is not post-quantum today; a swap to a PQ-safe primitive (e.g. ML-KEM) is planned, not implemented. The post-quantum signature (ML-DSA-65) is in preview in QSign.",
   },
   {
     q: "How do you handle vulnerability reports?",

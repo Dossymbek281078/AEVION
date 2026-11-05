@@ -124,7 +124,7 @@ const ja: Record<string, string> = {
   "shield.create": "Shieldを作成",
   "shield.dashboard": "ダッシュボード",
   "shield.shards": "シャード合計",
-  "shield.subtitle": "ポスト量子暗号保護。鍵はシャードに分割 — 任意の閾値で再構築可能ですが、単一のシャードは何も明かしません。",
+  "shield.subtitle": "シャミア方式の鍵分割とEd25519署名（ポスト量子署名はプレビュー段階）。鍵はシャードに分割 — 任意の閾値で再構築可能ですが、単一のシャードは何も明かしません。",
   "shield.threshold": "平均閾値",
   "shield.title": "Quantum Shield",
   "shield.total": "Shields合計",

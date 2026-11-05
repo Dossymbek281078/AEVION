@@ -61,11 +61,11 @@ export const INVEST_CARDS: InvestCard[] = [
     sub: { en: "nodes on the map", ru: "узлов на карте", kk: "картадағы түйін" },
   },
   {
-    title: { en: "Quantum-resistant", ru: "Устойчивость к квантовым атакам", kk: "Кванттық шабуылға төзімді" },
+    title: { en: "Layered signing", ru: "Многослойная подпись", kk: "Көпқабатты қолтаңба" },
     desc: {
-      en: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Ready for post-quantum migration. No other IP platform has this.",
-      ru: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Готово к переходу на постквантовую криптографию. Ни у одной другой IP-платформы этого нет.",
-      kk: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Посткванттық криптографияға көшуге дайын. Басқа ешбір IP платформасында мұндай жоқ.",
+      en: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Post-quantum signature is in preview.",
+      ru: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Постквантовая подпись — в предпросмотре.",
+      kk: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Постквантты қолтаңба — алдын ала қарауда.",
     },
     metric: { en: "3-layer", ru: "3 слоя", kk: "3 қабат" },
     sub: { en: "crypto shield", ru: "криптозащита", kk: "крипто қорғаныс" },

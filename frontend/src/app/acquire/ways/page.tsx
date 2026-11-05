@@ -97,8 +97,7 @@ export default function AcquireWaysPage() {
         <h2>Sovereign territory, and who it serves</h2>
         <p>
           The habitat is not only for individuals. A <strong>government can hold its own sovereign territory
-          on the globe</strong> — a sealed enclave only its authorized officials may enter, post-quantum-
-          protected, where the nation’s data never leaves its own contour. This is how you establish at the
+          on the globe</strong> — a sealed enclave only its authorized officials may enter, protected, where the nation’s data never leaves its own contour. This is how you establish at the
           level of states, not vendors. Kazakhstan — whose government is pushing AI hard right now — is a
           natural first beachhead.
         </p>
@@ -107,7 +106,7 @@ export default function AcquireWaysPage() {
           <tbody>
             <tr><td><strong>Governments</strong></td><td>Sovereign enclave, e-gov, identity, document attestation, transparent (corruption-resistant) procurement</td><td>State budgets, national security, anti-corruption</td></tr>
             <tr><td><strong>Education</strong></td><td>An account per child: every subject + AI literacy, a Claude tutor, credential attestation</td><td>~$100/child/year recurring — one country’s schools ≈ $350M/yr</td></tr>
-            <tr><td><strong>Banks</strong></td><td>Payment rail, KYC, <strong>post-quantum transaction signing</strong>, settlement, contract attestation</td><td>Banks must move to post-quantum now (harvest-now-decrypt-later)</td></tr>
+            <tr><td><strong>Banks</strong></td><td>Payment rail, KYC, <strong>transaction signing</strong> (post-quantum ML-DSA-65 in preview), settlement, contract attestation</td><td>Banks must move to post-quantum now (harvest-now-decrypt-later)</td></tr>
             <tr><td><strong>Healthcare / creators / devs</strong></td><td>Secure records; authorship attestation; one developer cabinet vs 15 subscriptions</td><td>Trust, provenance, efficiency</td></tr>
           </tbody>
         </table>

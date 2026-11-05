@@ -50,7 +50,7 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "Why now?",
-    a: "Three converging timing signals: (1) AI-generated content is exploding without an IP attribution layer; (2) post-quantum cryptography is becoming a board-level concern, and we're already shipping it; (3) creator-economy payouts are fragmented across 5+ vendors per creator — the bundling opportunity is at its peak.",
+    a: "Three converging timing signals: (1) AI-generated content is exploding without an IP attribution layer; (2) post-quantum cryptography is becoming a board-level concern, and our post-quantum signature is in preview; (3) creator-economy payouts are fragmented across 5+ vendors per creator — the bundling opportunity is at its peak.",
   },
   {
     q: "What are the biggest risks?",

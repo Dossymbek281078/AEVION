@@ -124,7 +124,7 @@ const tr: Record<string, string> = {
   "shield.create": "Shield oluştur",
   "shield.dashboard": "Kontrol paneli",
   "shield.shards": "Toplam Parça",
-  "shield.subtitle": "Kuantum sonrası kriptografik koruma. Anahtarlar parçalara bölünür — herhangi bir eşik yeniden oluşturabilir, ancak tek bir parça hiçbir şeyi açıklamaz.",
+  "shield.subtitle": "Shamir yöntemiyle anahtar bölme ve Ed25519 imzası (kuantum sonrası imza önizlemede). Anahtarlar parçalara bölünür — herhangi bir eşik yeniden oluşturabilir, ancak tek bir parça hiçbir şeyi açıklamaz.",
   "shield.threshold": "Ort. Eşik",
   "shield.title": "Quantum Shield",
   "shield.total": "Toplam Shield",

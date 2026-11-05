@@ -124,7 +124,7 @@ const zh: Record<string, string> = {
   "shield.create": "创建盾牌",
   "shield.dashboard": "仪表板",
   "shield.shards": "碎片总数",
-  "shield.subtitle": "后量子密码保护。密钥分割成碎片 — 任意阈值可重建，但没有单个碎片会泄露任何信息。",
+  "shield.subtitle": "Shamir 密钥分割与 Ed25519 签名（后量子签名处于预览阶段）。密钥分割成碎片 — 任意阈值可重建，但没有单个碎片会泄露任何信息。",
   "shield.threshold": "平均阈值",
   "shield.title": "量子盾牌",
   "shield.total": "盾牌总数",

@@ -212,8 +212,9 @@ node demo-local.mjs                                   # sign 3 files, alter one 
         </h2>
         <ul style={{ color: "#334155", fontSize: 15, lineHeight: 1.7, paddingLeft: 20, marginBottom: 8 }}>
           <Row>
-            <b>42 signatures</b> in the live registry, <b>20 of them revoked</b>, two
-            active keys — revocation is visible in verification, not hidden.
+            A live registry that includes <b>revoked signatures</b>, with two active keys
+            (HMAC-SHA256 and Ed25519) — revocation is visible in verification, not hidden.
+            Current counts: <code>/api/qsign/v2/health</code>.
           </Row>
           <Row>
             Shamir <b>2-of-3</b> custody of the proof records, with Ed25519.
@@ -223,8 +224,9 @@ node demo-local.mjs                                   # sign 3 files, alter one 
           </Row>
         </ul>
         <p style={{ color: "#64748b", fontSize: 14, lineHeight: 1.7, marginBottom: 26 }}>
-          Measured on production {MEASURED}. Those 42 signatures are a working base, not
-          inventory — see the next section.
+          Verifier runs measured on production {MEASURED}. The registry is a working base, not
+          inventory, and its signature is Ed25519 — the post-quantum signature is in preview
+          (qsign mode: preview) — see the next section.
         </p>
 
         <h2 style={{ fontSize: 20, fontWeight: 800, marginTop: 32, marginBottom: 10 }}>

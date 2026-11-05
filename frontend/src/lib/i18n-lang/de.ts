@@ -124,7 +124,7 @@ const de: Record<string, string> = {
   "shield.create": "Shield erstellen",
   "shield.dashboard": "Dashboard",
   "shield.shards": "Shards insgesamt",
-  "shield.subtitle": "Post-Quanten-Kryptographieschutz. Schlüssel werden in Shards aufgeteilt — jeder Schwellenwert kann rekonstruieren, aber kein einzelner Shard gibt etwas preis.",
+  "shield.subtitle": "Schlüsselteilung nach Shamir und Ed25519-Signatur (die Post-Quanten-Signatur ist nur eine Vorschau). Schlüssel werden in Shards aufgeteilt — jeder Schwellenwert kann rekonstruieren, aber kein einzelner Shard gibt etwas preis.",
   "shield.threshold": "Avg. Schwellenwert",
   "shield.title": "Quantum Shield",
   "shield.total": "Shields insgesamt",

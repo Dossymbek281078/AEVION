@@ -395,7 +395,7 @@ export default function QuantumShieldPage() {
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(13,148,136,0.4), rgba(59,130,246,0.3))", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>&#x1F6E1;</div>
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.03em" }}>Quantum Shield</h1>
-                  <div style={{ fontSize: 12, opacity: 0.55, marginTop: 2 }}>Post-Quantum Cryptographic Layer</div>
+                  <div style={{ fontSize: 12, opacity: 0.55, marginTop: 2 }}>Threshold Key-Sharing Layer</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 11, fontWeight: 800, background: health?.status === "ok" ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)", color: health?.status === "ok" ? "#34d399" : "#fca5a5", border: "1px solid " + (health?.status === "ok" ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"), letterSpacing: "0.05em" }}>

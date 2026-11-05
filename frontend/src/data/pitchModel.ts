@@ -389,15 +389,15 @@ export const launchedModules: PitchModule[] = [
     href: "/quantum-shield",
     stage: "live",
     bucket: "ip-and-trust",
-    tagline: "Post-quantum Ed25519 + Shamir's Secret Sharing for threshold key recovery.",
+    tagline: "Ed25519 + Shamir's Secret Sharing for threshold key recovery.",
     problem:
       "Single-key custody is fragile and quantum-computing-vulnerable. Multi-party threshold cryptography is complex and rarely deployed.",
     killerFeature:
       "Animated shard visualizer (canvas particle effects) on a working 2-of-3 (or custom-N) threshold scheme. Auto-invoked by QSign for high-value artifacts.",
     networkRole:
-      "Shield is the cryptographic moat that makes Bureau certificates quantum-resistant — a credible '10-year defensibility' story for institutional investors.",
+      "Shield is the cryptographic moat that makes Bureau certificate keys threshold-protected — a credible '10-year defensibility' story for institutional investors.",
     proof: ["Live shield records dashboard", "Demo with 4 sample shards (2-of-3 threshold)", "Graceful fallback if API unreachable"],
-    valueLine: "Post-quantum signatures available (real ML-DSA-65 / FIPS 204, opt-in) — an institutional-grade trust signal ahead of the migration.",
+    valueLine: "Post-quantum signature (ML-DSA-65 / FIPS 204) is implemented but in preview on prod, key-activated — not yet an active protection.",
   },
   {
     id: "bank",
@@ -594,9 +594,9 @@ export const billionDefense = {
     },
     {
       number: "04",
-      title: "Quantum-resistant crypto stack as institutional signal",
+      title: "Ed25519 + Shamir crypto stack as institutional signal",
       body:
-        "Ed25519 + Shamir SSS + HMAC + 6 international legal frameworks → Bureau certificates are credible to a court, an auditor, and an institutional treasury. Few competitors will catch up; fewer still will catch up before the post-quantum cliff.",
+        "Ed25519 + Shamir SSS + HMAC + 6 international legal frameworks → Bureau certificates are credible to a court, an auditor, and an institutional treasury. Few competitors will catch up; a post-quantum signature is in preview.",
     },
     {
       number: "05",

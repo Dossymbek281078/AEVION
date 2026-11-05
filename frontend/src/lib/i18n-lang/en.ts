@@ -6811,7 +6811,7 @@ const en: Record<string, string> = {
   "shield.create": "Create Shield",
   "shield.dashboard": "Dashboard",
   "shield.shards": "Total Shards",
-  "shield.subtitle": "Post-quantum cryptographic protection. Keys split into shards — any threshold can reconstruct, but no single shard reveals anything.",
+  "shield.subtitle": "Key splitting by Shamir's scheme and an Ed25519 signature (the post-quantum signature is in preview). Keys split into shards — any threshold can reconstruct, but no single shard reveals anything.",
   "shield.threshold": "Avg Threshold",
   "shield.title": "Quantum Shield",
   "shield.total": "Total Shields",

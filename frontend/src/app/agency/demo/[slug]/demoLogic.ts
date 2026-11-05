@@ -91,7 +91,7 @@ export function buildDraft(raw: string, demo: Demo) {
   if (service) {
     lines.push(
       service.price
-        ? service.name + " — " + service.price + "."
+        ? service.name + " — " + service.price + (service.price.endsWith(".") ? "" : ".")
         : service.name + ": стоимость подскажет администратор после уточнения деталей.",
     );
   } else {

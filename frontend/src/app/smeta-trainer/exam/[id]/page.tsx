@@ -453,6 +453,7 @@ export default function ExamTaskPage({
               {failedCount >= 2 && (
                 <div className="bg-amber-100 border border-amber-300 rounded p-2 text-xs text-amber-900 mt-2">
                   <div className="font-bold mb-1">🔍 Эталонный разбор ({failedCount} неудач):</div>
+                  <div className="overflow-x-auto" data-exam-table-scroll>
                   <table className="w-full text-[11px]">
                     <thead className="text-amber-700">
                       <tr>
@@ -471,6 +472,7 @@ export default function ExamTaskPage({
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -569,6 +571,7 @@ export default function ExamTaskPage({
 
             <div className="mt-4">
               <h3 className="text-xs font-bold text-slate-700 uppercase mb-2">Сравнение с эталоном</h3>
+              <div className="overflow-x-auto" data-exam-table-scroll>
               <table className="w-full text-xs">
                 <thead className="bg-slate-100 text-slate-600">
                   <tr>
@@ -601,6 +604,7 @@ export default function ExamTaskPage({
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
 
             {report.breakdown.ai.notices.length > 0 && (
@@ -740,6 +744,7 @@ export default function ExamTaskPage({
                   + Добавить позицию
                 </button>
               </div>
+              <div className="overflow-x-auto" data-exam-table-scroll>
               <table className="w-full text-xs">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
@@ -836,6 +841,7 @@ export default function ExamTaskPage({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           ))}
 

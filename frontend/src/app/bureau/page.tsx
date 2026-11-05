@@ -813,7 +813,7 @@ function BureauPageInner() {
             {[
               { n: "1", title: tb("Register"), desc: tb("Describe your work — we create a SHA-256 content hash"), icon: "📋", color: "#0d9488" },
               { n: "2", title: tb("Sign"), desc: tb("HMAC-SHA256 cryptographic signature proves integrity"), icon: "🔏", color: "#3b82f6" },
-              { n: "3", title: tb("Shield"), desc: tb("Ed25519 + Shamir's Secret Sharing for quantum-grade protection"), icon: "🛡️", color: "#8b5cf6" },
+              { n: "3", title: tb("Shield"), desc: tb("Ed25519 signature + Shamir's Secret Sharing of the key; post-quantum signature is in preview"), icon: "🛡️", color: "#8b5cf6" },
               { n: "4", title: tb("Certify"), desc: tb("IP Certificate with legal basis — publicly verifiable"), icon: "📜", color: "#f59e0b" },
             ].map((s) => (
               <div key={s.n} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>

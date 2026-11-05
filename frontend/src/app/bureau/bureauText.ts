@@ -78,7 +78,7 @@ export const BUREAU_TEXT: Record<string, Tr> = {
   "Sign": { ru: "Подпись", kk: "Қолтаңба" },
   "HMAC-SHA256 cryptographic signature proves integrity": { ru: "Криптографическая подпись HMAC-SHA256 подтверждает целостность", kk: "HMAC-SHA256 криптографиялық қолтаңбасы тұтастықты дәлелдейді" },
   "Shield": { ru: "Щит", kk: "Қалқан" },
-  "Ed25519 + Shamir's Secret Sharing for quantum-grade protection": { ru: "Ed25519 + разделение секрета Шамира для защиты квантового уровня", kk: "Кванттық деңгейдегі қорғау үшін Ed25519 + Шамирдің құпияны бөлу әдісі" },
+  "Ed25519 signature + Shamir's Secret Sharing of the key; post-quantum signature is in preview": { ru: "Подпись Ed25519 + разделение ключа по схеме Шамира; постквантовая подпись — в предпросмотре", kk: "Ed25519 қолтаңбасы + кілтті Шамир схемасымен бөлу; постквантты қолтаңба — алдын ала қарауда" },
   "Certify": { ru: "Сертификат", kk: "Сертификат" },
   "IP Certificate with legal basis — publicly verifiable": { ru: "Сертификат ИС с правовым основанием — проверяется публично", kk: "Құқықтық негізі бар ЗМ сертификаты — жария тексеріледі" },
   // уровни

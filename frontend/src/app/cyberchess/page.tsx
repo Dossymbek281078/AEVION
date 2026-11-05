@@ -7528,7 +7528,7 @@ export default function CyberChessPage(){
         <div style={{minHeight:"60vh",display:"flex",alignItems:"center",justifyContent:"center",color:T.dim,fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${T.dim}`,borderTopColor:T.accent,animation:"cc-spin 0.8s linear infinite"}}/>
-            <span>Подгружаю шахматы…</span>
+            <span aria-hidden="true">♟</span>{/* 5.11.2026: заглушка до монтирования, язык ещё неизвестен: русский текст видел en-браузер 1–1,5 с (замер прода) — теперь без слов */}
           </div>
         </div>
       </ProductPageShell>

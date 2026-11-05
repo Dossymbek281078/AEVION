@@ -1876,9 +1876,10 @@ export default function CyberChessPage(){
   //
   // Открываем ТОЛЬКО для разделов, которые и правда живут в правой панели.
   // Сейчас это «коуч» (его содержимое рендерится внутри .cc-right-panel).
-  // «Анализ» и «задачи» рисуются в главной колонке — им шторка не нужна, и
-  // открывать её там значило бы закрыть доску без причины.
-  const РАЗДЕЛЫ_В_ШТОРКЕ = new Set(["coach"]);
+  // «Задачи» рисуются в главной колонке — им шторка не нужна, и открывать её
+  // там значило бы закрыть доску без причины.
+  // 4.11: «Анализ» тоже в шторке (390: иначе видна одна доска).
+  const РАЗДЕЛЫ_В_ШТОРКЕ = new Set(["coach","analysis"]);
   const открытьРаздел = (раздел: string) => {
     sTab(раздел as never);
     if (isMobileLayout && РАЗДЕЛЫ_В_ШТОРКЕ.has(раздел)) sMobileSidebarOpen(true);
@@ -2156,11 +2157,8 @@ export default function CyberChessPage(){
   });
   useEffect(()=>{try{localStorage.setItem(BB_KEY,JSON.stringify(blunderBook.slice(0,50)))}catch{}},[blunderBook]);
   const[mobileSidebarOpen,sMobileSidebarOpen]=useState(false);
-  /* 4.11.2026 (окно «Приложения», замер прода 9ca100905, 390×844): «Спроси тренера» в «С чего начать»,
-   * цель «Открой тренера» и ещё 10 мест зовут sTab("coach") напрямую, мимо открытьРаздел — раздел
-   * переключался, а шторка с тренером оставалась за краем (.cc-right-panel x=390), человек видел одну доску.
-   * Тренер на телефоне живёт ТОЛЬКО в шторке, поэтому шторка открывается от самого раздела, а не от кнопки. */
-  useEffect(()=>{if(tab==="coach"&&isMobileLayout)sMobileSidebarOpen(true)},[tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 4.11: шторка — от раздела, не от кнопки (sTab зовут мимо открытьРаздел).
+  useEffect(()=>{if(isMobileLayout&&РАЗДЕЛЫ_В_ШТОРКЕ.has(tab))sMobileSidebarOpen(true)},[tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const[refiningAnalysis,sRefiningAnalysis]=useState(false);
   const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
   const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");

@@ -462,6 +462,8 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     imgPermanent: "Картинка загружена на постоянный адрес",
     imgTooBig: "Картинка слишком большая (не больше 5 МБ)",
     saveHttp: "Не удалось сохранить — сервер ответил {status}",
+    zipHttp: "Не удалось скачать ZIP — сервер ответил {status}",
+    zipNetwork: "Не удалось скачать ZIP — нет связи с сервером",
     serverReplied: "сервер ответил {status}",
     noServer: "нет связи с сервером",
     noLink: "нет связи",
@@ -618,6 +620,8 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     imgPermanent: "The image was uploaded to a permanent address",
     imgTooBig: "The image is too large (5 MB max)",
     saveHttp: "Could not save — the server replied {status}",
+    zipHttp: "Could not download the ZIP — the server replied {status}",
+    zipNetwork: "Could not download the ZIP — no connection to the server",
     serverReplied: "the server replied {status}",
     noServer: "no connection to the server",
     noLink: "no connection",
@@ -774,6 +778,8 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     imgPermanent: "Сурет тұрақты мекенжайға жүктелді",
     imgTooBig: "Сурет тым үлкен (5 МБ-тан аспау керек)",
     saveHttp: "Сақтау мүмкін болмады — сервер {status} деп жауап берді",
+    zipHttp: "ZIP жүктеу мүмкін болмады — сервер {status} деп жауап берді",
+    zipNetwork: "ZIP жүктеу мүмкін болмады — серверге байланыс жоқ",
     serverReplied: "сервер {status} деп жауап берді",
     noServer: "серверге қосылу жоқ",
     noLink: "байланыс жоқ",
@@ -1335,20 +1341,22 @@ async function скачатьZip(projectId: string, name: string): Promise<void>
     const r = await fetch(apiUrl(`/api/devhub/projects/${projectId}/export`));
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
-      alert(devhubServerError(j?.error, `Не удалось скачать ZIP (ответ ${r.status})`));
+      alert(devhubServerError(j?.error, fill(tlModule().zipHttp, { status: r.status })));
       return;
     }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(name || "project").replace(/[^w.-]+/g, "_")}.zip`;
+    // Имя файла: буквы любого алфавита и цифры, иначе «probe zip» превращался в «_-_» (замер 4.11).
+    const чистое = String(name || "").trim().replace(/[^p{L}p{N}.-]+/gu, "_").replace(/^_+|_+$/g, "");
+    a.download = `${чистое || "project"}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   } catch (e: any) {
-    alert(devhubServerError(e?.message, "Не удалось скачать ZIP: нет связи с сервером"));
+    alert(devhubServerError(e?.message, tlModule().zipNetwork));
   }
 }
 

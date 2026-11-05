@@ -78,6 +78,7 @@ const NOT_A_SALES_PAGE: Record<string, string> = {
   "revenue/page.tsx": "внутренний дашборд выручки, не для покупателя",
   "layout.tsx": "корневая обёртка всего сайта: lemonsqueezy.com здесь — скрипт партнёрской программы LS (30.10.2026, ?aff=), а не покупка. Счётчик в обёртке дал бы второе событие на КАЖДЫЙ заход каждой страницы — у страниц свои PageTracking.",
   "multichat-engine/CouncilConsole.tsx": "консоль рисуется внутри multichat-engine/page.tsx, где стоит <PageTracking page=\"multichat-engine\" />; ссылка /pricing?app= здесь — кнопка тарифа после 402. Второй счётчик посчитал бы тот же заход дважды (31.10.2026).",
+  "cyberchess/DeepAnalysisPanel.tsx": "замок глубокого анализа рисуется внутри cyberchess/page.tsx, где стоит свой замер посещения; ссылка /pricing?app=cyberchess — «Открыть доступ» (4.11.2026). Второй счётчик посчитал бы тот же заход дважды.",
   "qcoreai/multi/GuestQuotaWall.tsx": "стена квоты гостя рисуется внутри qcoreai/multi/page.tsx, где стоит <PageTracking page=\"qcoreai-multi\" />; ссылка /pricing здесь — «Тарифы» после исчерпанной нормы. Второй счётчик посчитал бы тот же заход дважды (4.11.2026; на проде 7e10f6979 сторож падал на этом файле).",
   "qmelanin/_client.tsx": "часть страницы qmelanin — замер стоит в её page.tsx, второй считал бы то же посещение дважды",
   "longevity/_client.tsx": "часть страницы longevity — замер стоит в её page.tsx, второй считал бы то же посещение дважды",

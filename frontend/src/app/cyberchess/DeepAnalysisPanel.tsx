@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DeepEngine, type DeepEngineState } from "./deepEngine";
 import { checkAppAccess, type AppAccess } from "@/lib/appAccess";
-import { keepChannel } from "@/lib/products";
+import { keepChannel, PRICING_APP } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useСсылкаВхода } from "../auth/loginHref";
 
@@ -131,24 +131,26 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
             (isModuleEntitled на бэкенде). То есть надпись называла человеку
             ступень дороже нужной — потеря ровно в ту сторону, в которую её не
             видно: покупку не сделали, а отказ никуда не записался. */}
-        {/* 🔴 07.10.2026: «в платной подписке» СНЯТО. Это место тоже продавало —
-            оно единственное, где неоплативший читает, за что платить. А замер
-            показал, что платная часть не работает ни у кого, включая
-            оплативших: сети по адресу /nnue отдают 404, каталога в сборке нет,
-            переменная NEXT_PUBLIC_NNUE_BASE не задана. Замок оставлен (кнопку
-            для всех не открываем — решение основателя), но предложения купить
-            здесь больше нет: оно было бы обещанием неработающего. */}
-        <div style={{ fontWeight: 800, color: "#5b7a00" }}>🔒 Глубокий анализ пока недоступен</div>
+        {/* 07.10: «недоступен» — сетей /nnue не было (404). 4.11: сети на проде есть (200, 75 МБ),
+            состав ниже — только подтверждённое гейтами page.tsx (сторож deepAnalysisLockNamesPaidFeatures). */}
+        <div style={{ fontWeight: 800, color: "#5b7a00" }}>🔒 Глубокий анализ — в CyberChess за $50/год</div>
         <div style={{ marginTop: 6, color: "#4a4a4a", lineHeight: 1.5 }}>
           Stockfish 17.1 с полной нейросетью — глубина анализа уровня lichess.
           Игра, 500&nbsp;000 задач, ИИ-коуч и лёгкий анализ остаются бесплатными.
         </div>
+        <ul data-testid="cc-paid-features" style={{ margin: "8px 0 0", paddingLeft: 18, color: "#4a4a4a", lineHeight: 1.5 }}>
+          <li>Уровни ИИ 5–6 — Мастер и Stockfish (бесплатно: до 4)</li>
+          <li>Ghost-подсказки без монет</li>
+          <li>Глубокий разбор партии без монет</li>
+          <li>Глубокий анализ Stockfish 17.1 NNUE на этой панели</li>
+          <li>Значок Pro в профиле</li>
+        </ul>
         <a
           // Метка канала переживает переход: человек пришёл с ролика или
           // рекламы, и если она теряется здесь, покупка Pro запишется в
           // direct — а именно этот переход мы и хотим считать (сторож
           // channelSurvivesInternalLinks поймал потерю сразу).
-          href={keepChannel("/pricing", channelNow())}
+          href={keepChannel(PRICING_APP("cyberchess"), channelNow())}
           style={{
             display: "inline-block", marginTop: 10, padding: "8px 14px", borderRadius: 8,
             background: "#5b7a00", color: "#fff", fontWeight: 700, textDecoration: "none",

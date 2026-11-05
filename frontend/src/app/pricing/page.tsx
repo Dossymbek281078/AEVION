@@ -8,6 +8,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
 import { predlagaemOtdelno, vkhoditVPlanetu } from "@/lib/neProdayotsyaOtdelno";
+import { CyberChessPaidList } from "@/app/cyberchess/CyberChessPaidList";
 import { vybratVhod, nuzhnaProkrutkaKKartochke } from "@/lib/vhodNaStranitseTsen";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
@@ -1093,6 +1094,9 @@ export default function PricingPage() {
                 <div style={{ fontSize: 15, color: "#334155", fontWeight: 700, marginBottom: 2 }}>
                   {заСрок(платёжПриложения(app, срокГероя), TERM_MONTHS[срокГероя])}
                 </div>
+              )}
+              {app.slug === "cyberchess" && (
+                <div style={{ margin: "6px 0 8px" }}><CyberChessPaidList lang={i18n.lang} color="#334155" /></div>
               )}
               <div style={{ fontSize: 15, color: "#64748b" }}>
                 {t("pricing.home.heroModule.paymentCard")}{" "}

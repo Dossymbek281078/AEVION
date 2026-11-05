@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { DeepEngine, type DeepEngineState } from "./deepEngine";
 import { checkAppAccess, type AppAccess } from "@/lib/appAccess";
+import { CyberChessPaidList } from "./CyberChessPaidList";
+import { useI18nOptional } from "@/lib/i18n";
 import { keepChannel, PRICING_APP } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useСсылкаВхода } from "../auth/loginHref";
@@ -138,13 +140,7 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
           Stockfish 17.1 с полной нейросетью — глубина анализа уровня lichess.
           Игра, 500&nbsp;000 задач, ИИ-коуч и лёгкий анализ остаются бесплатными.
         </div>
-        <ul data-testid="cc-paid-features" style={{ margin: "8px 0 0", paddingLeft: 18, color: "#4a4a4a", lineHeight: 1.5 }}>
-          <li>Уровни ИИ 5–6 — Мастер и Stockfish (бесплатно: до 4)</li>
-          <li>Ghost-подсказки без монет</li>
-          <li>Глубокий разбор партии без монет</li>
-          <li>Глубокий анализ Stockfish 17.1 NNUE на этой панели</li>
-          <li>Значок Pro в профиле</li>
-        </ul>
+        <div style={{ marginTop: 8 }}><CyberChessPaidList lang={useI18nOptional()?.lang} /></div>
         <a
           // Метка канала переживает переход: человек пришёл с ролика или
           // рекламы, и если она теряется здесь, покупка Pro запишется в

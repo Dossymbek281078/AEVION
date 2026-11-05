@@ -7,6 +7,7 @@ import Piece from "../Pieces";
 import { GUIDE_PATHS as guidePaths } from "../guide/guide";
 import { LOVUSHKI, type Lovushka, type Yazyk } from "./traps";
 import { BuyCyberChessButton } from "../BuyCyberChessButton";
+import { CyberChessPaidList } from "../CyberChessPaidList";
 
 const UI: Record<Yazyk, Record<string, string>> = {
   ru: {
@@ -173,6 +174,7 @@ export default function TrapsView({ yazyk: lang }: { yazyk: Yazyk }) {
         <p style={{ margin: "0 0 20px" }}>
           <BuyCyberChessButton lang={lang} source="traps" fallbackChannel="seo-traps" />
         </p>
+        <div style={{ margin: "0 0 20px" }}><CyberChessPaidList lang={lang} compact /></div>
         <ol style={{ columns: "2 200px", margin: "0 0 12px", paddingLeft: 20, lineHeight: 1.8 }}>
           {LOVUSHKI.map((t) => (
             <li key={t.id}>

@@ -3,6 +3,7 @@
 import { GUIDE, GUIDE_EXAMPLES, PRICING_HREF, coachHref, guideFaqJsonLd, trapHref } from "./guide";
 import type { Yazyk } from "../traps/traps";
 import { BuyCyberChessButton } from "../BuyCyberChessButton";
+import { CyberChessPaidList } from "../CyberChessPaidList";
 
 const card: React.CSSProperties = { border: "1px solid rgba(22,22,26,0.12)", borderRadius: 12, padding: "14px 16px", background: "#fff" };
 const btn: React.CSSProperties = { display: "inline-block", padding: "12px 20px", borderRadius: 10, fontWeight: 800, fontSize: 15, textDecoration: "none", textAlign: "center" };
@@ -10,12 +11,15 @@ const btn: React.CSSProperties = { display: "inline-block", padding: "12px 20px"
 function Buttons({ lang, n }: { lang: Yazyk; n: 1 | 2 }) {
   const t = GUIDE[lang];
   return (
+    <>
     <p style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "12px 0 28px" }}>
       <a href={coachHref(lang)} data-testid={`ccg-coach-${n}`} style={{ ...btn, background: "#a9781a", color: "#fff" }}>{t.ctaCoach}</a>
       <a href={PRICING_HREF} data-testid={`ccg-price-${n}`} style={{ ...btn, background: "#fff", color: "#7a5410", border: "2px solid #a9781a" }}>{t.ctaPrice}</a>
       {/* 4.11: касса в одно нажатие на первом экране (n=1) — задача Оркестратора. */}
       {n === 1 && <BuyCyberChessButton lang={lang} source="guide" fallbackChannel="seo-cc-guide" />}
     </p>
+    {n === 1 && <div style={{ margin: "-16px 0 28px" }}><CyberChessPaidList lang={lang} compact /></div>}
+    </>
   );
 }
 

@@ -21,6 +21,7 @@ type Me = {
   role: string;
   createdAt: string;
   emailVerifiedAt: string | null;
+  marketingConsent?: boolean;
 };
 
 type Session = {
@@ -108,6 +109,11 @@ export default function AccountPage() {
   const [currentPwd, setCurrentPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [pwdBusy, setPwdBusy] = useState(false);
+  const [mktBusy, setMktBusy] = useState(false);
+  const tx = (k: string, fb: string) => {
+    const v = i18n?.t(k);
+    return v && v !== k ? v : fb;
+  };
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [verifyToken, setVerifyToken] = useState("");
   const [verifyDevToken, setVerifyDevToken] = useState<string | null>(null);
@@ -181,7 +187,7 @@ export default function AccountPage() {
   // «Список пуст» и «узнать не удалось» — РАЗНЫЕ вещи, и на денежном пути
   // разница дороже всего (21.08.2026).
   const [ownedUnknown, setOwnedUnknown] = useState(false);
-  // Lite = 1 продукт на выбор: список доступных модулей + выбор + busy
+  // Free = 1 продукт на выбор (у Lite с 15.09 — вся планета): список модулей + выбор + busy
   const [allModules, setAllModules] = useState<{ id: string; name: string }[]>([]);
   const [liteChoice, setLiteChoice] = useState<string>("");
   const [liteBusy, setLiteBusy] = useState(false);
@@ -297,6 +303,25 @@ export default function AccountPage() {
       showToast(`Update failed: ${(e as Error).message}`, "error");
     } finally {
       setSavingName(false);
+    }
+  };
+
+  // Выключатель «Новости и предложения»: сервер хранит флаг и дату изменения.
+  const toggleMarketing = async (next: boolean) => {
+    setMktBusy(true);
+    try {
+      const r = await fetch(apiUrl("/api/auth/me/marketing-consent"), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ consent: next }),
+      });
+      if (!r.ok) throw new Error(String(r.status));
+      setMe((m) => (m ? { ...m, marketingConsent: next } : m));
+      showToast(next ? tx("account.marketing.on", "You will receive news and offers.") : tx("account.marketing.off", "You will not receive news and offers."), "success");
+    } catch {
+      showToast(tx("account.marketing.fail", "Could not save the setting"), "error");
+    } finally {
+      setMktBusy(false);
     }
   };
 
@@ -673,6 +698,23 @@ export default function AccountPage() {
                 </div>
               )}
 
+              {/* News and offers consent */}
+              <div style={card}>
+                <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16, fontWeight: 800 }}>
+                  {tx("account.marketing.title", "News and offers")}
+                </h2>
+                <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "#334155", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={me.marketingConsent === true}
+                    onChange={(e) => toggleMarketing(e.target.checked)}
+                    disabled={mktBusy}
+                    style={{ marginTop: 3 }}
+                  />
+                  <span>{tx("account.marketing.desc", "Email me about new prices, features and offers. Every email has an unsubscribe link.")}</span>
+                </label>
+              </div>
+
               {/* Password */}
               <div style={card}>
                 <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16, fontWeight: 800 }}>
@@ -761,9 +803,12 @@ export default function AccountPage() {
                       <span>{formatDate(sub.createdAt)}</span>
                     </div>
                   </div>
-                  {(sub.tierId === "lite" || sub.tierId === "free") && (
+                  {/* 5.11.2026: выбор «1 продукта» остался только у Free. Lite с 15.09 — месяц ВСЕЙ планеты
+                      (/pricing: «Все продукты AEVION в одной подписке»; бэк: normalizeTier lite → full), и
+                      предлагать оплатившему $250 выбрать один модуль — обещать меньше проданного (проба 5.11). */}
+                  {sub.tierId === "free" && (
                     <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(15,23,42,0.08)" }}>
-                      <div style={labelStyle}>Продукт {sub.tierId === "lite" ? "(Lite — 1 на выбор)" : "(Free — 1 на выбор)"}</div>
+                      <div style={labelStyle}>Продукт (Free — 1 на выбор)</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         <select
                           value={liteChoice}

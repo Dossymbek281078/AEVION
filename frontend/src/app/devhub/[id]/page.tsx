@@ -19,13 +19,13 @@ import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSn
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { track } from "@/lib/track";
-import { postNow } from "@/lib/channelNow";
+import { postNow, channelNow } from "@/lib/channelNow";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { pokazyvatKartochkuSokhraneniya, klyuchSokhraneniya, kanalDlyaLista, DEVHUB_SAVE_SOURCE, DEVHUB_SAVE_FEATURE } from "@/lib/devhubSaveCard";
 import { useI18nOptional } from "@/lib/i18n";
 import { tDevhub, type DevhubKey } from "../i18n";
 import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
-import { productById, PRICING_TIERS_LIST } from "@/lib/products";
+import { productById, PRICING_TIERS_LIST, keepChannel, сМодулем } from "@/lib/products";
 
 /**
  * A write whose result the UI is about to act on.
@@ -462,6 +462,8 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     imgPermanent: "Картинка загружена на постоянный адрес",
     imgTooBig: "Картинка слишком большая (не больше 5 МБ)",
     saveHttp: "Не удалось сохранить — сервер ответил {status}",
+    zipHttp: "Не удалось скачать ZIP — сервер ответил {status}",
+    zipNetwork: "Не удалось скачать ZIP — нет связи с сервером",
     serverReplied: "сервер ответил {status}",
     noServer: "нет связи с сервером",
     noLink: "нет связи",
@@ -618,6 +620,8 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     imgPermanent: "The image was uploaded to a permanent address",
     imgTooBig: "The image is too large (5 MB max)",
     saveHttp: "Could not save — the server replied {status}",
+    zipHttp: "Could not download the ZIP — the server replied {status}",
+    zipNetwork: "Could not download the ZIP — no connection to the server",
     serverReplied: "the server replied {status}",
     noServer: "no connection to the server",
     noLink: "no connection",
@@ -774,6 +778,8 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     imgPermanent: "Сурет тұрақты мекенжайға жүктелді",
     imgTooBig: "Сурет тым үлкен (5 МБ-тан аспау керек)",
     saveHttp: "Сақтау мүмкін болмады — сервер {status} деп жауап берді",
+    zipHttp: "ZIP жүктеу мүмкін болмады — сервер {status} деп жауап берді",
+    zipNetwork: "ZIP жүктеу мүмкін болмады — серверге байланыс жоқ",
     serverReplied: "сервер {status} деп жауап берді",
     noServer: "серверге қосылу жоқ",
     noLink: "байланыс жоқ",
@@ -1323,10 +1329,45 @@ function FileContextMenu({
 
 // Promise-only: Next 16 rejects the `T | Promise<T>` union in generated route
 // types (build-only error — see the note in src/app/[id]/page.tsx).
+/**
+ * 4.11.2026 (замер Ниш на проде, гость, 2 из 2): кнопка ZIP открывала адрес
+ * экспорта через window.open — браузер шёл без гостевого заголовка и без
+ * Authorization, бэк отвечал {"error":"project not found"}. Качаем через
+ * fetch: обёртка installDevhubGuestHeader кладёт личность и токен, ответ —
+ * в файл. Отказ показываем словами, а не молчим.
+ */
+async function скачатьZip(projectId: string, name: string): Promise<void> {
+  try {
+    const r = await fetch(apiUrl(`/api/devhub/projects/${projectId}/export`));
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(devhubServerError(j?.error, fill(tlModule().zipHttp, { status: r.status })));
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    // Имя файла: буквы любого алфавита и цифры, иначе «probe zip» превращался в «_-_» (замер 4.11).
+    const чистое = String(name || "").trim().replace(/[^p{L}p{N}.-]+/gu, "_").replace(/^_+|_+$/g, "");
+    a.download = `${чистое || "project"}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  } catch (e: any) {
+    alert(devhubServerError(e?.message, tlModule().zipNetwork));
+  }
+}
+
 export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   // Вне провайдера языка (тесты) — русский, как и раньше.
   const uiLang = useI18nOptional()?.lang ?? "ru";
+  // 4.11.2026: ссылки «Планеты» несут модуль и метку захода (см. сМодулем); канал — после гидратации.
+  const [канал, setКанал] = useState<string | null>(null);
+  useEffect(() => { setКанал(channelNow()); }, []);
+  const PLANET_TERMS_HREF = keepChannel(сМодулем(PLANET_TERMS_LIST, "devhub"), канал);
   const GL = GEN_UI[uiLang] ?? GEN_UI.ru;
   const AL = useAttrL();
   // Денежная плашка берёт подписи из СЛОВАРЯ МОДУЛЯ, а не из своих литералов:
@@ -4603,7 +4644,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 title={AL.upZip}
               >{zipImporting ? "..." : "📦"}</button>
               <button
-                onClick={() => { if (project) window.open(apiUrl(`/api/devhub/projects/${project.id}/export`), "_blank"); }}
+                onClick={() => { if (project) void скачатьZip(project.id, project.name); }}
                 disabled={!project || files.length === 0}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
                 title={AL.dlZip}
@@ -5573,7 +5614,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           <a
-                            href={PLANET_TERMS_LIST}
+                            href={PLANET_TERMS_HREF}
                             onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub-after-live", meta: { processor: "lemonsqueezy" } })}
                             style={{ padding: "7px 14px", background: "#fff", color: "#0d9488", borderRadius: 8, fontWeight: 800, fontSize: 13, textDecoration: "none", whiteSpace: "nowrap" }}
                           >
@@ -7483,7 +7524,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
           <span style={{ fontSize: 13, lineHeight: 1.45, flex: "1 1 260px" }}>{upgradeNudge}</span>
           {STUDIO_PRO && (
             <a
-              href={PLANET_TERMS_LIST}
+              href={PLANET_TERMS_HREF}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub-ide", meta: { processor: "lemonsqueezy" } })}

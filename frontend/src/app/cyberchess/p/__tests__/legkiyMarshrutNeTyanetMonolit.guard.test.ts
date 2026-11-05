@@ -40,7 +40,7 @@ describe("лёгкий маршрут задачи — Route Handler без мо
 
   it("знаменатель: маршрут — обработчик и логика, страницы React нет", () => {
     const имена = файлы.map((f) => f.slice(МАРШРУТ.length + 1).replace(/\\/g, "/")).sort();
-    expect(имена).toEqual(["[id]/route.ts", "klientSkript.ts", "logikaZadachi.ts", "pzSlova.ts", "yazykZaprosa.ts"]);
+    expect(имена).toEqual(["[id]/route.ts", "coachPanelSlova.ts", "klientSkript.ts", "logikaZadachi.ts", "pzSlova.ts", "yazykZaprosa.ts"]);
   });
 
   it("🔴 обработчик не импортирует React, провайдеры сайта и тяжёлые модули шахмат", () => {

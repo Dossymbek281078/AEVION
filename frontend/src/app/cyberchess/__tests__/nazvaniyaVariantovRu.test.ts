@@ -37,11 +37,15 @@ describe("названия вариантов на русском экране",
 
   it("подпись «вариант дня» берёт НАЗВАНИЕ, а не идентификатор", () => {
     const код = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
-    const i = код.indexOf("варианту дня (");
-    expect(i, "строка «варианту дня (…)» пропала — проверку надо переписать").toBeGreaterThan(0);
+    const i = код.indexOf("cpn.pip.askV");
+    expect(i, "подпись «вариант дня» (cpn.pip.askV) пропала — проверку надо переписать").toBeGreaterThan(0);
     const кусок = код.slice(i, i + 220);
     // именно поиск по VARIANTS отличает название от машинного ключа
-    expect(кусок).toContain("VARIANTS.find");
-    expect(кусок).toContain("?.name");
+    // 4.11: название берётся из словаря по идентификатору варианта (cpn.var.<id>), на языке экрана
+    expect(кусок).toContain('cc.t("cpn.var."+dailyVariantInfo.variant)');
+    const словарь = readFileSync(join(__dirname, "..", "p", "coachPanelSlova.ts"), "utf8");
+    for (const v of VARIANTS) {
+      expect(словарь, "нет названия варианта в словаре: " + v.id).toContain(`"cpn.var.${v.id}": "${v.name}"`);
+    }
   });
 });

@@ -7,6 +7,9 @@ import { getAuthToken } from "@/lib/auth";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PageTracking } from "@/components/PageTracking";
+import { GuestQuotaWall, GuestLimitChip, guestWallFrom, type GuestWall } from "./GuestQuotaWall";
+import { exampleFor, startStrategy } from "./guestExamples";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -94,6 +97,8 @@ type RunState = {
   finalContent?: string;
   error?: string;
   status: "running" | "done" | "error" | "stopped";
+  /** 402 guest_quota_exhausted: лимит гостя, не сбой — чип нейтральный, красной плашки нет (3.11). */
+  guestLimit?: boolean;
   startedAt: number;
   totalDurationMs?: number;
   totalCostUsd?: number;
@@ -291,6 +296,15 @@ const prettyModel = (m: string) => {
    Helpers
    ═══════════════════════════════════════════════════════════════════════ */
 
+/** Гость без токена: личные ручки (personas, templates, presence) не зовём — иначе 401 каждые 20 с (замер Продаж 4.11). */
+function hasAuthToken(): boolean {
+  try {
+    return typeof window !== "undefined" && !!getAuthToken();
+  } catch {
+    return false;
+  }
+}
+
 function bearerHeader(): HeadersInit {
   try {
     const t = typeof window !== "undefined" ? getAuthToken() : null;
@@ -385,6 +399,13 @@ export default function QCoreMultiAgentPage() {
   // plain factual lookups to a single flagship call, so users don't overpay for
   // trivia. They can still pin a specific strategy via the pills.
   const [strategy, setStrategy] = useState<Strategy>("auto");
+  // Гость с ролика «один вопрос — несколько моделей» открывает страницу сразу в Parallel (после монтирования — без расхождения SSR).
+  const [signedIn, setSignedIn] = useState(true);
+  useEffect(() => {
+    const t = hasAuthToken();
+    setSignedIn(t);
+    setStrategy((cur) => (cur === "auto" ? (startStrategy(t) as Strategy) : cur));
+  }, []);
   // council mode: how many crowd members to convene (2–6).
   const [councilSize, setCouncilSize] = useState<number>(3);
   // council mode: Mixture-of-Agents refinement layers (1=fast, 2-3=deeper/slower).
@@ -513,6 +534,7 @@ export default function QCoreMultiAgentPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [guestWall, setGuestWall] = useState<GuestWall | null>(null);
   // Sidebar quick-find + tag chip strip (feat/qcore-extras 2026-04-29).
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchResults, setSearchResults] = useState<Array<{
@@ -631,7 +653,7 @@ export default function QCoreMultiAgentPage() {
 
   /* ── V35: Presence ping — heartbeat every 20s when a session is active ── */
   useEffect(() => {
-    if (!activeSessionId) { setPresenceCount(0); return; }
+    if (!activeSessionId || !hasAuthToken()) { setPresenceCount(0); return; }
     const ping = async () => {
       try {
         const r = await fetch(apiUrl(`/api/qcoreai/sessions/${activeSessionId}/presence/ping`), {
@@ -699,11 +721,11 @@ export default function QCoreMultiAgentPage() {
         }
         if (Array.isArray(sessData?.items)) setSessions(sessData.items);
 
-        // V19: load agent personas
-        try {
+        // V19: load agent personas (только с токеном — гостю 401 не нужен)
+        if (hasAuthToken()) try {
           const pRes = await fetch(apiUrl("/api/qcoreai/me/personas"), { headers: bearerHeader() });
           const pData = await pRes.json().catch(() => ({}));
-          if (!pRes.ok) setPartial((p) => p.includes("персоны агентов") ? p : [...p, "персоны агентов"]);
+          if (!pRes.ok && pRes.status !== 401) setPartial((p) => p.includes("персоны агентов") ? p : [...p, "персоны агентов"]);
           if (Array.isArray(pData?.personas)) {
             const map: Record<string, { name: string; emoji?: string; color?: string }> = {};
             for (const p of pData.personas) map[p.roleId] = { name: p.name, emoji: p.emoji, color: p.color };
@@ -714,11 +736,11 @@ export default function QCoreMultiAgentPage() {
         // V7-Tmpl: load user's own templates in the background.
         try {
           const [tmplRes, pubTmplRes] = await Promise.all([
-            fetch(apiUrl("/api/qcoreai/templates"), { headers: bearerHeader() }),
+            hasAuthToken() ? fetch(apiUrl("/api/qcoreai/templates"), { headers: bearerHeader() }) : Promise.resolve(new Response("{}", { status: 401 })),
             fetch(apiUrl("/api/qcoreai/templates/public?limit=20")),
           ]);
           const tmplData = await tmplRes.json().catch(() => ({}));
-          if (!tmplRes.ok) setPartial((p) => p.includes("мои шаблоны") ? p : [...p, "мои шаблоны"]);
+          if (!tmplRes.ok && tmplRes.status !== 401) setPartial((p) => p.includes("мои шаблоны") ? p : [...p, "мои шаблоны"]);
           const pubData = await pubTmplRes.json().catch(() => ({}));
           if (!pubTmplRes.ok) setPartial((p) => p.includes("общие шаблоны") ? p : [...p, "общие шаблоны"]);
           if (Array.isArray(tmplData?.items)) setTemplates(tmplData.items);
@@ -1461,8 +1483,11 @@ export default function QCoreMultiAgentPage() {
         if (clearedFromInput) setInput(msg);
         // Guest gate (402 guest_quota_exhausted) carries a human message and a sign-in link.
         const humanMsg = typeof err?.message === "string" && err.message ? err.message : "";
-        const signIn = res.status === 402 && typeof err?.loginUrl === "string" ? ` ${err.loginUrl}` : "";
-        throw new Error(humanMsg ? humanMsg + signIn : err?.error || `HTTP ${res.status}`);
+        // Стена гостя — не сбой: вместо адреса сырым текстом две двери, вход и тарифы (3.11).
+        const wall = guestWallFrom(res.status, err, window.location.pathname + window.location.search);
+        if (wall) setGuestWall(wall);
+        const signIn = !wall && res.status === 402 && typeof err?.loginUrl === "string" ? ` ${err.loginUrl}` : "";
+        throw Object.assign(new Error(humanMsg ? humanMsg + signIn : err?.error || `HTTP ${res.status}`), { guestWall: !!wall });
       }
 
       let realRunId = tempRunId;
@@ -1676,11 +1701,13 @@ export default function QCoreMultiAgentPage() {
     } catch (e: any) {
       const isAbort = e?.name === "AbortError";
       const msgText = isAbort ? "Stopped by user." : e?.message || "Stream failed";
-      if (!isAbort) setGlobalError(msgText);
+      // Стену гостя показывает GuestQuotaWall — второй красной плашкой её не дублируем.
+      if (!isAbort && !e?.guestWall) setGlobalError(msgText);
       setRuns((prev) => prev.map((r) => (r.status === "running" ? {
         ...r,
         status: isAbort ? "stopped" : "error",
         error: isAbort ? undefined : msgText,
+        guestLimit: !isAbort && !!e?.guestWall,
       } : r)));
     } finally {
       abortRef.current = null;
@@ -1999,6 +2026,8 @@ export default function QCoreMultiAgentPage() {
   return (
     <main>
       <ProductPageShell maxWidth={1200}>
+        {/* Сюда ведёт Shorts 4.11 — до 3.11 заход не считался вовсе (0 page_view на 7 заходов). */}
+        <PageTracking page="qcoreai-multi" />
         <Wave1Nav />
         {partial.length > 0 && (
           <div
@@ -3915,6 +3944,7 @@ export default function QCoreMultiAgentPage() {
                   onPickStrategy={(s) => setStrategy(s)}
                   currentStrategy={strategy}
                   canSend={anyConfigured}
+                  signedIn={signedIn}
                 />
               ) : (
                 runs.map((run) => (
@@ -4034,6 +4064,8 @@ export default function QCoreMultiAgentPage() {
                 </button>
               </div>
             )}
+
+            {guestWall && <GuestQuotaWall wall={guestWall} />}
 
             {globalError && (
               <div
@@ -4417,7 +4449,9 @@ export default function QCoreMultiAgentPage() {
             gap: 10px;
           }
           @media (max-width: 880px) {
-            .qc-layout { grid-template-columns: 1fr; }
+            /* 4.11: minmax(0,1fr) + min-width:0 — see multiFitsPhoneWidth.guard.test (390px overflow). */
+            .qc-layout { grid-template-columns: minmax(0, 1fr); }
+            .qc-layout > * { min-width: 0; max-width: 100%; }
             .qc-pair-grid { grid-template-columns: 1fr; }
             .qc-sidebar { max-height: none !important; position: static !important; }
             .qc-sidebar-toggle { display: flex !important; }
@@ -5006,12 +5040,14 @@ function EmptyState({
   onPickStrategy,
   currentStrategy,
   canSend,
+  signedIn,
 }: {
   strategies: StrategyInfo[];
   onSuggest: (s: string, strategy?: Strategy) => void;
   onPickStrategy: (s: Strategy) => void;
   currentStrategy: Strategy;
   canSend: boolean;
+  signedIn: boolean;
 }) {
   const CARDS: { id: Strategy; title: string; blurb: string; example: string; accent: string }[] = [
     {
@@ -5092,7 +5128,7 @@ function EmptyState({
               </div>
               <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5 }}>{meta?.description || c.blurb}</div>
               <button
-                onClick={() => canSend && onSuggest(c.example, c.id)}
+                onClick={() => canSend && onSuggest(exampleFor(c.id, c.example, signedIn), c.id)}
                 disabled={!canSend}
                 style={{
                   textAlign: "left",
@@ -5103,7 +5139,7 @@ function EmptyState({
                   lineHeight: 1.45,
                 }}
               >
-                "{c.example}"
+                "{exampleFor(c.id, c.example, signedIn)}"
               </button>
               <button
                 onClick={() => onPickStrategy(c.id)}
@@ -5526,7 +5562,7 @@ function RunCard({
       )}
 
       {/* Error */}
-      {run.error && !run.finalContent && (
+      {run.error && !run.finalContent && !run.guestLimit && (
         <div
           style={{
             padding: "10px 14px", borderRadius: 10,
@@ -5587,7 +5623,8 @@ function RunCard({
               ⭐ PREMIUM QUOTA
             </span>
           )}
-          {run.status === "error" && (
+          {run.guestLimit && <GuestLimitChip />}
+          {run.status === "error" && !run.guestLimit && (
             <span
               style={{
                 padding: "2px 8px", borderRadius: 999,
@@ -6171,7 +6208,7 @@ function FinalCard({
             </span>
           );
         })()}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button
             onClick={toggleBookmark}
             title={bookmarked ? "Remove bookmark" : "Bookmark this run"}

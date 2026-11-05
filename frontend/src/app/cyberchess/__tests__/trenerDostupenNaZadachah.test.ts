@@ -40,7 +40,7 @@ function obrabotchik(якорь: string, длина = 900): string {
 
 describe("тренер доступен на задачах", () => {
   it("🔴 плитка «Из задач» ВКЛЮЧАЕТ тренера, а не выключает", () => {
-    const h = obrabotchik('modeBtn("🧩","Из задач"');
+    const h = obrabotchik('modeBtn("🧩",cc.t("cpn.mode.puz")');
     expect(h, "плитка снова выключает тренера — позиция встанет, спросить будет нечем").not.toContain("sCoachAIEnabled(false)");
     expect(h, "плитка не включает тренера").toContain("sCoachAIEnabled(true)");
   });
@@ -94,8 +94,8 @@ describe("тренер доступен на задачах", () => {
     // sCoachAIEnabled(false) исчезла отовсюду, — а у «За обоих» и
     // «Импорта» она на месте по делу: там человек играет сам или выбирает
     // источник, и комментарий тренера не нужен.
-    const свободная = obrabotchik('modeBtn("✋","За обоих"');
-    const импорт = obrabotchik('modeBtn("📥","Импорт"');
+    const свободная = obrabotchik('modeBtn("✋",cc.t("cpn.mode.both")');
+    const импорт = obrabotchik('modeBtn("📥",cc.t("cpn.mode.import")');
     expect(свободная + импорт, "соседние плитки перестали выключать тренера — правка задела не то").toContain("sCoachAIEnabled(false)");
   });
 });

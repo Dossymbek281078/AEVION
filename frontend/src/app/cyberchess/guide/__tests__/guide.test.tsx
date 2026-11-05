@@ -43,7 +43,10 @@ describe("/cyberchess/guide", () => {
       expect(html).toContain('"@type":"FAQPage"');
       expect(guideFaqJsonLd(l).mainEntity).toHaveLength(GUIDE[l].faq.length);
       expect(html).toContain("$50");
-      expect(html).not.toMatch(/NNUE/);
+      // 31.10 NNUE не обещали (сети /nnue были 404). 5.11: сети на проде, панель у оплатившего считает
+      // (подписанный вебхук LS + Playwright, +0.30 на глубине 18) — список «за $50/год» с NNUE стоит на первом экране.
+      expect(html).toContain('data-testid="cc-paid-features"');
+      expect(html).toMatch(/NNUE/);
     });
   }
 

@@ -17,6 +17,7 @@
  */
 
 import { PZ_SLOVA } from "./p/pzSlova";
+import { COACH_PANEL_SLOVA } from "./p/coachPanelSlova";
 import { useEffect, useState, useCallback } from "react";
 
 export type CcLocale = "ru" | "en" | "kk";
@@ -36,6 +37,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "rolik.loading": "Задача грузится…",
     "rolik.date": "ролик от {d}",
     ...PZ_SLOVA.ru,
+    ...COACH_PANEL_SLOVA.ru,
     // ── Видимый текст игрового экрана (волна EN, 19.10.2026). Русские значения —
     //    ДОСЛОВНО как было в page.tsx хардкодом; английские — рядом в en.
     //    Атрибуты title/aria и темы доски — отдельная волна (Б).
@@ -558,6 +560,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "rolik.loading": "Loading the puzzle…",
     "rolik.date": "video of {d}",
     ...PZ_SLOVA.en,
+    ...COACH_PANEL_SLOVA.en,
     // ── Visible game-screen text (EN wave, 2026-10-19). RU originals kept verbatim.
     "game.check": "Check!",
     "game.thinkingSF": "Stockfish is thinking…",
@@ -1034,6 +1037,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "rolik.loading": "Есеп жүктелуде…",
     "rolik.date": "{d} бейнесі",
     ...PZ_SLOVA.kk,
+    ...COACH_PANEL_SLOVA.kk,
     // 21.10.2026: 50 ключей игрового экрана здесь не было — tFor тихо брал русский
     // (замер yazyk-devhub.mjs --click: «Анализ варианта», «Игра за белых» у kk).
     // Термины — те же, что уже в файле: Тең (ничья), Тағы, Тас, жүріс, ЖИ, жаттықтырушы.

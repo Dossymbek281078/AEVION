@@ -60,7 +60,7 @@ describe("кнопка модуля несёт метку канала к выб
 
   test("модуль вне пяти: ведёт к подписке, с меткой", async () => {
     at("?c=tg");
-    await waitFor(async () => expect(await buyHref("qlearn")).toBe("/pricing?c=tg#planet-buy"));
+    await waitFor(async () => expect(await buyHref("qlearn")).toBe("/pricing?module=qlearn&c=tg#planet-buy"));
   });
 
   test("без метки адрес чистый", async () => {
@@ -69,6 +69,6 @@ describe("кнопка модуля несёт метку канала к выб
 
   test("выдуманная метка не уезжает", async () => {
     at("?c=zzzz");
-    expect(await buyHref("qlearn")).toBe("/pricing#planet-buy");
+    expect(await buyHref("qlearn")).toBe("/pricing?module=qlearn#planet-buy");
   });
 });

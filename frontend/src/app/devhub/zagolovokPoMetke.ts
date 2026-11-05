@@ -23,10 +23,11 @@ export type Obeshchanie = {
   istochnik: string;
 };
 
+// 3.11: без числа минут — /devhub/guide честно пишет, что срок не обещаем (1 прогон из 6 адреса не дал).
 const ОБЩЕЕ: Record<ЯзыкОбещания, string> = {
-  ru: "Сайт по описанию — до живого адреса за минуту",
-  en: "A site from a description — a live address in a minute",
-  kk: "Сипаттама бойынша сайт — бір минутта тірі мекенжайға дейін",
+  ru: "Сайт по описанию — от слов до живого адреса, без кода",
+  en: "A site from a description — from words to a live address, no code",
+  kk: "Сипаттама бойынша сайт — сөзден тірі мекенжайға дейін, кодсыз",
 };
 
 /** Обещания роликов DevHub (папка 13-Бренд-медиа-реклама/2026-10-12-РОЛИКИ-DevHub). */
@@ -39,9 +40,9 @@ const ПО_РОЛИКАМ: Record<string, Record<ЯзыкОбещания, { h1:
   },
   // ролик 3: ИИ оставил «[Название кофейни]» — починили словами
   "3": {
-    ru: { h1: "ИИ ошибся — починили словами за минуту", primer: "лендинг кофейни с меню, часами работы и картой проезда" },
-    en: { h1: "The AI slipped — fixed with words in a minute", primer: "coffee shop landing page with a menu, opening hours and a map" },
-    kk: { h1: "ЖИ қателесті — сөзбен бір минутта түзеттік", primer: "мәзірі, жұмыс уақыты және картасы бар кофехана лендингі" },
+    ru: { h1: "ИИ ошибся — починили словами, без кода", primer: "лендинг кофейни с меню, часами работы и картой проезда" },
+    en: { h1: "The AI slipped — fixed with words, no code", primer: "coffee shop landing page with a menu, opening hours and a map" },
+    kk: { h1: "ЖИ қателесті — сөзбен, кодсыз түзеттік", primer: "мәзірі, жұмыс уақыты және картасы бар кофехана лендингі" },
   },
   // ролик 4: визитка мастера маникюра
   "4": {

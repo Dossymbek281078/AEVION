@@ -23,10 +23,10 @@ describe("PipelineSteps", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("marks completed steps with ✓ when current is mid-pipeline", () => {
+  it("гость на середине конвейера: ✓ нет (2.11.2026), только номера", () => {
     render(<PipelineSteps current="bureau" />);
-    const checks = screen.getAllByText("✓");
-    expect(checks.length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryAllByText("✓")).toHaveLength(0);
+    expect(screen.getByText("1")).toBeInTheDocument();
   });
 
   it("renders 6 anchors with hrefs to correct routes", () => {

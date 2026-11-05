@@ -1,6 +1,7 @@
 // /bureau/guide — страница для патентных бюро и поверенных из поиска, ведёт в заявку.
 // Язык — serverLang (?lang=, кука, Accept-Language), как у /bureau; en/ru/kk (kk — черновик).
 import type { Metadata } from "next";
+import { PageTracking } from "@/components/PageTracking";
 import { serverLang } from "@/lib/serverLang";
 import { GuideView } from "./GuideView";
 import { GUIDE_LANGUAGES, guideLang, guideMetadata } from "./guideText";
@@ -20,5 +21,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function BureauGuidePage() {
   const lang = guideLang(await serverLang("ru"));
-  return <GuideView lang={lang} />;
+  return (
+    <>
+      <PageTracking page="bureau-guide" />
+      <GuideView lang={lang} />
+    </>
+  );
 }

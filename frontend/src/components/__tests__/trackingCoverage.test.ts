@@ -70,11 +70,16 @@ const VIEW_MARKERS = [/<PageTracking\b/, /track\(\s*"page_view"/, /type:\s*"page
  * Каждое исключение — с причиной: без неё список тихо разрастётся до бесполезного.
  */
 const NOT_A_SALES_PAGE: Record<string, string> = {
+  // 4.11.2026: кнопка-компонент, не страница — стоит на /cyberchess/traps и /cyberchess/guide,
+  // у которых свой <PageTracking>; посещение считают они (замер прода 3.11: page_view 7/7).
+  "cyberchess/BuyCyberChessButton.tsx": "компонент кнопки кассы внутри страниц с PageTracking (traps/guide)",
   "legal/privacy/page.tsx": "юридический текст, ссылка упомянута как обработчик платежей",
   "pricing/layout.tsx": "общая обёртка всех страниц /pricing: замер стоит в её page.tsx (type page_view). С 01.10 обёртка рисует серверный блок цен — его видит поисковик и превью ссылки, и ссылки ?app= в нём ведут на карточки ТОЙ ЖЕ страницы. Второй счётчик здесь дал бы ДВА события на один заход на КАЖДОЙ подстранице /pricing — ровно то, что мы чинили записью «заход считался дважды на всех восьми входах воронки».",
   "revenue/page.tsx": "внутренний дашборд выручки, не для покупателя",
   "layout.tsx": "корневая обёртка всего сайта: lemonsqueezy.com здесь — скрипт партнёрской программы LS (30.10.2026, ?aff=), а не покупка. Счётчик в обёртке дал бы второе событие на КАЖДЫЙ заход каждой страницы — у страниц свои PageTracking.",
   "multichat-engine/CouncilConsole.tsx": "консоль рисуется внутри multichat-engine/page.tsx, где стоит <PageTracking page=\"multichat-engine\" />; ссылка /pricing?app= здесь — кнопка тарифа после 402. Второй счётчик посчитал бы тот же заход дважды (31.10.2026).",
+  "cyberchess/DeepAnalysisPanel.tsx": "замок глубокого анализа рисуется внутри cyberchess/page.tsx, где стоит свой замер посещения; ссылка /pricing?app=cyberchess — «Открыть доступ» (4.11.2026). Второй счётчик посчитал бы тот же заход дважды.",
+  "qcoreai/multi/GuestQuotaWall.tsx": "стена квоты гостя рисуется внутри qcoreai/multi/page.tsx, где стоит <PageTracking page=\"qcoreai-multi\" />; ссылка /pricing здесь — «Тарифы» после исчерпанной нормы. Второй счётчик посчитал бы тот же заход дважды (4.11.2026; на проде 7e10f6979 сторож падал на этом файле).",
   "qmelanin/_client.tsx": "часть страницы qmelanin — замер стоит в её page.tsx, второй считал бы то же посещение дважды",
   "longevity/_client.tsx": "часть страницы longevity — замер стоит в её page.tsx, второй считал бы то же посещение дважды",
   "qventure/_result.tsx": "часть страницы qventure — замер стоит в её page.tsx и в a/[id]/page.tsx; сам файл рисует разбор и собирает адрес внутри них",

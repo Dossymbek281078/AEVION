@@ -7,21 +7,21 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://a
 export const metadata: Metadata = {
   title: "QFusionAI — Hybrid AI Router",
   description:
-    "Гибридный AI-движок, объединяющий лучшие LLM (OpenAI, Anthropic, Gemini, DeepSeek, Grok) с автоматическим routing по цене/скорости/качеству. Один API — пять провайдеров.",
+    "Гибридный AI-движок, объединяющий лучшие LLM (OpenAI, Anthropic, Gemini, OpenRouter) с автоматическим routing по цене/скорости/качеству. Один API — несколько провайдеров.",
   alternates: { canonical: `${SITE}/qfusionai` },
   openGraph: {
     type: "website",
     url: `${SITE}/qfusionai`,
     title: "QFusionAI — Hybrid AI Router",
     description:
-      "5 LLM-провайдеров в одном API · автоматический routing по cost/latency/quality · fallback chain · кэш ответов.",
+      "Claude, GPT, Gemini и OpenRouter в одном API · автоматический routing по cost/latency/quality · fallback chain · кэш ответов.",
     siteName: "AEVION",
     images: [{ url: `${SITE}/qfusionai/opengraph-image`, width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "QFusionAI · Hybrid AI Router",
-    description: "5 LLM providers, 1 API. Auto-routing + fallback + cache.",
+    description: "Claude, GPT, Gemini, OpenRouter — 1 API. Auto-routing + fallback + cache.",
   },
   robots: { index: true, follow: true },
 };

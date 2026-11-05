@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
-import { меткаЗаходаДляЗаписи, postNow } from "@/lib/channelNow";
+import { меткаЗаходаДляЗаписи, postNow, channelNow } from "@/lib/channelNow";
 import { zagolovokPoMetke } from "./zagolovokPoMetke";
 import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
@@ -22,7 +22,7 @@ import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
 import { shagPervogoEkrana, podklyuchitSobytiyaPervogoEkrana } from "@/lib/sobytiyaPervogoEkrana";
-import { productById, fromPerMonthOf, PRICING_TIERS_LIST } from "@/lib/products";
+import { productById, fromPerMonthOf, PRICING_TIERS_LIST, keepChannel, сМодулем } from "@/lib/products";
 import { englishHref } from "@/lib/englishPages";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
@@ -219,7 +219,12 @@ export default function DevHubPage() {
   const lang = языкКадра(useI18nOptional(), useServerLang());
   // 30.10.2026: на /en/devhub конструктор вёл в /pricing без языка — гость с русским браузером
   // попадал на русские цены [приёмка прода 7d91f4884]. Ссылки в цены несут язык страницы; ru — как было.
-  const pricingHrefWithLang = (h: string) => (lang === "en" ? englishHref(h) : lang === "kk" ? h.replace(/(#|$)/, (m) => (h.includes("?") ? "&" : "?") + "lang=kk" + m) : h);
+  // 4.11.2026 (путь зрителя канала до кассы): ссылки в цены теряли метку захода (?c=…) и модуль —
+  // /pricing рисовал плашку Мультичата, checkout_start шёл без метки. Канал — после гидратации, как в ModulePricingChip.
+  const [канал, setКанал] = useState<string | null>(null);
+  useEffect(() => { setКанал(channelNow()); }, []);
+  const сЯзыком = (h: string) => (lang === "en" ? englishHref(h) : lang === "kk" ? h.replace(/(#|$)/, (m) => (h.includes("?") ? "&" : "?") + "lang=kk" + m) : h);
+  const pricingHrefWithLang = (h: string) => сЯзыком(keepChannel(сМодулем(h, "devhub"), канал));
   /* Заголовок первого экрана по метке ролика (?c=). Метка живёт в window, поэтому на сервере и в
      первой отрисовке — общее обещание, после монтирования — обещание ролика (13.10.2026). */
   const [обещание, setОбещание] = useState(() => zagolovokPoMetke(lang, null));

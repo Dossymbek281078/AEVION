@@ -67,5 +67,14 @@ describe("вход /example и метка канала", () => {
     for (const t of подсказки) {
       expect(СРОК.test(t), `обещание на входе называет срок: «${t.slice(0, 70)}»`).toBe(false);
     }
+    // 3.11 (Ниши): шапка обещала «до живого адреса за минуту», а /devhub/guide честно
+    // пишет «число минут не обещаем». Заголовки первого экрана и freeNote — без срока.
+    const freeNote = [...файл.matchAll(/"hero.freeNote": "([^"]+)"/g)].map((m) => m[1]);
+    expect(freeNote.length, "freeNote найдено не три").toBe(3);
+    for (const t of freeNote) expect(СРОК.test(t), `freeNote называет срок: «${t}»`).toBe(false);
+    const заголовки = readFileSync(join(__dirname, "..", "zagolovokPoMetke.ts"), "utf8");
+    const h1 = [...заголовки.matchAll(/(?:ru|en|kk): (?:{ h1: )?"([^"]+)"/g)].map((m) => m[1]);
+    expect(h1.length, "заголовков первого экрана найдено мало").toBeGreaterThanOrEqual(15);
+    for (const t of h1) expect(СРОК.test(t), `заголовок первого экрана называет срок: «${t}»`).toBe(false);
   });
 });

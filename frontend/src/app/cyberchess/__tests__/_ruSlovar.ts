@@ -7,6 +7,7 @@ import { join } from "node:path";
 const i18n = readFileSync(join(__dirname, "..", "i18n.ts"), "utf8");
 const pzSlova = readFileSync(join(__dirname, "..", "p", "pzSlova.ts"), "utf8");
 const coachSlova = readFileSync(join(__dirname, "..", "p", "coachPanelSlova.ts"), "utf8");
+const gameSlova = readFileSync(join(__dirname, "..", "p", "gameSlova.ts"), "utf8");
 function chast(src: string, ot: string, do_: string): Record<string, string> {
   const a = src.indexOf(ot), b = src.indexOf(do_);
   const out: Record<string, string> = {};
@@ -17,6 +18,7 @@ export const ru: Record<string, string> = {
   ...chast(i18n, "  ru: {", "  en: {"),
   ...chast(pzSlova, "  ru: {", "  en: {"),
   ...chast(coachSlova, "  ru: {", "  en: {"),
+  ...chast(gameSlova, "  ru: {", "  en: {"),
 };
 /** ru-значение ключа; падает, если ключа в ru-словаре нет. */
 export function ruOf(key: string): string {

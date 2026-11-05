@@ -131,7 +131,7 @@ import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
-import { useCcI18n, tFor, type CcLocale } from "./i18n";
+import { useCcI18n, tFor, ccF, type CcLocale } from "./i18n";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
 import { createTierPaymentRequest, pollPaymentRequest, verifyPaymentRequest, type ChessyTier } from "./billing";
 import MultiPanel from "./MultiPanel";
@@ -1637,6 +1637,8 @@ export default function CyberChessPage(){
   // рендер доски за !mounted-гейтом (ниже) — до гидрации ничего не рисуем,
   // поэтому синхронный t() не даёт вспышки ru→en на первом экране.
   const cc=useCcI18n();
+  const ccT=useRef(cc.t);ccT.current=cc.t;
+  const ccPW=(n:number,ru:[string,string,string],kOne:string,kMany:string)=>cc.locale==="ru"?ccPlural(n,...ru):cc.t(n===1?kOne:kMany); // свежий t() для обработчиков и колбэков вне JSX
   // Имя уровня ИИ на языке интерфейса. Семь мест вывода тянули поле `ru`
   // напрямую, и на казахском экране уровень оставался русским. Поле `ru`
   // остаётся запасом: пропал ключ — показываем русское имя, а не ключ.
@@ -10594,7 +10596,7 @@ export default function CyberChessPage(){
               </div>
               {/* Move count + TC */}
               <div style={{fontSize:10,color:CC.textMute,marginTop:1}}>
-                Ход {Math.ceil(hist.length/2)} · {tc.ini>0?tc.name:"без таймера"}
+                {cc.t("gm.0005")} {Math.ceil(hist.length/2)} · {tc.ini>0?tc.name:cc.t("gm.0175")}
               </div>
               {/* Always-on: материальный баланс + фаза партии + дебют.
                   Работает без движка анализа (в отличие от блока точности ниже). */}
@@ -10648,8 +10650,8 @@ export default function CyberChessPage(){
                     {streak>=3&&<span style={{color:"#f97316",fontWeight:900,marginLeft:"auto",fontSize:9,background:"rgba(249,115,22,0.1)",padding:"1px 4px",borderRadius:4}}>🔥{streak}</span>}
                   </div>
                   {avgCpl>0&&<div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <span style={{color:CC.textMute}}>Ø потеря</span>
-                    <span style={{fontWeight:800,color:avgCpl<30?"#10b981":avgCpl<80?"#f59e0b":"#ef4444",fontFamily:"ui-monospace,monospace"}}>{avgCpl} сp</span>
+                    <span style={{color:CC.textMute}}>{cc.t("gm.0070")}</span>
+                    <span style={{fontWeight:800,color:avgCpl<30?"#10b981":avgCpl<80?"#f59e0b":"#ef4444",fontFamily:"ui-monospace,monospace"}}>{avgCpl} {cc.t("gm.0001")}</span>
                   </div>}
                   {myMoves.length>=4&&<div style={{display:"flex",gap:1,alignItems:"flex-end",height:12,marginTop:2}}>
                     {myMoves.map((m,k)=>{
@@ -10692,7 +10694,7 @@ export default function CyberChessPage(){
                 color:showThreatMap?CC.brand:CC.textDim}}>
               {cc.t("pz.threatMap")}
             </button>
-            <button onClick={async()=>{try{const t=await whisperAndSpeak(game.fen(),evalCp,evalMate);showToast(`🔊 ${t}`,"info")}catch{showToast("Голос недоступен","error")}}}
+            <button onClick={async()=>{try{const t=await whisperAndSpeak(game.fen(),evalCp,evalMate);showToast(`🔊 ${t}`,"info")}catch{showToast(cc.t("gm.0279"),"error")}}}
               title={cc.t("attr.voice_analysis_of_the_position")}
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
                 background:CC.surface2,color:CC.textDim}}>
@@ -10710,15 +10712,15 @@ export default function CyberChessPage(){
                   const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
                   const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                   const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
-                  const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
-                  try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Буфер обмена недоступен","error")}
-                }} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Скачать PGN</Btn>
+                  const share=ccF(cc.t("gm.0444"),pgn,url);
+                  try{navigator.clipboard.writeText(share).then(()=>showToast(cc.t("gm.0397"),"success")).catch(()=>showToast(cc.t("gm.0462"),"error"))}catch{showToast(cc.t("gm.0381"),"error")}
+                }} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>{cc.t("gm.0145")}</Btn>
                 <Btn size="sm" variant="secondary" onClick={()=>{
                   const white=hotseat?cc.t("game.player1"):(pCol==="w"?cc.t("game.you"):lv.name);
                   const black=hotseat?cc.t("game.player2"):(pCol==="b"?cc.t("game.you"):lv.name);
                   const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
                   sReelMeta({white,black,result});sShowReel(true);
-                }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Авто-ролик</Btn>
+                }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>{cc.t("gm.0176")}</Btn>
                 <Btn size="sm" variant="secondary" onClick={()=>{
                   const white=hotseat?cc.t("game.player1"):(pCol==="w"?cc.t("game.you"):lv.name);
                   const black=hotseat?cc.t("game.player2"):(pCol==="b"?cc.t("game.you"):lv.name);
@@ -10726,8 +10728,8 @@ export default function CyberChessPage(){
                   const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
                   const blob=new Blob([svg],{type:"image/svg+xml"});
                   downloadFile(blob,`aevion-chess-${denPoMestnomu()}.svg`);
-                  showToast("SVG скачан — открой в браузере чтобы поделиться","success");
-                }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Картинкой</Btn>
+                  showToast(cc.t("gm.0546"),"success");
+                }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>{cc.t("gm.0159")}</Btn>
               </>}
           </div>}
           {/* Daily Mission widget — hidden during an active vs-computer game and during P2P
@@ -10763,12 +10765,12 @@ export default function CyberChessPage(){
               <Btn size="sm" variant="primary" onClick={async()=>{
                 if(gmBusyRef.current)return;
                 gmBusyRef.current=true;
-                sCoachRemark({kind:"position",title:"🧠 Гроссмейстер думает…",body:"Разбираю позицию…"});
+                sCoachRemark({kind:"position",title:cc.t("gm.0382"),body:cc.t("gm.0294")});
                 try{
                   const r=await fetch(`/api-backend/api/cyberchess-voice-coach/ask`,{
                     method:"POST",headers:{"Content-Type":"application/json"},
                     body:JSON.stringify({
-                      question:"Разбери текущую позицию как гроссмейстер: краткая оценка, главные идеи и планы за обе стороны, и что мне играть дальше и почему. По делу, конкретными ходами в нотации.",
+                      question:cc.t("gm.0646"),
                       fen:game.fen(),
                       lastMove:hist[hist.length-1]??null,
                       history:hist.slice(-24),
@@ -10785,19 +10787,19 @@ export default function CyberChessPage(){
                   if(!r.ok)throw new Error(`ask ${r.status}`);
                   const j=await r.json() as {text?:string};
                   const text=(j?.text||"").trim();
-                  if(text)sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:text,hint:"ИИ-тренер уровня 2600+ · на основе позиции и оценки движка"});
-                  else sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:"Не удалось получить разбор — попробуй ещё раз.",hint:"Или используй 🔍 Объясни (движок+эвристика)"});
+                  if(text)sCoachRemark({kind:"position",title:cc.t("gm.0383"),body:text,hint:cc.t("gm.0570")});
+                  else sCoachRemark({kind:"position",title:cc.t("gm.0383"),body:cc.t("gm.0542"),hint:cc.t("gm.0528")});
                 }catch{
-                  sCoachRemark({kind:"position",title:"🧠 GM-разбор недоступен",body:"ИИ-тренер сейчас не отвечает. Используй 🔍 Объясни, 📋 Найди план или 🎯 Тактика — они работают на движке.",hint:"GM-разбор требует связи с QCoreAI"});
+                  sCoachRemark({kind:"position",title:cc.t("gm.0384"),body:cc.t("gm.0627"),hint:cc.t("gm.0469")});
                 }finally{gmBusyRef.current=false;}
-              }}>🧠 GM-разбор</Btn>
+              }}>{cc.t("gm.0160")}</Btn>
               <Btn size="sm" variant="primary" onClick={()=>{
                 const fen=game.fen();
                 // 1) Мат в 1 — мгновенно, без движка. Коуч обязан это видеть.
                 try{
                   const c=new Chess(fen);
                   for(const m of c.moves()){const t=new Chess(fen);t.move(m);if(t.isCheckmate()){
-                    sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:`🏆 МАТ В 1 ХОД: ${m}!\nНе ищи ничего другого — ставь мат, партия выиграна.`});
+                    sCoachRemark({kind:"position",title:cc.t("gm.0398"),body:ccF(cc.t("gm.0597"),m)});
                     return;
                   }}
                 }catch{}
@@ -10811,9 +10813,9 @@ export default function CyberChessPage(){
                   const iAmWhite=pCol==="w";
                   const myIdea=iAmWhite?opening.whiteIdea:opening.blackIdea;
                   const oppIdea=iAmWhite?opening.blackIdea:opening.whiteIdea;
-                  const keys=opening.keySquares?.length?`\n🔑 Ключевые поля: ${opening.keySquares.join(", ")}`:"";
-                  const plans=opening.commonPlans?.length?`\n📋 Типовые планы:\n${opening.commonPlans.map(p=>`• ${p}`).join("\n")}`:"";
-                  return `\n\n📚 Дебют: ${opening.name} (${opening.eco}) — ${opening.character}\n💡 Твой план (${iAmWhite?"белые":"чёрные"}): ${myIdea}\n♟ План соперника: ${oppIdea}${keys}${plans}`;
+                  const keys=opening.keySquares?.length?ccF(cc.t("gm.0556"),opening.keySquares.join(", ")):"";
+                  const plans=opening.commonPlans?.length?ccF(cc.t("gm.0593"),opening.commonPlans.map(p=>`• ${p}`).join("\n")):"";
+                  return ccF(cc.t("gm.0648"),opening.name,opening.eco,opening.character,iAmWhite?cc.t("gm.0041"):cc.t("gm.0071"),myIdea,oppIdea,keys,plans);
                 })():"";
                 // Пешечная структура — называем по имени и даём типовой план за обе стороны.
                 // Актуально после дебюта (≥14 полуходов), когда каркас определился.
@@ -10822,8 +10824,8 @@ export default function CyberChessPage(){
                   const mine=pCol===struct.owner;
                   const myPlan=mine?struct.ownerPlan:struct.opponentPlan;
                   const oppPlan=mine?struct.opponentPlan:struct.ownerPlan;
-                  const keys=struct.keySquares.length?`\n🔑 Ключевые поля: ${struct.keySquares.join(", ")}`:"";
-                  return `\n\n🏗 Структура: ${struct.name}\n${struct.description}\n🎯 Суть: ${struct.keyIdea}\n💡 Твой план: ${myPlan.slice(0,3).join("; ")}\n♟ План соперника: ${oppPlan.slice(0,2).join("; ")}${keys}`;
+                  const keys=struct.keySquares.length?ccF(cc.t("gm.0556"),struct.keySquares.join(", ")):"";
+                  return ccF(cc.t("gm.0649"),struct.name,struct.description,struct.keyIdea,myPlan.slice(0,3).join("; "),oppPlan.slice(0,2).join("; "),keys);
                 })():"";
                 const buildBody=(cp:number,mate:number)=>{
                   const engineBody=generatePositionExplanation(fen,hist.length,cp,mate);
@@ -10831,27 +10833,27 @@ export default function CyberChessPage(){
                   if(mate===0&&Math.abs(cp)<300){
                     const phaseKey=hist.length<20?"opening":hist.length<40?"middlegame":"endgame";
                     const principles=getPhaseAdvice(phaseKey,2).map((p:string)=>`• ${p}`).join("\n");
-                    principlesHint=`\n\n📖 Принципы ${phaseKey==="opening"?"дебюта":phaseKey==="middlegame"?"миттельшпиля":"эндшпиля"}:\n${principles}`;
+                    principlesHint=ccF(cc.t("gm.0634"),phaseKey==="opening"?cc.t("gm.0072"):phaseKey==="middlegame"?cc.t("gm.0198"):cc.t("gm.0125"),principles);
                   }
                   return engineBody+openingHint+structHint+tacticsHint+principlesHint;
                 };
                 // 2) Реальный eval движка (бело-относительный), иначе fallback на текущий стейт.
                 if(!sfR.current?.ready()){
-                  sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:buildBody(evalCp,evalMate)});
+                  sCoachRemark({kind:"position",title:cc.t("gm.0398"),body:buildBody(evalCp,evalMate)});
                   return;
                 }
-                sCoachRemark({kind:"position",title:"⏳ Тренер разбирает позицию…",body:"Считаю движком…"});
+                sCoachRemark({kind:"position",title:cc.t("gm.0427"),body:cc.t("gm.0267")});
                 const sign=fen.split(" ")[1]==="w"?1:-1;let lc=0,lmt=0;
                 sfR.current.eval(fen,14,(cc:number,mm:number)=>{lc=cc*sign;lmt=mm*sign;},()=>{
-                  sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:buildBody(lc,lmt)});
+                  sCoachRemark({kind:"position",title:cc.t("gm.0398"),body:buildBody(lc,lmt)});
                 });
-              }}>🔍 Объясни</Btn>
+              }}>{cc.t("gm.0126")}</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{
                 // Найди план — top-3 моих лучших ходов + комментарий
-                if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
-                sCoachRemark({kind:"plan",title:"⏳ Тренер думает над планом…",body:"Считаю топ-3 хода…"});
+                if(!sfR.current?.ready()){showToast(cc.t("gm.0313"),"error");return}
+                sCoachRemark({kind:"plan",title:cc.t("gm.0428"),body:cc.t("gm.0314")});
                 sfR.current.multiPV(game.fen(),12,3,(lines)=>{
-                  if(!lines||lines.length===0){sCoachRemark({kind:"plan",title:"Не нашёл плана",body:"Попробуй ещё раз через секунду"});return}
+                  if(!lines||lines.length===0){sCoachRemark({kind:"plan",title:cc.t("gm.0244"),body:cc.t("gm.0450")});return}
                   const ms=lines.slice(0,3).map((l,i)=>{
                     const uci=l.moves&&l.moves[0]?l.moves[0]:"";
                     try{
@@ -10866,29 +10868,29 @@ export default function CyberChessPage(){
                   }).join("\n");
                   const top=lines[0];
                   const isMine=game.turn()===pCol;
-                  sCoachRemark({kind:"plan",title:`📋 Топ-3 ${isMine?"ТВОИХ":"ходов соперника"} (depth ${top.depth})`,body:ms,hint:isMine?"Сделай ход 1 для лучшего результата":"Готовься к этим ответам соперника"});
+                  sCoachRemark({kind:"plan",title:ccF(cc.t("gm.0585"),isMine?cc.t("gm.0042"):cc.t("gm.0268"),top.depth),body:ms,hint:isMine?cc.t("gm.0483"):cc.t("gm.0470")});
                 });
-              }}>📋 Найди план</Btn>
+              }}>{cc.t("gm.0177")}</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{
                 // Подскажи тактику — быстрый поиск тактических мотивов через engine
-                if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
-                sCoachRemark({kind:"tactic",title:"⏳ Ищу тактику…",body:"Стockfish считает…"});
+                if(!sfR.current?.ready()){showToast(cc.t("gm.0313"),"error");return}
+                sCoachRemark({kind:"tactic",title:cc.t("gm.0245"),body:cc.t("gm.0315")});
                 sfR.current.go(game.fen(),14,(f,t,p)=>{
-                  if(!f||!t){sCoachRemark({kind:"tactic",title:"Тактика не найдена",body:"Позиция тихая — играй стратегически"});return}
+                  if(!f||!t){sCoachRemark({kind:"tactic",title:cc.t("gm.0316"),body:cc.t("gm.0484")});return}
                   try{
                     const test=new Chess(game.fen());
                     const mv=test.move({from:f,to:t,promotion:(p||"q") as any});
                     const isCapture=!!mv?.captured;
                     const isCheck=test.isCheck();
                     const isMate=test.isCheckmate();
-                    const motif=isMate?"⚔ МАТ!":isCapture&&isCheck?"⚡ Вилка с шахом":isCheck?"♔ Шах":isCapture?"💎 Размен/выигрыш материала":"✨ Тихий улучшающий ход";
-                    const body=`Лучший ход: ${mv?.san||`${f}-${t}`}\n\n${motif}\n\nПопробуй найти продолжение.`;
+                    const motif=isMate?cc.t("gm.0073"):isCapture&&isCheck?cc.t("gm.0269"):isCheck?cc.t("gm.0043"):isCapture?cc.t("gm.0429"):cc.t("gm.0366");
+                    const body=ccF(cc.t("gm.0604"),mv?.san||`${f}-${t}`,motif);
                     sArrows([{from:f as Square,to:t as Square,c:"#10b981"}]);
                     setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),5000);
-                    sCoachRemark({kind:"tactic",title:"🎯 Тактический совет",body,hint:"Стрелка на доске показывает ход на 5 секунд"});
-                  }catch{sCoachRemark({kind:"tactic",title:"Тактика",body:`Ход: ${f}-${t}`})}
+                    sCoachRemark({kind:"tactic",title:cc.t("gm.0345"),body,hint:cc.t("gm.0529")});
+                  }catch{sCoachRemark({kind:"tactic",title:cc.t("gm.0101"),body:ccF(cc.t("gm.0246"),f,t)})}
                 });
-              }}>🎯 Тактика</Btn>
+              }}>{cc.t("gm.0127")}</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{
                 // Где слабости — атака на короля + «висящие» (незащищённые атакованные) фигуры.
                 const fen=game.fen();
@@ -10912,51 +10914,51 @@ export default function CyberChessPage(){
                   if(myKsq)myAtk=c.attackers(myKsq as Square,oppColor).length;
                   if(oppKsq)oppAtk=c.attackers(oppKsq as Square,myColor).length;
                 }catch{}
-                const safety=myAtk===0?"в безопасности":myAtk===1?"под атакой 1 фигуры":`под атакой ${myAtk} фигур!`;
-                const attack=oppAtk===0?"безопасен":oppAtk>=2?`под атакой ${oppAtk} фигур!`:"под лёгким давлением";
+                const safety=myAtk===0?cc.t("gm.0247"):myAtk===1?cc.t("gm.0333"):ccF(cc.t("gm.0417"),myAtk);
+                const attack=oppAtk===0?cc.t("gm.0146"):oppAtk>=2?ccF(cc.t("gm.0417"),oppAtk):cc.t("gm.0346");
                 const parts:string[]=[
-                  `Твой король (${myKsq}): ${safety}`,
-                  `Король соперника (${oppKsq}): ${attack}`,
+                  ccF(cc.t("gm.0471"),myKsq,safety),
+                  ccF(cc.t("gm.0505"),oppKsq,attack),
                 ];
-                if(myHang.length)parts.push(``,`⚠️ ТВОИ висят (бесплатно бьются): ${myHang.join(", ")} — защити или уведи!`);
-                if(oppHang.length)parts.push(``,`💎 У соперника висят: ${oppHang.join(", ")} — забирай!`);
-                if(!myHang.length&&!oppHang.length)parts.push(``,`Висящих фигур нет — ищи мелкие улучшения и слабые пешки.`);
-                sCoachRemark({kind:"weakness",title:"🛡 Слабости в позиции",body:parts.join("\n"),hint:myHang.length?"Сначала спаси висящие фигуры!":myAtk>=2?"Защити короля немедленно!":oppHang.length?"Забери бесплатную фигуру!":oppAtk>=2?"Усиль атаку!":undefined});
-              }}>🛡 Слабости</Btn>
+                if(myHang.length)parts.push(``,ccF(cc.t("gm.0598"),myHang.join(", ")));
+                if(oppHang.length)parts.push(``,ccF(cc.t("gm.0562"),oppHang.join(", ")));
+                if(!myHang.length&&!oppHang.length)parts.push(``,cc.t("gm.0566"));
+                sCoachRemark({kind:"weakness",title:cc.t("gm.0358"),body:parts.join("\n"),hint:myHang.length?cc.t("gm.0445"):myAtk>=2?cc.t("gm.0409"):oppHang.length?cc.t("gm.0410"):oppAtk>=2?cc.t("gm.0199"):undefined});
+              }}>{cc.t("gm.0147")}</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{
                 // Разбор последнего хода — природа хода (из SAN) + качество (если есть полный
                 // анализ) + РЕАЛЬНАЯ оценка движка. Раньше во время живой партии (analysis пуст)
                 // показывал «Eval +0.00 · Нейтральный ход» — мусор.
-                if(hist.length===0){sCoachRemark({kind:"explain",title:"Нет ходов",body:"Партия ещё не началась"});return}
+                if(hist.length===0){sCoachRemark({kind:"explain",title:cc.t("gm.0148"),body:cc.t("gm.0367")});return}
                 const lastSan=hist[hist.length-1];
                 const lastIdx=hist.length-1;
                 const myAnnot=moveAnnotations[lastIdx];
-                const annot=myAnnot?` (ты отметил: ${myAnnot})`:"";
-                const movedBy=lastIdx%2===0?"Белые":"Чёрные";
+                const annot=myAnnot?ccF(cc.t("gm.0411"),myAnnot):"";
+                const movedBy=lastIdx%2===0?cc.t("gm.0029"):cc.t("gm.0038");
                 const isMate=lastSan.includes("#"),isCheck=lastSan.includes("+"),isCap=lastSan.includes("x"),isCastle=lastSan.startsWith("O-"),isProm=lastSan.includes("=");
-                const nature=isMate?"⚔ мат":isCastle?"рокировка":isProm?"превращение":isCap&&isCheck?"взятие с шахом":isCheck?"шах":isCap?"взятие":"тихий ход";
+                const nature=isMate?cc.t("gm.0044"):isCastle?cc.t("gm.0149"):isProm?cc.t("gm.0178"):isCap&&isCheck?cc.t("gm.0248"):isCheck?cc.t("gm.0018"):isCap?cc.t("gm.0074"):cc.t("gm.0150");
                 const q=analysis[lastIdx]?.quality;
-                const qLabel=q==="brilliant"?"💎 Блестящий":q==="great"?"🌟 Отличный":q==="good"?"✅ Хороший":q==="inacc"?"⚠ Неточность":q==="mistake"?"❌ Ошибка":q==="blunder"?"💀 Зевок":"";
+                const qLabel=q==="brilliant"?cc.t("gm.0200"):q==="great"?cc.t("gm.0179"):q==="good"?cc.t("gm.0151"):q==="inacc"?cc.t("gm.0201"):q==="mistake"?cc.t("gm.0128"):q==="blunder"?cc.t("gm.0129"):"";
                 const bestSan=analysis[lastIdx]?.best;
                 const buildBody=(cp:number|null,mate:number)=>{
-                  const evalStr=mate!==0?`мат в ${Math.abs(mate)} (${mate>0?"за белых":"за чёрных"})`:cp!==null?`${cp>0?"+":""}${(cp/100).toFixed(2)}`:"запусти полный анализ для оценки";
-                  const lines=[`${movedBy} сыграли ${lastSan} — ${nature}.`];
-                  if(qLabel)lines.push(`${qLabel} ход`);
-                  lines.push(`Оценка позиции: ${evalStr}`);
-                  if(bestSan&&(q==="mistake"||q==="blunder"||q==="inacc"))lines.push(`Лучше было: ${bestSan}`);
+                  const evalStr=mate!==0?ccF(cc.t("gm.0571"),Math.abs(mate),mate>0?cc.t("gm.0130"):cc.t("gm.0152")):cp!==null?`${cp>0?"+":""}${(cp/100).toFixed(2)}`:cc.t("gm.0463");
+                  const lines=[ccF(cc.t("gm.0521"),movedBy,lastSan,nature)];
+                  if(qLabel)lines.push(ccF(cc.t("gm.0217"),qLabel));
+                  lines.push(ccF(cc.t("gm.0418"),evalStr));
+                  if(bestSan&&(q==="mistake"||q==="blunder"||q==="inacc"))lines.push(ccF(cc.t("gm.0368"),bestSan));
                   return lines.join("\n");
                 };
                 if(!sfR.current?.ready()){
-                  sCoachRemark({kind:"explain",title:`📝 Разбор: ${lastSan}${annot}`,body:buildBody(analysis[lastIdx]?.cp??null,0),hint:q==="blunder"?"Используй 🔍 Объясни чтобы понять позицию":undefined});
+                  sCoachRemark({kind:"explain",title:ccF(cc.t("gm.0446"),lastSan,annot),body:buildBody(analysis[lastIdx]?.cp??null,0),hint:q==="blunder"?cc.t("gm.0514"):undefined});
                   return;
                 }
-                sCoachRemark({kind:"explain",title:"⏳ Разбираю ход…",body:"Считаю движком…"});
+                sCoachRemark({kind:"explain",title:cc.t("gm.0270"),body:cc.t("gm.0267")});
                 const sgn=game.fen().split(" ")[1]==="w"?1:-1;let lc=0,lm=0;
                 sfR.current.eval(game.fen(),14,(cc:number,mm:number)=>{lc=cc*sgn;lm=mm*sgn;},()=>{
-                  sCoachRemark({kind:"explain",title:`📝 Разбор: ${lastSan}${annot}`,body:buildBody(lc,lm),hint:q==="blunder"?"Используй 🔍 Объясни или 📋 Найди план":undefined});
+                  sCoachRemark({kind:"explain",title:ccF(cc.t("gm.0446"),lastSan,annot),body:buildBody(lc,lm),hint:q==="blunder"?cc.t("gm.0499"):undefined});
                 });
-              }}>📝 Разбор</Btn>
-              {coachRemark&&<Btn size="sm" variant="ghost" onClick={()=>sCoachRemark(null)}>✕ Скрыть</Btn>}
+              }}>{cc.t("gm.0102")}</Btn>
+              {coachRemark&&<Btn size="sm" variant="ghost" onClick={()=>sCoachRemark(null)}>{cc.t("gm.0075")}</Btn>}
             </div>
             {coachRemark&&<div style={{
               padding:"10px 12px",borderRadius:RADIUS.md,
@@ -10973,21 +10975,21 @@ export default function CyberChessPage(){
             style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#c4b5fd"}}>
             <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[1]}}>
               <Badge tone="accent" size="sm">{openingDrill.eco}</Badge>
-              <div style={{fontSize:13,fontWeight:800,color:CC.accent}}>🎓 Тренировка дебюта</div>
+              <div style={{fontSize:13,fontWeight:800,color:CC.accent}}>{cc.t("gm.0317")}</div>
               <div style={{flex:1}}/>
-              <Btn size="xs" variant="ghost" onClick={()=>{sOpeningDrill(null);showToast("Drill прерван","info")}}>✕</Btn>
+              <Btn size="xs" variant="ghost" onClick={()=>{sOpeningDrill(null);showToast(cc.t("gm.0218"),"info")}}>✕</Btn>
             </div>
             <div style={{fontSize:13,fontWeight:700,color:CC.text,marginBottom:SPACE[1]}}>{openingDrill.name}</div>
             <div style={{height:6,borderRadius:RADIUS.full,background:"#ede9fe",overflow:"hidden",marginBottom:SPACE[1]}}>
               <div style={{height:"100%",width:`${Math.round(openingDrill.ply/openingDrill.moves.length*100)}%`,background:`linear-gradient(90deg,${CC.accent},#a78bfa)`,transition:`width ${MOTION.base} ${MOTION.ease}`}}/>
             </div>
             <div style={{fontSize:11,color:CC.textDim,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-              <span>Ход {openingDrill.ply+1} / {openingDrill.moves.length}</span>
-              {openingDrill.mistakes>0&&<span style={{color:CC.danger,fontWeight:900,padding:"1px 7px",borderRadius:999,background:"rgba(220,38,38,0.10)"}}>✗ {openingDrill.mistakes} {openingDrill.mistakes===1?"ошибка":"ошибки"}</span>}
+              <span>{cc.t("gm.0005")} {openingDrill.ply+1} / {openingDrill.moves.length}</span>
+              {openingDrill.mistakes>0&&<span style={{color:CC.danger,fontWeight:900,padding:"1px 7px",borderRadius:999,background:"rgba(220,38,38,0.10)"}}>✗ {openingDrill.mistakes} {openingDrill.mistakes===1?cc.t("gm.0076"):cc.t("gm.0077")}</span>}
               <button onClick={()=>{
                 const next=openingDrill.moves[openingDrill.ply];
-                if(next)showToast(`Следующий ход: ${next}`,"info");
-              }} style={{fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:4,border:`1px solid #c4b5fd`,background:"rgba(124,58,237,0.08)",color:CC.accent,cursor:"pointer"}}>💡 подсказка</button>
+                if(next)showToast(ccF(cc.t("gm.0369"),next),"info");
+              }} style={{fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:4,border:`1px solid #c4b5fd`,background:"rgba(124,58,237,0.08)",color:CC.accent,cursor:"pointer"}}>{cc.t("gm.0161")}</button>
             </div>
           </Card>}
 
@@ -11045,16 +11047,16 @@ export default function CyberChessPage(){
             <span style={{fontSize:11,padding:"2px 8px",borderRadius:RADIUS.full,background:p2p.status==="connected"?"#059669":"#f59e0b",color:"#fff",fontWeight:800}}>{p2p.status==="connected"?"CONNECTED":p2p.status==="open"?"Waiting for friend…":p2p.status}</span>
             {p2p.latencyMs>0&&<span style={{fontSize:11,color:"#065f46"}}>ping {p2p.latencyMs}ms</span>}
             {p2pRoomId&&<span style={{fontSize:10,color:"#047857",fontFamily:"ui-monospace,monospace",marginLeft:"auto"}}>#{p2pRoomId}</span>}
-            <button onClick={()=>{p2p.disconnect();sP2pMode(false);sP2pRoomId("")}} style={{padding:"2px 8px",borderRadius:6,border:"1px solid #6ee7b7",background:"white",color:"#065f46",fontSize:10,fontWeight:800,cursor:"pointer"}}>✕ Отключиться</button>
+            <button onClick={()=>{p2p.disconnect();sP2pMode(false);sP2pRoomId("")}} style={{padding:"2px 8px",borderRadius:6,border:"1px solid #6ee7b7",background:"white",color:"#065f46",fontSize:10,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0180")}</button>
           </div>}
           {/* Ghost Duel HUD */}
           {ghostDuelMode&&ghostDuelConfig&&on&&!over&&(tab==="play")&&<div style={{padding:"8px 14px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:"1px solid #a78bfa",display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
             <span style={{fontSize:18}}>👻</span>
-            <span style={{fontWeight:900,color:"#6d28d9",fontSize:13}}>Дуэль с прошлым</span>
-            <span style={{fontSize:11,color:"#5b21b6"}}>{formatPastDate(ghostDuelConfig.pastDate)} · {ghostDuelConfig.pastAiLevel} · ход {hist.length}/{ghostDuelConfig.pastMoves.length}</span>
-            {ghostDuelDivergePly!==null&&<span style={{fontSize:11,color:"#dc2626",fontWeight:800}}>⚡ Отклонение на ходу {Math.floor(ghostDuelDivergePly/2)+1}</span>}
+            <span style={{fontWeight:900,color:"#6d28d9",fontSize:13}}>{cc.t("gm.0219")}</span>
+            <span style={{fontSize:11,color:"#5b21b6"}}>{formatPastDate(ghostDuelConfig.pastDate)} · {ghostDuelConfig.pastAiLevel} {cc.t("gm.0032")} {hist.length}/{ghostDuelConfig.pastMoves.length}</span>
+            {ghostDuelDivergePly!==null&&<span style={{fontSize:11,color:"#dc2626",fontWeight:800}}>{cc.t("gm.0334")} {Math.floor(ghostDuelDivergePly/2)+1}</span>}
             <div style={{flex:1}}/>
-            <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast("Дуэль завершена","info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>Выйти</button>
+            <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast(cc.t("gm.0271"),"info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0019")}</button>
           </div>}
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF&&sfOk} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i} t={cc.t} locale={cc.locale}/>}
@@ -11085,18 +11087,18 @@ export default function CyberChessPage(){
                     animation:"diceRoll 0.4s ease-out"
                   }}>{["⚀","⚁","⚂","⚃","⚄","⚅"][diceFace-1]}</span>
                   <span style={{fontWeight:800,color:noDiceOptions?CC.danger:CC.text}}>
-                    Только: <b style={{color:CC.danger,padding:"2px 8px",borderRadius:RADIUS.sm,background:"rgba(220,38,38,0.08)"}}>{diceLabel}</b>
+                    {cc.t("gm.0078")} <b style={{color:CC.danger,padding:"2px 8px",borderRadius:RADIUS.sm,background:"rgba(220,38,38,0.08)"}}>{diceLabel}</b>
                   </span>
                   {noDiceOptions&&<button title={cc.t("attr.no_moves_for_the_selected")}
                     onClick={()=>{
                       try{
                         const parts=game.fen().split(" ");parts[1]=parts[1]==="w"?"b":"w";parts[3]="-";
                         const ng=new Chess(parts.join(" "));setGame(ng);sBk(k=>k+1);
-                        showToast(`🎲 Пропускаю ход (нет ${diceLabel})`,"info");
+                        showToast(ccF(cc.t("gm.0485"),diceLabel),"info");
                       }catch{}
                     }}
                     style={{padding:"4px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.danger}`,background:"rgba(220,38,38,0.10)",color:CC.danger,fontSize:11,fontWeight:800,cursor:"pointer",animation:"cc-pulse-glow 1.2s infinite"}}>
-                    ⏭ Пас
+                    {cc.t("gm.0370")}
                   </button>}
                 </>;
               })()}
@@ -11119,7 +11121,7 @@ export default function CyberChessPage(){
               </>}
               {variant==="reinforcement"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11}}>след. подкрепление через <b>{10-(hist.length%10)}</b> ходов</span>
+                <span style={{fontSize:11}}>{cc.t("gm.0385")} <b>{10-(hist.length%10)}</b> {cc.t("gm.0020")}</span>
               </>}
               {variant==="fischer960"&&<>
                 <div style={{flex:1}}/>
@@ -11151,27 +11153,27 @@ export default function CyberChessPage(){
               </>}
               {variant==="kingofthehill"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11}}>цель: король на <b>d4·d5·e4·e5</b></span>
+                <span style={{fontSize:11}}>{cc.t("gm.0249")} <b>d4·d5·e4·e5</b></span>
               </>}
               {variant==="atomic"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11,color:"#9a3412"}}>💥 каждое взятие = взрыв 3×3</span>
+                <span style={{fontSize:11,color:"#9a3412"}}>{cc.t("gm.0419")}</span>
               </>}
               {variant==="knightriders"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11}}>🐎 кони + пешки · цель — мат</span>
+                <span style={{fontSize:11}}>{cc.t("gm.0420")}</span>
               </>}
               {variant==="pawnapocalypse"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11,color:"#b91c1c",fontWeight:800}}>💀 двойные пешки · продвигай до превращения</span>
+                <span style={{fontSize:11,color:"#b91c1c",fontWeight:800}}>{cc.t("gm.0515")}</span>
               </>}
               {variant==="powerdrop"&&<>
                 <div style={{flex:1}}/>
-                {(()=>{const rem=hist.length%5;const next=rem===0?0:5-rem;return<span style={{fontSize:11,fontWeight:800,color:next===0?"#c2410c":undefined}}>{next===0?"🔥 DROP ДОСТУПЕН!":`след. дроп через ${next} ход${next===1?"":"ов"}`}</span>;})()}
+                {(()=>{const rem=hist.length%5;const next=rem===0?0:5-rem;return<span style={{fontSize:11,fontWeight:800,color:next===0?"#c2410c":undefined}}>{next===0?cc.t("gm.0295"):ccF(cc.t("gm.0547"),next,next===1?"":cc.t("gm.0006"))}</span>;})()}
               </>}
               {variant==="crazyhouse"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11,color:"#9a3412",fontWeight:800}}>🏚 drop в любой момент</span>
+                <span style={{fontSize:11,color:"#9a3412",fontWeight:800}}>{cc.t("gm.0347")}</span>
               </>}
             </div>
             {(variant==="powerdrop"||variant==="crazyhouse")&&(()=>{
@@ -11181,7 +11183,7 @@ export default function CyberChessPage(){
               const canDrop=isDropAvailable(hist.length,dropEvery)&&game.turn()===pCol&&!over&&poolSize(dropPool,pCol)>0;
               return <div style={{marginTop:6,paddingTop:6,borderTop:`1px solid #fb923c`}}>
                 <div style={{display:"flex",gap:SPACE[2],alignItems:"center",flexWrap:"wrap"}}>
-                  <span style={{fontSize:10,fontWeight:900,color:"#9a3412",letterSpacing:0.5}}>ТВОЙ ПУЛ:</span>
+                  <span style={{fontSize:10,fontWeight:900,color:"#9a3412",letterSpacing:0.5}}>{cc.t("gm.0103")}</span>
                   {(["q","r","b","n","p"] as const).map(t=>{
                     const cnt=myPool[t];
                     if(cnt===0)return null;
@@ -11189,13 +11191,13 @@ export default function CyberChessPage(){
                     const isSel=selectedDropPiece===t&&dropPickerOpen;
                     return <button key={t} onClick={()=>{
                       if(!canDrop){
-                        if(game.turn()!==pCol)showToast("Дождись своего хода","info");
-                        else if(variant==="crazyhouse")showToast("Нужно сначала захватить фигуру соперника","info");
-                        else{const rem=hist.length%dropEvery;const next=rem===0?0:dropEvery-rem;showToast(next===0?"Сброс доступен — но пул пуст. Захвати фигуру!":`Drop доступен через ${next} ход${next===1?"":"ов"}`,"info");}
+                        if(game.turn()!==pCol)showToast(cc.t("gm.0335"),"info");
+                        else if(variant==="crazyhouse")showToast(cc.t("gm.0508"),"info");
+                        else{const rem=hist.length%dropEvery;const next=rem===0?0:dropEvery-rem;showToast(next===0?cc.t("gm.0539"):ccF(cc.t("gm.0555"),next,next===1?"":cc.t("gm.0006")),"info");}
                         return;
                       }
                       sSelectedDropPiece(t);sDropPickerOpen(true);
-                      showToast(`Кликни на пустую клетку чтобы дропнуть ${POOL_GLYPH[sym]}`,"info");
+                      showToast(ccF(cc.t("gm.0567"),POOL_GLYPH[sym]),"info");
                     }} style={{
                       display:"inline-flex",alignItems:"center",gap:3,
                       padding:"3px 8px",borderRadius:RADIUS.sm,
@@ -11209,11 +11211,11 @@ export default function CyberChessPage(){
                       <span style={{fontSize:11}}>×{cnt}</span>
                     </button>;
                   })}
-                  {poolSize(dropPool,pCol)===0&&<span style={{fontSize:11,color:CC.textDim,fontStyle:"italic"}}>пуст — захвати фигуру</span>}
-                  {dropPickerOpen&&<Btn size="xs" variant="ghost" onClick={()=>{sDropPickerOpen(false);sSelectedDropPiece(null)}}>✕ отмена</Btn>}
+                  {poolSize(dropPool,pCol)===0&&<span style={{fontSize:11,color:CC.textDim,fontStyle:"italic"}}>{cc.t("gm.0336")}</span>}
+                  {dropPickerOpen&&<Btn size="xs" variant="ghost" onClick={()=>{sDropPickerOpen(false);sSelectedDropPiece(null)}}>{cc.t("gm.0079")}</Btn>}
                 </div>
                 {poolSize(dropPool,pCol==="w"?"b":"w")>0&&<div style={{display:"flex",gap:SPACE[1],alignItems:"center",marginTop:4,opacity:0.7}}>
-                  <span style={{fontSize:10,color:"#9a3412"}}>пул соперника:</span>
+                  <span style={{fontSize:10,color:"#9a3412"}}>{cc.t("gm.0202")}</span>
                   {(["q","r","b","n","p"] as const).map(t=>{
                     const cnt=oppPool[t];if(cnt===0)return null;
                     const sym=pCol==="w"?t:t.toUpperCase();
@@ -11251,19 +11253,19 @@ export default function CyberChessPage(){
                 </div>
               </div>);
             return <div style={{marginTop:8,display:"flex",gap:8,padding:"12px",borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0"}}>
-              <div style={{flex:"0 0 100%",marginBottom:4,fontSize:13,fontWeight:800,color:"#065f46",letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📊 Точность партии</div>
-              {row("Ты",meS,meAcc,pCol==="w"?"⚪":"⚫")}
+              <div style={{flex:"0 0 100%",marginBottom:4,fontSize:13,fontWeight:800,color:"#065f46",letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{cc.t("gm.0280")}</div>
+              {row(cc.t("gm.0007"),meS,meAcc,pCol==="w"?"⚪":"⚫")}
               {row("AI",aiS,aiAcc,pCol==="w"?"⚫":"⚪")}
             </div>;
           })()}
-          {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
+          {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>{cc.t("gm.0296")}</div>}
           {/* Replay Director + AI Story (killer #9 + #10) */}
           {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&!cinematic&&<div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap"}}>
             <button
               onClick={()=>{
                 try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}catch{}
                 sCinematic(true);sReplaying(true);
-                sCinematicMoment({label:"🎬 CINEMATIC REPLAY",color:"#0f172a",sub:`${hist.length} ходов · режиссёр AEVION`});
+                sCinematicMoment({label:"🎬 CINEMATIC REPLAY",color:"#0f172a",sub:ccF(cc.t("gm.0500"),hist.length)});
                 setTimeout(()=>sCinematicMoment(null),1800);
               }}
               
@@ -11274,7 +11276,7 @@ export default function CyberChessPage(){
                 boxShadow:"0 4px 16px rgba(15,23,42,0.4)",
                 display:"flex",alignItems:"center",justifyContent:"center" as const,gap:10}}>
               <span style={{fontSize:18}}>🎬</span>
-              <span>КИНОПОВТОР</span>
+              <span>{cc.t("gm.0131")}</span>
             </button>
             <button
               onClick={()=>{const txt=generateStory();sStoryText(txt);sShowStory(true);setTimeout(()=>speakStory(txt),300)}}
@@ -11286,18 +11288,18 @@ export default function CyberChessPage(){
                 boxShadow:"0 4px 16px rgba(194,65,12,0.35)",
                 display:"flex",alignItems:"center",justifyContent:"center" as const,gap:10}}>
               <span style={{fontSize:18}}>📖</span>
-              <span>STORY · озвучка партии</span>
+              <span>{cc.t("gm.0348")}</span>
             </button>
           </div>}
           {cinematic&&<div style={{marginTop:8,padding:"10px 16px",borderRadius:10,
             background:"linear-gradient(135deg,#0c0a09,#1e1b4b)",color:"#fff",
             display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
             boxShadow:"0 2px 12px rgba(15,23,42,0.3)"}}>
-            <span style={{fontSize:13,fontWeight:900,letterSpacing:0.5}}>🎬 CINEMATIC · ход {(browseIdx<0?hist.length:browseIdx)}/{hist.length}</span>
+            <span style={{fontSize:13,fontWeight:900,letterSpacing:0.5}}>{cc.t("gm.0297")} {(browseIdx<0?hist.length:browseIdx)}/{hist.length}</span>
             <button onClick={()=>{sCinematic(false);sReplaying(false);sCinematicMoment(null)}}
               style={{padding:"4px 10px",fontSize:11,fontWeight:800,borderRadius:6,
                 background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",
-                color:"#fff",cursor:"pointer"}}>Стоп</button>
+                color:"#fff",cursor:"pointer"}}>{cc.t("gm.0008")}</button>
           </div>}
 
           {/* ── Game Insights — info sub-tab (play) or coach tab ── */}
@@ -11314,32 +11316,32 @@ export default function CyberChessPage(){
             const moveCount=hist.length;
             // Generate a short coach-style insight
             const insights:string[]=[];
-            if(isWin&&blunders===0)insights.push("Чистая победа без зевков — отличное исполнение!");
-            else if(isWin&&blunders>0)insights.push(`Победа, но ${blunders} зевок${blunders>1?"а":""} — стоит разобрать.`);
-            else if(isLoss&&blunders>=2)insights.push(`${blunders} ${ccPlural(blunders,"зевок","зевка","зевков")} ${ccPlural(blunders,"привёл","привели","привели")} к поражению — разбери в разделе «Анализ».`);
-            else if(isLoss&&mistakes>=3)insights.push(`${mistakes} ошибки сыграли роль — работай над точностью расчёта.`);
-            else if(isDraw)insights.push("Ничья — хорошая борьба. Попробуй найти упущенный шанс в разделе «Анализ».");
-            else insights.push("Неплохая партия — проверь ключевые моменты в разделе «Анализ».");
-            if(great>=2)insights.push(`${great} отличных хода 🌟 — ты видел хорошие возможности!`);
-            if(opening)insights.push(`Дебют: ${opening}.`);
-            if(moveCount<20)insights.push("Короткая партия — анализ поможет понять где пошло не так.");
-            else if(moveCount>50)insights.push("Долгая партия — значит хорошая борьба в эндшпиле.");
+            if(isWin&&blunders===0)insights.push(cc.t("gm.0548"));
+            else if(isWin&&blunders>0)insights.push(ccF(cc.t("gm.0589"),blunders,blunders>1?"а":""));
+            else if(isLoss&&blunders>=2)insights.push(ccF(cc.t("gm.0643"),blunders,ccPW(blunders,["зевок","зевка","зевков"],"gm.p01","gm.p02"),ccPW(blunders,["привёл","привели","привели"],"gm.p03","gm.p04")));
+            else if(isLoss&&mistakes>=3)insights.push(ccF(cc.t("gm.0583"),mistakes));
+            else if(isDraw)insights.push(cc.t("gm.0596"));
+            else insights.push(cc.t("gm.0579"));
+            if(great>=2)insights.push(ccF(cc.t("gm.0568"),great));
+            if(opening)insights.push(ccF(cc.t("gm.0318"),opening));
+            if(moveCount<20)insights.push(cc.t("gm.0569"));
+            else if(moveCount>50)insights.push(cc.t("gm.0553"));
             return <div style={{
               marginTop:8,padding:"10px 14px",borderRadius:10,
               background:isWin?"linear-gradient(135deg,#f0fdf4,#dcfce7)":isLoss?"linear-gradient(135deg,#fef2f2,#fee2e2)":"linear-gradient(135deg,#f0f9ff,#dbeafe)",
               border:`1px solid ${isWin?"#86efac":isLoss?"#fca5a5":"#93c5fd"}`
             }}>
               <div style={{fontSize:11,fontWeight:900,color:isWin?"#15803d":isLoss?"#b91c1c":"#1e40af",letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:6}}>
-                💬 Coach · итог партии
+                {cc.t("gm.0486")}
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 {insights.slice(0,3).map((ins,i)=><div key={i} style={{fontSize:12,color:isWin?"#166534":isLoss?"#991b1b":"#1e3a8a",lineHeight:1.5}}>{ins}</div>)}
               </div>
               <button onClick={()=>{
-                const q=`Партия завершена: ${ruResult(over)}. Было ${blunders} зевков и ${mistakes} ошибок. Дебют: ${opening||"нет данных"}. Дай мне 3 конкретных совета что улучшить.`;
+                const q=ccF(cc.t("gm.0644"),ruResult(over),blunders,mistakes,opening||cc.t("gm.0162"));
                 sCoachPrefillQ(q);sTab("coach");
               }} style={{marginTop:8,padding:"5px 10px",borderRadius:6,border:"none",background:"rgba(0,0,0,0.08)",color:"inherit",fontSize:11,fontWeight:800,cursor:"pointer"}}>
-                🎓 Подробный разбор с Coach →
+                {cc.t("gm.0522")}
               </button>
             </div>;
           })()}
@@ -11363,18 +11365,18 @@ export default function CyberChessPage(){
                 const a=analysis[ply];
                 if(!a)continue;
                 if(t<2000&&(a.quality==="blunder"||a.quality==="mistake")){
-                  flags.push(`Ход ${Math.floor(ply/2)+1}: ${(t/1000).toFixed(1)}с — спешка → ${a.quality==="blunder"?"зевок":"ошибка"}`);
+                  flags.push(ccF(cc.t("gm.0625"),Math.floor(ply/2)+1,(t/1000).toFixed(1),a.quality==="blunder"?cc.t("gm.0045"):cc.t("gm.0076")));
                 }
                 if(t>30000&&Math.abs(a.cp)>500){
-                  flags.push(`Ход ${Math.floor(ply/2)+1}: ${(t/1000).toFixed(0)}с в ${a.cp>0?"выигранной":"проигранной"} → потеря времени`);
+                  flags.push(ccF(cc.t("gm.0628"),Math.floor(ply/2)+1,(t/1000).toFixed(0),a.cp>0?cc.t("gm.0163"):cc.t("gm.0181")));
                 }
               }
             }
-            const fmt=(ms:number)=>ms<1000?`${ms}мс`:ms<10000?`${(ms/1000).toFixed(1)}с`:`${Math.round(ms/1000)}с`;
+            const fmt=(ms:number)=>ms<1000?ccF(cc.t("gm.0104"),ms):ms<10000?ccF(cc.t("gm.0386"),(ms/1000).toFixed(1)):ccF(cc.t("gm.0386"),Math.round(ms/1000));
             return <div style={{marginTop:8,padding:"10px 14px",borderRadius:RADIUS.lg,background:"linear-gradient(135deg,#fefce8,#fef9c3)",border:"1px solid #facc15"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <div style={{fontSize:11,fontWeight:900,color:"#854d0e",letterSpacing:0.5,textTransform:"uppercase" as const}}>⏱ Управление временем · {myPlyTimes.length} твоих ходов</div>
-                <div style={{fontSize:10,color:"#a16207",fontWeight:700}}>средний {fmt(avgMs)} · максимум {fmt(maxMs)}</div>
+                <div style={{fontSize:11,fontWeight:900,color:"#854d0e",letterSpacing:0.5,textTransform:"uppercase" as const}}>{cc.t("gm.0371")} {myPlyTimes.length} {cc.t("gm.0153")}</div>
+                <div style={{fontSize:10,color:"#a16207",fontWeight:700}}>{cc.t("gm.0080")} {fmt(avgMs)} {cc.t("gm.0154")} {fmt(maxMs)}</div>
               </div>
               <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
                 style={{width:"100%",height:60,background:"linear-gradient(180deg,#fff 0%,#fef9c3 100%)",borderRadius:6}}>
@@ -11384,19 +11386,19 @@ export default function CyberChessPage(){
                   return <rect key={i} x={xs(i)-2} y={ys(p.t)} width={4} height={H-ys(p.t)-2}
                     fill={flagged?"#dc2626":p.t<3000?"#f59e0b":p.t<10000?"#84cc16":"#0891b2"}
                     rx={1}>
-                    <title>Ход {Math.floor(p.ply/2)+1}: {fmt(p.t)}{analysis[p.ply]?` · ${analysis[p.ply].quality}`:""}</title>
+                    <title>{cc.t("gm.0005")} {Math.floor(p.ply/2)+1}: {fmt(p.t)}{analysis[p.ply]?` · ${analysis[p.ply].quality}`:""}</title>
                   </rect>;
                 })}
               </svg>
               {flags.length>0?<div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:"rgba(220,38,38,0.08)",border:"1px solid rgba(220,38,38,0.25)",fontSize:11,color:"#991b1b",lineHeight:1.6}}>
-                <div style={{fontWeight:900,marginBottom:2}}>🚩 Замечания тренера ({flags.length}):</div>
+                <div style={{fontWeight:900,marginBottom:2}}>{cc.t("gm.0349")}{flags.length}):</div>
                 {flags.slice(0,3).map((f,i)=><div key={i}>· {f}</div>)}
-                {flags.length>3&&<div style={{fontStyle:"italic",marginTop:2}}>+ ещё {flags.length-3}</div>}
+                {flags.length>3&&<div style={{fontStyle:"italic",marginTop:2}}>{cc.t("gm.0033")} {flags.length-3}</div>}
               </div>:<div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:"rgba(132,204,22,0.10)",border:"1px solid rgba(132,204,22,0.3)",fontSize:11,color:"#3f6212",fontWeight:700}}>
-                ✓ Время распределено хорошо — никаких спешащих зевков или потерь времени в выигранных позициях
+                {cc.t("gm.0629")}
               </div>}
               <div style={{marginTop:6,fontSize:10,color:"#854d0e",lineHeight:1.5}}>
-                Зелёный — нормально (10-30с) · Жёлтый — быстро (3-10с) · Оранжевый — спешка (&lt;3с) · Красный — флаг тренера
+                {cc.t("gm.0638")}
               </div>
             </div>;
           })()}
@@ -11416,18 +11418,18 @@ export default function CyberChessPage(){
               boxShadow:SHADOW.sm}}>
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
                 <span style={{fontSize:18}}>🎯</span>
-                <div style={{fontSize:13,fontWeight:900,color:"#92400e",letterSpacing:0.3}}>ПЕРЕИГРАТЬ ОШИБКИ</div>
-                <Badge tone="gold" size="xs">+3 Chessy за каждую</Badge>
+                <div style={{fontSize:13,fontWeight:900,color:"#92400e",letterSpacing:0.3}}>{cc.t("gm.0272")}</div>
+                <Badge tone="gold" size="xs">{cc.t("gm.0298")}</Badge>
               </div>
               <div style={{fontSize:11,color:"#b45309",marginBottom:SPACE[2],lineHeight:1.5}}>
-                Кликни на зевок — откроется позиция до ошибки, найди правильный ход.
+                {cc.t("gm.0611")}
               </div>
               <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
                 {myErrors.map(({a,i})=>{
                   const isBlunder=a.quality==="blunder";
                   return <button key={i} onClick={()=>rewindBlunder(i)}
                     className="cc-focus-ring"
-                    title={`Ход ${Math.floor(i/2)+1}${userIsWhite?"":"..."}  · ${isBlunder?"Зевок":"Ошибка"} · eval ${a.cp>=0?"+":""}${(a.cp/100).toFixed(1)}${a.best?` · лучше было: ${a.best}`:""}`}
+                    title={ccF(cc.t("gm.0647"),Math.floor(i/2)+1,userIsWhite?"":"...",isBlunder?cc.t("gm.0046"):cc.t("gm.0081"),a.cp>=0?"+":"",(a.cp/100).toFixed(1),a.best?ccF(cc.t("gm.0399"),a.best):"")}
                     style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
                       borderRadius:RADIUS.full,border:`1px solid ${isBlunder?"#fca5a5":"#fdba74"}`,
                       background:isBlunder?"#fef2f2":"#fff7ed",
@@ -11435,8 +11437,8 @@ export default function CyberChessPage(){
                       fontSize:12,fontWeight:800,cursor:"pointer",
                       transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
                     <span style={{fontSize:13,fontWeight:900}}>{isBlunder?"??":"?"}</span>
-                    <span>Ход {Math.floor(i/2)+1}{userIsWhite?".":"..."}</span>
-                    {a.best&&<span style={{fontSize:11,fontWeight:700,opacity:0.85,fontFamily:"ui-monospace,monospace"}}>· лучше: {a.best}</span>}
+                    <span>{cc.t("gm.0005")} {Math.floor(i/2)+1}{userIsWhite?".":"..."}</span>
+                    {a.best&&<span style={{fontSize:11,fontWeight:700,opacity:0.85,fontFamily:"ui-monospace,monospace"}}>{cc.t("gm.0105")} {a.best}</span>}
                   </button>;
                 })}
               </div>
@@ -11565,7 +11567,7 @@ export default function CyberChessPage(){
                   </div>
                   <div style={{fontSize:22,fontWeight:900,color:accColor(acc),lineHeight:1,fontFamily:"monospace"}}>{acc}%</div>
                 </div>
-                <div style={{fontSize:10,color:color==="w"?T.dim:"#94a3b8",fontWeight:700,marginBottom:6}}>Потеря сантипешек: <b style={{color:color==="w"?T.text:"#f1f5f9"}}>{acpl}</b></div>
+                <div style={{fontSize:10,color:color==="w"?T.dim:"#94a3b8",fontWeight:700,marginBottom:6}}>{cc.t("gm.0299")} <b style={{color:color==="w"?T.text:"#f1f5f9"}}>{acpl}</b></div>
                 <div style={{display:"grid",gridTemplateColumns:`repeat(${s.brilliant>0?6:5},1fr)`,gap:4}}>
                   {([...(s.brilliant>0?[["!!",s.brilliant,"#06b6d4","brilliant"]]:[])] as [string,number,string,string][]).concat([["!",s.great,T.accent,"great"],["○",s.good,color==="w"?T.dim:"#94a3b8","good"],["?!",s.inacc,"#ca8a04","inacc"],["?",s.mistake,"#ea580c","mistake"],["??",s.blunder,T.danger,"blunder"]]).map(([sym,v,col,k])=>(
                     <div key={k as string} style={{padding:"5px 2px",borderRadius:5,background:color==="w"?"#f9fafb":"#0f172a",textAlign:"center",border:`1px solid ${color==="w"?T.border:"#334155"}`}}>
@@ -11579,8 +11581,8 @@ export default function CyberChessPage(){
               {/* Eval graph */}
               <div style={{borderRadius:10,background:"#0f172a",padding:"10px 12px",border:"1px solid #334155"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
-                  <span>📈 График оценки</span>
-                  <span style={{fontSize:10,color:"#64748b"}}>{analysis.length} {ccPlural(analysis.length,"ход","хода","ходов")}</span>
+                  <span>{cc.t("gm.0250")}</span>
+                  <span style={{fontSize:10,color:"#64748b"}}>{analysis.length} {ccPW(analysis.length,["ход","хода","ходов"],"gm.p05","gm.p06")}</span>
                 </div>
                 {(()=>{
                   const gW=Math.max(100,analysis.length*4);
@@ -11625,8 +11627,8 @@ export default function CyberChessPage(){
               </div>
               {/* Per-side stats */}
               <div style={{display:"flex",gap:8}}>
-                {sideStat("Белые","w",wStats,wAcc,wAcpl,"⚪")}
-                {sideStat("Чёрные","b",bStats,bAcc,bAcpl,"⚫")}
+                {sideStat(cc.t("gm.0029"),"w",wStats,wAcc,wAcpl,"⚪")}
+                {sideStat(cc.t("gm.0038"),"b",bStats,bAcc,bAcpl,"⚫")}
               </div>
             </div>);
           })()}
@@ -11636,7 +11638,7 @@ export default function CyberChessPage(){
           {/* Дубль премув-панели удалён — есть единая строка выше move list (line ~4900). */}
 
           {(capB.length>0||capW.length>0)&&tab==="analysis"&&<div style={{padding:"8px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>
-            <div style={{fontSize:13,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,marginBottom:4}}>⚔ Взятые фигуры</div>
+            <div style={{fontSize:13,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,marginBottom:4}}>{cc.t("gm.0220")}</div>
             {capB.length>0&&<div style={{fontSize:20,letterSpacing:2,lineHeight:1.1}} translate="no">{capB.join("")}</div>}
             {capW.length>0&&<div style={{fontSize:20,letterSpacing:2,lineHeight:1.1,opacity:0.5}} translate="no">{capW.join("")}</div>}
           </div>}
@@ -11644,16 +11646,16 @@ export default function CyberChessPage(){
           {/* ── Compact Engine Variations (Analysis tab only) ── */}
           {tab==="analysis"&&mpvLines.length>0&&<div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
             <div style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,background:"#faf5ff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:T.purple}}>🌳 Варианты · d{mpvLines[0]?.depth||mpvDepth}</span>
+              <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:T.purple}}>{cc.t("gm.0221")}{mpvLines[0]?.depth||mpvDepth}</span>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <button onClick={()=>sShowEngBest(v=>!v)} title={cc.t("attr.engine_best_move_arrow_on")}
                   style={{fontSize:10,fontWeight:800,cursor:"pointer",padding:"2px 8px",borderRadius:999,
                     border:`1px solid ${showEngBest?"#06b6d4":T.border}`,
                     background:showEngBest?"rgba(6,182,212,0.10)":"transparent",
                     color:showEngBest?"#0e7490":T.dim}}>
-                  ➤ Стрелка {showEngBest?"вкл":"выкл"}
+                  {cc.t("gm.0132")} {showEngBest?cc.t("gm.0021"):cc.t("gm.0034")}
                 </button>
-                <span style={{fontSize:10,color:T.dim,fontWeight:600}}>{mpvLines.length} {mpvLines.length===1?"линия":"линий"}</span>
+                <span style={{fontSize:10,color:T.dim,fontWeight:600}}>{mpvLines.length} {mpvLines.length===1?cc.t("gm.0047"):cc.t("gm.0048")}</span>
               </div>
             </div>
             <div style={{maxHeight:180,overflowY:"auto"}}>
@@ -11701,7 +11703,7 @@ export default function CyberChessPage(){
                 {openingData.opening.eco?<span style={{fontFamily:"monospace",marginRight:6}}>{openingData.opening.eco}</span>:null}{openingData.opening.name}
               </div>}
               <div style={{padding:"4px 12px",fontSize:10,color:T.dim,fontFamily:"monospace",borderBottom:`1px solid ${T.border}`,background:"#fffbeb",display:"flex",justifyContent:"space-between"}}>
-                <span>{oeShortNum(openingData.total)} партий мастеров</span>
+                <span>{oeShortNum(openingData.total)} {cc.t("gm.0222")}</span>
                 <span>{oeWhitePct(openingData)}% W · {oeDrawPct(openingData)}% D · {oeBlackPct(openingData)}% B</span>
               </div>
               <div style={{maxHeight:180,overflowY:"auto"}}>
@@ -11720,7 +11722,7 @@ export default function CyberChessPage(){
                       sSel(null);sVm(new Set());
                     }catch{}
                   };
-                  return <div key={i} role="button" tabIndex={0} aria-label={`Сыграть ${m.san} — ${oeShortNum(total)} партий`} className="cc-focus-ring" onClick={playOe} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();playOe()}}} style={{padding:"5px 12px",borderBottom:i<openingData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
+                  return <div key={i} role="button" tabIndex={0} aria-label={ccF(cc.t("gm.0543"),m.san,oeShortNum(total))} className="cc-focus-ring" onClick={playOe} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();playOe()}}} style={{padding:"5px 12px",borderBottom:i<openingData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background="#fef9c3"}}
                     onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
                     <span style={{minWidth:50,fontSize:13,fontWeight:800,fontFamily:"monospace",color:T.text}}>{m.san}</span>
@@ -11736,20 +11738,20 @@ export default function CyberChessPage(){
               </div>
             </>}
           </div>}
-          {tab==="analysis"&&!showOpeningExp&&<button onClick={()=>sShowOpeningExp(true)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fffbeb",color:"#854d0e",fontSize:11,fontWeight:800,cursor:"pointer"}}>📚 Показать Opening Explorer</button>}
+          {tab==="analysis"&&!showOpeningExp&&<button onClick={()=>sShowOpeningExp(true)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fffbeb",color:"#854d0e",fontSize:11,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0421")}</button>}
 
           {/* ── Endgame Tablebase — Analysis tab, ≤7 фигур ── */}
           {tab==="analysis"&&isTablebaseEligible(game.fen())&&<div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
             <div style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(135deg,#dbeafe,#bfdbfe)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:"#1e40af"}}>♔ Таблицы окончаний · 7 фигур</span>
-              <span style={{fontSize:10,color:"#1e40af",fontWeight:700}}>идеальная игра</span>
+              <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:"#1e40af"}}>{cc.t("gm.0430")}</span>
+              <span style={{fontSize:10,color:"#1e40af",fontWeight:700}}>{cc.t("gm.0203")}</span>
             </div>
-            {tbLoading?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Загрузка…</div>:!tbData?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Tablebase недоступен (вероятно, оффлайн).</div>:<>
+            {tbLoading?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>{cc.t("gm.0106")}</div>:!tbData?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>{cc.t("gm.0506")}</div>:<>
               <div style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,background:"#f0f9ff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:13,fontWeight:900,color:tbColor(tbData.category)}}>{tbLabel(tbData.category,game.turn())}</span>
                 {tbData.dtm!==null&&!tbData.checkmate&&<span style={{fontSize:11,fontFamily:"monospace",fontWeight:800,color:T.text}}>DTM: {Math.abs(tbData.dtm)}</span>}
-                {tbData.checkmate&&<span style={{fontSize:11,fontWeight:800,color:tbColor(tbData.category)}}>Мат на доске</span>}
-                {tbData.stalemate&&<span style={{fontSize:11,fontWeight:800,color:T.dim}}>Пат</span>}
+                {tbData.checkmate&&<span style={{fontSize:11,fontWeight:800,color:tbColor(tbData.category)}}>{cc.t("gm.0164")}</span>}
+                {tbData.stalemate&&<span style={{fontSize:11,fontWeight:800,color:T.dim}}>{cc.t("gm.0002")}</span>}
               </div>
               {tbData.moves.length>0&&<div style={{maxHeight:160,overflowY:"auto"}}>
                 {tbData.moves.slice(0,6).map((m,i)=>{
@@ -11765,14 +11767,14 @@ export default function CyberChessPage(){
                       sSel(null);sVm(new Set());
                     }catch{}
                   };
-                  return <div key={i} role="button" tabIndex={0} aria-label={`Сыграть ${m.san} — ${tbLabel(m.category,game.turn())}`} className="cc-focus-ring" onClick={playTb} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();playTb()}}} style={{padding:"5px 12px",borderBottom:i<5&&i<tbData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
+                  return <div key={i} role="button" tabIndex={0} aria-label={ccF(cc.t("gm.0557"),m.san,tbLabel(m.category,game.turn()))} className="cc-focus-ring" onClick={playTb} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();playTb()}}} style={{padding:"5px 12px",borderBottom:i<5&&i<tbData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background="#dbeafe"}}
                     onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
                     <span style={{minWidth:54,fontSize:13,fontWeight:i===0?900:700,fontFamily:"monospace",color:T.text}}>{m.san}</span>
                     <span style={{padding:"1px 6px",borderRadius:3,fontSize:10,fontWeight:800,color:"#fff",background:tbColor(m.category),fontFamily:"monospace"}}>{m.category}</span>
                     {m.dtm!==null&&!m.checkmate&&<span style={{fontSize:10,color:T.dim,fontFamily:"monospace"}}>DTM {Math.abs(m.dtm)}</span>}
                     {m.checkmate&&<span style={{fontSize:10,fontWeight:800,color:tbColor(m.category)}}>#</span>}
-                    {m.stalemate&&<span style={{fontSize:10,color:T.dim}}>пат</span>}
+                    {m.stalemate&&<span style={{fontSize:10,color:T.dim}}>{cc.t("gm.0003")}</span>}
                   </div>;
                 })}
               </div>}
@@ -11788,7 +11790,7 @@ export default function CyberChessPage(){
           {tab==="analysis"&&hist.length>0&&!showAnal&&!analyzing&&<button onClick={()=>runAnalysis()} style={{padding:"10px 14px",borderRadius:10,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 6px rgba(124,58,237,0.2)"}}>
             🔍 {cc.t("game.analyzeWhole")} ({hist.length} {cc.t("game.moves")})
           </button>}
-          {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Анализирую… {analysisProgress}%</div>}
+          {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>{cc.t("gm.0204")} {analysisProgress}%</div>}
 
           {/* Move list + premoves — hidden in info/coach sub-tabs during active play */}
           {!(tab==="play"&&on&&!over&&rpTab!=="moves")&&<div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",flex:"1 1 auto",minHeight:160,display:"flex",flexDirection:"column"}}>
@@ -11804,7 +11806,7 @@ export default function CyberChessPage(){
                 <span style={{minWidth:cmp?11:14,height:cmp?11:14,borderRadius:7,background:"#2563eb",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:cmp?8:9,fontWeight:900}}>{i+1}</span>
                 <span>{pm.from}→{pm.to}</span>
                 <button onClick={()=>{sPms(v=>v.filter((_,j)=>j!==i));snd("premove")}}
-                  title={`Удалить премув ${pm.from}→${pm.to}`}
+                  title={ccF(cc.t("gm.0476"),pm.from,pm.to)}
                   style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:cmp?14:18,height:cmp?14:18,borderRadius:9,border:"none",background:"transparent",color:"#94a3b8",fontSize:cmp?10:11,fontWeight:900,cursor:"pointer",lineHeight:1,padding:0,marginLeft:1}}
                   onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#fee2e2";(e.currentTarget as HTMLElement).style.color="#dc2626"}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color="#94a3b8"}}>✕</button>
@@ -11813,7 +11815,7 @@ export default function CyberChessPage(){
               <button onClick={()=>{sPms(p=>p.slice(0,-1));snd("premove")}} title={cc.t("attr.cancel_the_last_premove")}
                 style={{padding:cmp?"2px 6px":"3px 8px",borderRadius:6,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:800,cursor:"pointer"}}>↶</button>
               <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title={cc.t("attr.cancel_all_premoves")}
-                style={{padding:cmp?"2px 6px":"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ всё</button>
+                style={{padding:cmp?"2px 6px":"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0022")}</button>
             </div>;})()}
             <div style={{padding:"7px 10px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:10,fontWeight:900,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:5,flex:1,minWidth:0}}>
@@ -11825,11 +11827,11 @@ export default function CyberChessPage(){
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:130,
                   padding:"1px 6px",borderRadius:RADIUS.full,background:"rgba(16,185,129,0.10)",
                 }} title={currentOpening.name}>{currentOpening.eco} · {currentOpening.name}</span>}
-                {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>⚡ уточняю d18...</span>}
+                {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>{cc.t("gm.0251")}</span>}
               </span>
               {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
-                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);navigator.clipboard.writeText(pgn).then(()=>showToast("PGN скопирован","success")).catch(()=>showToast("Ошибка копирования","error"));}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title={cc.t("attr.copy_pgn_to_clipboard")}>📋</button>
-                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${denPoMestnomu()}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast("PGN скачан","success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title={cc.t("attr.download_pgn")}>⬇</button>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);navigator.clipboard.writeText(pgn).then(()=>showToast(cc.t("gm.0252"),"success")).catch(()=>showToast(cc.t("gm.0319"),"error"));}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title={cc.t("attr.copy_pgn_to_clipboard")}>📋</button>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${denPoMestnomu()}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast(cc.t("gm.0165"),"success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title={cc.t("attr.download_pgn")}>⬇</button>
                 <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
                 <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title={cc.t("attr.to_the_start")}>⏮</button>
                 <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title={cc.t("attr.back")}>◀</button>
@@ -11838,7 +11840,7 @@ export default function CyberChessPage(){
                   // If at end, rewind to start before starting replay
                   if(browseIdx<0||browseIdx>=hist.length-1){try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null)}catch{}}
                   sReplaying(true);
-                }} style={{padding:"3px 9px",borderRadius:4,border:`1px solid ${replaying?T.accent:T.border}`,background:replaying?"rgba(5,150,105,0.1)":"#fff",color:replaying?T.accent:T.text,fontSize:11,fontWeight:800,cursor:"pointer"}} title={replaying?"Пауза":"Авто-воспроизведение"}>{replaying?"❚❚":"▶"}</button>
+                }} style={{padding:"3px 9px",borderRadius:4,border:`1px solid ${replaying?T.accent:T.border}`,background:replaying?"rgba(5,150,105,0.1)":"#fff",color:replaying?T.accent:T.text,fontSize:11,fontWeight:800,cursor:"pointer"}} title={replaying?cc.t("gm.0049"):cc.t("gm.0350")}>{replaying?"❚❚":"▶"}</button>
                 {replaying&&<select aria-label={cc.t("attr.replay_speed")} value={replaySpeed} onChange={e=>sReplaySpeed(+e.target.value)} style={{padding:"2px 4px",borderRadius:4,border:`1px solid ${T.border}`,fontSize:11,cursor:"pointer",background:"#fff"}} title={cc.t("attr.speed")}>
                   <option value={2000}>0.5x</option>
                   <option value={1000}>1x</option>
@@ -11856,7 +11858,7 @@ export default function CyberChessPage(){
                   const prev=[...moments].reverse().find(p=>p<cur);
                   const next=moments.find(p=>p>cur);
                   const glyph=(q?:string)=>q==="brilliant"?"!!":q==="blunder"?"??":q==="mistake"?"?":"●";
-                  const jump=(p:number)=>{try{const g=new Chess(fenHist[p]);setGame(g);sBk(k=>k+1);sBrowseIdx(p);sLm(null);sSel(null);sVm(new Set());sReplaying(false);const a=analysis.find(x=>x.move-1===p);showToast(`${glyph(a?.quality)} Ключевой момент · ход ${Math.floor(p/2)+1}`,"info");}catch{}};
+                  const jump=(p:number)=>{try{const g=new Chess(fenHist[p]);setGame(g);sBk(k=>k+1);sBrowseIdx(p);sLm(null);sSel(null);sVm(new Set());sReplaying(false);const a=analysis.find(x=>x.move-1===p);showToast(ccF(cc.t("gm.0581"),glyph(a?.quality),Math.floor(p/2)+1),"info");}catch{}};
                   const nb=(enabled:boolean):React.CSSProperties=>({padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,fontWeight:800,cursor:enabled?"pointer":"default",opacity:enabled?1:0.4,color:T.danger});
                   return <>
                     <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
@@ -11867,7 +11869,7 @@ export default function CyberChessPage(){
               </div>}
             </div>
             {/* Analysis progress bar */}
-            {tab==="analysis"&&hist.length>0&&analysisProgress>0&&analysisProgress<100&&<div style={{height:3,background:`linear-gradient(90deg,${T.purple} ${analysisProgress}%,rgba(124,58,237,0.12) ${analysisProgress}%)`,transition:"background 0.4s ease",borderBottom:"1px solid rgba(124,58,237,0.15)"}} title={`Анализ: ${analysisProgress}%`}/>}
+            {tab==="analysis"&&hist.length>0&&analysisProgress>0&&analysisProgress<100&&<div style={{height:3,background:`linear-gradient(90deg,${T.purple} ${analysisProgress}%,rgba(124,58,237,0.12) ${analysisProgress}%)`,transition:"background 0.4s ease",borderBottom:"1px solid rgba(124,58,237,0.15)"}} title={ccF(cc.t("gm.0437"),analysisProgress)}/>}
             <div ref={moveListScrollRef}
               onMouseLeave={()=>{
                 // Container leave: restore snapshot (real position) — debounce to avoid flicker.
@@ -11965,7 +11967,7 @@ export default function CyberChessPage(){
                         {moveTimes[wIdx]!=null&&<span style={{fontSize:8,color:moveTimes[wIdx]<3000?"#f97316":moveTimes[wIdx]<10000?"#ca8a04":"#64748b",fontFamily:"ui-monospace,monospace",lineHeight:1,opacity:0.8}}>{moveTimes[wIdx]<10000?(moveTimes[wIdx]/1000).toFixed(1)+"s":Math.round(moveTimes[wIdx]/1000)+"s"}</span>}
                         {moveComments[wIdx]&&<span style={{fontSize:9,color:"#6366f1"}}>💬</span>}
                         {(wQ==="blunder"||wQ==="mistake")&&over&&fenHist[wIdx]&&<button
-                          onClick={e=>{e.stopPropagation();try{const g=new Chess(fenHist[wIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(wIdx-1);sLm(null);sSel(null);sVm(new Set());sTab("analysis");}catch{}sShowGameOver(false);showToast(`📌 Позиция хода ${Math.floor(wIdx/2)+1} — найди лучший ход!`,"info");}}
+                          onClick={e=>{e.stopPropagation();try{const g=new Chess(fenHist[wIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(wIdx-1);sLm(null);sSel(null);sVm(new Set());sTab("analysis");}catch{}sShowGameOver(false);showToast(ccF(cc.t("gm.0572"),Math.floor(wIdx/2)+1),"info");}}
                           style={{fontSize:9,padding:"1px 5px",borderRadius:4,border:"1px solid rgba(239,68,68,0.4)",background:"rgba(239,68,68,0.12)",color:"#f87171",cursor:"pointer",fontWeight:700,lineHeight:1.4}}>
                           📌
                         </button>}
@@ -11994,7 +11996,7 @@ export default function CyberChessPage(){
                         {moveTimes[bIdx]!=null&&<span style={{fontSize:8,color:moveTimes[bIdx]<3000?"#f97316":moveTimes[bIdx]<10000?"#ca8a04":"#64748b",fontFamily:"ui-monospace,monospace",lineHeight:1,opacity:0.8}}>{moveTimes[bIdx]<10000?(moveTimes[bIdx]/1000).toFixed(1)+"s":Math.round(moveTimes[bIdx]/1000)+"s"}</span>}
                         {moveComments[bIdx]&&<span style={{fontSize:9,color:"#6366f1"}}>💬</span>}
                         {(bQ==="blunder"||bQ==="mistake")&&over&&fenHist[bIdx]&&<button
-                          onClick={e=>{e.stopPropagation();try{const g=new Chess(fenHist[bIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(bIdx-1);sLm(null);sSel(null);sVm(new Set());sTab("analysis");}catch{}sShowGameOver(false);showToast(`📌 Позиция хода ${Math.floor(bIdx/2)+1} — найди лучший ход!`,"info");}}
+                          onClick={e=>{e.stopPropagation();try{const g=new Chess(fenHist[bIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(bIdx-1);sLm(null);sSel(null);sVm(new Set());sTab("analysis");}catch{}sShowGameOver(false);showToast(ccF(cc.t("gm.0572"),Math.floor(bIdx/2)+1),"info");}}
                           style={{fontSize:9,padding:"1px 5px",borderRadius:4,border:"1px solid rgba(239,68,68,0.4)",background:"rgba(239,68,68,0.12)",color:"#f87171",cursor:"pointer",fontWeight:700,lineHeight:1.4}}>
                           📌
                         </button>}
@@ -12006,7 +12008,7 @@ export default function CyberChessPage(){
                     </span>
                     {/* Inline comment editor — spans full grid row when active */}
                     {tab==="analysis"&&(commentEditPly===wIdx||commentEditPly===bIdx)&&<div style={{gridColumn:"1 / -1",padding:"4px 8px",background:"#f0f0ff",borderBottom:"1px solid #c7d2fe",display:"flex",gap:4,alignItems:"flex-start"}}>
-                      <textarea aria-label={`Комментарий к ходу ${Math.floor(wIdx/2)+1}`} autoFocus value={commentEditVal} onChange={e=>sCommentEditVal(e.target.value)}
+                      <textarea aria-label={ccF(cc.t("gm.0523"),Math.floor(wIdx/2)+1)} autoFocus value={commentEditVal} onChange={e=>sCommentEditVal(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();const ply=commentEditPly!;if(commentEditVal.trim()){sMoveComments(p=>({...p,[ply]:commentEditVal.trim()}))}else{sMoveComments(p=>{const n={...p};delete n[ply];return n})}sCommentEditPly(null);}else if(e.key==="Escape"){sCommentEditPly(null);}}}
                         placeholder={cc.t("attr.move_note_enter_save_esc")}
                         rows={2} style={{flex:1,fontSize:11,padding:"4px 6px",borderRadius:4,border:"1px solid #a5b4fc",resize:"vertical",background:"#ffffff",color:"#312e81",outline:"none"}}/>
@@ -12110,21 +12112,21 @@ export default function CyberChessPage(){
               <button onClick={enterScratch} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.3,boxShadow:"0 2px 6px rgba(124,58,237,0.3)"}}>{cc.t("login.signIn")} →</button>
             </div>:<div style={{display:"flex",flexDirection:"column",gap:6}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                <span style={{fontSize:13,fontWeight:900,letterSpacing:"0.08em",color:"#92400e"}}>🔍 РЕЖИМ АНАЛИЗА</span>
+                <span style={{fontSize:13,fontWeight:900,letterSpacing:"0.08em",color:"#92400e"}}>{cc.t("gm.0253")}</span>
                 <div style={{display:"flex",gap:5}}>
-                  <button onClick={resetScratch} title={cc.t("attr.reset_to_the_current_position")} style={{padding:"4px 10px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",fontSize:11,fontWeight:800,cursor:"pointer"}}>↺ Сброс</button>
-                  <button onClick={exitScratch} title={cc.t("attr.back_to_the_game")} style={{padding:"4px 10px",borderRadius:6,border:"none",background:T.danger,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ Выйти</button>
+                  <button onClick={resetScratch} title={cc.t("attr.reset_to_the_current_position")} style={{padding:"4px 10px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",fontSize:11,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0050")}</button>
+                  <button onClick={exitScratch} title={cc.t("attr.back_to_the_game")} style={{padding:"4px 10px",borderRadius:6,border:"none",background:T.danger,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0051")}</button>
                 </div>
               </div>
               {scratchHist.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"4px 0"}}>{scratchHist.map((s,i)=><span key={i} style={{padding:"1px 5px",borderRadius:3,background:"rgba(255,255,255,0.6)",color:"#92400e",fontSize:11,fontWeight:700,fontFamily:"monospace"}}>{i%2===0?`${Math.floor(i/2)+1}.`:""}{s}</span>)}</div>}
-              <span style={{fontSize:10,color:"#78350f",fontStyle:"italic"}}>Партия идёт параллельно · таймеры тикают · соперник может сходить</span>
+              <span style={{fontSize:10,color:"#78350f",fontStyle:"italic"}}>{cc.t("gm.0582")}</span>
             </div>}
           </div>}
 
           {tab==="puzzles"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
             {/* ── Mode Selector — FIRST so Puzzle Rush is immediately visible ── */}
             <Card padding={SPACE[2]} tone="surface1">
-              <SectionHeader title={cc.t("attr.mode")} hint={pzMode==="rush"?(rushKind==="survival"?`Survival · 3 ошибки · адаптивно`:`Timed ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · адаптивно`):pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
+              <SectionHeader title={cc.t("attr.mode")} hint={pzMode==="rush"?(rushKind==="survival"?cc.t("gm.0458"):ccF(cc.t("gm.0620"),Math.floor(rushDuration/60),String(rushDuration%60).padStart(2,"0"))):pzMode==="timed3"?cc.t("gm.0223"):pzMode==="timed5"?cc.t("gm.0224"):pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
                 {([["learn","📚",cc.t("pz.mode.learn")],["timed3","3⏱",cc.t("pz.mode.3min")],["timed5","5⏱",cc.t("pz.mode.5min")],["custom","⚙",cc.t("pz.mode.custom")],["rush","⚡",cc.t("cpn.sess.streak")]] as const).map(([m,ic,label])=>{
                   const active=pzMode===m;
@@ -12142,17 +12144,17 @@ export default function CyberChessPage(){
               </div>
               {/* Custom duration input — пресеты + произвольное число секунд (любой контроль). */}
               {pzMode==="custom"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
-                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность · любой контроль</div>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>{cc.t("gm.0431")}</div>
                 <div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center"}}>
-                  {([[60,"1 мин"],[120,"2 мин"],[600,"10 мин"],[1200,"20 мин"],[1800,"30 мин"]] as const).map(([sec,label])=>{
+                  {([[60,cc.t("gm.0052")],[120,cc.t("gm.0053")],[600,cc.t("gm.0082")],[1200,cc.t("gm.0083")],[1800,cc.t("gm.0084")]] as const).map(([sec,label])=>{
                     const active=pzCustomSec===sec;
-                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);startClock(sec);showToast(`Свой ${label}`,"info")}}
+                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);startClock(sec);showToast(ccF(cc.t("gm.0225"),label),"info")}}
                       style={{padding:"5px 10px",borderRadius:RADIUS.sm,
                         border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                         background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
                         fontSize:11,fontWeight:800,cursor:"pointer"}}>{label}</button>;
                   })}
-                  <span style={{fontSize:11,color:CC.textMute,marginLeft:4}}>сек:</span>
+                  <span style={{fontSize:11,color:CC.textMute,marginLeft:4}}>{cc.t("gm.0009")}</span>
                   <input aria-label={cc.t("attr.time_per_puzzle_seconds")} type="number" min={30} max={3600} step={30}
                     value={pzCustomSec}
                     onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=3600){sPzCustomSec(v);sPzTimeLeft(v)}}}
@@ -12162,9 +12164,9 @@ export default function CyberChessPage(){
               {/* Rush duration selector — виден только когда выбран Rush */}
               {pzMode==="rush"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
                 {/* Тип раша: Survival (3 ошибки) или Timed (по времени) */}
-                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Тип Rush</div>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>{cc.t("gm.0085")}</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[1],marginBottom:SPACE[2]}}>
-                  {([["survival","❤","Survival","3 ошибки"],["timed","⏱","Timed","по времени"]] as const).map(([k,ic,label,sub])=>{
+                  {([["survival","❤","Survival",cc.t("gm.0133")],["timed","⏱","Timed",cc.t("gm.0166")]] as const).map(([k,ic,label,sub])=>{
                     const active=rushKind===k;
                     return <button key={k} onClick={()=>{sRushKind(k);if(rushActive)sPzMode("learn")}} title={`${label} — ${sub}`}
                       style={{padding:"7px 6px",borderRadius:RADIUS.sm,
@@ -12176,10 +12178,10 @@ export default function CyberChessPage(){
                     </button>;
                   })}
                 </div>
-                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Сложность подстраивается под тебя · {puzzleRank(rushTargetView)} ~{rushTargetView}</div>
-                {rushKind==="timed"&&<><div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность Rush</div>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>{cc.t("gm.0477")} {puzzleRank(rushTargetView)} ~{rushTargetView}</div>
+                {rushKind==="timed"&&<><div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>{cc.t("gm.0273")}</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
-                  {([[90,"1:30"],[180,"3 мин"],[300,"5 мин"],[600,"10 мин"]] as const).map(([sec,label])=>{
+                  {([[90,"1:30"],[180,"3 мин"],[300,"5 мин"],[600,cc.t("gm.0082")]] as const).map(([sec,label])=>{
                     const active=rushDuration===sec;
                     return <button key={sec} onClick={()=>{sRushDuration(sec);if(rushActive){startClock(sec);sRushScore(0);sRushStreak(0);sRushBestStreak(0)}}}
                       style={{padding:"6px 4px",borderRadius:RADIUS.sm,
@@ -12238,21 +12240,21 @@ export default function CyberChessPage(){
                   <div style={{display:"flex",alignItems:"center",gap:SPACE[2],padding:`${SPACE[2]}px ${SPACE[3]}px`}}>
                     <div style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:52}}>
                       <div style={{fontSize:28,fontWeight:900,color:"#fcd34d",lineHeight:1,fontFamily:"ui-monospace,monospace"}}>{rushScore}</div>
-                      <div style={{fontSize:9,fontWeight:800,color:"#92400e",letterSpacing:1,textTransform:"uppercase" as const}}>решено</div>
+                      <div style={{fontSize:9,fontWeight:800,color:"#92400e",letterSpacing:1,textTransform:"uppercase" as const}}>{cc.t("gm.0035")}</div>
                     </div>
                     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center"}}>
                       {rushStreak>=3?<div style={{fontSize:22,fontWeight:900,color:rushStreak>=5?"#ef4444":"#f97316",display:"flex",alignItems:"center",gap:2}}>
                         {Array.from({length:Math.min(rushStreak,5)}).map((_,i)=><span key={i} style={{filter:`hue-rotate(${i*10}deg)`,animation:`cc-pulse-glow ${0.8+i*0.1}s ease-in-out infinite`,fontSize:16+i*2}}>🔥</span>)}
                         <span style={{fontSize:18,fontWeight:900,marginLeft:2}}>{rushStreak}</span>
-                      </div>:rushStreak>0?<div style={{fontSize:16,fontWeight:900,color:"#fb923c"}}>🔥 {rushStreak}</div>:<div style={{fontSize:12,color:"#475569",fontWeight:700}}>Серии пока нет</div>}
-                      <div style={{fontSize:9,color:"#78716c",fontWeight:700}}>СЕРИЯ</div>
+                      </div>:rushStreak>0?<div style={{fontSize:16,fontWeight:900,color:"#fb923c"}}>🔥 {rushStreak}</div>:<div style={{fontSize:12,color:"#475569",fontWeight:700}}>{cc.t("gm.0205")}</div>}
+                      <div style={{fontSize:9,color:"#78716c",fontWeight:700}}>{cc.t("gm.0023")}</div>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
-                      {rushKind==="survival"&&<div style={{fontSize:15,letterSpacing:1}} title={`${rushLives} из ${RUSH_LIVES} жизней`}>
+                      {rushKind==="survival"&&<div style={{fontSize:15,letterSpacing:1}} title={ccF(cc.t("gm.0489"),rushLives,RUSH_LIVES)}>
                         {Array.from({length:RUSH_LIVES}).map((_,i)=><span key={i} style={{opacity:i<rushLives?1:0.25}}>{i<rushLives?"❤":"🖤"}</span>)}
                       </div>}
-                      <div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>уровень <span style={{color:"#fcd34d",fontWeight:900}}>{puzzleRank(rushTargetView)}</span> ~{rushTargetView}</div>
-                      {rushBest>0&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>рекорд <span style={{color:"#fcd34d",fontWeight:900}}>{rushBest}</span></div>}
+                      <div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>{cc.t("gm.0086")} <span style={{color:"#fcd34d",fontWeight:900}}>{puzzleRank(rushTargetView)}</span> ~{rushTargetView}</div>
+                      {rushBest>0&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>{cc.t("gm.0054")} <span style={{color:"#fcd34d",fontWeight:900}}>{rushBest}</span></div>}
                     </div>
                   </div>
                 </div>}
@@ -12281,15 +12283,15 @@ export default function CyberChessPage(){
                   // ключевым отличием от простого «верно/неверно» — и была мертва.
                   // Английские ключи оставлены: в старом бандле часть тем сырые теги.
                   const motifMap:Record<string,{icon:string;name:string;desc:string;ru:string}>={
-                    fork:{icon:"🐴",name:"Вилка",ru:"Вилка",desc:"Одна фигура атакует две цели одновременно — соперник не успевает защитить обе."},
-                    pin:{icon:"📌",name:"Связка",ru:"Связка",desc:"Фигура не может двигаться — за ней стоит более ценная. Используй это давление."},
-                    skewer:{icon:"⚔",name:"Рентген",ru:"Рентген",desc:"Атака на ценную фигуру, за которой прячется ещё одна. Вынуждает отступить и потерять материал."},
-                    discoveredAttack:{icon:"💥",name:"Открытый удар",ru:"Вскрытое нападение",desc:"Ход одной фигуры открывает атаку другой — соперник не готов к двойному удару."},
-                    deflection:{icon:"↗",name:"Отвлечение",ru:"Отвлечение",desc:"Вынуждаем фигуру уйти с важного поля, теряя защиту ключевой цели."},
-                    decoy:{icon:"🎭",name:"Завлечение",ru:"Завлечение",desc:"Жертвой заманиваем фигуру на невыгодное поле для последующего удара."},
-                    backRankMate:{icon:"🏰",name:"Мат на последней горизонтали",ru:"Мат на последней горизонтали",desc:"Король заперт своими пешками. Ладья или ферзь ставят мат по первой/восьмой линии."},
-                    hangingPiece:{icon:"🎁",name:"Висячая фигура",ru:"Висящая фигура",desc:"Фигура соперника без защиты — просто забирай!"},
-                    trappedPiece:{icon:"🕸",name:"Западня",ru:"Поймана фигура",desc:"Фигура не может уйти без потерь — окружай и бери."},
+                    fork:{icon:"🐴",name:"Вилка",ru:"Вилка",desc:cc.t("gm.0605")},
+                    pin:{icon:"📌",name:"Связка",ru:"Связка",desc:cc.t("gm.0606")},
+                    skewer:{icon:"⚔",name:"Рентген",ru:"Рентген",desc:cc.t("gm.0621")},
+                    discoveredAttack:{icon:"💥",name:cc.t("gm.0226"),ru:"Вскрытое нападение",desc:cc.t("gm.0603")},
+                    deflection:{icon:"↗",name:"Отвлечение",ru:"Отвлечение",desc:cc.t("gm.0586")},
+                    decoy:{icon:"🎭",name:"Завлечение",ru:"Завлечение",desc:cc.t("gm.0590")},
+                    backRankMate:{icon:"🏰",name:"Мат на последней горизонтали",ru:"Мат на последней горизонтали",desc:cc.t("gm.0612")},
+                    hangingPiece:{icon:"🎁",name:cc.t("gm.0254"),ru:"Висящая фигура",desc:cc.t("gm.0540")},
+                    trappedPiece:{icon:"🕸",name:cc.t("gm.0107"),ru:cc.t("gm.0255"),desc:cc.t("gm.0554")},
                   };
                   const themeLc=theme.toLowerCase();
                   const motif=Object.entries(motifMap).find(([k,v])=>
@@ -12299,7 +12301,7 @@ export default function CyberChessPage(){
                     <div style={{fontSize:15,fontWeight:900,color:"#065f46",padding:"10px 14px",borderRadius:8,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:"1px solid #6ee7b7",display:"flex",alignItems:"center",gap:8,animation:"cc-turn-flash 0.6s ease-out"}}>
                       <span style={{fontSize:20}}>✅</span>
                       <span>{pzMode==="rush"&&rushStreak>=3?`${pt("Серия")} ${rushStreak}! 🔥`:pzMode==="rush"?pt("Верно! 🎯"):isMate?`${cc.t("pz.mateIn").replace("{n}",String(matovVResheniyi(pzCurrent) ?? pzCurrent.mateIn))}! ${pt("Отлично!")}`:pt("Верно! Отличный ход")}</span>
-                      {(pzMode==="timed3"||pzMode==="timed5"||pzMode==="rush"||pzMode==="custom")&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#059669"}}>+3с ⏱</span>}
+                      {(pzMode==="timed3"||pzMode==="timed5"||pzMode==="rush"||pzMode==="custom")&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#059669"}}>{cc.t("gm.0024")}</span>}
                     </div>
                     {/* Объяснение тактического мотива — ключевое отличие от простого «верно/неверно» */}
                     {motif&&pzMode==="learn"&&<div style={{marginTop:6,padding:"9px 12px",borderRadius:8,background:"linear-gradient(135deg,#fffbeb,#fef9c3)",border:"1px solid #fde68a",fontSize:12,color:"#78350f"}}>
@@ -12321,7 +12323,7 @@ export default function CyberChessPage(){
                 }}>
                   <span style={{fontSize:18}}>❌</span>
                   <span>{pzMode==="rush"?pt("Неверно! Стрик сброшен"):pt("Неверно. Попробуй ещё")}</span>
-                  {pzMode==="rush"&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:T.danger}}>−5с ⏱</span>}
+                  {pzMode==="rush"&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:T.danger}}>{cc.t("gm.0025")}</span>}
                 </div>}
                 {/* After 2 wrong tries (non-timed/non-rush retry modes) reveal the expected best move as a hint */}
                 {pzAttempt==="wrong"&&pzMode!=="rush"&&pzWrongTriesRef.current.fen===pzCurrent.fen&&pzWrongTriesRef.current.n>=2&&pzCurrent.sol[0]&&<div style={{
@@ -12344,7 +12346,7 @@ export default function CyberChessPage(){
                   <input ref={pzFileInputRef} type="file" accept=".fen,.pgn,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)loadPzFile(f);e.target.value="";}}/>
                   {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>{pt("Заново")}</Btn>}
                   {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title={cc.t("attr.play_the_solution_on_the")}>{pt("Решение")}</Btn>}
-                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown");
+                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,cc.t("gm.0155")))return;sPzAttempt("shown");
                     soobschitOPodskazke(pzCurrent,pzWrongTriesRef.current.fen===pzCurrent?.fen?pzWrongTriesRef.current.n:0)}}>{pt("Подсказка · 5")}</Btn>}
                   {/* 🔴 ВХОД К ТРЕНЕРУ ПРЯМО ОТСЮДА. Во вкладке «Задачи» кнопки коуча
                       не было вовсе: панель тренера живёт в своей вкладке, и человек,
@@ -12600,8 +12602,8 @@ export default function CyberChessPage(){
                       // Адаптивно — цель = рейтинг + бонус за серию решений (растёт с победами).
                       const lo=Math.max(0,adaptivePzRating-150),hi=Math.min(3000,adaptivePzRating+150);
                       sPzFilterRating([lo,hi]);sPzI(0);pzAutoTuned.current=true;
-                      showToast(`Задачи под твой уровень ${adaptivePzRating} (${lo}–${hi})${pzStreak.cur>0?` · серия +${Math.min(300,pzStreak.cur*40)}`:""}`,"info");
-                    }} title={`Адаптивная цель: рейтинг ${rat}${pzStreak.cur>0?` + серия ${pzStreak.cur} (+${Math.min(300,pzStreak.cur*40)})`:""}`} style={{padding:"4px 9px",borderRadius:6,border:"1px solid #7c3aed",background:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#7c3aed":"transparent",color:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#fff":"#7c3aed",fontSize:11,fontWeight:800,cursor:"pointer"}}>
+                      showToast(ccF(cc.t("gm.0639"),adaptivePzRating,lo,hi,pzStreak.cur>0?ccF(cc.t("gm.0524"),Math.min(300,pzStreak.cur*40)):""),"info");
+                    }} title={ccF(cc.t("gm.0635"),rat,pzStreak.cur>0?ccF(cc.t("gm.0576"),pzStreak.cur,Math.min(300,pzStreak.cur*40)):"")} style={{padding:"4px 9px",borderRadius:6,border:"1px solid #7c3aed",background:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#7c3aed":"transparent",color:Math.abs(pzFilterRating[0]-(Math.max(0,adaptivePzRating-150)))<40?"#fff":"#7c3aed",fontSize:11,fontWeight:800,cursor:"pointer"}}>
                       ⚡ {pt("Мой уровень")} {adaptivePzRating}{pzStreak.cur>0?` 🔥${pzStreak.cur}`:""}
                     </button>
                   </div>
@@ -12676,10 +12678,10 @@ export default function CyberChessPage(){
             const curPly=browseIdx<0?hist.length-1:browseIdx-1;
             return <div style={{borderRadius:RADIUS.lg,background:T.surface,border:`1px solid ${T.border}`,padding:`${SPACE[3]}px ${SPACE[4]}px`,display:"flex",flexDirection:"column",gap:SPACE[2]}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-                <div style={{fontSize:11,fontWeight:900,letterSpacing:0.5,textTransform:"uppercase" as const,color:T.purple}}>📈 Эval graph · {pts.length} ходов</div>
+                <div style={{fontSize:11,fontWeight:900,letterSpacing:0.5,textTransform:"uppercase" as const,color:T.purple}}>{cc.t("gm.0256")} {pts.length} {cc.t("gm.0020")}</div>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <button onClick={()=>{try{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}catch{}}} style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}} title={cc.t("attr.copy_fen_of_the_current")}>📋 Скопировать FEN</button>
-                  <div style={{fontSize:10,color:T.dim,fontWeight:700}}>клик по точке → переход к ходу</div>
+                  <button onClick={()=>{try{navigator.clipboard.writeText(game.fen());showToast(cc.t("gm.0257"),"success")}catch{}}} style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}} title={cc.t("attr.copy_fen_of_the_current")}>{cc.t("gm.0281")}</button>
+                  <div style={{fontSize:10,color:T.dim,fontWeight:700}}>{cc.t("gm.0438")}</div>
                 </div>
               </div>
               <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
@@ -12695,18 +12697,18 @@ export default function CyberChessPage(){
                     stroke={isCur?"#0f172a":"#fff"} strokeWidth={isCur?1.4:0.6}
                     style={{cursor:"pointer"}}
                     onClick={()=>goToPly(i)}>
-                    <title>Ход {Math.floor(i/2)+1}{i%2===0?".":"..."} {hist[i]||""} · cp {(p.cp/100).toFixed(1)}{p.quality!=="good"?` · ${p.quality}`:""}</title>
+                    <title>{cc.t("gm.0005")} {Math.floor(i/2)+1}{i%2===0?".":"..."} {hist[i]||""} · cp {(p.cp/100).toFixed(1)}{p.quality!=="good"?` · ${p.quality}`:""}</title>
                   </circle>;
                 })}
               </svg>
               {keyMoments.length>0&&<div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center",fontSize:11}}>
-                <span style={{fontSize:10,color:T.dim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const,marginRight:4}}>🎯 ключевые моменты:</span>
+                <span style={{fontSize:10,color:T.dim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const,marginRight:4}}>{cc.t("gm.0320")}</span>
                 {keyMoments.map(m=>{
                   const isUserMove=hist.length>0&&((pCol==="w")===(m.x%2===0));
                   const ic=m.quality==="blunder"?"??":m.quality==="mistake"?"?":"!";
                   const col=QUALITY_COL[m.quality];
                   return <button key={m.x} onClick={()=>goToPly(m.x)}
-                    title={`${hist[m.x]||""} · ход ${Math.floor(m.x/2)+1}${m.x%2===0?".":"..."} · ${m.quality}`}
+                    title={ccF(cc.t("gm.0613"),hist[m.x]||"",Math.floor(m.x/2)+1,m.x%2===0?".":"...",m.quality)}
                     style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:999,
                       border:`1px solid ${col}66`,background:`${col}14`,color:col,
                       fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
@@ -12726,7 +12728,7 @@ export default function CyberChessPage(){
                 if(maxSwing<150)return null; // not significant
                 const p=pts[swingIdx];const prev=pts[swingIdx-1];
                 const isUserCaused=((pCol==="w")===(swingIdx%2===0));
-                const moveSan=hist[swingIdx]||`ход ${Math.floor(swingIdx/2)+1}`;
+                const moveSan=hist[swingIdx]||ccF(cc.t("gm.0459"),Math.floor(swingIdx/2)+1);
                 const cpChange=((p.cp-prev.cp)/100).toFixed(1);
                 return <div role="button" tabIndex={0} aria-label={cc.t("attr.go_to_the_turning_point")} className="cc-focus-ring" onClick={()=>goToPly(swingIdx)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();goToPly(swingIdx)}}} style={{
                   marginTop:4,padding:"7px 10px",borderRadius:8,cursor:"pointer",
@@ -12737,13 +12739,13 @@ export default function CyberChessPage(){
                   <span style={{fontSize:16}}>⚡</span>
                   <div style={{flex:1}}>
                     <div style={{fontSize:11,fontWeight:900,color:isUserCaused?"#b91c1c":"#065f46"}}>
-                      {isUserCaused?"Поворотный момент — здесь ты изменил ход партии":"Соперник изменил ход партии здесь"}
+                      {isUserCaused?cc.t("gm.0549"):cc.t("gm.0472")}
                     </div>
                     <div style={{fontSize:10,color:T.dim}}>
-                      {moveSan} · изменение {cpChange} cp · ход {Math.floor(swingIdx/2)+1}
+                      {moveSan} {cc.t("gm.0167")} {cpChange} {cc.t("gm.0108")} {Math.floor(swingIdx/2)+1}
                     </div>
                   </div>
-                  <span style={{fontSize:10,color:T.dim,fontWeight:700}}>→ перейти</span>
+                  <span style={{fontSize:10,color:T.dim,fontWeight:700}}>{cc.t("gm.0109")}</span>
                 </div>;
               })()}
             </div>;
@@ -12758,38 +12760,38 @@ export default function CyberChessPage(){
                 {/* Empty start */}
                 <button onClick={()=>{
                   const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
-                  showToast("Начальная позиция","info");
+                  showToast(cc.t("gm.0300"),"info");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>{cc.t("cpn.start")}</button>
 
                 {/* Last saved game */}
                 <button onClick={()=>{
-                  if(savedGames.length===0){showToast("Нет сыгранных партий","error");return}
+                  if(savedGames.length===0){showToast(cc.t("gm.0351"),"error");return}
                   const last=savedGames[0];
                   const g=new Chess();const fh:string[]=[g.fen()];const mhist:string[]=[];
                   for(const san of last.moves){try{const mv=g.move(san);if(mv){mhist.push(mv.san);fh.push(g.fen())}}catch{break}}
                   setGame(g);sBk(k=>k+1);sHist(mhist);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(last.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(last.playerColor);sFlip(last.playerColor==="b");
-                  showToast(`Партия · ${mhist.length} ходов`,"success");
+                  showToast(ccF(cc.t("gm.0451"),mhist.length),"success");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>{cc.t("cpn.last")}</button>
 
                 {/* All archive */}
-                <button onClick={()=>{if(savedGames.length===0){showToast("Архив пуст","info");return}sGamesModalOpen(true)}}
+                <button onClick={()=>{if(savedGames.length===0){showToast(cc.t("gm.0168"),"info");return}sGamesModalOpen(true)}}
                   className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>
                   {cc.t("cpn.archive").replace("{n}",String(savedGames.length))}
                 </button>
 
                 {/* Current puzzle */}
                 <button onClick={()=>{
-                  if(!pzCurrent){showToast("Нет активной задачи","error");return}
+                  if(!pzCurrent){showToast(cc.t("gm.0337"),"error");return}
                   const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`Задача · ${pzCurrent.name}`,"success");
+                  showToast(ccF(cc.t("gm.0422"),pzCurrent.name),"success");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>{cc.t("cpn.curpz")}</button>
 
                 {/* Random puzzle */}
                 <button onClick={()=>{
-                  if(PUZZLES.length===0){showToast("Задачи не загружены","error");return}
+                  if(PUZZLES.length===0){showToast(cc.t("gm.0338"),"error");return}
                   const pz=PUZZLES[Math.floor(Math.random()*PUZZLES.length)];
                   const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`🎲 Случайная задача · ${pz.r} · ${pz.name}`,"info");
+                  showToast(ccF(cc.t("gm.0525"),pz.r,pz.name),"info");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>{cc.t("cpn.randpz")}</button>
 
                 {/* Daily puzzle */}
@@ -12803,15 +12805,15 @@ export default function CyberChessPage(){
 
                 {/* Random endgame study */}
                 <button onClick={()=>{
-                  if(ENDGAMES.length===0){showToast("Этюды недоступны","error");return}
+                  if(ENDGAMES.length===0){showToast(cc.t("gm.0282"),"error");return}
                   const eg=ENDGAMES[Math.floor(Math.random()*ENDGAMES.length)];
                   const g=new Chess(eg.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([eg.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(eg.side);sFlip(eg.side==="b");
-                  showToast(`🏰 Этюд · ${eg.name}`,"info");
+                  showToast(ccF(cc.t("gm.0352"),eg.name),"info");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>{cc.t("cpn.randend")}</button>
 
                 {/* Random opening line */}
                 <button onClick={()=>{
-                  if(!openingsDb||openingsDb.length===0){showToast("Дебюты не загружены","error");return}
+                  if(!openingsDb||openingsDb.length===0){showToast(cc.t("gm.0339"),"error");return}
                   const op=openingsDb[Math.floor(Math.random()*openingsDb.length)];
                   const g=new Chess();const fh:string[]=[g.fen()];const mh:string[]=[];
                   const sans=(typeof op.moves==="string"?op.moves.split(/\s+/):[]).filter(Boolean);
@@ -12831,41 +12833,41 @@ export default function CyberChessPage(){
                       const h=g.history();const g2=new Chess();const fh:string[]=[g2.fen()];const mh:string[]=[];
                       for(const san of h){try{const mv=g2.move(san);if(mv){mh.push(mv.san);fh.push(g2.fen())}}catch{break}}
                       setGame(g2);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
-                      showToast(`PGN · ${mh.length} ходов`,"success");
-                    }catch{showToast("Неверный PGN","error")}};
+                      showToast(ccF(cc.t("gm.0400"),mh.length),"success");
+                    }catch{showToast(cc.t("gm.0206"),"error")}};
                     r.readAsText(f);e.target.value="";
                   }}/>
                 </label>
 
                 {/* FEN prompt */}
                 <button onClick={()=>{
-                  const fen=prompt("Введите FEN позиции:");
+                  const fen=prompt(cc.t("gm.0353"));
                   if(!fen)return;
-                  try{const g=new Chess(fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");showToast("FEN загружен","success")}catch{showToast("Неверный FEN","error")}
+                  try{const g=new Chess(fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");showToast(cc.t("gm.0207"),"success")}catch{showToast(cc.t("gm.0208"),"error")}
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🔤 FEN</button>
 
                 {/* PGN text */}
                 <button onClick={()=>{
-                  const pgn=prompt("Вставьте PGN:");if(!pgn)return;
+                  const pgn=prompt(cc.t("gm.0227"));if(!pgn)return;
                   try{
                     const g=new Chess();g.loadPgn(pgn);
                     const h=g.history();const g2=new Chess();const fh:string[]=[g2.fen()];const mh:string[]=[];
                     for(const san of h){try{const mv=g2.move(san);if(mv){mh.push(mv.san);fh.push(g2.fen())}}catch{break}}
                     setGame(g2);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
-                    showToast(`PGN · ${mh.length} ходов`,"success");
-                  }catch{showToast("Неверный PGN","error")}
+                    showToast(ccF(cc.t("gm.0400"),mh.length),"success");
+                  }catch{showToast(cc.t("gm.0206"),"error")}
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>{cc.t("cpn.pgntext")}</button>
                 {/* Board Editor shortcut from Analysis tab */}
-                <button onClick={()=>{sEditorMode(true);sOn(false);sOver(null);sPms([]);sPmSel(null);showToast("Расставляй фигуры — нажми «Применить» для загрузки в анализ","info");sTab("coach");}} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:"1px solid #c4b5fd",background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#5b21b6",textAlign:"left"}}>{cc.t("cpn.pos")}</button>
+                <button onClick={()=>{sEditorMode(true);sOn(false);sOver(null);sPms([]);sPmSel(null);showToast(cc.t("gm.0573"),"info");sTab("coach");}} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:"1px solid #c4b5fd",background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#5b21b6",textAlign:"left"}}>{cc.t("cpn.pos")}</button>
                 {savedGames.length>0&&savedGames.slice(0,5).map((sg,gi)=>{
-                  const glabel=sg.opening?sg.opening.split(" ").slice(0,2).join(" "):"Партия #"+(savedGames.length-gi);
+                  const glabel=sg.opening?sg.opening.split(" ").slice(0,2).join(" "):cc.t("gm.0134")+(savedGames.length-gi);
                   const gresult=(sg.result.includes("win")||sg.result.includes("Win"))?"🏆":(sg.result.includes("Draw")||sg.result.includes("draw"))?"🤝":"💔";
                   return <button key={sg.id||gi} onClick={()=>{
                     const gc=new Chess();const gfh:string[]=[gc.fen()];const gmh:string[]=[];
                     for(const san of sg.moves){try{const mv=gc.move(san);if(mv){gmh.push(mv.san);gfh.push(gc.fen())}}catch{break}}
                     setGame(gc);sBk(k=>k+1);sHist(gmh);sFenHist(gfh);sLm(null);sSel(null);sVm(new Set());sOver(sg.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(sg.playerColor);sFlip(sg.playerColor==="b");
-                    showToast(gresult+" Разбираем · "+gmh.length+" ходов","success");
-                  }} className="cc-focus-ring" title={sg.result+" · "+(sg.moves?.length||0)+" ходов"}
+                    showToast(gresult+cc.t("gm.0228")+gmh.length+cc.t("gm.0087"),"success");
+                  }} className="cc-focus-ring" title={sg.result+" · "+(sg.moves?.length||0)+cc.t("gm.0087")}
                     style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:11,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
                     {gresult} {glabel} · {sg.moves?.length||0}h
                   </button>;
@@ -12887,11 +12889,11 @@ export default function CyberChessPage(){
               {enginePanelExpanded&&<div style={{padding:12,borderTop:`1px solid ${T.border}`}}>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{fontSize:14,color:T.dim,fontWeight:700}}>Вариантов</span>
+                  <span style={{fontSize:14,color:T.dim,fontWeight:700}}>{cc.t("gm.0110")}</span>
                   {[1,2,3,4,5].map(n=><button key={n} onClick={()=>sMpvCount(n)} style={{width:26,height:26,borderRadius:6,border:mpvCount===n?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:mpvCount===n?"rgba(124,58,237,0.08)":"#fff",color:mpvCount===n?T.purple:T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>{n}</button>)}
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{fontSize:14,color:T.dim,fontWeight:700}}>Глубина</span>
+                  <span style={{fontSize:14,color:T.dim,fontWeight:700}}>{cc.t("gm.0055")}</span>
                   <input type="range" aria-label={cc.t("attr.search_depth")} min={8} max={22} value={mpvDepth} onChange={e=>sMpvDepth(+e.target.value)} style={{width:80,accentColor:T.purple}}/>
                   <span style={{fontSize:13,fontWeight:900,color:T.purple,minWidth:20}}>{mpvDepth}</span>
                 </div>
@@ -12902,14 +12904,14 @@ export default function CyberChessPage(){
               {/* Current FEN display only (import buttons are in "Источник позиции" above) */}
               <div style={{display:"flex",gap:4,alignItems:"center"}}>
                 <input aria-label={cc.t("attr.position_in_fen_format")} value={game.fen()} readOnly onClick={e=>(e.target as HTMLInputElement).select()} style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
-                <button onClick={()=>{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>📋 Копировать</button>
+                <button onClick={()=>{navigator.clipboard.writeText(game.fen());showToast(cc.t("gm.0257"),"success")}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>{cc.t("gm.0182")}</button>
               </div>
               {/* Position Notes — user annotations for current analysis session */}
               {(()=>{
                 const PN_KEY=`aevion_pos_note_${game.fen().split(" ")[0]}`;
                 const[note,sNote]=typeof window!=="undefined"?[localStorage.getItem(PN_KEY)||"",(v:string)=>{try{localStorage.setItem(PN_KEY,v)}catch{}}]:["",()=>{}];
                 return<div style={{marginTop:8}}>
-                  <div style={{fontSize:10,fontWeight:800,color:T.dim,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:4}}>📝 Заметки к позиции</div>
+                  <div style={{fontSize:10,fontWeight:800,color:T.dim,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:4}}>{cc.t("gm.0321")}</div>
                   <textarea aria-label={cc.t("attr.game_note")} defaultValue={note} onChange={e=>{sNote(e.target.value)}} placeholder={cc.t("attr.write_an_idea_plan_or")} rows={2}
                     style={{width:"100%",padding:"6px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,color:T.text,resize:"vertical",background:"#fafafa",boxSizing:"border-box"}}/>
                 </div>;
@@ -12918,7 +12920,7 @@ export default function CyberChessPage(){
               {/* Guess Mode Panel */}
               {guessMode&&<div style={{marginTop:8,padding:"12px",borderRadius:8,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fde68a"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div style={{fontSize:13,fontWeight:900,color:"#92400e"}}>🎯 Найди лучший ход</div>
+                  <div style={{fontSize:13,fontWeight:900,color:"#92400e"}}>{cc.t("gm.0301")}</div>
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
                     <span style={{fontSize:13,fontWeight:800,color:T.accent}}>{guessScore.right}</span>
                     <span style={{fontSize:13,color:T.dim}}>/</span>
@@ -12929,14 +12931,14 @@ export default function CyberChessPage(){
                   </div>
                 </div>
                 <div style={{fontSize:13,color:"#78716c",marginBottom:6}}>
-                  {game.turn()==="w"?"⚪ Ход белых":"⚫ Ход чёрных"} — сделай ход на доске
+                  {game.turn()==="w"?cc.t("gm.0183"):cc.t("gm.0209")} {cc.t("gm.0490")}
                 </div>
-                {guessResult==="correct"&&<div style={{padding:"8px 12px",borderRadius:6,background:"#ecfdf5",border:"1px solid #86efac",fontSize:14,fontWeight:800,color:T.accent,marginBottom:6}}>✓ Правильно! Лучший ход: {guessBestSan}</div>}
-                {guessResult==="wrong"&&<div style={{padding:"8px 12px",borderRadius:6,background:"#fef2f2",border:"1px solid #fca5a5",fontSize:14,fontWeight:800,color:T.danger,marginBottom:6}}>✗ Неверно. Лучший ход был: <span style={{fontFamily:"monospace",background:"#fff",padding:"1px 6px",borderRadius:4}}>{guessBestSan}</span></div>}
-                {!guessBest&&<div style={{fontSize:14,color:"#a8a29e"}}>⏳ Engine считает лучший ход...</div>}
+                {guessResult==="correct"&&<div style={{padding:"8px 12px",borderRadius:6,background:"#ecfdf5",border:"1px solid #86efac",fontSize:14,fontWeight:800,color:T.accent,marginBottom:6}}>{cc.t("gm.0387")} {guessBestSan}</div>}
+                {guessResult==="wrong"&&<div style={{padding:"8px 12px",borderRadius:6,background:"#fef2f2",border:"1px solid #fca5a5",fontSize:14,fontWeight:800,color:T.danger,marginBottom:6}}>{cc.t("gm.0412")} <span style={{fontFamily:"monospace",background:"#fff",padding:"1px 6px",borderRadius:4}}>{guessBestSan}</span></div>}
+                {!guessBest&&<div style={{fontSize:14,color:"#a8a29e"}}>{cc.t("gm.0439")}</div>}
                 <div style={{display:"flex",gap:6,marginTop:4}}>
-                  {guessResult!=="idle"&&<button onClick={nextGuess} style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#f59e0b",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>▶ Следующая позиция</button>}
-                  {guessResult!=="idle"&&<button onClick={()=>{sGuessMode(false);runMultiPV()}} style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:13,fontWeight:700,cursor:"pointer"}}>Показать все линии</button>}
+                  {guessResult!=="idle"&&<button onClick={nextGuess} style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#f59e0b",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0302")}</button>}
+                  {guessResult!=="idle"&&<button onClick={()=>{sGuessMode(false);runMultiPV()}} style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:13,fontWeight:700,cursor:"pointer"}}>{cc.t("gm.0283")}</button>}
                 </div>
               </div>}
               </div>}
@@ -12946,7 +12948,7 @@ export default function CyberChessPage(){
               Click ▶ Analyze or make a move to see engine lines
             </div>}
             {mpvRunning&&<div style={{padding:"20px",textAlign:"center",color:T.purple,fontSize:14,fontWeight:700,background:"rgba(124,58,237,0.04)",borderRadius:10,border:`1px solid rgba(124,58,237,0.2)`}}>
-              ⚡ Считаю на глубине {mpvDepth}, вариантов: {mpvCount}…
+              {cc.t("gm.0322")} {mpvDepth}{cc.t("gm.0184")} {mpvCount}…
             </div>}
           </div>}
 
@@ -12973,8 +12975,8 @@ export default function CyberChessPage(){
               return <div style={{borderRadius:10,background:"linear-gradient(135deg,#fefce8,#fef9c3)",border:"1px solid #fde047",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:14}}>🏅</span>
-                  <span style={{fontSize:11,fontWeight:900,color:"#713f12",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Лучшие партии</span>
-                  <span style={{fontSize:10,color:"#92400e",fontWeight:700}}>{savedGames.length} всего</span>
+                  <span style={{fontSize:11,fontWeight:900,color:"#713f12",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>{cc.t("gm.0185")}</span>
+                  <span style={{fontSize:10,color:"#92400e",fontWeight:700}}>{savedGames.length} {cc.t("gm.0026")}</span>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:4}}>
                   {toShow.map((g,i)=>{
@@ -12985,8 +12987,8 @@ export default function CyberChessPage(){
                       border:"1px solid rgba(253,224,71,0.5)",fontSize:12
                     }}>
                       <span style={{fontSize:14,minWidth:18}}>{w?"🏆":d?"🤝":"💔"}</span>
-                      <span style={{fontWeight:700,color:"#451a03",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.opening||"Стандарт"}</span>
-                      <span style={{color:"#78350f",fontWeight:700,whiteSpace:"nowrap"}}>{g.moves?.length||0} ходов</span>
+                      <span style={{fontWeight:700,color:"#451a03",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.opening||cc.t("gm.0135")}</span>
+                      <span style={{color:"#78350f",fontWeight:700,whiteSpace:"nowrap"}}>{g.moves?.length||0} {cc.t("gm.0020")}</span>
                       <span style={{color:w?"#059669":d?"#6b7280":"#dc2626",fontWeight:900,fontSize:11}}>{g.rating||rat}</span>
                     </div>;
                   })}
@@ -13042,7 +13044,7 @@ export default function CyberChessPage(){
                 </div>}
                 <div style={{display:"flex",gap:6}}>
                   {canAddCurrent&&<Btn size="sm" variant="secondary" onClick={()=>{
-                    const name=prompt("Название линии (например, «Italian — Main»):",currentOpening?.name||`Моя линия #${repertoire.entries.length+1}`);
+                    const name=prompt(cc.t("gm.0536"),currentOpening?.name||ccF(cc.t("gm.0516"),repertoire.entries.length+1));
                     if(!name)return;
                     const eco=currentOpening?.eco;
                     const ecoName=currentOpening?.name;
@@ -13052,7 +13054,7 @@ export default function CyberChessPage(){
                       createdAt:Date.now(),uses:0,wins:0,losses:0,draws:0
                     };
                     sRepertoire(r=>({...r,entries:[entry,...r.entries]}));
-                    showToast(`📚 «${name}» сохранено в репертуар`,"success");
+                    showToast(ccF(cc.t("gm.0478"),name),"success");
                   }}>{cc.t("cpn.rep.save")}</Btn>}
                   <Btn size="sm" variant="primary" onClick={()=>sRepertoireOpen(true)}>{cc.t("cpn.rep.open")}</Btn>
                 </div>
@@ -13084,11 +13086,11 @@ export default function CyberChessPage(){
                 const histVid=hist.slice(0,plyVid);
                 const fen=fenHist[plyVid]??game.fen();
                 const pozVid=new Chess(fen);
-                const turn=pozVid.turn()==="w"?"белые":"чёрные";
-                const lastMove=histVid.length>0?histVid[histVid.length-1]:"(партия не начата)";
+                const turn=pozVid.turn()==="w"?cc.t("gm.0041"):cc.t("gm.0071");
+                const lastMove=histVid.length>0?histVid[histVid.length-1]:cc.t("gm.0323");
                 const recent=histVid.slice(-10).join(" ");
                 const evalCpStr=evalMate!==0?`#${evalMate>0?evalMate:-evalMate}`:`${evalCp>=0?"+":""}${(evalCp/100).toFixed(2)}`;
-                const phase=histVid.length<14?"дебют":histVid.length<40?"миттельшпиль":"эндшпиль";
+                const phase=histVid.length<14?cc.t("gm.0056"):histVid.length<40?cc.t("gm.0210"):cc.t("gm.0136");
                 const userMsg:CoachMsg={role:"user",content:question.trim(),ts:Date.now()};
                 const newMsgs=[...coachChat,userMsg];
                 sCoachChat(newMsgs);
@@ -13096,25 +13098,25 @@ export default function CyberChessPage(){
                 sCoachChatLoading(true);
                 // Annotated moves summary for coach context
                 const annotSummary=Object.keys(moveAnnotations).length>0
-                  ?"\nАннотации игрока: "+Object.entries(moveAnnotations).filter(([i])=>Number(i)<plyVid).map(([i,a])=>{const mv=histVid[Number(i)];return mv?`${mv}${a}`:"";}).filter(Boolean).join(", ")
+                  ?cc.t("gm.0354")+Object.entries(moveAnnotations).filter(([i])=>Number(i)<plyVid).map(([i,a])=>{const mv=histVid[Number(i)];return mv?`${mv}${a}`:"";}).filter(Boolean).join(", ")
                   :"";
-                const openingCtx=currentOpening?`\nДебют: ${currentOpening.eco} ${currentOpening.name}`:"";
-                const variantCtx=variant!=="standard"?`\nВариант: ${variant}`:"";
+                const openingCtx=currentOpening?ccF(cc.t("gm.0558"),currentOpening.eco,currentOpening.name):"";
+                const variantCtx=variant!=="standard"?ccF(cc.t("gm.0359"),variant):"";
                 // Ground the LLM in moves that are ACTUALLY legal in this exact position —
                 // chess.js is deterministic and always correct, unlike an LLM reading a raw
                 // FEN string. This is what stops the coach from suggesting moves that don't
                 // exist on the board (reported bug: hallucinated non-existent moves).
                 const legalSan=pozVid.moves();
                 const legalMovesCtx=legalSan.length>0
-                  ?`\nЛегальные ходы в этой позиции (${legalSan.length}): ${legalSan.join(", ")}`
-                  :"\n(партия окончена — легальных ходов нет)";
+                  ?ccF(cc.t("gm.0599"),legalSan.length,legalSan.join(", "))
+                  :cc.t("gm.0517");
                 const bestSan=getEngineBestSan(fen);
                 // (1) 31.10.2026: «где моя ошибка» тренер угадывал сам и в 3 из 5 прогонов называл неверный
                 // ход. Ошибку считает движок (оценка до/после каждого хода игрока), ИИ только объясняет.
                 let vyvodDvizhka="";
                 if(/ошибк|зев|mistake|blunder|қате/i.test(question)&&histVid.length>0){
                   if(!sfR.current?.ready()){
-                    vyvodDvizhka="ВЫВОД ДВИЖКА: движок ещё не загружен, ошибки не посчитаны — не называй конкретный ход ошибкой, предложи открыть разбор партии.";
+                    vyvodDvizhka=cc.t("gm.0640");
                   }else{
                     try{
                       const m=await import("./poslednyayaOshibka");
@@ -13128,27 +13130,18 @@ export default function CyberChessPage(){
                       vyvodDvizhka=m.vyvodDlyaTrenera(r,pCol==="b"?"b":"w");
                     }catch(e){
                       console.error("[CyberChess] вывод движка для тренера не посчитан",e);
-                      vyvodDvizhka="ВЫВОД ДВИЖКА: посчитать ошибки не удалось — не называй конкретный ход ошибкой.";
+                      vyvodDvizhka=cc.t("gm.0607");
                     }
                   }
                 }
                 // 31.10.2026: тренер дописывал продолжения сам («Bxf7+ Kd7» в ловушке Легаля, а Kd7 нелегален —
                 // поле бьёт конь e5). Ответы соперника на лучший ход тоже даёт chess.js, не модель.
                 let otvetySopernika="";
-                if(bestSan){try{const pp=new Chess(fen);pp.move(bestSan);const ot=pp.moves();otvetySopernika=ot.length?`\nПосле ${bestSan} у соперника легальны только: ${ot.join(", ")}`:`\nПосле ${bestSan} у соперника ходов нет (мат или пат)`;}catch{/* ход движка не лёг на позицию — строку не даём */}}
-                const bestMoveCtx=bestSan?`\nЛучший ход по движку (проверен, легален): ${bestSan}${otvetySopernika}`:"";
+                if(bestSan){try{const pp=new Chess(fen);pp.move(bestSan);const ot=pp.moves();otvetySopernika=ot.length?ccF(cc.t("gm.0584"),bestSan,ot.join(", ")):ccF(cc.t("gm.0563"),bestSan);}catch{/* ход движка не лёг на позицию — строку не даём */}}
+                const bestMoveCtx=bestSan?ccF(cc.t("gm.0594"),bestSan,otvetySopernika):"";
                 // Build context block prepended to the user's question for the API.
-                const contextBlock=`КОНТЕКСТ ПОЗИЦИИ:
-FEN: ${fen}
-Ход ${Math.floor(histVid.length/2)+1}, ${turn} ходят. Фаза: ${phase}.${openingCtx}${variantCtx}${plyVid<hist.length?`\nИгрок листает партию: на доске позиция после полухода ${plyVid} из ${hist.length}, ходы после неё в контекст не входят.`:""}
-Последние ходы: ${recent||"начало партии"}
-Последний ход: ${lastMove}
-Engine eval: ${evalCpStr} (с точки зрения белых)${bestMoveCtx}${legalMovesCtx}
-Игрок играет: ${pCol==="w"?"белыми":"чёрными"}, рейтинг ${rat}${annotSummary}${vyvodDvizhka?`\n${vyvodDvizhka}`:""}
-
-ВОПРОС УЧЕНИКА:
-${question.trim()}`;
-                const SYSTEM=`Ты AEVION CyberChess Coach — опытный шахматный тренер. Отвечай на русском, конкретно, по позиции. 2-5 предложений. Без воды и общих фраз. Если просят план — дай конкретные ходы (SAN) и идею. Если про ошибку — назови ход и худшую альтернативу. Используй FEN и engine eval как источник истины. КРИТИЧЕСКИ ВАЖНО: любой ход, который ты называешь как возможный/рекомендуемый ход В ТЕКУЩЕЙ позиции, ДОЛЖЕН дословно совпадать с одним из ходов в списке «Легальные ходы» из контекста — если хода там нет, он невозможен на доске, не называй его. Если не уверен в конкретном ходе — говори про идею/план словами, а не выдумывай нотацию. «Лучший ход по движку», если он есть в контексте, уже проверен и всегда легален — используй его как основу для конкретных рекомендаций. Если есть аннотации — прокомментируй отмеченные моменты. Если в контексте есть «ВЫВОД ДВИЖКА» — это готовый ответ про ошибку: назови ровно этот ход (или скажи, что ошибок нет, если так сказано) и объясни, чем он плох; никакой другой ход ошибкой не называй и с выводом не спорь. Ответ соперника на рекомендованный ход называй только из списка «у соперника легальны только» — других ходов там нет.`;
+                const contextBlock=ccF(cc.t("gm.0651"),fen,Math.floor(histVid.length/2)+1,turn,phase,openingCtx,variantCtx,plyVid<hist.length?ccF(cc.t("gm.0637"),plyVid,hist.length):"",recent||cc.t("gm.0229"),lastMove,evalCpStr,bestMoveCtx,legalMovesCtx,pCol==="w"?cc.t("gm.0088"):cc.t("gm.0111"),rat,annotSummary,vyvodDvizhka?`\n${vyvodDvizhka}`:"",question.trim());
+                const SYSTEM=cc.t("gm.0652");
                 try{
                   const ctrl=new AbortController();
                   const tId=setTimeout(()=>ctrl.abort(),30000);
@@ -13210,8 +13203,8 @@ ${question.trim()}`;
                   /* Сервер отбраковал свой ответ (не тот язык, огрызок) и честно говорит об этом
                      кодом 200 с fallback:"engine" (решение оркестратора 13.10.2026: это не авария,
                      5xx не поднимать). Человеку — разбор движком, как при отказе провайдера. */
-                  if(data?.fallback==="engine"){const о:any=new Error(String(data.message||"Тренер ответил не по делу — показываю разбор движком."));о.отказПоСмыслу=true;throw о;}
-                  const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";
+                  if(data?.fallback==="engine"){const о:any=new Error(String(data.message||cc.t("gm.0559")));о.отказПоСмыслу=true;throw о;}
+                  const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||cc.t("gm.0211");
                   // Тренер ответил — прежняя пометка об отказе больше не верна.
                   тренерОтветил();
                   // Если ответила запасная модель — говорим об этом одной строкой:
@@ -13253,14 +13246,14 @@ ${question.trim()}`;
                   const лимитИсчерпан=лимитПровайдера(сообщениеОшибки);
                   const когдаВернётся=срокВозврата(сообщениеОшибки);
                   const base=лимитИсчерпан
-                    ?`💬 Разбор словами сейчас выключен${когдаВернётся}. Партия, задачи и движок работают.`
+                    ?ccF(cc.t("gm.0614"),когдаВернётся)
                     :(общаяОчередьАнонимов(сообщениеОшибки)
-                      ?"⏳ Сейчас много желающих: тренер отвечает по очереди. Войдите в аккаунт — очередь вас не коснётся."
-                      :e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.");
+                      ?cc.t("gm.0623")
+                      :e?.name==="AbortError"?cc.t("gm.0464"):cc.t("gm.0452"));
                   const ходПоРусски=bestSan?hodPoRusski(fen,uciИзSan(fen,bestSan)||""):"";
                   const tip=bestSan
-                    ?`\n\n♟ Отвечаю движком (Stockfish, глубина 14): лучший ход — ${ходПоРусски||bestSan}, оценка ${evalCpStr} (с точки зрения белых).${лимитИсчерпан?"":" Спроси ещё раз через минуту для развёрнутого разбора."}`
-                    :(лимитИсчерпан?" Нажми 🔍 Объясни или 📋 План — они считаются движком и работают.":" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.");
+                    ?ccF(cc.t("gm.0650"),ходПоРусски||bestSan,evalCpStr,лимитИсчерпан?"":cc.t("gm.0564"))
+                    :(лимитИсчерпан?cc.t("gm.0587"):cc.t("gm.0592"));
                   // Отказ по смыслу (200 с fallback:"engine") — текст сервера, остальное как при отказе провайдера.
                   sCoachChat([...newMsgs,{role:"assistant",content:(e?.отказПоСмыслу?сообщениеОшибки:base)+tip,ts:Date.now()}]);
                 }finally{
@@ -13333,54 +13326,54 @@ ${question.trim()}`;
               const dna=gameDna;
               const flags:{label:string;detail:string;tone:"warn"|"info"|"good"}[]=[];
               if(dna.whiteWinPct-dna.blackWinPct>20&&dna.blackGames>=3){
-                flags.push({label:"⚫ Слабая защита",detail:`${dna.whiteWinPct}% за белых vs ${dna.blackWinPct}% за чёрных. Учи дебюты за чёрных (Caro-Kann, KID).`,tone:"warn"});
+                flags.push({label:cc.t("gm.0274"),detail:ccF(cc.t("gm.0624"),dna.whiteWinPct,dna.blackWinPct),tone:"warn"});
               }
               if(dna.blackWinPct-dna.whiteWinPct>20&&dna.whiteGames>=3){
-                flags.push({label:"⚪ Слабая инициатива",detail:`${dna.blackWinPct}% за чёрных vs ${dna.whiteWinPct}% за белых. Учи активные дебюты за белых (Italian, KIA).`,tone:"warn"});
+                flags.push({label:cc.t("gm.0340"),detail:ccF(cc.t("gm.0630"),dna.blackWinPct,dna.whiteWinPct),tone:"warn"});
               }
               if(dna.avgLengthLoss>0&&dna.avgLengthLoss<25){
-                flags.push({label:"⚡ Ранние зевки",detail:`Средняя длина проигрыша: ${dna.avgLengthLoss} ходов. Урок 2 «Не зевай — blunder check» — твой приоритет.`,tone:"warn"});
+                flags.push({label:cc.t("gm.0258"),detail:ccF(cc.t("gm.0626"),dna.avgLengthLoss),tone:"warn"});
               }
               if(dna.tacticalPhaseLoss==="opening"){
-                flags.push({label:"📖 Дебютные ошибки",detail:`Большинство поражений — в дебюте. Работай над репертуаром (Урок 14) и принципами (Урок 1).`,tone:"warn"});
+                flags.push({label:cc.t("gm.0324"),detail:cc.t("gm.0619"),tone:"warn"});
               }
               if(dna.tacticalPhaseLoss==="endgame"){
-                flags.push({label:"🏁 Слабый эндшпиль",detail:`Чаще теряешь в эндшпиле. Урок 5 (пешечные эндшпили) + Урок 3 (базовые маты).`,tone:"warn"});
+                flags.push({label:cc.t("gm.0325"),detail:cc.t("gm.0600"),tone:"warn"});
               }
               if(dna.recentTrend==="up"&&dna.recentWinPctDelta>=10){
-                flags.push({label:"📈 Растёшь",detail:`Последние 10 партий +${dna.recentWinPctDelta}% к WR. Продолжай в том же темпе!`,tone:"good"});
+                flags.push({label:cc.t("gm.0169"),detail:ccF(cc.t("gm.0608"),dna.recentWinPctDelta),tone:"good"});
               }
               if(dna.recentTrend==="down"&&dna.recentWinPctDelta<=-10){
-                flags.push({label:"📉 Спад формы",detail:`Последние 10 партий ${dna.recentWinPctDelta}% к WR. Возможно — усталость. Сделай перерыв или возьми Урок по психологии (Roadmap).`,tone:"warn"});
+                flags.push({label:cc.t("gm.0230"),detail:ccF(cc.t("gm.0642"),dna.recentWinPctDelta),tone:"warn"});
               }
               if(dna.bestOpening){
-                flags.push({label:`✓ Сильный дебют: ${dna.bestOpening.opening}`,detail:`${dna.bestOpening.winPct}% побед в ${dna.bestOpening.total} партиях. Изучи его глубже — это твой репертуар.`,tone:"good"});
+                flags.push({label:ccF(cc.t("gm.0530"),dna.bestOpening.opening),detail:ccF(cc.t("gm.0631"),dna.bestOpening.winPct,dna.bestOpening.total),tone:"good"});
               }
               if(dna.worstOpening&&dna.worstOpening.total>=3){
-                flags.push({label:`✗ Слабый дебют: ${dna.worstOpening.opening}`,detail:`${dna.worstOpening.winPct}% побед в ${dna.worstOpening.total} партиях. Либо изучи его, либо смени на другой.`,tone:"warn"});
+                flags.push({label:ccF(cc.t("gm.0531"),dna.worstOpening.opening),detail:ccF(cc.t("gm.0632"),dna.worstOpening.winPct,dna.worstOpening.total),tone:"warn"});
               }
               if(dna.currentStreak.type==="L"&&dna.currentStreak.count>=3){
-                flags.push({label:`💔 Серия проигрышей ×${dna.currentStreak.count}`,detail:`Возьми паузу 30 минут или порешай задачи для восстановления уверенности.`,tone:"warn"});
+                flags.push({label:ccF(cc.t("gm.0550"),dna.currentStreak.count),detail:cc.t("gm.0595"),tone:"warn"});
               }
               return <div style={{borderRadius:10,background:"linear-gradient(135deg,#fef2f2,#fff1f2)",border:"1px solid #fca5a5",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:14}}>🩺</span>
-                  <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Персональная диагностика · {dna.total} партий</span>
+                  <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>{cc.t("gm.0413")} {dna.total} {cc.t("gm.0036")}</span>
                   <span style={{fontSize:10,color:"#6b7280",fontWeight:700}}>WR {dna.winPct}%</span>
                 </div>
                 {/* Quick stats grid */}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4,fontSize:10}}>
                   <div style={{textAlign:"center",padding:"5px 4px",background:"#fff",borderRadius:5}}>
                     <div style={{fontWeight:900,color:CC.brand,fontSize:14}}>{dna.wins}</div>
-                    <div style={{color:CC.textDim,letterSpacing:0.3}}>побед</div>
+                    <div style={{color:CC.textDim,letterSpacing:0.3}}>{cc.t("gm.0027")}</div>
                   </div>
                   <div style={{textAlign:"center",padding:"5px 4px",background:"#fff",borderRadius:5}}>
                     <div style={{fontWeight:900,color:CC.danger,fontSize:14}}>{dna.losses}</div>
-                    <div style={{color:CC.textDim,letterSpacing:0.3}}>пораж.</div>
+                    <div style={{color:CC.textDim,letterSpacing:0.3}}>{cc.t("gm.0037")}</div>
                   </div>
                   <div style={{textAlign:"center",padding:"5px 4px",background:"#fff",borderRadius:5}}>
                     <div style={{fontWeight:900,color:CC.text,fontSize:14}}>{dna.avgLengthWin}</div>
-                    <div style={{color:CC.textDim,letterSpacing:0.3}}>avg ходов</div>
+                    <div style={{color:CC.textDim,letterSpacing:0.3}}>{cc.t("gm.0112")}</div>
                   </div>
                   <div style={{textAlign:"center",padding:"5px 4px",background:"#fff",borderRadius:5}}>
                     <div style={{fontWeight:900,color:dna.ratingGrowth>=0?CC.brand:CC.danger,fontSize:14}}>{dna.ratingGrowth>=0?"+":""}{dna.ratingGrowth}</div>
@@ -13399,10 +13392,10 @@ ${question.trim()}`;
                     <div style={{color:"#475569",fontSize:11}}>{f.detail}</div>
                   </div>)}
                 </div>:<div style={{fontSize:11,color:"#6b7280",fontStyle:"italic",lineHeight:1.5}}>
-                  Слабостей не найдено — продолжай играть стабильно.
+                  {cc.t("gm.0588")}
                 </div>}
                 {dna.insights.length>0&&<div style={{fontSize:10,color:"#6b7280",lineHeight:1.5,paddingTop:4,borderTop:"1px dashed rgba(220,38,38,0.2)"}}>
-                  💡 Дополнительно: {dna.insights.slice(0,2).join(" · ")}
+                  {cc.t("gm.0284")} {dna.insights.slice(0,2).join(" · ")}
                 </div>}
               </div>;
             })()}
@@ -13410,15 +13403,15 @@ ${question.trim()}`;
             {blunderBook.length>0&&<div style={{borderRadius:10,background:"linear-gradient(135deg,#fef2f2,#fff1f2)",border:"1px solid #fca5a5",padding:"10px 12px"}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
                 <span style={{fontSize:14}}>📕</span>
-                <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Зевок-бук · {blunderBook.length} позиций</span>
-                <button onClick={()=>sBlunderBook([])} title={cc.t("attr.clear")} style={{fontSize:10,fontWeight:700,color:"#6b7280",border:"1px solid #fca5a5",borderRadius:4,padding:"2px 6px",background:"#fff",cursor:"pointer"}}>× очистить</button>
+                <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>{cc.t("gm.0170")} {blunderBook.length} {cc.t("gm.0057")}</span>
+                <button onClick={()=>sBlunderBook([])} title={cc.t("attr.clear")} style={{fontSize:10,fontWeight:700,color:"#6b7280",border:"1px solid #fca5a5",borderRadius:4,padding:"2px 6px",background:"#fff",cursor:"pointer"}}>{cc.t("gm.0137")}</button>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 {blunderBook.slice(0,5).map((b,i)=>(
                   <button key={i} onClick={()=>{
                     try{const g=new Chess(b.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([b.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");sOn(true);sSetup(false);
-                      showToast(`Позиция загружена — найди лучший ход вместо ${b.san}!`,"info");
-                    }catch{showToast("Ошибка загрузки позиции","error")}}
+                      showToast(ccF(cc.t("gm.0560"),b.san),"info");
+                    }catch{showToast(cc.t("gm.0388"),"error")}}
                   } style={{
                     padding:"6px 10px",borderRadius:6,border:"1px solid #fca5a5",background:"#fff",
                     cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:8
@@ -13426,7 +13419,7 @@ ${question.trim()}`;
                     <span style={{fontSize:16,flexShrink:0}}>💀</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:11,fontWeight:700,color:"#991b1b"}}>
-                        Ход {b.moveNum}: {b.san} ??{b.opening?` · ${b.opening.slice(0,25)}`:""}
+                        {cc.t("gm.0005")} {b.moveNum}: {b.san} ??{b.opening?` · ${b.opening.slice(0,25)}`:""}
                       </div>
                       <div style={{fontSize:9,color:"#6b7280",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                         {b.fen.slice(0,40)}…
@@ -13436,7 +13429,7 @@ ${question.trim()}`;
                   </button>
                 ))}
               </div>
-              {blunderBook.length>5&&<div style={{fontSize:10,color:"#991b1b",marginTop:4,textAlign:"center"}}>+{blunderBook.length-5} ещё позиций</div>}
+              {blunderBook.length>5&&<div style={{fontSize:10,color:"#991b1b",marginTop:4,textAlign:"center"}}>+{blunderBook.length-5} {cc.t("gm.0156")}</div>}
             </div>}
 
             {/* ── Рекомендуемый урок — адаптивно по слабостям + рейтингу ── */}
@@ -13448,11 +13441,11 @@ ${question.trim()}`;
               }}>
                 <span style={{fontSize:26,flexShrink:0}}>{lesson.emoji}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:10,fontWeight:900,color:"#047857",letterSpacing:0.5,textTransform:"uppercase" as const}}>🎓 Рекомендуемый урок · уровень {ratingTier(rat)==="beginner"?"новичок":ratingTier(rat)==="intermediate"?"средний":"продвинутый"}</div>
-                  <div style={{fontSize:14,fontWeight:900,color:"#064e3b",lineHeight:1.2}}>Урок {lesson.num}: {lesson.title}</div>
-                  <div style={{fontSize:11,color:"#065f46",marginTop:1}}>Почему: {reason}</div>
+                  <div style={{fontSize:10,fontWeight:900,color:"#047857",letterSpacing:0.5,textTransform:"uppercase" as const}}>{cc.t("gm.0453")} {ratingTier(rat)==="beginner"?cc.t("gm.0113"):ratingTier(rat)==="intermediate"?cc.t("gm.0080"):cc.t("gm.0186")}</div>
+                  <div style={{fontSize:14,fontWeight:900,color:"#064e3b",lineHeight:1.2}}>{cc.t("gm.0028")} {lesson.num}: {lesson.title}</div>
+                  <div style={{fontSize:11,color:"#065f46",marginTop:1}}>{cc.t("gm.0089")} {reason}</div>
                 </div>
-                <span style={{fontSize:12,color:"#047857",fontWeight:900,flexShrink:0}}>Начать →</span>
+                <span style={{fontSize:12,color:"#047857",fontWeight:900,flexShrink:0}}>{cc.t("gm.0090")}</span>
               </button>;
             })()}
             {/* ── Study Plan — weekly recommendation based on weaknesses + themePerf ── */}
@@ -13461,33 +13454,33 @@ ${question.trim()}`;
               // Build a personalized 7-item weekly plan
               const plan:{day:string;task:string;icon:string;action:()=>void}[]=[];
               // Monday: play a game
-              plan.push({day:"Пн",task:"Сыграй партию",icon:"♟",action:()=>{sTab("play");sSetup(true)}});
+              plan.push({day:cc.t("gm.0010"),task:cc.t("gm.0231"),icon:"♟",action:()=>{sTab("play");sSetup(true)}});
               // Tuesday: weak theme puzzles if any
               const weakThemes=Object.entries(themePerf).filter(([,v])=>v.c+v.w>=3&&v.c/(v.c+v.w)<0.5).sort((a,b)=>(a[1].c/(a[1].c+a[1].w))-(b[1].c/(b[1].c+b[1].w)));
               if(weakThemes.length>0){
                 const wt=weakThemes[0][0];
-                plan.push({day:"Вт",task:`Задачи: ${wt}`,icon:"🎯",action:()=>{sTab("puzzles");sPzFilterTheme(wt);sPzI(0);sPzCategory("all")}});
+                plan.push({day:cc.t("gm.0011"),task:ccF(cc.t("gm.0232"),wt),icon:"🎯",action:()=>{sTab("puzzles");sPzFilterTheme(wt);sPzI(0);sPzCategory("all")}});
               }else{
-                plan.push({day:"Вт",task:"Реши 10 задач",icon:"🎯",action:()=>{sTab("puzzles");sPzMode("learn" as any)}});
+                plan.push({day:cc.t("gm.0011"),task:cc.t("gm.0233"),icon:"🎯",action:()=>{sTab("puzzles");sPzMode("learn" as any)}});
               }
               // Wednesday: Coach knowledge reading
-              plan.push({day:"Ср",task:"Читай базу знаний",icon:"📚",action:()=>{sShowKnowledge(true)}});
+              plan.push({day:cc.t("gm.0012"),task:cc.t("gm.0303"),icon:"📚",action:()=>{sShowKnowledge(true)}});
               // Thursday: analysis of last game
-              if(savedGames.length>0)plan.push({day:"Чт",task:"Разбери последнюю партию",icon:"🔍",action:()=>{sTab("analysis");const last=savedGames[0];const g=new Chess();const fh=[g.fen()];const mh:string[]=[];for(const s of last.moves){try{const mv=g.move(s);if(mv){mh.push(mv.san);fh.push(g.fen())}}catch{break}}setGame(g);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(last.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(last.playerColor);sFlip(last.playerColor==="b")}});
+              if(savedGames.length>0)plan.push({day:cc.t("gm.0013"),task:cc.t("gm.0401"),icon:"🔍",action:()=>{sTab("analysis");const last=savedGames[0];const g=new Chess();const fh=[g.fen()];const mh:string[]=[];for(const s of last.moves){try{const mv=g.move(s);if(mv){mh.push(mv.san);fh.push(g.fen())}}catch{break}}setGame(g);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(last.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(last.playerColor);sFlip(last.playerColor==="b")}});
               // Friday: blunder book practice
-              if(blunderBook.length>0)plan.push({day:"Пт",task:"Тренируй позиции из зевок-бука",icon:"📕",action:()=>{const b=blunderBook[0];try{const g=new Chess(b.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([b.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");sOn(true);sSetup(false);}catch{}}});
-              else plan.push({day:"Пт",task:"Puzzle Rush 3 мин",icon:"⚡",action:()=>{sTab("puzzles");sPzMode("rush" as any)}});
+              if(blunderBook.length>0)plan.push({day:cc.t("gm.0014"),task:cc.t("gm.0454"),icon:"📕",action:()=>{const b=blunderBook[0];try{const g=new Chess(b.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([b.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");sOn(true);sSetup(false);}catch{}}});
+              else plan.push({day:cc.t("gm.0014"),task:cc.t("gm.0304"),icon:"⚡",action:()=>{sTab("puzzles");sPzMode("rush" as any)}});
               // Saturday: variant game
-              plan.push({day:"Сб",task:"Играй вариант",icon:"🎲",action:()=>{sTab("play");sShowVariants(true)}});
+              plan.push({day:cc.t("gm.0015"),task:cc.t("gm.0234"),icon:"🎲",action:()=>{sTab("play");sShowVariants(true)}});
               // Sunday: rest or openings
-              plan.push({day:"Вс",task:"Изучи дебютный репертуар",icon:"📖",action:()=>{sTab("coach")}});
+              plan.push({day:cc.t("gm.0016"),task:cc.t("gm.0402"),icon:"📖",action:()=>{sTab("coach")}});
               const todayDay=new Date().getDay(); // 0=Sun,1=Mon...
               const dayMap=[6,0,1,2,3,4,5]; // JS 0=Sun → plan[6]
               const todayPlanIdx=dayMap[todayDay];
               return <div style={{borderRadius:10,background:"linear-gradient(135deg,#f0f9ff,#dbeafe)",border:"1px solid #93c5fd",padding:"10px 12px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
                   <span style={{fontSize:14}}>📅</span>
-                  <span style={{fontSize:11,fontWeight:900,color:"#1e40af",letterSpacing:0.5,textTransform:"uppercase" as const}}>Недельный план · на основе анализа игры</span>
+                  <span style={{fontSize:11,fontWeight:900,color:"#1e40af",letterSpacing:0.5,textTransform:"uppercase" as const}}>{cc.t("gm.0493")}</span>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
                   {plan.slice(0,7).map((p,i)=>{
@@ -13504,7 +13497,7 @@ ${question.trim()}`;
                   })}
                 </div>
                 {plan[todayPlanIdx]&&<div style={{marginTop:6,fontSize:11,color:"#1e40af",fontWeight:700}}>
-                  📌 Сегодня: <span onClick={plan[todayPlanIdx].action} style={{cursor:"pointer",textDecoration:"underline"}}>{plan[todayPlanIdx].task}</span>
+                  {cc.t("gm.0171")} <span onClick={plan[todayPlanIdx].action} style={{cursor:"pointer",textDecoration:"underline"}}>{plan[todayPlanIdx].task}</span>
                 </div>}
               </div>;
             })()}
@@ -13527,21 +13520,21 @@ ${question.trim()}`;
                     {modeBtn("🤖",cc.t("cpn.mode.ai"),cc.t("cpn.mode.ai.sub"),()=>{
                       sCoachAIEnabled(true);sEditorMode(false);
                       const cl=pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();
-                      showToast("Новая игра против ИИ","success");
+                      showToast(cc.t("gm.0355"),"success");
                     },isVsAI)}
                     {modeBtn("✋",cc.t("cpn.mode.both"),cc.t("cpn.mode.both.sub"),()=>{
                       sCoachAIEnabled(false);sEditorMode(false);
                       const g=new Chess();setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([g.fen()]);sCapW([]);sCapB([]);sPromo(null);sPms([]);sPmSel(null);sOn(false);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);
-                      showToast("Свободная игра за обоих","info");
+                      showToast(cc.t("gm.0389"),"info");
                     },isSolo&&hist.length===0)}
                     {modeBtn("📥",cc.t("cpn.mode.import"),cc.t("cpn.mode.import.sub"),()=>{
                       sCoachAIEnabled(false);
                       const el=document.getElementById("coach-import-section");
                       if(el)el.scrollIntoView({behavior:"smooth",block:"start"});
-                      showToast("Выбери источник ниже","info");
+                      showToast(cc.t("gm.0356"),"info");
                     })}
                     {modeBtn("🧩",cc.t("cpn.mode.puz"),cc.t("cpn.mode.puz.sub"),()=>{
-                      if(!pzCurrent){showToast("Сначала выбери задачу во вкладке «Задачи»","info");sTab("puzzles");return}
+                      if(!pzCurrent){showToast(cc.t("gm.0518"),"info");sTab("puzzles");return}
                       const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
                       // 🔴 Здесь стояло sCoachAIEnabled(false), и это был дефект:
                       // плитка живёт ВНУТРИ панели тренера и существует ровно для
@@ -13553,10 +13546,10 @@ ${question.trim()}`;
                       // игра» и «Импорт», где выключение осмысленно.
                       // Найдено окном Роликов на проде 06.10.2026, 390×844.
                       sCoachAIEnabled(true);sEditorMode(false);
-                      showToast(`Задача: ${pzCurrent.name} — спроси тренера`,"success");
+                      showToast(ccF(cc.t("gm.0526"),pzCurrent.name),"success");
                     })}
                     {modeBtn("📜",savedGames.length>0?`${cc.t("cpn.mode.lib")} · ${savedGames.length}`:cc.t("cpn.mode.lib"),cc.t("cpn.mode.lib.sub"),()=>{
-                      if(savedGames.length===0){showToast("Нет сыгранных партий — сыграй хотя бы одну","error");return}
+                      if(savedGames.length===0){showToast(cc.t("gm.0527"),"error");return}
                       sGamesModalOpen(true);
                     })}
                     {modeBtn("🏰",cc.t("cpn.mode.end"),cc.t("cpn.mode.end.sub").replace("{n}",String(ENDGAMES.length)),()=>sShowEndgames(true))}
@@ -13569,13 +13562,13 @@ ${question.trim()}`;
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
                 <span style={{fontSize:20}}>🏰</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:800,color:T.blue,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Активный эндшпиль · цель: {currentEndgame.goal==="Win"?"победа":"ничья"} за {currentEndgame.side==="w"?"белых":"чёрных"}</div>
+                  <div style={{fontSize:12,fontWeight:800,color:T.blue,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{cc.t("gm.0403")} {currentEndgame.goal==="Win"?"победа":"ничья"} {cc.t("gm.0004")} {currentEndgame.side==="w"?cc.t("gm.0058"):cc.t("gm.0091")}</div>
                   <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1.2,marginTop:2}}>{currentEndgame.name}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:900,color:"#78350f",background:"#fef3c7",padding:"3px 10px",borderRadius:10,whiteSpace:"nowrap"}}>+{currentEndgame.reward} C</div>
               </div>
               <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginTop:4}}>{currentEndgame.hint}</div>
-              <button onClick={()=>sCurrentEndgame(null)} style={{marginTop:6,padding:"4px 10px",borderRadius:6,border:"1px solid "+T.border,background:"#fff",color:T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>Отказаться</button>
+              <button onClick={()=>sCurrentEndgame(null)} style={{marginTop:6,padding:"4px 10px",borderRadius:6,border:"1px solid "+T.border,background:"#fff",color:T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>{cc.t("gm.0138")}</button>
             </div>}
             {/* Position import */}
             <div id="coach-import-section" style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe",padding:"10px 12px"}}>
@@ -13583,25 +13576,25 @@ ${question.trim()}`;
               <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
                 <button onClick={()=>{
                   const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol("w");sFlip(false);
-                  showToast("Начальная позиция","info");
+                  showToast(cc.t("gm.0300"),"info");
                 }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>{cc.t("cpn.start")}</button>
 
                 <button onClick={()=>{
                   // Load latest saved game
-                  if(savedGames.length===0){showToast("Нет сыгранных партий","error");return}
+                  if(savedGames.length===0){showToast(cc.t("gm.0351"),"error");return}
                   const last=savedGames[0];
                   const g=new Chess();const fh:string[]=[g.fen()];const mhist:string[]=[];
                   for(const san of last.moves){try{const mv=g.move(san);if(mv){mhist.push(mv.san);fh.push(g.fen())}}catch{break}}
                   setGame(g);sBk(k=>k+1);sHist(mhist);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(last.playerColor);sFlip(last.playerColor==="b");
-                  showToast(`Загружена партия · ${mhist.length} ходов`,"success");
+                  showToast(ccF(cc.t("gm.0509"),mhist.length),"success");
                 }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>{cc.t("cpn.last")}</button>
 
                 <button onClick={()=>{
-                  if(!pzCurrent){showToast("Нет активной задачи","error");return}
+                  if(!pzCurrent){showToast(cc.t("gm.0337"),"error");return}
                   const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");sCoachAIEnabled(true);
                   // Тренера включаем и здесь: кнопка в панели тренера, а без
                   // флага позиция встаёт молча и спросить о ней негде.
-                  showToast(`Из задачи · ${pzCurrent.name} — спроси тренера`,"success");
+                  showToast(ccF(cc.t("gm.0544"),pzCurrent.name),"success");
                 }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>{cc.t("cpn.curpz")}</button>
 
                 <label style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left",display:"block"}}>
@@ -13614,8 +13607,8 @@ ${question.trim()}`;
                       const h=g.history();const g2=new Chess();const fh:string[]=[g2.fen()];const mh:string[]=[];
                       for(const san of h){try{const mv=g2.move(san);if(mv){mh.push(mv.san);fh.push(g2.fen())}}catch{break}}
                       setGame(g2);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);
-                      showToast(`PGN · ${mh.length} ходов`,"success");
-                    }catch{showToast("Неверный PGN","error")}};
+                      showToast(ccF(cc.t("gm.0400"),mh.length),"success");
+                    }catch{showToast(cc.t("gm.0206"),"error")}};
                     r.readAsText(f);e.target.value="";
                   }}/>
                 </label>
@@ -13640,7 +13633,7 @@ ${question.trim()}`;
                   />
                   <button onClick={zagruzitFen} style={{padding:"8px 12px",borderRadius:7,border:"none",
                     background:T.accent,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
-                    Загрузить
+                    {cc.t("gm.0423")}
                   </button>
                 </div>}
 
@@ -13659,9 +13652,9 @@ ${question.trim()}`;
                 <button onClick={()=>sCoachAIEnabled(false)} title={cc.t("attr.free_chat_without_automatic_position")} style={{padding:"6px 10px",borderRadius:6,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>{cc.t("cpn.cmode.free")}</button>
               </div>
               {coachAIEnabled&&<><span style={{width:1,height:20,background:T.border}}/>
-              <span style={{fontSize:11,color:T.dim,fontWeight:700}}>Уровень:{!coachLevelTouched.current&&<span title={`Авто по рейтингу ${rat}`} style={{marginLeft:3,fontSize:9,color:T.accent,fontWeight:800}}>авто</span>}</span>
+              <span style={{fontSize:11,color:T.dim,fontWeight:700}}>{cc.t("gm.0092")}{!coachLevelTouched.current&&<span title={ccF(cc.t("gm.0390"),rat)} style={{marginLeft:3,fontSize:9,color:T.accent,fontWeight:800}}>{cc.t("gm.0017")}</span>}</span>
               <div style={{display:"flex",gap:3}}>
-                {([["beginner","🌱","до 1200"],["intermediate","📘","1200-1800"],["advanced","🏆","1800+"]] as const).map(([lv,ic,elo])=>
+                {([["beginner","🌱",cc.t("gm.0114")],["intermediate","📘","1200-1800"],["advanced","🏆","1800+"]] as const).map(([lv,ic,elo])=>
                   <button key={lv} onClick={()=>{coachLevelTouched.current=true;sCoachLevel(lv)}} title={elo} style={{padding:"6px 8px",borderRadius:5,border:coachLevel===lv?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachLevel===lv?"rgba(5,150,105,0.08)":"#fff",fontSize:14,cursor:"pointer"}}>{ic}</button>)}
               </div></>}
             </div>
@@ -13669,27 +13662,27 @@ ${question.trim()}`;
             {/* Collapsible Learning Tips */}
             {coachAIEnabled&&<div style={{borderRadius:10,background:"linear-gradient(135deg,#fef3c7,#fef9c3)",border:"1px solid #fde68a",overflow:"hidden"}}>
               <button onClick={()=>sCoachTipsExpanded(!coachTipsExpanded)} style={{width:"100%",padding:"8px 12px",border:"none",background:"transparent",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-                <span style={{fontSize:11,fontWeight:800,color:"#92400e",letterSpacing:"0.05em",textTransform:"uppercase" as const}}>💡 Что изучать · {coachLevel==="beginner"?"Новичок":coachLevel==="intermediate"?"Средний":"Продвинутый"}</span>
+                <span style={{fontSize:11,fontWeight:800,color:"#92400e",letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{cc.t("gm.0275")} {coachLevel==="beginner"?cc.t("gm.0115"):coachLevel==="intermediate"?cc.t("gm.0116"):cc.t("gm.0187")}</span>
                 <span style={{fontSize:11,color:"#92400e",transform:coachTipsExpanded?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
               </button>
               {coachTipsExpanded&&<div style={{padding:"0 14px 12px"}}>
                 {coachLevel==="beginner"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
-                  <div style={{marginBottom:5}}><b>Основы:</b> правила ходов, шах и мат, пат</div>
-                  <div style={{marginBottom:5}}><b>Принципы:</b> развивай фигуры, контролируй центр, рокируй рано</div>
-                  <div style={{marginBottom:5}}><b>Задачи:</b> маты в 1-2 хода, угрозы</div>
-                  <div><b>Партии:</b> играй с ботами 800-1000 и спрашивай Coach'а</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0059")}</b> {cc.t("gm.0432")}</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0117")}</b> {cc.t("gm.0545")}</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0060")}</b> {cc.t("gm.0360")}</div>
+                  <div><b>{cc.t("gm.0061")}</b> {cc.t("gm.0519")}</div>
                 </div>}
                 {coachLevel==="intermediate"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
-                  <div style={{marginBottom:5}}><b>Тактика:</b> вилка, связка, двойной удар, завлечение</div>
-                  <div style={{marginBottom:5}}><b>Дебюты:</b> выбери 1-2 за оба цвета, учи 10-15 ходов</div>
-                  <div style={{marginBottom:5}}><b>Эндшпиль:</b> ладейные (Лусена, Филидора), пешечные</div>
-                  <div><b>Партии:</b> анализируй свои в Analysis</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0093")}</b> {cc.t("gm.0494")}</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0062")}</b> {cc.t("gm.0501")}</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0118")}</b> {cc.t("gm.0487")}</div>
+                  <div><b>{cc.t("gm.0061")}</b> {cc.t("gm.0404")}</div>
                 </div>}
                 {coachLevel==="advanced"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
-                  <div style={{marginBottom:5}}><b>Стратегия:</b> слабые поля, форпосты, пешечная структура</div>
-                  <div style={{marginBottom:5}}><b>Дебюты:</b> глубокая подготовка, партии гроссмейстеров</div>
-                  <div style={{marginBottom:5}}><b>Эндшпиль:</b> оппозиция, цугцванг, технические позиции</div>
-                  <div><b>Классика:</b> Капабланка, Фишер, Карлсен · этюды</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0139")}</b> {cc.t("gm.0507")}</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0062")}</b> {cc.t("gm.0510")}</div>
+                  <div style={{marginBottom:5}}><b>{cc.t("gm.0118")}</b> {cc.t("gm.0502")}</div>
+                  <div><b>{cc.t("gm.0119")}</b> {cc.t("gm.0465")}</div>
                 </div>}
               </div>}
             </div>}
@@ -13704,7 +13697,7 @@ ${question.trim()}`;
               {editorMode&&<div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
                 {/* Piece palette */}
                 <div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Белые</div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{cc.t("gm.0029")}</div>
                   <div style={{display:"flex",gap:4}}>
                     {(["k","q","r","b","n","p"] as const).map(t=>{
                       const sel=editorPiece?.type===t&&editorPiece?.color==="w";
@@ -13714,7 +13707,7 @@ ${question.trim()}`;
                   </div>
                 </div>
                 <div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Чёрные</div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{cc.t("gm.0038")}</div>
                   <div style={{display:"flex",gap:4}}>
                     {(["k","q","r","b","n","p"] as const).map(t=>{
                       const sel=editorPiece?.type===t&&editorPiece?.color==="b";
@@ -13725,23 +13718,23 @@ ${question.trim()}`;
                 </div>
                 {/* Eraser + clear + presets */}
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button onClick={()=>sEditorPiece(null)} style={{padding:"6px 12px",borderRadius:6,border:editorPiece===null?`2px solid ${T.danger}`:`1px solid ${T.border}`,background:editorPiece===null?"#fef2f2":"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>🧽 Ластик</button>
-                  <button onClick={()=>{const g=new Chess();g.clear();const parts=g.fen().split(" ");parts[1]=editorTurn;try{g.load(parts.join(" "));setGame(g);sBk(k=>k+1);}catch{}}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>⚫ Пустая</button>
-                  <button onClick={()=>{const g=new Chess();setGame(g);sBk(k=>k+1);sEditorTurn("w");}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>⟲ Начальная</button>
+                  <button onClick={()=>sEditorPiece(null)} style={{padding:"6px 12px",borderRadius:6,border:editorPiece===null?`2px solid ${T.danger}`:`1px solid ${T.border}`,background:editorPiece===null?"#fef2f2":"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>{cc.t("gm.0120")}</button>
+                  <button onClick={()=>{const g=new Chess();g.clear();const parts=g.fen().split(" ");parts[1]=editorTurn;try{g.load(parts.join(" "));setGame(g);sBk(k=>k+1);}catch{}}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>{cc.t("gm.0094")}</button>
+                  <button onClick={()=>{const g=new Chess();setGame(g);sBk(k=>k+1);sEditorTurn("w");}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>{cc.t("gm.0157")}</button>
                 </div>
                 {/* Turn selector */}
                 <div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Чей ход</div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{cc.t("gm.0063")}</div>
                   <div style={{display:"flex",gap:6}}>
-                    {(["w","b"] as const).map(c=><button key={c} onClick={()=>{sEditorTurn(c);try{const parts=game.fen().split(" ");parts[1]=c;const g=new Chess();g.load(parts.join(" "));setGame(g);sBk(k=>k+1);}catch{}}} style={{flex:1,padding:"8px",borderRadius:6,border:editorTurn===c?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:editorTurn===c?"rgba(5,150,105,0.1)":"#fff",fontSize:13,fontWeight:800,color:T.text,cursor:"pointer"}}>{c==="w"?"⚪ Белые":"⚫ Чёрные"}</button>)}
+                    {(["w","b"] as const).map(c=><button key={c} onClick={()=>{sEditorTurn(c);try{const parts=game.fen().split(" ");parts[1]=c;const g=new Chess();g.load(parts.join(" "));setGame(g);sBk(k=>k+1);}catch{}}} style={{flex:1,padding:"8px",borderRadius:6,border:editorTurn===c?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:editorTurn===c?"rgba(5,150,105,0.1)":"#fff",fontSize:13,fontWeight:800,color:T.text,cursor:"pointer"}}>{c==="w"?cc.t("gm.0121"):cc.t("gm.0140")}</button>)}
                   </div>
                 </div>
                 {/* Play from this position */}
                 <div style={{display:"flex",gap:6,paddingTop:6,borderTop:`1px solid ${T.border}`}}>
-                  <button onClick={()=>{try{const v=game.fen();new Chess(v);sEditorMode(false);sEditorPiece(null);sOn(true);sOver(null);sHist([]);sFenHist([v]);sPCol("w");sFlip(false);showToast("Играть белыми","success");}catch{showToast("Невалидная позиция","error")}}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>▶ Играть белыми</button>
-                  <button onClick={()=>{try{const v=game.fen();new Chess(v);sEditorMode(false);sEditorPiece(null);sOn(true);sOver(null);sHist([]);sFenHist([v]);sPCol("b");sFlip(true);showToast("Играть чёрными","success");}catch{showToast("Невалидная позиция","error")}}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",background:"#1e293b",color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>▶ Играть чёрными</button>
+                  <button onClick={()=>{try{const v=game.fen();new Chess(v);sEditorMode(false);sEditorPiece(null);sOn(true);sOver(null);sHist([]);sFenHist([v]);sPCol("w");sFlip(false);showToast(cc.t("gm.0235"),"success");}catch{showToast(cc.t("gm.0326"),"error")}}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0236")}</button>
+                  <button onClick={()=>{try{const v=game.fen();new Chess(v);sEditorMode(false);sEditorPiece(null);sOn(true);sOver(null);sHist([]);sFenHist([v]);sPCol("b");sFlip(true);showToast(cc.t("gm.0259"),"success");}catch{showToast(cc.t("gm.0326"),"error")}}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",background:"#1e293b",color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0260")}</button>
                 </div>
-                <div style={{fontSize:11,color:T.dim,fontStyle:"italic",textAlign:"center"}}>Клик по клетке — поставить/убрать фигуру</div>
+                <div style={{fontSize:11,color:T.dim,fontStyle:"italic",textAlign:"center"}}>{cc.t("gm.0503")}</div>
               </div>}
             </div>
           </div>}
@@ -13813,17 +13806,17 @@ ${question.trim()}`;
                 setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
                 sShowKnowledge(false);
                 if(hint)showToast(hint,"info");
-                else showToast("Позиция загружена","success");
-              }catch{showToast("Неверная позиция","error")}
+                else showToast(cc.t("gm.0305"),"success");
+              }catch{showToast(cc.t("gm.0285"),"error")}
             }}
           />}
 
           {showFlashcards&&coachKnowledge&&(()=>{const cards=coachKnowledge.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" data-dialog-panel aria-modal="true" aria-label={cc.t("attr.coach_flashcards")} style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span>🃏</span><span style={{fontSize:11,fontWeight:900,letterSpacing:1,color:"#a78bfa",textTransform:"uppercase" as const}}>Флеш-карточки</span><span style={{marginLeft:"auto",fontSize:11,color:"#94a3b8"}}>{(flashcardIdx%cards.length)+1}/{cards.length}</span><button onClick={()=>sShowFlashcards(false)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✕</button></div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span>🃏</span><span style={{fontSize:11,fontWeight:900,letterSpacing:1,color:"#a78bfa",textTransform:"uppercase" as const}}>{cc.t("gm.0188")}</span><span style={{marginLeft:"auto",fontSize:11,color:"#94a3b8"}}>{(flashcardIdx%cards.length)+1}/{cards.length}</span><button onClick={()=>sShowFlashcards(false)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✕</button></div>
             <div style={{textAlign:"center",marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:"#f1f5f9",marginBottom:4}}>{card.t}</div><div style={{fontSize:11,color:"#a78bfa",padding:"1px 8px",borderRadius:999,background:"rgba(124,58,237,0.15)",display:"inline-block"}}>{card.cat}</div></div>
-            <button onClick={()=>sFlashcardFlipped(v=>!v)} style={{width:"100%",padding:"12px",borderRadius:10,border:"1px solid rgba(167,139,250,0.4)",background:flashcardFlipped?"rgba(124,58,237,0.18)":"transparent",color:"#e9d5ff",fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:10}}>{flashcardFlipped?`✓ Ход: ${card.b}`:"👁 Показать ответ"}</button>
+            <button onClick={()=>sFlashcardFlipped(v=>!v)} style={{width:"100%",padding:"12px",borderRadius:10,border:"1px solid rgba(167,139,250,0.4)",background:flashcardFlipped?"rgba(124,58,237,0.18)":"transparent",color:"#e9d5ff",fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:10}}>{flashcardFlipped?ccF(cc.t("gm.0286"),card.b):cc.t("gm.0306")}</button>
             {flashcardFlipped&&<div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.55,padding:"8px 12px",background:"rgba(255,255,255,0.05)",borderRadius:8,marginBottom:12}}>{card.ex}</div>}
-            <div style={{display:"flex",gap:8}}><button onClick={()=>{sFlashcardIdx(i=>(i-1+cards.length)%cards.length);sFlashcardFlipped(false)}} style={{flex:1,padding:"9px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>← Назад</button><button onClick={()=>{sFlashcardIdx(i=>(i+1)%cards.length);sFlashcardFlipped(false)}} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>Следующая →</button></div>
+            <div style={{display:"flex",gap:8}}><button onClick={()=>{sFlashcardIdx(i=>(i-1+cards.length)%cards.length);sFlashcardFlipped(false)}} style={{flex:1,padding:"9px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>{cc.t("gm.0064")}</button><button onClick={()=>{sFlashcardIdx(i=>(i+1)%cards.length);sFlashcardFlipped(false)}} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>{cc.t("gm.0158")}</button></div>
           </div></div>;})()}
 
           <CoachLessonsModal
@@ -13837,8 +13830,8 @@ ${question.trim()}`;
                 sShowLessons(false);sTab("coach");
                 if(meta)sActiveLesson({id:meta.lessonId,step:meta.stepIdx,title:meta.lessonTitle,emoji:meta.lessonEmoji});
                 if(hint)showToast(hint,"info");
-                else showToast("Позиция загружена","success");
-              }catch{showToast("Неверная позиция","error")}
+                else showToast(cc.t("gm.0305"),"success");
+              }catch{showToast(cc.t("gm.0285"),"error")}
             }}
           />
 
@@ -13858,10 +13851,10 @@ ${question.trim()}`;
           maxWidth:380
         }} onClick={e=>e.stopPropagation()}>
           <div style={{fontSize:11,fontWeight:900,color:CC.brand,letterSpacing:1.5,textTransform:"uppercase" as const,textAlign:"center",marginBottom:SPACE[1]}}>Promotion · {promo.to.toUpperCase()}</div>
-          <div style={{fontSize:18,fontWeight:900,color:CC.text,textAlign:"center",marginBottom:SPACE[3]}}>В какую фигуру?</div>
+          <div style={{fontSize:18,fontWeight:900,color:CC.text,textAlign:"center",marginBottom:SPACE[3]}}>{cc.t("gm.0237")}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[2]}}>
             {(["q","r","b","n"] as const).map(pt=>{
-              const labels:Record<string,string>={q:"Ферзь",r:"Ладья",b:"Слон",n:"Конь"};
+              const labels:Record<string,string>={q:cc.t("gm.0065"),r:cc.t("gm.0066"),b:cc.t("gm.0039"),n:cc.t("gm.0040")};
               const hot:Record<string,string>={q:"Q",r:"R",b:"B",n:"N"};
               return <button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} 
                 style={{
@@ -13882,7 +13875,7 @@ ${question.trim()}`;
               </button>;
             })}
           </div>
-          <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center"}}>Клик мимо — отмена</div>
+          <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center"}}>{cc.t("gm.0287")}</div>
         </div>
       </div>}
       <style>{`@media (max-width:768px){[data-app-shell-pill]{position:absolute !important}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}@keyframes sf-depth-pulse{0%{opacity:0.45;transform:scale(0.96)}50%{opacity:1;transform:scale(1.04)}100%{opacity:0.85;transform:scale(1)}}@keyframes pip-suggest-pulse{0%,100%{box-shadow:0 0 0 0 rgba(168,85,247,0.6)}50%{box-shadow:0 0 0 8px rgba(168,85,247,0)}}`}</style>
@@ -13928,7 +13921,7 @@ ${question.trim()}`;
       };
       // Bulk PGN export — concatenate all filtered games as a multi-PGN .pgn file
       const exportPGN=()=>{
-        if(filtered.length===0){showToast("Нет партий для экспорта","error");return}
+        if(filtered.length===0){showToast(cc.t("gm.0391"),"error");return}
         const today=denPoMestnomu();
         const blocks=filtered.map((g,i)=>{
           const white=g.playerColor==="w"?cc.t("game.you"):g.aiLevel;
@@ -13939,30 +13932,30 @@ ${question.trim()}`;
         });
         const blob=new Blob([blocks.join("\n\n")],{type:"application/x-chess-pgn"});
         downloadFile(blob,`aevion-chess-library-${today}-${filtered.length}games.pgn`);
-        showToast(`📦 ${filtered.length} партий → PGN`,"success");
+        showToast(ccF(cc.t("gm.0479"),filtered.length),"success");
       };
       const deleteOne=(id:string)=>{
-        if(!confirm("Удалить эту партию из библиотеки?"))return;
+        if(!confirm(cc.t("gm.0473")))return;
         const next=savedGames.filter(g=>g.id!==id);
         try{localStorage.setItem(GK,JSON.stringify(next))}catch{}
         sSavedGames(next);
-        showToast("Партия удалена","info");
+        showToast(cc.t("gm.0261"),"info");
       };
       const deleteAll=()=>{
         if(savedGames.length===0)return;
-        if(!confirm(`Удалить ВСЕ ${savedGames.length} партий? Это нельзя отменить.`))return;
+        if(!confirm(ccF(cc.t("gm.0577"),savedGames.length)))return;
         try{localStorage.setItem(GK,"[]")}catch{}
         sSavedGames([]);
-        showToast("Библиотека очищена","info");
+        showToast(cc.t("gm.0327"),"info");
       };
       const ICON_RES:Record<"win"|"loss"|"draw"|"all",string>={all:"🎯",win:"🏆",loss:"💔",draw:"½"};
       return<Modal open={gamesModalOpen} onClose={()=>sGamesModalOpen(false)} size="xl"
-        title={<span>📚 Библиотека партий <span style={{fontSize:13,color:CC.textDim,fontWeight:600,marginLeft:8}}>{savedGames.length} всего · {rat} ELO · показано {filtered.length}</span></span>}>
+        title={<span>{cc.t("gm.0341")} <span style={{fontSize:13,color:CC.textDim,fontWeight:600,marginLeft:8}}>{savedGames.length} {cc.t("gm.0095")} {rat} {cc.t("gm.0238")} {filtered.length}</span></span>}>
 
         {/* Rating progression chart */}
         {ratingHistory.length>1&&<div style={{background:"#0f172a",borderRadius:RADIUS.md,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[3],border:"1px solid #334155"}}>
           <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2],display:"flex",justifyContent:"space-between"}}>
-            <span>📈 Прогресс рейтинга · {ratingHistory.length} партий</span>
+            <span>{cc.t("gm.0361")} {ratingHistory.length} {cc.t("gm.0036")}</span>
             <span style={{fontSize:10,color:"#64748b"}}>{minR} — {maxR}</span>
           </div>
           <svg viewBox={`0 0 ${Math.max(100,ratingHistory.length*8)} 80`} preserveAspectRatio="none" style={{width:"100%",height:90,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 100%)",borderRadius:6}}>
@@ -13984,9 +13977,9 @@ ${question.trim()}`;
                 border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                 background:active?CC.brandSoft:CC.surface1,cursor:"pointer",textAlign:"left",
                 transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
-              <div style={{fontSize:13,fontWeight:900,color:active?CC.brand:CC.text,marginBottom:SPACE[1]}}>{icon} {cat==="all"?"Все":cat}</div>
+              <div style={{fontSize:13,fontWeight:900,color:active?CC.brand:CC.text,marginBottom:SPACE[1]}}>{icon} {cat==="all"?cc.t("gm.0030"):cat}</div>
               <div style={{fontSize:22,fontWeight:900,color:CC.text,lineHeight:1}}>{s.total}</div>
-              <div style={{fontSize:10,color:CC.textDim,fontWeight:700,marginTop:SPACE[1],textTransform:"uppercase" as const,letterSpacing:0.5}}>партий</div>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:700,marginTop:SPACE[1],textTransform:"uppercase" as const,letterSpacing:0.5}}>{cc.t("gm.0036")}</div>
               {s.total>0&&<div style={{marginTop:SPACE[2],display:"flex",gap:6,fontSize:11,fontWeight:800}}>
                 <span style={{color:CC.brand}}>{s.wins}W</span>
                 <span style={{color:CC.danger}}>{s.losses}L</span>
@@ -14004,15 +13997,15 @@ ${question.trim()}`;
             style={{flex:"2 1 220px",minWidth:200,padding:"8px 12px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,background:CC.surface1,color:CC.text,outline:"none"}}/>
           <select aria-label={cc.t("attr.sort_games")} value={gamesSort} onChange={e=>sGamesSort(e.target.value as any)}
             style={{padding:"8px 10px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:12,fontWeight:700,background:CC.surface1,color:CC.text,cursor:"pointer"}}>
-            <option value="date">📅 Сначала новые</option>
-            <option value="rating">⭐ По рейтингу</option>
-            <option value="length">📏 По длине партии</option>
-            <option value="result">🏆 По результату</option>
+            <option value="date">{cc.t("gm.0262")}</option>
+            <option value="rating">{cc.t("gm.0189")}</option>
+            <option value="length">{cc.t("gm.0288")}</option>
+            <option value="result">{cc.t("gm.0263")}</option>
           </select>
           <div style={{display:"flex",gap:4}}>
             {(["all","win","loss","draw"] as const).map(r=>{
               const a=gamesResult===r;
-              const lbl=r==="all"?"Все":r==="win"?"Победы":r==="loss"?"Пораж.":"Ничьи";
+              const lbl=r==="all"?cc.t("gm.0030"):r==="win"?cc.t("gm.0096"):r==="loss"?cc.t("gm.0097"):cc.t("gm.0067");
               return <button key={r} onClick={()=>sGamesResult(r)} className="cc-focus-ring"
                 style={{padding:"7px 11px",borderRadius:RADIUS.md,border:a?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                   background:a?CC.brandSoft:CC.surface1,color:a?CC.brand:CC.textDim,fontSize:11,fontWeight:800,cursor:"pointer"}}>
@@ -14022,13 +14015,13 @@ ${question.trim()}`;
           </div>
           <div style={{flex:1}}/>
           <Btn size="sm" variant="secondary" onClick={exportPGN} disabled={filtered.length===0}>📦 PGN ({filtered.length})</Btn>
-          {savedGames.length>0&&<Btn size="sm" variant="danger" onClick={deleteAll}>🗑 Очистить всё</Btn>}
+          {savedGames.length>0&&<Btn size="sm" variant="danger" onClick={deleteAll}>{cc.t("gm.0239")}</Btn>}
         </div>
 
         {/* Games list */}
         <div style={{border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,overflow:"hidden",maxHeight:440,overflowY:"auto"}}>
           {filtered.length===0?<div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>
-            {savedGames.length===0?"Сыграй хотя бы одну партию — она появится здесь":"Ничего не найдено по этим фильтрам"}
+            {savedGames.length===0?cc.t("gm.0551"):cc.t("gm.0480")}
           </div>:
           filtered.map(g=>{
             const isWin=isWinG(g);const isDraw=isDrawG(g);
@@ -14047,7 +14040,7 @@ ${question.trim()}`;
                 for(const san of g.moves){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}}catch{break}}
                 setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.playerColor);sFlip(g.playerColor==="b");
                 if(destTab==="coach"){sCoachAIEnabled(false);sEditorMode(false);}
-                showToast(`Партия открыта · ${mh.length} ходов${destTab==="coach"?" · тренер готов к разбору":""}`,"success");
+                showToast(ccF(cc.t("gm.0616"),mh.length,destTab==="coach"?cc.t("gm.0414"):""),"success");
               }} style={{flex:1,padding:`${SPACE[3]}px ${SPACE[4]}px`,border:"none",background:"transparent",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",borderLeft:`3px solid ${resCol}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[3],minWidth:0,flex:1}}>
                   <div style={{width:32,height:32,borderRadius:"50%",background:resCol+"18",color:resCol,
@@ -14055,12 +14048,12 @@ ${question.trim()}`;
                     {isWin?"W":isDraw?"D":"L"}
                   </div>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:14,fontWeight:700,color:CC.text,marginBottom:2}}>{g.opening||"Без дебюта"}</div>
+                    <div style={{fontSize:14,fontWeight:700,color:CC.text,marginBottom:2}}>{g.opening||cc.t("gm.0172")}</div>
                     <div style={{fontSize:11,color:CC.textDim,display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
                       <span>{g.category||"—"}</span>
                       <span>· {g.aiLevel}</span>
                       <span>· {g.tc}</span>
-                      <span>· {g.moves.length} ходов</span>
+                      <span>· {g.moves.length} {cc.t("gm.0020")}</span>
                       <span>· {g.playerColor==="w"?"⚪":"⚫"}</span>
                     </div>
                   </div>
@@ -14087,21 +14080,21 @@ ${question.trim()}`;
     {showShop&&(()=>{
       type ShopItem={id:string;name:string;desc:string;cost:number;kind:"unlock"|"action";onBuy?:()=>void;disabled?:boolean};
       const items:ShopItem[]=[
-        {id:"master_ai",name:"Мастер и Stockfish (2400 и 3500 ELO)",desc:"Открывает два верхних уровня — Мастера и полную силу движка",cost:30,kind:"unlock"},
-        {id:"theme_neon",name:"Тема Neon ⚡",desc:"Киберпанк-доска, неоновый градиент",cost:50,kind:"unlock"},
-        {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
-        {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
-        {id:"ai_rival",name:"Соперник «Алексей» 🧠",desc:"Персональный ИИ-соперник, который запоминает твои партии и растёт с тобой (beta)",cost:100,kind:"unlock"},
+        {id:"master_ai",name:cc.t("gm.0491"),desc:cc.t("gm.0574"),cost:30,kind:"unlock"},
+        {id:"theme_neon",name:cc.t("gm.0190"),desc:cc.t("gm.0481"),cost:50,kind:"unlock"},
+        {id:"theme_obsidian",name:cc.t("gm.0289"),desc:cc.t("gm.0290"),cost:50,kind:"unlock"},
+        {id:"theme_sakura",name:cc.t("gm.0264"),desc:cc.t("gm.0307"),cost:50,kind:"unlock"},
+        {id:"ai_rival",name:cc.t("gm.0362"),desc:cc.t("gm.0610"),cost:100,kind:"unlock"},
         {id:"hint_ghost",
           name:(()=>{
             const left=(chessy.ach as Record<string,number>).hints_left||0;
-            if(left>0)return `Ghost-подсказка 💎 (${left} в пакете)`;
-            return isPro?"Ghost-подсказка ✨":"Ghost-подсказка";
+            if(left>0)return ccF(cc.t("gm.0495"),left);
+            return isPro?cc.t("gm.0308"):cc.t("gm.0276");
           })(),
           desc:(()=>{
             const left=(chessy.ach as Record<string,number>).hints_left||0;
-            if(left>0)return `У тебя ${left} подсказок из пакета — бесплатно. На 3 секунды увидишь лучший ход на доске.`;
-            return isPro?"Pro: бесплатные подсказки. На 3 секунды увидишь лучший ход на доске.":"На 3 секунды увидишь лучший ход прямо на доске (разовое использование в текущей партии)";
+            if(left>0)return ccF(cc.t("gm.0618"),left);
+            return isPro?cc.t("gm.0591"):cc.t("gm.0617");
           })(),
           cost:(()=>{
             const left=(chessy.ach as Record<string,number>).hints_left||0;
@@ -14109,55 +14102,55 @@ ${question.trim()}`;
             return isPro?0:15;
           })(),
           kind:"action",disabled:!on||!!over,onBuy:()=>{
-          if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+          if(!sfR.current?.ready()){showToast(cc.t("gm.0313"),"error");return}
           // Consume from pack first (if any)
           const left=(chessy.ach as Record<string,number>).hints_left||0;
           if(left>0){
             sChessy(c=>({...c,ach:{...c.ach,hints_left:left-1}}));
           }
           sShowShop(false);
-          showToast(left>0?`🧠 Считаю подсказку (осталось ${left-1})...`:"🧠 Считаю подсказку...","info");
+          showToast(left>0?ccF(cc.t("gm.0532"),left-1):cc.t("gm.0372"),"info");
           sfR.current.go(game.fen(),12,(f,t)=>{
-            if(!f||!t){showToast("Не нашёл хода","error");return}
+            if(!f||!t){showToast(cc.t("gm.0240"),"error");return}
             sArrows([{from:f as Square,to:t as Square,c:"#22c55e"}]);
             setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),3000);
           });
         }},
-        {id:"deep_review",name:isPro?"Глубокий разбор ✨":"Глубокий разбор партии",desc:isPro?"В подписке бесплатно. Тренер пройдёт по всем ходам и выдаст план на будущее.":"Тренер пройдёт по всем ходам и выдаст план на будущее",cost:isPro?0:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
+        {id:"deep_review",name:isPro?cc.t("gm.0309"):cc.t("gm.0373"),desc:isPro?cc.t("gm.0601"):cc.t("gm.0561"),cost:isPro?0:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast(cc.t("gm.0433"),"info")}},
         // New shop items
-        {id:"theme_wood",name:"Тема Wood 🪵",desc:"Тёплая деревянная доска",cost:40,kind:"unlock"},
-        {id:"theme_ice",name:"Тема Ice ❄️",desc:"Холодный ледяной стиль",cost:40,kind:"unlock"},
-        {id:"theme_rose",name:"Тема Rose 🌹",desc:"Розовая романтика",cost:40,kind:"unlock"},
-        {id:"theme_dark",name:"Тема Dark 🌑",desc:"Тёмный минималистичный",cost:35,kind:"unlock"},
-        {id:"streak_shield",name:"Щит серии 🛡",desc:"Один раз защитит серию решений от обнуления",cost:25,kind:"action",onBuy:()=>{
-          sChessy(c=>({...c,owned:{...c.owned,streak_shield:true}}));sShowShop(false);showToast("🛡 Щит серии включён!","success");
+        {id:"theme_wood",name:cc.t("gm.0212"),desc:cc.t("gm.0392"),cost:40,kind:"unlock"},
+        {id:"theme_ice",name:cc.t("gm.0191"),desc:cc.t("gm.0374"),cost:40,kind:"unlock"},
+        {id:"theme_rose",name:cc.t("gm.0213"),desc:cc.t("gm.0310"),cost:40,kind:"unlock"},
+        {id:"theme_dark",name:cc.t("gm.0214"),desc:cc.t("gm.0375"),cost:35,kind:"unlock"},
+        {id:"streak_shield",name:cc.t("gm.0215"),desc:cc.t("gm.0533"),cost:25,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,owned:{...c.owned,streak_shield:true}}));sShowShop(false);showToast(cc.t("gm.0363"),"success");
         }},
-        {id:"puzzle_boost",name:"Ускорение ⚡",desc:"Следующие 10 задач с двойным Chessy-бонусом",cost:30,kind:"action",onBuy:()=>{
-          sChessy(c=>({...c,owned:{...c.owned,puzzle_boost:true}}));sShowShop(false);showToast("⚡ Ускорение включено на 10 задач!","success");
+        {id:"puzzle_boost",name:cc.t("gm.0192"),desc:cc.t("gm.0534"),cost:30,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,owned:{...c.owned,puzzle_boost:true}}));sShowShop(false);showToast(cc.t("gm.0474"),"success");
         }},
         // ── Shop v2 (2026-05-18) ──
-        {id:"hint_pack_5",name:"Пакет подсказок ×5",desc:"5 ghost-подсказок на любые партии (счётчик хранится в профиле)",cost:60,kind:"action",onBuy:()=>{
-          sChessy(c=>({...c,ach:{...c.ach,hints_left:((c.ach as Record<string,number>).hints_left||0)+5}}));sShowShop(false);showToast("✨ +5 подсказок добавлено","success");
+        {id:"hint_pack_5",name:cc.t("gm.0328"),desc:cc.t("gm.0580"),cost:60,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,ach:{...c.ach,hints_left:((c.ach as Record<string,number>).hints_left||0)+5}}));sShowShop(false);showToast(cc.t("gm.0405"),"success");
         }},
-        {id:"hint_pack_10",name:"Пакет подсказок ×10",desc:"10 ghost-подсказок (выгоднее, чем ×5)",cost:100,kind:"action",onBuy:()=>{
-          sChessy(c=>({...c,ach:{...c.ach,hints_left:((c.ach as Record<string,number>).hints_left||0)+10}}));sShowShop(false);showToast("✨ +10 подсказок добавлено","success");
+        {id:"hint_pack_10",name:cc.t("gm.0342"),desc:cc.t("gm.0496"),cost:100,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,ach:{...c.ach,hints_left:((c.ach as Record<string,number>).hints_left||0)+10}}));sShowShop(false);showToast(cc.t("gm.0415"),"success");
         }},
-        {id:"time_boost_30",name:"Time boost +30s ⏱",desc:"Следующая партия начинается с +30 секунд на твоих часах",cost:20,kind:"action",onBuy:()=>{
-          sChessy(c=>({...c,ach:{...c.ach,time_boost:30}}));sShowShop(false);showToast("⏱ +30s забронированы на следующую партию","success");
+        {id:"time_boost_30",name:"Time boost +30s ⏱",desc:cc.t("gm.0565"),cost:20,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,ach:{...c.ach,time_boost:30}}));sShowShop(false);showToast(cc.t("gm.0511"),"success");
         }},
-        {id:"chessy_double_1g",name:"Chessy x2 (1 партия) 💰",desc:"Следующая партия — двойной Chessy reward",cost:25,kind:"action",onBuy:()=>{
-          sChessy(c=>({...c,ach:{...c.ach,chessy_double:1}}));sShowShop(false);showToast("💰 Chessy x2 активирован на следующую партию","success");
+        {id:"chessy_double_1g",name:cc.t("gm.0393"),desc:cc.t("gm.0512"),cost:25,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,ach:{...c.ach,chessy_double:1}}));sShowShop(false);showToast(cc.t("gm.0537"),"success");
         }},
-        {id:"avatar_emoji",name:"Custom Emoji аватар 🎭",desc:"Выбери любой emoji вместо стандартной 👤 иконки",cost:45,kind:"unlock"},
+        {id:"avatar_emoji",name:cc.t("gm.0376"),desc:cc.t("gm.0552"),cost:45,kind:"unlock"},
       ];
       const purchaseUnlock=(id:string,cost:number,name:string)=>{
-        if(chessy.owned[id]){showToast("Уже куплено","info");return}
-        if(!spendChessy(cost,`покупка: ${name}`))return;
+        if(chessy.owned[id]){showToast(cc.t("gm.0193"),"info");return}
+        if(!spendChessy(cost,ccF(cc.t("gm.0291"),name)))return;
         sChessy(c=>({...c,owned:{...c.owned,[id]:true}}));
-        showToast(`✓ Куплено: ${name}`,"success");
+        showToast(ccF(cc.t("gm.0329"),name),"success");
       };
       return <Modal open={showShop} onClose={()=>sShowShop(false)} size="lg"
-        title={<span>🛒 Chessy · магазин <Badge tone="gold" size="md" style={{marginLeft:8}}><Icon.Coin width={12} height={12}/> {chessy.balance}</Badge></span>}>
+        title={<span>{cc.t("gm.0330")} <Badge tone="gold" size="md" style={{marginLeft:8}}><Icon.Coin width={12} height={12}/> {chessy.balance}</Badge></span>}>
 
         {/* ─── AEVION Pro / monetization tier card ─── three-tier ladder shown above the
             Chessy spend grid. Free is current default; Pro and Ultimate are gated.
@@ -14167,29 +14160,29 @@ ${question.trim()}`;
             отвечает «не настроен» — без этой карточки у покупателя с картой в магазине не было пути. */}
         <div data-cc-buy="shop" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:SPACE[3],flexWrap:"wrap",borderRadius:RADIUS.lg,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[3],background:"#fffbeb",border:`1px solid ${CC.gold}`}}>
           <div>
-            <div style={{fontSize:11,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:"#92400e"}}>💳 Оплата картой</div>
-            <div style={{fontSize:14,fontWeight:800,color:CC.text}}>Полный доступ к CyberChess · {ccBuyLabel}</div>
+            <div style={{fontSize:11,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:"#92400e"}}>{cc.t("gm.0265")}</div>
+            <div style={{fontSize:14,fontWeight:800,color:CC.text}}>{cc.t("gm.0434")} {ccBuyLabel}</div>
           </div>
           {platformApp==="active"
-            ?<span data-cc-buy="shop-active" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:"#d1fae5",color:"#065f46",fontWeight:900,fontSize:13,whiteSpace:"nowrap"}}>✓ Куплено картой · Pro включён</span>
-            :<a href={ccBuyHref} onClick={учестьКликПоПокупке} className="cc-touch" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:CC.gold,color:"#1f2937",fontWeight:900,fontSize:13,textDecoration:"none",whiteSpace:"nowrap"}}>Купить →</a>}
+            ?<span data-cc-buy="shop-active" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:"#d1fae5",color:"#065f46",fontWeight:900,fontSize:13,whiteSpace:"nowrap"}}>{cc.t("gm.0440")}</span>
+            :<a href={ccBuyHref} onClick={учестьКликПоПокупке} className="cc-touch" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:CC.gold,color:"#1f2937",fontWeight:900,fontSize:13,textDecoration:"none",whiteSpace:"nowrap"}}>{cc.t("gm.0098")}</a>}
         </div>
         <div style={{borderRadius:RADIUS.lg,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[4],
           background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",
           border:"1px solid #312e81",boxShadow:"0 6px 22px rgba(15,23,42,0.18)"}}>
-          <div style={{fontSize:11,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:"#a78bfa",marginBottom:SPACE[1]}}>🎟 Билет в AEVION CyberChess</div>
-          <div style={{fontSize:18,fontWeight:900,color:"#fff",marginBottom:SPACE[3]}}>Открой полный доступ к платформе</div>
+          <div style={{fontSize:11,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:"#a78bfa",marginBottom:SPACE[1]}}>{cc.t("gm.0424")}</div>
+          <div style={{fontSize:18,fontWeight:900,color:"#fff",marginBottom:SPACE[3]}}>{cc.t("gm.0455")}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:SPACE[2]}}>
             {[
-              {id:"free",name:"Free",price:"0",sub:"навсегда",
-                features:["Игра против ИИ до 2000 ELO","Все 12 вариантов шахмат",`${pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+"} ${ccPlural(pzTotal??0,"задача","задачи","задач")} с фильтрами`,"База знаний тренера","Партии с другом напрямую","Библиотека партий и выгрузка PGN"],
-                cta:"Текущий тариф",disabled:true},
-              {id:"pro",name:"Pro",price:"500",sub:"AEV / месяц",accent:true,
-                features:["Всё из Free","Соперник до 3500 ELO — полная сила движка","Безлимитные подсказки","Глубокий разбор каждой партии","Дебютная теория из мастер-партий","Разбор до 5 вариантов сразу","🎬 Ролики из партий без водяного знака"],
-                cta:"Купить за Chessy"},
+              {id:"free",name:"Free",price:"0",sub:cc.t("gm.0141"),
+                features:[cc.t("gm.0425"),cc.t("gm.0394"),ccF(cc.t("gm.0636"),pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+",ccPW(pzTotal??0,["задача","задачи","задач"],"gm.p09","gm.p10")),cc.t("gm.0343"),cc.t("gm.0406"),cc.t("gm.0466")],
+                cta:cc.t("gm.0241"),disabled:true},
+              {id:"pro",name:"Pro",price:"500",sub:cc.t("gm.0194"),accent:true,
+                features:[cc.t("gm.0195"),cc.t("gm.0520"),cc.t("gm.0364"),cc.t("gm.0447"),cc.t("gm.0467"),cc.t("gm.0435"),cc.t("gm.0504")],
+                cta:cc.t("gm.0292")},
               {id:"ultimate",name:"Ultimate",price:"5000",sub:"AEV / lifetime",
-                features:["Всё из Pro","Свои характеры соперников (Магнус, Хикару…)","Личный ИИ-тренер, который помнит твои партии","Турниры с призами в AEV","Раннее тестирование новых вариантов","API-доступ к engine","Приоритетная поддержка"],
-                cta:"Купить за Chessy"}
+                features:[cc.t("gm.0173"),cc.t("gm.0535"),cc.t("gm.0538"),cc.t("gm.0395"),cc.t("gm.0488"),cc.t("gm.0344"),cc.t("gm.0377")],
+                cta:cc.t("gm.0292")}
             ].map(t=>{
               const isPro=t.id==="pro";const isUlt=t.id==="ultimate";
               const owned=t.id!=="free"&&!!chessy.owned[t.id];
@@ -14210,11 +14203,11 @@ ${question.trim()}`;
                 {owned&&<div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",
                   background:"linear-gradient(135deg,#10b981,#34d399)",color:"#fff",fontSize:10,fontWeight:900,
                   padding:"2px 10px",borderRadius:RADIUS.full,letterSpacing:1,textTransform:"uppercase" as const,
-                  boxShadow:"0 2px 8px rgba(16,185,129,0.4)"}}>✓ активен</div>}
+                  boxShadow:"0 2px 8px rgba(16,185,129,0.4)"}}>{cc.t("gm.0122")}</div>}
                 {!owned&&t.accent&&<div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",
                   background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",fontSize:10,fontWeight:900,
                   padding:"2px 10px",borderRadius:RADIUS.full,letterSpacing:1,textTransform:"uppercase" as const,
-                  boxShadow:"0 2px 8px rgba(124,58,237,0.4)"}}>популярный</div>}
+                  boxShadow:"0 2px 8px rgba(124,58,237,0.4)"}}>{cc.t("gm.0142")}</div>}
                 <div style={{fontSize:14,fontWeight:900,color:"#fff",marginBottom:2}}>{t.name}</div>
                 <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:SPACE[2]}}>
                   <span style={{fontSize:24,fontWeight:900,color:owned?"#34d399":isPro?"#c4b5fd":isUlt?"#fcd34d":"#cbd5e1"}}>{t.price}</span>
@@ -14240,21 +14233,21 @@ ${question.trim()}`;
                         ?? "")
                       : "";
                     if(!jwt){
-                      showToast("Войди в аккаунт чтобы купить","info");
+                      showToast(cc.t("gm.0441"),"info");
                       sShowShop(false);
                       setTimeout(()=>{try{window.location.href="/auth"}catch{}},600);
                       return;
                     }
                     // 2) Create QPayNet payment request
-                    showToast(`💳 Создаю счёт на ${t.name}…`,"info");
+                    showToast(ccF(cc.t("gm.0442"),t.name),"info");
                     const r=await createTierPaymentRequest(tier,amountAev,jwt);
                     if(!r.ok){
                       if(r.error==="platform_wallet_not_configured"){
-                        showToast("Оплата в AEV пока недоступна — купите картой: кнопка «Купить →» вверху магазина","info");
+                        showToast(cc.t("gm.0609"),"info");
                       }else if(r.error==="auth_required"){
-                        showToast("Сессия истекла — войди заново","error");
+                        showToast(cc.t("gm.0448"),"error");
                       }else{
-                        showToast(`Ошибка биллинга: ${r.error}`,"error");
+                        showToast(ccF(cc.t("gm.0436"),r.error),"error");
                       }
                       return;
                     }
@@ -14270,31 +14263,31 @@ ${question.trim()}`;
                     color:owned?"#34d399":(t.disabled||showComingSoon)?"#94a3b8":"#fff",
                     fontSize:12,fontWeight:900,letterSpacing:0.3,
                     boxShadow:(t.disabled||owned||showComingSoon)?"none":"0 2px 8px rgba(0,0,0,0.2)"
-                  }}>{owned?"✓ Активирован":showComingSoon?"Скоро":eitherOwned&&t.id!=="free"?"Сменить тариф":t.cta}</button>
+                  }}>{owned?cc.t("gm.0242"):showComingSoon?cc.t("gm.0068"):eitherOwned&&t.id!=="free"?cc.t("gm.0243"):t.cta}</button>
                 {/* Internal-only test activator — gated behind an explicit localStorage debug
                     flag (never surfaced to real visitors) so QA can still exercise owned-tier
                     UI paths without shipping a public self-unlock button. Previously rendered
                     unconditionally for any visitor, letting anyone grant themselves Ultimate for
                     free via a single confirm() dialog — closed as a launch-readiness fix. */}
                 {!owned&&t.id!=="free"&&process.env.NODE_ENV!=="production"&&typeof window!=="undefined"&&window.localStorage.getItem("aevion_debug")==="1"&&<button onClick={()=>{
-                  if(!confirm(`🧪 Тест-активация ${t.name} (без реальной оплаты)?\n\nВсе premium-фичи разблокируются. Можно отключить через localStorage clear.`))return;
+                  if(!confirm(ccF(cc.t("gm.0641"),t.name)))return;
                   sChessy(c=>({...c,owned:{...c.owned,[t.id]:true}}));
-                  showToast(`✨ ${t.name} активирован (тест-режим)`,"success");
+                  showToast(ccF(cc.t("gm.0492"),t.name),"success");
                 }} style={{width:"100%",marginTop:6,padding:"4px 8px",borderRadius:RADIUS.sm,border:"1px dashed rgba(148,163,184,0.4)",background:"transparent",color:"#94a3b8",fontSize:10,fontWeight:700,cursor:"pointer",letterSpacing:0.3}}>
-                  🧪 Тест-активация (без оплаты · debug-режим)
+                  {cc.t("gm.0575")}
                 </button>}
                 {owned&&<button onClick={()=>{
-                  if(!confirm(`Отключить ${t.name}?`))return;
+                  if(!confirm(ccF(cc.t("gm.0357"),t.name)))return;
                   sChessy(c=>{const o={...c.owned};delete o[t.id];return {...c,owned:o}});
-                  showToast(`${t.name} отключён`,"info");
+                  showToast(ccF(cc.t("gm.0331"),t.name),"info");
                 }} style={{width:"100%",marginTop:6,padding:"4px 8px",borderRadius:RADIUS.sm,border:"1px dashed rgba(52,211,153,0.4)",background:"transparent",color:"#34d399",fontSize:10,fontWeight:700,cursor:"pointer",letterSpacing:0.3}}>
-                  Отключить тариф
+                  {cc.t("gm.0456")}
                 </button>}
               </div>;
             })}
           </div>
           <div style={{fontSize:11,color:"#94a3b8",marginTop:SPACE[2],lineHeight:1.5}}>
-            💡 AEV — внутренняя валюта всей платформы AEVION. Её зарабатывают в QTrade, CyberChess (победы и задачи), QShield, или купить за фиат через QPayNet.
+            {cc.t("gm.0645")}
           </div>
         </div>
 
@@ -14308,9 +14301,9 @@ ${question.trim()}`;
         }}>
           <div style={{fontSize:24}}>📅</div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:12,fontWeight:900,color:CC.text}}>Серия дней подряд</div>
+            <div style={{fontSize:12,fontWeight:900,color:CC.text}}>{cc.t("gm.0277")}</div>
             <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
-              День {chessy.streak||1} подряд · следующий вход = +{Math.min(50,10+((chessy.streak||0)+1)*5)} Chessy
+              {cc.t("gm.0031")} {chessy.streak||1} {cc.t("gm.0416")}{Math.min(50,10+((chessy.streak||0)+1)*5)} Chessy
             </div>
           </div>
           <div style={{display:"flex",gap:3}}>
@@ -14323,7 +14316,7 @@ ${question.trim()}`;
           </div>
         </div>
 
-        <div style={{fontSize:11,fontWeight:900,letterSpacing:1.2,color:CC.textDim,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>💰 Магазин Chessy · бонусы и расходники</div>
+        <div style={{fontSize:11,fontWeight:900,letterSpacing:1.2,color:CC.textDim,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>{cc.t("gm.0497")}</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:SPACE[2],marginBottom:SPACE[4]}}>
           {items.map(it=>{
             const owned=it.kind==="unlock"&&chessy.owned[it.id];
@@ -14338,7 +14331,7 @@ ${question.trim()}`;
             }}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:SPACE[2]}}>
                 <div style={{fontWeight:900,color:CC.text,fontSize:14,lineHeight:1.3}}>{it.name}</div>
-                {owned?<Badge tone="brand" size="xs">✓ Куплено</Badge>:<Badge tone="gold" size="sm"><Icon.Coin width={11} height={11}/> {it.cost}</Badge>}
+                {owned?<Badge tone="brand" size="xs">{cc.t("gm.0123")}</Badge>:<Badge tone="gold" size="sm"><Icon.Coin width={11} height={11}/> {it.cost}</Badge>}
               </div>
               <div style={{fontSize:12,color:CC.textDim,lineHeight:1.5}}>{it.desc}</div>
               {!owned&&<Btn
@@ -14348,7 +14341,7 @@ ${question.trim()}`;
                 full
                 onClick={()=>{if(it.kind==="unlock")purchaseUnlock(it.id,it.cost,it.name);else if(it.onBuy){if(!spendChessy(it.cost,it.name))return;it.onBuy()}}}
               >
-                {it.disabled?"Нужна сыгранная партия":!afford?`Нужно +${it.cost-chessy.balance}`:it.kind==="action"?"Использовать":"Купить"}
+                {it.disabled?cc.t("gm.0378"):!afford?ccF(cc.t("gm.0468"),it.cost-chessy.balance):it.kind==="action"?cc.t("gm.0216"):cc.t("gm.0099")}
               </Btn>}
             </div>;
           })}
@@ -14356,17 +14349,17 @@ ${question.trim()}`;
 
         <div style={{padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.md,
           background:"linear-gradient(135deg,#fef3c7,#fffbeb)",border:"1px solid #fcd34d"}}>
-          <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:SPACE[1]}}>💡 Как заработать Chessy</div>
+          <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:SPACE[1]}}>{cc.t("gm.0379")}</div>
           <div style={{fontSize:12,color:"#b45309",lineHeight:1.7}}>
-            · Победа против AI: 5–160 (чем сильнее соперник и длиннее партия — тем больше)<br/>
-            · Задача: 2–15 (по рейтингу)<br/>
-            · Daily-бонус: 5, 30 (streak 3), 100 (streak 7)<br/>
-            · Достижения: 30–400 за вехи
+            {cc.t("gm.0602")}<br/>
+            {cc.t("gm.0426")}<br/>
+            {cc.t("gm.0541")}<br/>
+            {cc.t("gm.0498")}
           </div>
         </div>
 
         {Object.keys(chessy.ach).length>0&&<div style={{marginTop:SPACE[3]}}>
-          <div style={{fontSize:12,fontWeight:800,color:CC.textDim,marginBottom:SPACE[2],textTransform:"uppercase" as const,letterSpacing:0.5}}>🏆 Достижения · {Object.keys(chessy.ach).length}</div>
+          <div style={{fontSize:12,fontWeight:800,color:CC.textDim,marginBottom:SPACE[2],textTransform:"uppercase" as const,letterSpacing:0.5}}>{cc.t("gm.0266")} {Object.keys(chessy.ach).length}</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {Object.keys(chessy.ach).map(k=><Badge key={k} tone="neutral" size="sm" style={{padding:"4px 10px"}}>{ACH_LABELS[k]||k}</Badge>)}
           </div>
@@ -14374,12 +14367,12 @@ ${question.trim()}`;
 
         {chessyLog.length>0&&<details style={{marginTop:SPACE[3]}}>
           <summary style={{cursor:"pointer",fontSize:12,fontWeight:800,color:CC.textDim,textTransform:"uppercase" as const,letterSpacing:0.5,padding:`${SPACE[2]}px 0`}}>
-            📜 История Chessy · last {chessyLog.length}
+            {cc.t("gm.0396")} {chessyLog.length}
           </summary>
           <div style={{marginTop:SPACE[2],maxHeight:240,overflowY:"auto",border:`1px solid ${CC.border}`,borderRadius:RADIUS.md}}>
             {chessyLog.map((e,i)=>{
               const ago=Math.max(1,Math.round((Date.now()-e.ts)/60000));
-              const agoStr=ago<60?`${ago}м`:ago<1440?`${Math.round(ago/60)}ч`:`${Math.round(ago/1440)}д`;
+              const agoStr=ago<60?ccF(cc.t("gm.0124"),ago):ago<1440?ccF(cc.t("gm.0380"),Math.round(ago/60)):ccF(cc.t("gm.0407"),Math.round(ago/1440));
               return <div key={i} style={{
                 display:"flex",alignItems:"center",gap:SPACE[2],
                 padding:`${SPACE[1]+2}px ${SPACE[3]}px`,
@@ -14402,16 +14395,15 @@ ${question.trim()}`;
     {billingPending&&(()=>{
       const bp=billingPending;
       return <Modal open={!!billingPending} onClose={()=>{if(!bp.busy)sBillingPending(null)}} size="sm"
-        title={<span>💳 Оплата · {bp.tierName}</span>}>
+        title={<span>{cc.t("gm.0174")} {bp.tierName}</span>}>
         <div style={{fontSize:13,color:CC.text,lineHeight:1.6,marginBottom:SPACE[3]}}>
-          Открыл AEVION Bank в новой вкладке. Заверши оплату и нажми «Я оплатил» — мы проверим
-          статус и активируем {bp.tierName} в течение минуты.
+          {cc.t("gm.0633")} {bp.tierName} {cc.t("gm.0408")}
         </div>
         <div style={{display:"flex",gap:SPACE[2],flexDirection:"column"}}>
           <Btn variant="primary" size="md" full disabled={bp.busy}
             onClick={async()=>{
               sBillingPending(p=>p?{...p,busy:true}:p);
-              showToast("⏳ Проверяю оплату…","info");
+              showToast(cc.t("gm.0332"),"info");
               const jwt=(typeof window!=="undefined")
                 ? (getAuthToken()
                   ?? "")
@@ -14419,22 +14411,22 @@ ${question.trim()}`;
               const paid=await pollPaymentRequest(bp.token,jwt,{intervalMs:3000,timeoutMs:60000});
               if(paid){
                 sChessy(c=>({...c,owned:{...c.owned,[bp.tier]:true}}));
-                showToast(`✨ ${bp.tierName} активирован!`,"success");
+                showToast(ccF(cc.t("gm.0449"),bp.tierName),"success");
                 sBillingPending(null);
               }else{
-                showToast("Оплата не подтверждена за минуту — попробуй обновить страницу","error");
+                showToast(cc.t("gm.0578"),"error");
                 sBillingPending(p=>p?{...p,busy:false}:p);
               }
             }}>
-            {bp.busy?"⏳ Проверяю…":"✓ Я оплатил"}
+            {bp.busy?cc.t("gm.0196"):cc.t("gm.0197")}
           </Btn>
           <Btn variant="secondary" size="sm" full disabled={bp.busy}
             onClick={()=>{try{window.open(bp.payUrl,"_blank","noopener,noreferrer")}catch{}}}>
-            ↗ Открыть страницу оплаты снова
+            {cc.t("gm.0513")}
           </Btn>
           <Btn variant="ghost" size="sm" full disabled={bp.busy}
             onClick={()=>sBillingPending(null)}>
-            Отменить
+            {cc.t("gm.0311")}
           </Btn>
         </div>
       </Modal>;
@@ -14444,7 +14436,7 @@ ${question.trim()}`;
     <Modal open={showEndgames} onClose={()=>sShowEndgames(false)} size="lg"
       title={cc.t("attr.endgame_training")}>
       <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
-        12 классических позиций от KP–K до KBN–K. Победил = Chessy + разбор от Алексея.
+        {cc.t("gm.0615")}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:SPACE[2]}}>
         {ENDGAMES.map((eg,i)=>{
@@ -14458,12 +14450,12 @@ ${question.trim()}`;
               boxShadow:SHADOW.sm}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
               <div style={{fontWeight:900,color:CC.text,fontSize:14,lineHeight:1.3}}>{eg.name}</div>
-              <Badge tone={gTone} size="xs">{eg.goal==="Win"?"Выиграть":"Удержать"} · {eg.side==="w"?"♔":"♚"}</Badge>
+              <Badge tone={gTone} size="xs">{eg.goal==="Win"?cc.t("gm.0143"):cc.t("gm.0144")} · {eg.side==="w"?"♔":"♚"}</Badge>
             </div>
             <div style={{fontSize:12,color:CC.textDim,lineHeight:1.5}}>{eg.hint.slice(0,110)}{eg.hint.length>110?"…":""}</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:SPACE[1]}}>
               <Badge tone="gold" size="xs">+{eg.reward} Chessy</Badge>
-              <span style={{fontSize:12,fontWeight:800,color:CC.brand}}>Начать →</span>
+              <span style={{fontSize:12,fontWeight:800,color:CC.brand}}>{cc.t("gm.0090")}</span>
             </div>
           </button>;
         })}
@@ -14471,7 +14463,7 @@ ${question.trim()}`;
       <div style={{marginTop:SPACE[3],padding:`${SPACE[2]}px ${SPACE[3]}px`,
         borderRadius:RADIUS.md,background:"#f0fdf4",border:"1px solid #a7f3d0",
         fontSize:12,color:"#065f46"}}>
-        💡 Открываются в Coach — спроси Алексея, как играть. Голос включается в шапке Coach'а (🔊).
+        {cc.t("gm.0622")}
       </div>
     </Modal>
 
@@ -14498,10 +14490,10 @@ ${question.trim()}`;
           {dailyReward.isWelcome?"🎉":dailyReward.streak>=14?"🔥":dailyReward.streak>=7?"⭐":dailyReward.streak>=3?"✨":"☀"}
         </div>
         <div style={{fontSize:17,fontWeight:900,marginBottom:2}}>
-          {dailyReward.isWelcome?"Добро пожаловать!":dailyReward.streak>=7?"Неделя без пропусков!":dailyReward.streak>=3?"Отличная серия!":"Ежедневный бонус"}
+          {dailyReward.isWelcome?cc.t("gm.0312"):dailyReward.streak>=7?cc.t("gm.0365"):dailyReward.streak>=3?cc.t("gm.0278"):cc.t("gm.0293")}
         </div>
         <div style={{fontSize:15,color:CC.textDim,marginBottom:16,lineHeight:1.4}}>
-          {dailyReward.isWelcome?"Твой первый визит — начнём вместе":"День "+dailyReward.streak+" подряд — продолжай в том же духе!"}
+          {dailyReward.isWelcome?cc.t("gm.0475"):cc.t("gm.0069")+dailyReward.streak+cc.t("gm.0482")}
         </div>
         <div style={{
           display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
@@ -14522,14 +14514,14 @@ ${question.trim()}`;
           }}>{d<=dailyReward.streak?"✓":d}</div>)}
         </div>}
         <div style={{fontSize:11,color:CC.textMute,marginBottom:16}}>
-          {dailyReward.streak>=14?"Следующий бонус: +200 (14 дней)":dailyReward.streak>=7?"Следующий рубеж: 14 дней → +200":dailyReward.streak>=3?"Следующий рубеж: 7 дней → +100":"Следующий рубеж: 3 дня → +30"}
+          {dailyReward.streak>=14?cc.t("gm.0460"):dailyReward.streak>=7?cc.t("gm.0461"):dailyReward.streak>=3?cc.t("gm.0457"):cc.t("gm.0443")}
         </div>
         <button onClick={closeDailyReward} style={{
           width:"100%",padding:"12px 20px",borderRadius:12,border:"none",
           background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",
           fontSize:16,fontWeight:900,cursor:"pointer",letterSpacing:0.5,
           boxShadow:"0 4px 14px rgba(124,58,237,0.4)",
-        }}>▶ Начать</button>
+        }}>{cc.t("gm.0100")}</button>
       </div>
     </div>}
 
@@ -14606,7 +14598,7 @@ ${question.trim()}`;
     }}>
       <div style={{fontWeight:900,marginBottom:4}}>🎓 Напоминание тренера</div>
       <div style={{fontSize:12,opacity:0.92,marginBottom:8}}>
-        У тебя {dueReminders.length} {ccPlural(dueReminders.length,"тема","темы","тем")} для повторения с интервалами 1, 3 и 7 дней — так материал остаётся в памяти. Открой «Знания тренера».
+        {ccF(cc.t("gm.p11"),dueReminders.length,ccPW(dueReminders.length,["тема","темы","тем"],"gm.p07","gm.p08"))}
       </div>
       <div style={{display:"flex",gap:6}}>
         <button onClick={()=>{
@@ -14627,7 +14619,7 @@ ${question.trim()}`;
           </div>
           <p style={{margin:"12px 0 0",color:CC.textDim,fontSize:13}}>+50 Chessy уже на счёте. Начнём?</p>
         </>},
-        {icon:"🎯",title:`${pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+"} ${ccPlural(pzTotal??0,"задача","задачи","задач")} и режимы на время`,body:<>
+        {icon:"🎯",title:ccF(cc.t("gm.p12"),pzTotal?pzTotal.toLocaleString("ru-RU"):"500 000+",ccPW(pzTotal??0,["задача","задачи","задач"],"gm.p09","gm.p10")),body:<>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Puzzle Rush</b> — реши как можно больше за 3 минуты. Streak 🔥 увеличивает Chessy-бонус.</p>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Тайм-режимы</b> — 3мин / 5мин / свой: авто-переход после каждого решения, итоговый экран с WR%.</p>
           <p style={{margin:0,color:CC.textDim,fontSize:13}}>Нажми <b>Задачи</b> в верхней навигации → Выбери режим → Вперёд!</p>

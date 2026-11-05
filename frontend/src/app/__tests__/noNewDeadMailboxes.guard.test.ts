@@ -62,8 +62,6 @@ const ИЗВЕСТНЫЕ = new Set([
   "privacy/page.tsx",
   "proof/page.tsx",
   "qcoreai/budget/page.tsx",
-  "qstore/QStoreNotify.tsx",
-  "qstore/page.tsx",
   "security/layout.tsx",
   "security/page.tsx",
   "studio/page.tsx",

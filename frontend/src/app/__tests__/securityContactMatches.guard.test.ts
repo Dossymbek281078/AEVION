@@ -152,8 +152,6 @@ const PENDING_FILES = new Set([
   "app/privacy/page.tsx",
   "app/proof/page.tsx",
   "app/qcoreai/budget/page.tsx",
-  "app/qstore/QStoreNotify.tsx",
-  "app/qstore/page.tsx",
   "app/security/layout.tsx",
   "app/security/page.tsx",
   "app/studio/page.tsx",

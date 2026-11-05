@@ -51,8 +51,22 @@ describe("язык карты разногласий", () => {
     expect(en.checks.map((c) => [c.kind, c.weight])).toEqual(ru.checks.map((c) => [c.kind, c.weight]));
   });
 
-  test("dissentLang: en, en-US, EN → en; всё остальное (ru, kk, мусор, не строка) → ru", () => {
+  test("dissentLang: en, en-US, EN → en; kk, kk-KZ → kk; всё остальное (ru, мусор, не строка) → ru", () => {
     for (const v of ["en", "en-US", " EN "]) expect(dissentLang(v), v).toBe("en");
-    for (const v of ["ru", "kk", "", "xx", undefined, null, 5, {}]) expect(dissentLang(v), String(v)).toBe("ru");
+    for (const v of ["kk", "kk-KZ", " KK "]) expect(dissentLang(v), v).toBe("kk");
+    for (const v of ["ru", "", "xx", undefined, null, 5, {}]) expect(dissentLang(v), String(v)).toBe("ru");
+  });
+
+  // 5.11.2026 замер прода fc6614f1c (kk, 1463, ?c=probe-prilozheniya): итог «Расхождение, включая…» и «Сверить число…» русские на казахской странице.
+  test("lang=kk: итог и проверки по-казахски, русских слов шаблона нет; состав карты тот же", () => {
+    const kk = buildDissentMap(SPLIT, "kk"), ru = buildDissentMap(SPLIT, "ru");
+    expect(kk.note).toMatch(/^Келіспеушілік.*сандық/);
+    expect(kk.checks.some((c) => /^Санды дереккөзбен салыстырыңыз/.test(c.text))).toBe(true);
+    expect(/[ӘәҒғҚқҢңӨөҰұҮүҺһІі]/.test(весьТекст(kk)), весьТекст(kk)).toBe(true);
+    expect(весьТекст(kk)).not.toMatch(/Расхождение|Сверить|против|включая/);
+    expect({ ...kk, note: "", checks: [] }).toEqual({ ...ru, note: "", checks: [] });
+    const f = buildDissentMap(FAILED, "kk");
+    expect(f.checks.some((c) => /жауап бермеді/.test(c.text)) && /салыстыратын ештеңе жоқ/.test(f.note)).toBe(true);
+    expect(весьТекст(f)).not.toMatch(/не ответил|сравнивать не с чем/);
   });
 });

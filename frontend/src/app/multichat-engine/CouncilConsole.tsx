@@ -117,7 +117,7 @@ export function разметкаОтвета(text: string): ReactNode[] {
     const заголовок = /^\s{0,3}#{1,4}\s+(.*)$/.exec(строка);
     const тело = заголовок ? заголовок[1] : строка;
     const части = тело.split(/(\*\*[^*\n]+\*\*)/g).map((ч, j) =>
-      /^\*\*[^*\n]+\*\*$/.test(ч) ? <strong key={j}>{ч.slice(2, -2)}</strong> : ч,
+      /^\*\*[^*\n]+\*\*$/.test(ч) ? <strong key={j}>{ч.slice(2, -2)}</strong> : ч.replace(/\*\*/g, ""),
     );
     return (
       <span key={i}>

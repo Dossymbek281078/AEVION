@@ -775,7 +775,8 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   // Чек считается по русской карте — канон: хеши текстов проверок не зависят от языка экрана.
   // Человеку на /en уходит та же карта по-английски (замер 30.10: в en-отчёте стоял русский текст).
   const dissentCanon = buildDissentMap(results as never);
-  const dissent = dissentLang(req.body?.lang) === "en" ? buildDissentMap(results as never, "en") : dissentCanon;
+  const dissentL = dissentLang(req.body?.lang);
+  const dissent = dissentL === "ru" ? dissentCanon : buildDissentMap(results as never, dissentL);
 
   // Чек: канонический артефакт с составом панели, хешами ответов, картой
   // разногласий и стоимостью. Ответ без происхождения — это мнение; ответ с

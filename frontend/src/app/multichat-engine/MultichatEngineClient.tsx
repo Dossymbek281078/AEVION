@@ -792,6 +792,7 @@ export default function MultichatEnginePage() {
             <Link
               key={href}
               href={href}
+              translate="no"
               style={{
                 border: `1px solid ${T.brandGlow}`,
                 background: T.violetFill06,

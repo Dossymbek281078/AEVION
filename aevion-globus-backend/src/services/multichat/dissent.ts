@@ -12,12 +12,16 @@
 // вопрос и добавил бы собственную ошибку — здесь это не нужно.
 
 /** Язык текстов карты разногласий. Русский — канон (по нему считается хеш чека), английский — для /en. */
-export type DissentLang = "ru" | "en";
+export type DissentLang = "ru" | "en" | "kk";
 
-/** Любое значение из запроса → поддержанный язык; незнакомое и казахский — русский (понятнее английского для kk). */
+/** Любое значение из запроса → поддержанный язык; незнакомое — русский. 5.11.2026: казахский теперь свой —
+ *  на /kk итог и «Что проверить» были русскими посреди казахской страницы (замер прода fc6614f1c, ?c=probe-prilozheniya). */
 export function dissentLang(v: unknown): DissentLang {
-  return typeof v === "string" && v.trim().toLowerCase().startsWith("en") ? "en" : "ru";
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return s.startsWith("en") ? "en" : s.startsWith("kk") ? "kk" : "ru";
 }
+/** Один из трёх текстов по языку. */
+const T3 = (lang: DissentLang, ru: string, en: string, kk: string): string => (lang === "en" ? en : lang === "kk" ? kk : ru);
 
 export type AgentAnswer = {
   agentId: string;
@@ -480,7 +484,6 @@ const MAX_CHECKS = 5;
  *  бесплатным и воспроизводимым, как и она сама. */
 export function buildChecklist(map: Omit<DissentMap, "checks">, lang: DissentLang = "ru"): Check[] {
   const out: Check[] = [];
-  const en = lang === "en";
 
   for (const c of map.numericConflicts) {
     // Значения СНАЧАЛА группируются, и только разные группы противопоставляются.
@@ -495,13 +498,14 @@ export function buildChecklist(map: Omit<DissentMap, "checks">, lang: DissentLan
       if (list) list.push(v.agentId); else groups.set(key, [v.agentId]);
     }
     const names = (ids: string[]) =>
-      ids.length <= 1 ? ids.join("") : `${ids.slice(0, -1).join(", ")} ${en ? "and" : "и"} ${ids[ids.length - 1]}`;
-    const spread = [...groups.entries()].map(([raw, ids]) => `${names(ids)}: ${raw}`).join(en ? " vs " : " против ");
+      ids.length <= 1 ? ids.join("") : `${ids.slice(0, -1).join(", ")} ${T3(lang, "и", "and", "және")} ${ids[ids.length - 1]}`;
+    const spread = [...groups.entries()].map(([raw, ids]) => `${names(ids)}: ${raw}`).join(T3(lang, " против ", " vs ", " қарсы "));
     out.push({
       kind: "number",
-      text: en
-        ? `Check the number against the source — ${spread}. Context: «${c.context}»`
-        : `Сверить число с источником — ${spread}. Контекст: «${c.context}»`,
+      text: T3(lang,
+        `Сверить число с источником — ${spread}. Контекст: «${c.context}»`,
+        `Check the number against the source — ${spread}. Context: «${c.context}»`,
+        `Санды дереккөзбен салыстырыңыз — ${spread}. Контекст: «${c.context}»`),
       agents: c.values.map((v) => v.agentId),
       weight: 3,
     });
@@ -512,9 +516,10 @@ export function buildChecklist(map: Omit<DissentMap, "checks">, lang: DissentLan
   for (const c of map.contradictions) {
     out.push({
       kind: "contradiction",
-      text: en
-        ? `Agents directly contradict each other on «${c.word}»: ${c.affirms.join(", ")} assert it, ${c.denies.join(", ")} deny it. Read both answers side by side.`
-        : `Агенты прямо противоречат друг другу по «${c.word}»: ${c.affirms.join(", ")} утверждает, ${c.denies.join(", ")} отрицает. Прочитать оба ответа рядом.`,
+      text: T3(lang,
+        `Агенты прямо противоречат друг другу по «${c.word}»: ${c.affirms.join(", ")} утверждает, ${c.denies.join(", ")} отрицает. Прочитать оба ответа рядом.`,
+        `Agents directly contradict each other on «${c.word}»: ${c.affirms.join(", ")} assert it, ${c.denies.join(", ")} deny it. Read both answers side by side.`,
+        `Агенттер «${c.word}» бойынша бір-біріне тікелей қайшы: ${c.affirms.join(", ")} растайды, ${c.denies.join(", ")} теріске шығарады. Екі жауапты қатар оқыңыз.`),
       agents: [...c.affirms, ...c.denies],
       weight: 3,
     });
@@ -525,17 +530,19 @@ export function buildChecklist(map: Omit<DissentMap, "checks">, lang: DissentLan
       h.kind === "failed"
         ? {
             kind: "failure",
-            text: en
-              ? `Agent ${h.agentId} did not answer — the picture is incomplete. Rerun it or exclude it from the conclusions.`
-              : `Агент ${h.agentId} не ответил — картина неполная. Перезапустить или исключить его из выводов.`,
+            text: T3(lang,
+              `Агент ${h.agentId} не ответил — картина неполная. Перезапустить или исключить его из выводов.`,
+              `Agent ${h.agentId} did not answer — the picture is incomplete. Rerun it or exclude it from the conclusions.`,
+              `${h.agentId} агенті жауап бермеді — сурет толық емес. Қайта іске қосыңыз немесе қорытындыдан шығарыңыз.`),
             agents: [h.agentId],
             weight: 3,
           }
         : {
             kind: "hedge",
-            text: en
-              ? `Agent ${h.agentId} itself flagged uncertainty («${h.note}») — do not rely on this part without checking.`
-              : `Агент ${h.agentId} сам отметил неуверенность («${h.note}») — не опирайтесь на эту часть без проверки.`,
+            text: T3(lang,
+              `Агент ${h.agentId} сам отметил неуверенность («${h.note}») — не опирайтесь на эту часть без проверки.`,
+              `Agent ${h.agentId} itself flagged uncertainty («${h.note}») — do not rely on this part without checking.`,
+              `${h.agentId} агенті өзі күмәнін білдірді («${h.note}») — тексермей осы бөлікке сүйенбеңіз.`),
             agents: [h.agentId],
             weight: 2,
           }
@@ -545,9 +552,10 @@ export function buildChecklist(map: Omit<DissentMap, "checks">, lang: DissentLan
   if (map.outlier) {
     out.push({
       kind: "outlier",
-      text: en
-        ? `Read agent ${map.outlier.agentId}’s answer first: it is the furthest from the others. That does not mean “wrong” — it means it saw something of its own.`
-        : `Прочитать первым ответ агента ${map.outlier.agentId}: он дальше всех от остальных. Это не значит «неправ» — значит, он увидел что-то своё.`,
+      text: T3(lang,
+        `Прочитать первым ответ агента ${map.outlier.agentId}: он дальше всех от остальных. Это не значит «неправ» — значит, он увидел что-то своё.`,
+        `Read agent ${map.outlier.agentId}’s answer first: it is the furthest from the others. That does not mean “wrong” — it means it saw something of its own.`,
+        `Алдымен ${map.outlier.agentId} агентінің жауабын оқыңыз: ол басқалардан ең алыс. Бұл «қате» дегенді білдірмейді — ол өзінше бірдеңе көрді дегенді білдіреді.`),
       agents: [map.outlier.agentId],
       weight: 1,
     });
@@ -558,9 +566,10 @@ export function buildChecklist(map: Omit<DissentMap, "checks">, lang: DissentLan
   if (!out.length && map.verdict === "consensus") {
     out.push({
       kind: "consensus",
-      text: en
-        ? "Agents agree — check the shared premise: the models were trained on overlapping data and err alike."
-        : "Агенты сошлись — проверьте общую посылку: модели учились на пересекающихся данных и ошибаются одинаково.",
+      text: T3(lang,
+        "Агенты сошлись — проверьте общую посылку: модели учились на пересекающихся данных и ошибаются одинаково.",
+        "Agents agree — check the shared premise: the models were trained on overlapping data and err alike.",
+        "Агенттер келісті — ортақ алғышартты тексеріңіз: модельдер қиылысатын деректермен оқытылған және бірдей қателеседі."),
       agents: [],
       weight: 1,
     });
@@ -638,18 +647,19 @@ export function buildDissentMap(answers: AgentAnswer[], lang: DissentLang = "ru"
         : "split";
 
   const parts = [
-    conflicts.length ? (lang === "en" ? `${conflicts.length} numeric` : `${conflicts.length} числовых`) : "",
-    opposed.length ? (lang === "en" ? `direct negation on «${opposed.map((c) => c.word).join("», «")}»` : `прямое отрицание по «${opposed.map((c) => c.word).join("», «")}»`) : "",
+    conflicts.length ? T3(lang, `${conflicts.length} числовых`, `${conflicts.length} numeric`, `${conflicts.length} сандық`) : "",
+    opposed.length ? (() => { const w = opposed.map((c) => c.word).join("», «"); return T3(lang, `прямое отрицание по «${w}»`, `direct negation on «${w}»`, `«${w}» бойынша тікелей теріске шығару`); })() : "",
   ].filter(Boolean);
 
   const note =
     verdict === "insufficient"
-      ? (lang === "en" ? `Substantive answers: ${good.length} — nothing to compare.` : `Содержательных ответов ${good.length} — сравнивать не с чем.`)
+      ? T3(lang, `Содержательных ответов ${good.length} — сравнивать не с чем.`, `Substantive answers: ${good.length} — nothing to compare.`, `Мазмұнды жауаптар: ${good.length} — салыстыратын ештеңе жоқ.`)
       : verdict === "consensus"
-        ? (lang === "en" ? `Agents converge (${agreement}). Agreement does not prove correctness: the models err alike.` : `Агенты сходятся (${agreement}). Совпадение не доказывает правоту: модели ошибаются похоже.`)
-        : lang === "en"
-          ? `Disagreement${parts.length ? `, including ${parts.join(" and ")}` : ""}. Look here first.`
-          : `Расхождение${parts.length ? `, включая ${parts.join(" и ")}` : ""}. Смотреть в первую очередь сюда.`;
+        ? T3(lang, `Агенты сходятся (${agreement}). Совпадение не доказывает правоту: модели ошибаются похоже.`, `Agents converge (${agreement}). Agreement does not prove correctness: the models err alike.`, `Агенттер бір пікірде (${agreement}). Келісім дұрыстықты дәлелдемейді: модельдер ұқсас қателеседі.`)
+        : T3(lang,
+            `Расхождение${parts.length ? `, включая ${parts.join(" и ")}` : ""}. Смотреть в первую очередь сюда.`,
+            `Disagreement${parts.length ? `, including ${parts.join(" and ")}` : ""}. Look here first.`,
+            `Келіспеушілік${parts.length ? `, соның ішінде ${parts.join(" және ")}` : ""}. Алдымен осыны қараңыз.`);
 
   const base = {
     agents: list.length,

@@ -224,14 +224,18 @@ const НАШИ_МЕТКИ_КАНАЛА = [
   "probe-ph",         // прогон под запуск на Product Hunt
   "smoke",
   "test",
+  "qa",               // ручные прогоны QA (05.11.2026: нужна и оплате — меткаНаша)
 ];
 
 /** Похожа ли метка канала на нашу. Точное совпадение или наше слово с разделителем. */
-function нашаМетка(значение: string | null | undefined): boolean {
+export function нашаМетка(значение: string | null | undefined): boolean {
   const v = String(значение ?? "").trim().toLowerCase();
   if (!v) return false;
   return НАШИ_МЕТКИ_КАНАЛА.some((m) => v === m || v.startsWith(`${m}-`) || v.startsWith(`${m}_`));
 }
+
+/** Единое имя для оплаты: метка канала (custom_data.channel / url_params) — наша? Тот же список, что у воронки. */
+export const меткаНаша = нашаМетка;
 
 /**
  * Отдельный параметр `probe=<окно>` в адресе — явное «это наш заход».

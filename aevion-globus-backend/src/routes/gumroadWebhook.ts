@@ -885,6 +885,9 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       // в отчёте ноль, и слепота выглядела бы как отсутствие продаж.
       записатьПодтверждённуюОплату({
         source: "gumroad",
+        // Gumroad шлёт test=true в пингах тестовых покупок; метка канала — из url_params.
+        testMode: String(raw.test ?? "").toLowerCase() === "true",
+        channel: purchaseChannel || null,
         tier: tierId,
         reference: reference ?? null,
         event: "paid",

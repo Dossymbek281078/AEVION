@@ -264,7 +264,7 @@ export async function obrabotatZakazPilota(z: { event: string; revoke: boolean; 
   if (!нам.ok) errors.push("mail-us: " + (нам.error ?? "failed"));
   if (!z.revoke) {
     try {
-      await Promise.resolve(записатьПодтверждённуюОплату({ source: "lemonsqueezy", tier: PILOT_PRODUCT, reference: PILOT_PRODUCT, event: z.event, email: z.email || null, value: z.totalCents == null ? PILOT_USD : z.totalCents / 100 }));
+      await Promise.resolve(записатьПодтверждённуюОплату({ source: "lemonsqueezy", tier: PILOT_PRODUCT, reference: PILOT_PRODUCT, event: z.event, email: z.email || null, testMode: z.testMode, channel: z.channel, value: z.totalCents == null ? PILOT_USD : z.totalCents / 100 }));
     } catch (err) {
       errors.push("event: " + (err instanceof Error ? err.message : String(err)));
     }

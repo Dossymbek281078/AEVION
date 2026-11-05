@@ -546,6 +546,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // воронке. Почту не пишем: в хранилище воронки личных данных нет.
         записатьПодтверждённуюОплату({
           testMode: payload.meta?.test_mode === true,
+          channel: payload.meta?.custom_data?.channel ?? null,
           source: "lemonsqueezy",
           tier: appSlug,
           app: appSlug,
@@ -682,6 +683,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         console.log(`[ls/webhook] ${event} → один модуль: ${String(customModule)} for ${email}`);
         записатьПодтверждённуюОплату({
           testMode: payload.meta?.test_mode === true,
+          channel: payload.meta?.custom_data?.channel ?? null,
           source: "lemonsqueezy",
           tier: String(customModule),
           app: String(customModule),
@@ -778,6 +780,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // кассы, а не загрузка страницы «спасибо».
       записатьПодтверждённуюОплату({
           testMode: payload.meta?.test_mode === true,
+          channel: payload.meta?.custom_data?.channel ?? null,
           source: "lemonsqueezy",
           tier: tierId,
           reference: ref ?? null,

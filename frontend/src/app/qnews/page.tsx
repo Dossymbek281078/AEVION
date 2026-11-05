@@ -8,6 +8,7 @@ import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { getAuthHeaders } from "@/lib/auth";
+import { useQnewsT, relativeTimeLang, articlesCount } from "./i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,16 +25,6 @@ interface NewsItem {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
 const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
   tech: { bg: "#eff6ff", fg: "#2563eb" },
   crypto: { bg: "#fff7ed", fg: "#c2410c" },
@@ -44,6 +35,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
 };
 
 function CategoryBadge({ category }: { category: string }) {
+  const { catName } = useQnewsT();
   const color = CATEGORY_COLORS[category] ?? { bg: "#f1f5f9", fg: "#475569" };
   return (
     <span
@@ -58,7 +50,7 @@ function CategoryBadge({ category }: { category: string }) {
         letterSpacing: "0.05em",
       }}
     >
-      {category}
+      {catName(category)}
     </span>
   );
 }
@@ -80,6 +72,7 @@ function ArticleCard({
   aiSummary: { summary: string; keyPoints: string[] } | null;
   aiLoading: boolean;
 }) {
+  const { t, lang } = useQnewsT();
   return (
     <div
       style={{
@@ -100,7 +93,7 @@ function ArticleCard({
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
             <CategoryBadge category={article.category} />
             <span style={{ fontSize: 12, color: "#94a3b8" }}>{article.source}</span>
-            <span style={{ fontSize: 12, color: "#94a3b8" }}>{relativeTime(article.publishedAt)}</span>
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>{relativeTimeLang(lang, article.publishedAt)}</span>
           </div>
           <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.4, marginBottom: 8 }}>
             {article.title}
@@ -149,7 +142,7 @@ function ArticleCard({
               }}
             >
               <div style={{ fontWeight: 700, fontSize: 13, color: "#7c3aed", marginBottom: 8 }}>
-                AI Summary
+                {t("card.aiSummary")}
               </div>
               <p style={{ margin: "0 0 10px", fontSize: 13, color: "#374151", lineHeight: 1.6 }}>
                 {aiSummary.summary}
@@ -182,7 +175,7 @@ function ArticleCard({
                 fontSize: 13,
               }}
             >
-              {aiLoading ? "Summarizing..." : "✦ AI Summarize"}
+              {aiLoading ? t("card.summarizing") : t("card.summarize")}
             </button>
             <a
               href={article.url}
@@ -200,7 +193,7 @@ function ArticleCard({
                 textDecoration: "none",
               }}
             >
-              Read Original
+              {t("card.readOriginal")}
             </a>
           </div>
         </div>
@@ -212,6 +205,7 @@ function ArticleCard({
 // ─── Trending Sidebar ─────────────────────────────────────────────────────────
 
 function TrendingSidebar({ articles }: { articles: NewsItem[] }) {
+  const { t } = useQnewsT();
   return (
     <div
       style={{
@@ -223,7 +217,7 @@ function TrendingSidebar({ articles }: { articles: NewsItem[] }) {
       }}
     >
       <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", marginBottom: 14 }}>
-        Trending Now
+        {t("trending")}
       </div>
       {articles.map((a, i) => (
         <div
@@ -266,15 +260,8 @@ function TrendingSidebar({ articles }: { articles: NewsItem[] }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-const CATEGORIES = [
-  { id: "", label: "All" },
-  { id: "tech", label: "Tech" },
-  { id: "crypto", label: "Crypto" },
-  { id: "ai", label: "AI" },
-  { id: "business", label: "Business" },
-  { id: "science", label: "Science" },
-  { id: "world", label: "World" },
-];
+// Подписи категорий — из словаря (./i18n): здесь только идентификаторы.
+const CATEGORY_IDS = ["", "tech", "crypto", "ai", "business", "science", "world"] as const;
 
 function authHeaders(): HeadersInit {
   try {
@@ -302,6 +289,7 @@ function saveLocalBookmarks(ids: Set<string>): void {
 }
 
 export default function QNewsPage() {
+  const { t, catName, lang } = useQnewsT();
   const [articles, setArticles] = useState<NewsItem[]>([]);
   // Почему отдельное состояние, а не просто пустой список.
   //
@@ -422,7 +410,7 @@ export default function QNewsPage() {
         method: "POST", headers: authHeaders(),
         body: JSON.stringify(submitForm),
       });
-      if (resp.status === 401) { setSubmitMsg("Войдите чтобы публиковать статьи"); return; }
+      if (resp.status === 401) { setSubmitMsg(t("msg.signIn")); return; }
       // Ручка отвечает 201 и на ЗАПАСНОМ пути, помечая его storage:"memory":
       // статья живёт в памяти процесса и не переживает перезапуск. Экран об этом
       // не предупреждает, а слово «опубликована» — про публичность, поэтому
@@ -431,14 +419,14 @@ export default function QNewsPage() {
       const data = await resp.json().catch(() => ({})) as { storage?: string };
       const persisted = (data.storage ?? "db") === "db" || (data.storage ?? "db") === "postgres";
       if (resp.ok && !persisted) {
-        setSubmitMsg("Приняли, но сохранить насовсем сейчас не вышло — отправьте ещё раз через минуту.");
+        setSubmitMsg(t("msg.memory"));
         return;
       }
       if (resp.ok) {
-        setSubmitMsg("Статья опубликована!"); setShowSubmit(false);
+        setSubmitMsg(t("msg.ok")); setShowSubmit(false);
         setSubmitForm({ title: "", summary: "", url: "", source: "", category: "tech" });
         fetchArticles(category, search);
-      } else { setSubmitMsg("Ошибка публикации"); }
+      } else { setSubmitMsg(t("msg.fail")); }
     } finally { setSubmitBusy(false); }
   }
 
@@ -517,8 +505,8 @@ export default function QNewsPage() {
           <div>
             <h1 style={{ margin: "0 0 4px", fontSize: 28, fontWeight: 800, color: "#0f172a" }}>QNews</h1>
             <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
-              Отраслевые новости экосистемы AEVION — tech, crypto, AI, business, science.
-              {stats && <span style={{ marginLeft: 8, fontWeight: 600, color: "#0d9488" }}>{stats.total} статей</span>}
+              {t("hero.sub")}
+              {stats && <span style={{ marginLeft: 8, fontWeight: 600, color: "#0d9488" }}>{articlesCount(lang, stats.total)}</span>}
             </p>
             <div style={{ marginTop: 10 }}>
               <ModulePricingChip moduleId="qnews" />
@@ -532,7 +520,7 @@ export default function QNewsPage() {
               onClick={() => setShowSubmit(true)}
               style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#0d9488", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
             >
-              + Опубликовать
+              {t("hero.publish")}
             </button>
           </div>
         </div>
@@ -541,27 +529,27 @@ export default function QNewsPage() {
         {showSubmit && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
             <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
-              <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 800 }}>Опубликовать статью</h2>
+              <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 800 }}>{t("form.title")}</h2>
               {(["title", "url", "source", "summary"] as const).map((field) => (
                 <div key={field} style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>{field}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>{t(`form.f.${field}` as const)}</div>
                   {field === "summary"
-                    ? <textarea value={submitForm[field]} onChange={(e) => setSubmitForm((p) => ({ ...p, [field]: e.target.value }))} rows={3} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, boxSizing: "border-box", resize: "vertical" }} />
-                    : <input value={submitForm[field]} onChange={(e) => setSubmitForm((p) => ({ ...p, [field]: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, boxSizing: "border-box" }} />}
+                    ? <textarea aria-label={t(`form.f.${field}` as const)} value={submitForm[field]} onChange={(e) => setSubmitForm((p) => ({ ...p, [field]: e.target.value }))} rows={3} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, boxSizing: "border-box", resize: "vertical" }} />
+                    : <input aria-label={t(`form.f.${field}` as const)} value={submitForm[field]} onChange={(e) => setSubmitForm((p) => ({ ...p, [field]: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, boxSizing: "border-box" }} />}
                 </div>
               ))}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>Категория</div>
-                <select value={submitForm.category} onChange={(e) => setSubmitForm((p) => ({ ...p, category: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13 }}>
-                  {CATEGORIES.filter(c => c.id).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>{t("form.category")}</div>
+                <select aria-label={t("form.category")} value={submitForm.category} onChange={(e) => setSubmitForm((p) => ({ ...p, category: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13 }}>
+                  {CATEGORY_IDS.filter(c => c).map(c => <option key={c} value={c}>{catName(c)}</option>)}
                 </select>
               </div>
               {submitMsg && <div style={{ fontSize: 13, color: submitMsg.includes("!") ? "#0d9488" : "#dc2626", marginBottom: 10 }}>{submitMsg}</div>}
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={submitArticle} disabled={submitBusy || !submitForm.title || !submitForm.url} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "#0d9488", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", opacity: submitBusy ? 0.6 : 1 }}>
-                  {submitBusy ? "Публикую…" : "Опубликовать"}
+                  {submitBusy ? t("form.submitting") : t("form.submit")}
                 </button>
-                <button onClick={() => setShowSubmit(false)} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Отмена</button>
+                <button onClick={() => setShowSubmit(false)} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>{t("form.cancel")}</button>
               </div>
             </div>
           </div>
@@ -582,30 +570,30 @@ export default function QNewsPage() {
           <div style={{ flex: "1 1 320px", minWidth: 0 }}>
             {/* Search + bookmarks filter */}
             <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-              <input aria-label="Поиск по заголовкам и описаниям"
+              <input aria-label={t("search.aria")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="🔍 Поиск по заголовкам и описаниям…"
+                placeholder={t("search.ph")}
                 style={{ flex: 1, minWidth: 220, padding: "9px 14px", borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 14, background: "#fff", color: "#0f172a", boxSizing: "border-box" }}
               />
               <button
                 onClick={() => setShowBookmarksOnly((v) => !v)}
-                title="Показать только закладки"
+                title={t("bookmarks.title")}
                 style={{ padding: "9px 16px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: showBookmarksOnly ? "#7c3aed" : "#f1f5f9", color: showBookmarksOnly ? "#fff" : "#64748b", whiteSpace: "nowrap" }}
               >
-                🔖 Закладки{bookmarked.size > 0 ? ` (${bookmarked.size})` : ""}
+                {t("bookmarks")}{bookmarked.size > 0 ? ` (${bookmarked.size})` : ""}
               </button>
             </div>
 
             {/* Category tabs */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
-              {CATEGORIES.map((cat) => (
+              {CATEGORY_IDS.map((cat) => (
                 <button
-                  key={cat.id}
-                  style={tabStyle(category === cat.id)}
-                  onClick={() => setCategory(cat.id)}
+                  key={cat}
+                  style={tabStyle(category === cat)}
+                  onClick={() => setCategory(cat)}
                 >
-                  {cat.label}
+                  {cat ? catName(cat) : t("cat.all")}
                 </button>
               ))}
             </div>
@@ -613,7 +601,7 @@ export default function QNewsPage() {
             {/* Articles */}
             {loading && (
               <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>
-                Loading articles...
+                {t("loading")}
               </p>
             )}
             {!loading && displayedArticles.length === 0 && (
@@ -630,12 +618,12 @@ export default function QNewsPage() {
                 <div style={{ fontSize: 40, marginBottom: 12 }}>{showBookmarksOnly ? "🔖" : "📰"}</div>
                 <div>{
                   showBookmarksOnly
-                    ? "Пока нет закладок — нажми 📎 на статье."
+                    ? t("empty.bookmarks")
                     : articlesState === "paywall"
-                      ? "Лента QNews входит в план «AEVION Планета». Оформите доступ кнопкой «Купить» выше — статьи появятся сразу."
+                      ? t("empty.paywall")
                       : articlesState === "error"
-                        ? "Не удалось загрузить статьи. Обновите страницу — это сбой связи, а не пустая лента."
-                        : "Статьи не найдены"
+                        ? t("empty.error")
+                        : t("empty.none")
                 }</div>
               </div>
             )}
@@ -651,9 +639,8 @@ export default function QNewsPage() {
                 />
                 <button
                   onClick={() => toggleBookmark(article.id)}
-                  title={bookmarked.has(article.id) ? "Remove bookmark" : "Bookmark"}
-                  aria-label={(bookmarked.has(article.id)
-                    ? "Убрать из закладок: " : "В закладки: ") + article.title}
+                  title={bookmarked.has(article.id) ? t("bookmark.remove") : t("bookmark.add")}
+                  aria-label={t(bookmarked.has(article.id) ? "bookmark.removeAria" : "bookmark.addAria", { title: article.title })}
                   style={{ position: "absolute", top: 14, right: 14, background: "transparent", border: "none", cursor: "pointer", fontSize: 18, opacity: 0.7 }}
                 >
                   {bookmarked.has(article.id) ? "🔖" : "📎"}
@@ -667,9 +654,9 @@ export default function QNewsPage() {
             {/* AI Digest */}
             <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 18 }}>
               <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span>🤖 AI Дайджест дня</span>
+                <span>{t("digest.title")}</span>
                 <button onClick={fetchDigest} disabled={digestLoading} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer", fontWeight: 600 }}>
-                  {digestLoading ? "…" : "Обновить"}
+                  {digestLoading ? "…" : t("digest.refresh")}
                 </button>
               </div>
               {digest ? (
@@ -680,17 +667,17 @@ export default function QNewsPage() {
                   ))}
                 </>
               ) : (
-                <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Нажмите «Обновить» для AI-дайджеста текущих новостей.</p>
+                <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>{t("digest.hint")}</p>
               )}
             </div>
             <TrendingSidebar articles={trending} />
             {/* Stats */}
             {stats && (
               <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: "#0f172a" }}>📊 Статистика</div>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: "#0f172a" }}>{t("stats")}</div>
                 {Object.entries(stats.byCategory ?? {}).filter(([,v]) => (v as number) > 0).map(([cat, count]) => (
                   <div key={cat} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748b", marginBottom: 4 }}>
-                    <span>{cat}</span><span style={{ fontWeight: 700 }}>{count as number}</span>
+                    <span>{catName(cat)}</span><span style={{ fontWeight: 700 }}>{count as number}</span>
                   </div>
                 ))}
               </div>
@@ -703,14 +690,14 @@ export default function QNewsPage() {
             moduleId="qnews"
             noun="concept/messages"
             accent="amber"
-            sectionTitle="QNews concept board"
-            sectionHint="Какие отрасли + источники должен покрывать агрегатор? Какие AI-функции нужны?"
+            sectionTitle={t("board.title")}
+            sectionHint={t("board.hint")}
             titleField="idea"
             summaryField="rationale"
             fields={[
-              { key: "idea", label: "Идея / источник / фича", placeholder: "напр.: дайджест по 5 ключевым нишам каждое утро", required: true },
-              { key: "rationale", label: "Зачем это нужно", type: "textarea", placeholder: "Какую боль информационного перегруза решает" },
-              { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+              { key: "idea", label: t("board.idea"), placeholder: t("board.ideaPh"), required: true },
+              { key: "rationale", label: t("board.why"), type: "textarea", placeholder: t("board.whyPh") },
+              { key: "author", label: t("board.author"), placeholder: "anon" },
             ]}
           />
         </div>

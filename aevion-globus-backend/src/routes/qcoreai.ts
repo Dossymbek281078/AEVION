@@ -1988,6 +1988,10 @@ qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
   try {
     const run = await getRun(String(req.params.id));
     if (!run) return res.status(404).json({ error: "run not found" });
+    // 4.11.2026: как у /runs/:id — чужой прогон (модели, токены, цена) по id не отдаём.
+    const auth = await verifyBearerLive(req);
+    const session = await getSession(run.sessionId, qcoreOwner(req, auth));
+    if (!session) return res.status(403).json({ error: "forbidden" });
     const messages = await listMessages(run.id);
     const agentMessages = messages.filter(
       (m) => ["analyst", "writer", "critic", "pro", "con", "moderator", "judge"].includes(m.role)

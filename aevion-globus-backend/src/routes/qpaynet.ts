@@ -52,6 +52,7 @@ import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption, ope
 import { csvNeutralizeFormula } from "../lib/csv";
 import { queryNumber, queryIsoTimestamp } from "../lib/queryNumber";
 import { safeErrorText } from "../lib/safeError";
+import { stubBlocked } from "../lib/stubGuard";
 
 export const qpaynetRouter = Router();
 
@@ -1429,6 +1430,19 @@ qpaynetRouter.delete("/merchant/keys/:id", async (req, res) => {
 });
 
 // POST /api/qpaynet/merchant/charge — charge a user wallet via merchant key
+/**
+ * 4.11.2026 (слово основателя, проверка после письма исследователя): прямое
+ * списание продавцом с ЧУЖОГО кошелька по одному UUID шло без согласия
+ * владельца — любой вошедший заводил ключ продавца и мог списать с любого
+ * известного ему кошелька. Теперь прямое списание — только со своих кошельков
+ * (проверка интеграции) или при явном QPAYNET_ALLOW_DIRECT_MERCHANT_CHARGE=1;
+ * покупателя просят заплатить самому через платёжный запрос (POST /requests →
+ * /requests/:token/pay под его токеном).
+ */
+function directMerchantChargeAllowed(): boolean {
+  return process.env.QPAYNET_ALLOW_DIRECT_MERCHANT_CHARGE === "1";
+}
+
 qpaynetRouter.post("/merchant/charge", moneyLimiter, async (req, res) => {
   await ensureTables();
   const apiKey = req.headers["x-api-key"] as string | undefined;
@@ -1499,13 +1513,17 @@ qpaynetRouter.post("/merchant/charge", moneyLimiter, async (req, res) => {
     const result = await withTx(async (c) => {
       const [a, b] = [customerWalletId, merchantWalletId].sort();
       const locked = await c.query(
-        "SELECT id, balance, status FROM qpaynet_wallets WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        "SELECT id, owner_id, balance, status FROM qpaynet_wallets WHERE id=ANY($1) ORDER BY id FOR UPDATE",
         [[a, b]],
       );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const from = locked.rows.find((r: any) => r.id === customerWalletId);
       if (!from) throw new HttpError(404, "customer_wallet_not_found");
       if (from.status !== "active") throw new HttpError(400, "customer_wallet_inactive");
+      // Согласие владельца: чужой кошелёк напрямую не списываем (4.11.2026).
+      if (from.owner_id !== mk.rows[0].owner_id && !directMerchantChargeAllowed()) {
+        throw new HttpError(403, "customer_consent_required");
+      }
 
       const tiin = toTiin(amount);
       const fee = feeFor(tiin);
@@ -2434,6 +2452,7 @@ qpaynetRouter.post("/deposit/checkout", async (req, res) => {
 
 // POST /api/qpaynet/deposit/confirm-stub — dev-only: simulate webhook for stub flow
 qpaynetRouter.post("/deposit/confirm-stub", async (req, res) => {
+  if (stubBlocked(res)) return;
   if (stripe) return res.status(400).json({ error: "stripe_configured_use_real_webhook" });
   await ensureTables();
   await ensureDepositCheckoutsTable();

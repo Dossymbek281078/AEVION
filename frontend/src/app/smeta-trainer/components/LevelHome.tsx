@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LEVELS } from "../lib/levels";
 import { rates } from "../lib/corpus";
+import { EXAM_TASK_COUNT } from "../lib/examCount";
 import { LESSONS } from "../lib/lessons";
 import { useProgress } from "../lib/useProgress";
 import { getLessonsForLevel, levelLessonsCompletion, loadLessonProgress } from "../lib/lessons";
@@ -332,7 +333,7 @@ export function LevelHome() {
             >
               🎓 Экзамен
               <span className="text-[10px] text-amber-600 font-normal">
-                5 заданий · автопроверка · балл 0–100
+                заданий: {EXAM_TASK_COUNT} · автопроверка · балл 0–100
               </span>
             </Link>
             <Link

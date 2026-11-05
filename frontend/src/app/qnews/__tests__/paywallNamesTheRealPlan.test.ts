@@ -6,7 +6,8 @@ import path from "node:path";
 // Lite и выше», а тарифа Lite нет с 19.10 — один план «AEVION Планета» (его же
 // называет ответ 402 бэкенда, поле requiredPlan). Человек искал бы на /pricing
 // то, чего там нет.
-const PAGE = fs.readFileSync(path.resolve(__dirname, "..", "page.tsx"), "utf8");
+// 05.11.2026: строки интерфейса переехали из page.tsx в словарь i18n.ts — сторож читает его (ту же строку, то же условие).
+const PAGE = fs.readFileSync(path.resolve(__dirname, "..", "i18n.ts"), "utf8");
 
 describe("отказ ленты называет тот план, что продаётся", () => {
   test("в тексте отказа — «AEVION Планета», «тарифа Lite» нет", () => {

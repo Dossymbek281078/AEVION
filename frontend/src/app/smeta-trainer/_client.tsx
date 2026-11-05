@@ -9,6 +9,7 @@ import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { FreeChip } from "./components/FreeChip";
+import { EXAM_TASK_COUNT } from "./lib/examCount";
 
 export default function SmetaTrainerPage() {
   return (
@@ -22,7 +23,7 @@ export default function SmetaTrainerPage() {
         </div>
         <div className="flex items-center gap-3">
           <div className="text-[10px] text-slate-400 hidden sm:block">
-            НДЦС РК 8.01-08-2022 · {rates.length} расценок ЭСН · 5 уровней · 15 экзаменов · Школа №47, Алматы
+            НДЦС РК 8.01-08-2022 · {rates.length} расценок ЭСН · 5 уровней · экзаменов: {EXAM_TASK_COUNT} · Школа №47, Алматы
           </div>
           <Link
             href="/smeta-trainer/guide"

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
+import { anchorText, criterionLabel, demoProjectTitle, demoShotTitle, disclosureText, engineLabel, engineNote } from "./demoI18n";
 
 type Subject = { kind: string; description: string };
 type QcCriterion = { id: string; label: string; weight: number; score: number | null; note: string | null };
@@ -40,7 +41,7 @@ type Continuity = {
 };
 
 export default function QRealClient() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [project, setProject] = useState<Project | null>(null);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [criteria, setCriteria] = useState<QcCriterion[]>([]);
@@ -409,7 +410,7 @@ export default function QRealClient() {
         {project && (
           <section className="mt-8 border-b border-neutral-300 pb-8">
             <div className="flex items-baseline justify-between">
-              <h2 className="font-serif text-2xl">{t("qreal.storyboard.h")} — «{project.title}»</h2>
+              <h2 className="font-serif text-2xl">{t("qreal.storyboard.h")} — «{demoProjectTitle(lang, project)}»</h2>
               <span className="flex items-center gap-3 text-xs uppercase tracking-widest text-neutral-500">
                 {project.shots.length} {t("qreal.storyboard.shots")} · ~{project.shots.reduce((a, s) => a + s.durationSec, 0)}s
                 <button onClick={nextVariation} disabled={busy} className="border border-neutral-300 bg-white px-2 py-0.5 normal-case tracking-normal text-teal-800 transition hover:border-teal-700 disabled:opacity-40">
@@ -464,7 +465,7 @@ export default function QRealClient() {
               {project.shots.map((s) => (
                 <article key={s.id} className="border border-neutral-300 bg-white p-4">
                   <div className="flex items-baseline justify-between border-b border-neutral-200 pb-2">
-                    <h3 className="font-serif text-lg">{s.order}. {s.title}</h3>
+                    <h3 className="font-serif text-lg">{s.order}. {demoShotTitle(lang, project.id, s)}</h3>
                     <span className={`text-[11px] uppercase tracking-wider ${s.status === "queued" ? "text-teal-700" : "text-neutral-500"}`}>
                       {t(`qreal.status.${s.status}`)} · {s.durationSec}s
                     </span>
@@ -527,8 +528,8 @@ export default function QRealClient() {
                         <tbody>
                           {criteria.map((c) => (
                             <tr key={c.id} className="border-b border-dotted border-neutral-200">
-                              <td className="py-1 pr-2 align-top text-neutral-700" title={anchors[c.id] ? `1 — ${anchors[c.id]["1"]}\n3 — ${anchors[c.id]["3"]}\n5 — ${anchors[c.id]["5"]}` : undefined}>
-                                {c.label}
+                              <td className="py-1 pr-2 align-top text-neutral-700" title={anchors[c.id] ? `1 — ${anchorText(lang, c.id, "1", anchors[c.id]["1"])}\n3 — ${anchorText(lang, c.id, "3", anchors[c.id]["3"])}\n5 — ${anchorText(lang, c.id, "5", anchors[c.id]["5"])}` : undefined}>
+                                {criterionLabel(lang, c)}
                               </td>
                               <td className="w-28 py-1 text-right">
                                 <select
@@ -672,7 +673,7 @@ export default function QRealClient() {
                         оставить человека без линейки, по которой судит машина. */}
                     <summary className={`flex cursor-pointer gap-2 ${a ? "" : "list-none"}`}>
                       <span className="font-serif text-neutral-400">{String(i + 1).padStart(2, "0")}</span>
-                      <span>{c.label}</span>
+                      <span>{criterionLabel(lang, c)}</span>
                       <span className="ml-auto shrink-0 font-serif text-xs text-neutral-400">×{c.weight}</span>
                     </summary>
                     {a && (
@@ -680,7 +681,7 @@ export default function QRealClient() {
                         {(["1", "3", "5"] as const).map((lvl) => (
                           <div key={lvl} className="flex gap-2">
                             <dt className="shrink-0 font-serif text-neutral-400">{lvl}</dt>
-                            <dd>{a[lvl]}</dd>
+                            <dd>{anchorText(lang, c.id, lvl, a[lvl])}</dd>
                           </div>
                         ))}
                       </dl>
@@ -704,12 +705,12 @@ export default function QRealClient() {
             {engines.map((e) => (
               <div key={e.id} className="border border-neutral-300 bg-white p-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">{e.label}</h3>
+                  <h3 className="text-sm font-semibold">{engineLabel(lang, e)}</h3>
                   <span className={`text-[11px] uppercase tracking-wider ${e.configured ? "text-teal-700" : "text-red-700"}`}>
                     {e.configured ? t("qreal.engines.on") : t("qreal.engines.off")}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-neutral-600">{e.note}</p>
+                <p className="mt-1 text-xs text-neutral-600">{engineNote(lang, e)}</p>
                 {typeof e.usdPerSecond === "number" && e.usdPerSecond > 0 && (
                   <p className="mt-1 font-mono text-[11px] text-teal-800">~${e.usdPerSecond.toFixed(3)}/s</p>
                 )}
@@ -723,7 +724,7 @@ export default function QRealClient() {
           <section className="mt-8 pb-12">
             <h2 className="font-serif text-2xl">{t("qreal.prov.h")}</h2>
             <div className="mt-4 border-l-4 border-teal-700 bg-white p-4">
-              <p className="text-sm leading-relaxed text-neutral-700">{provenance.disclosure}</p>
+              <p className="text-sm leading-relaxed text-neutral-700">{disclosureText(lang, provenance.disclosure)}</p>
               <p className="mt-2 break-all font-mono text-[11px] text-neutral-500">sha256: {provenance.sha256}</p>
               <div className="mt-3 flex items-center gap-3">
                 {!qrightId ? (

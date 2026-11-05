@@ -29,7 +29,8 @@ function stubFetch(storage: string) {
   });
 }
 
-beforeEach(() => { try { localStorage.setItem("aevion_auth_token_v1", FAKE_JWT); } catch {} });
+// Язык страницы — из хранилища сайта: тест проверяет русские подписи, поэтому ставим ru (раньше страница была русской при любом языке).
+beforeEach(() => { try { localStorage.setItem("aevion_auth_token_v1", FAKE_JWT); localStorage.setItem("aevion_lang_v1", "ru"); } catch {} });
 afterEach(() => { vi.unstubAllGlobals(); try { localStorage.clear(); } catch {} });
 
 function openForm() {

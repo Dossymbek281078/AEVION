@@ -98,6 +98,18 @@ qeventsRouter.get("/categories", (_req: Request, res: Response) => {
 
 // ─── GET /api/qevents/events ─────────────────────────────────────────────────
 // Query: ?category=&location=&limit=&when=upcoming|past|all (default upcoming)
+/*
+ * 🔴 5.11.2026, замер прода (GET /api/qevents/events?when=past): все 10 «прошедших событий» — сиды
+ * scripts/seed-demo-content.js от учётки 652ca4d7… («AEVION FinTech Summit 2026» и ещё 4, каждое дважды,
+ * 0 участников). Этих событий не было, а страница показывала их как состоявшиеся. Как и товары QStore
+ * (28.10): в выдачу и календарь не попадают, в базе ничего не удаляется, по прямому id открываются.
+ */
+const ДЕМО_ОРГАНИЗАТОРЫ = (process.env.QEVENTS_DEMO_ORGANIZER_IDS ?? "652ca4d7-c4f4-4519-8bd9-562adab2ec2a")
+  .split(",")
+  .map((x) => x.trim())
+  .filter(Boolean);
+export const демоОрганизатор = (organizerId: unknown): boolean => ДЕМО_ОРГАНИЗАТОРЫ.includes(String(organizerId ?? ""));
+
 qeventsRouter.get("/events", async (req: Request, res: Response) => {
   const { category, location, limit, when } = req.query as Record<string, string | undefined>;
   // `|| 20` ловит NaN, но НЕ отрицательное: limit=-5 проходило дальше и
@@ -113,6 +125,8 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
       const conditions: string[] = [`"isPublic"=TRUE`];
       const args: unknown[] = [];
       let idx = 1;
+      conditions.push(`NOT ("organizerId"::text = ANY($${idx++}::text[]))`);
+      args.push(ДЕМО_ОРГАНИЗАТОРЫ);
 
       if (whenFilter === "upcoming") {
         conditions.push(`"startAt">=$${idx++}`);
@@ -140,7 +154,7 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
       return res.json({ events: rows, when: whenFilter });
     }
 
-    let events = Array.from(memEvents.values()).filter((e) => e.isPublic);
+    let events = Array.from(memEvents.values()).filter((e) => e.isPublic && !демоОрганизатор(e.organizerId));
     if (whenFilter === "upcoming") {
       events = events.filter((e) => e.startAt >= now);
     } else if (whenFilter === "past") {
@@ -492,8 +506,8 @@ qeventsRouter.get("/calendar", async (_req: Request, res: Response) => {
       const monthStart = `${ym}-01T00:00:00.000Z`;
       const monthEnd = new Date(Date.UTC(year, month, 1)).toISOString(); // first day of next month
       const { rows } = await pool.query(
-        `SELECT * FROM "QEvent" WHERE "isPublic"=TRUE AND "startAt">=$1 AND "startAt"<$2 ORDER BY "startAt" ASC`,
-        [monthStart, monthEnd],
+        `SELECT * FROM "QEvent" WHERE "isPublic"=TRUE AND "startAt">=$1 AND "startAt"<$2 AND NOT ("organizerId"::text = ANY($3::text[])) ORDER BY "startAt" ASC`,
+        [monthStart, monthEnd, ДЕМО_ОРГАНИЗАТОРЫ],
       );
       for (const ev of rows as QEvent[]) {
         const iso = typeof ev.startAt === "string" ? ev.startAt : new Date(ev.startAt).toISOString();
@@ -504,7 +518,7 @@ qeventsRouter.get("/calendar", async (_req: Request, res: Response) => {
       return res.json({ year, month, days });
     }
     for (const ev of memEvents.values()) {
-      if (!ev.isPublic) continue;
+      if (!ev.isPublic || демоОрганизатор(ev.organizerId)) continue;
       if (!ev.startAt.startsWith(ym)) continue;
       const day = ev.startAt.slice(0, 10);
       if (!days[day]) days[day] = [];

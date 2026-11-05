@@ -18,6 +18,7 @@ import {
   sendPasswordResetEmail,
 } from "../lib/build/email";
 import { статусОтправки } from "../lib/build/emailOutcomes";
+import { parseMarketingConsent, marketingUnsubConfigured, verifyMarketingToken } from "../lib/marketingConsent";
 
 const captureAuthError = makeServiceCapture("auth");
 
@@ -196,6 +197,13 @@ async function ensureAuthTier2Tables(): Promise<void> {
   await pool.query(`
     ALTER TABLE "AEVIONUser" ADD COLUMN IF NOT EXISTS "emailVerifiedAt" TIMESTAMPTZ;
     ALTER TABLE "AEVIONUser" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMPTZ;
+  `);
+
+  // Согласие на письма с новостями и предложениями (lib/marketingConsent.ts).
+  // Только добавляем столбцы: по умолчанию FALSE — у всех прежних аккаунтов согласия нет.
+  await pool.query(`
+    ALTER TABLE "AEVIONUser" ADD COLUMN IF NOT EXISTS "marketingConsent" BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE "AEVIONUser" ADD COLUMN IF NOT EXISTS "marketingConsentAt" TIMESTAMPTZ;
   `);
 
   ensuredAuthTier2 = true;
@@ -432,9 +440,9 @@ authRouter.post("/register", async (req, res) => {
     const id = crypto.randomUUID();
 
     await pool.query(
-      `INSERT INTO "AEVIONUser" ("id","email","passwordHash","name","role")
-       VALUES ($1,$2,$3,$4,$5)`,
-      [id, emailNorm, passwordHash, name, role]
+      `INSERT INTO "AEVIONUser" ("id","email","passwordHash","name","role","marketingConsent","marketingConsentAt")
+       VALUES ($1,$2,$3,$4,$5,$6, CASE WHEN $6::boolean THEN NOW() ELSE NULL END)`,
+      [id, emailNorm, passwordHash, name, role, parseMarketingConsent(req.body)]
     );
 
     const sid = await createSession(id, req);
@@ -549,7 +557,7 @@ authRouter.get("/me", async (req, res) => {
     await ensureAuthTier2Tables();
 
     const r = await pool.query(
-      `SELECT "id","email","name","role","createdAt","emailVerifiedAt","deletedAt"
+      `SELECT "id","email","name","role","createdAt","emailVerifiedAt","deletedAt","marketingConsent","marketingConsentAt"
        FROM "AEVIONUser" WHERE "id"=$1`,
       [payload.sub]
     );
@@ -564,6 +572,8 @@ authRouter.get("/me", async (req, res) => {
         role: user.role,
         createdAt: user.createdAt,
         emailVerifiedAt: user.emailVerifiedAt,
+        marketingConsent: user.marketingConsent === true,
+        marketingConsentAt: user.marketingConsentAt ?? null,
       },
       tokenPayload: payload,
     });
@@ -596,6 +606,57 @@ authRouter.patch("/me", async (req, res) => {
     res.status(500).json({ error: "update failed" });
   }
 });
+
+// 🔹 PATCH /me/marketing-consent — выключатель «Присылать новости и предложения» в кабинете.
+authRouter.patch("/me/marketing-consent", async (req, res) => {
+  try {
+    const payload: any = requireAuth(req, res);
+    if (!payload) return;
+    if (typeof req.body?.consent !== "boolean") {
+      return res.status(400).json({ error: "consent must be true or false" });
+    }
+    await ensureAuthTier2Tables();
+    const consent: boolean = req.body.consent;
+    await pool.query(
+      `UPDATE "AEVIONUser" SET "marketingConsent" = $1, "marketingConsentAt" = NOW() WHERE "id" = $2`,
+      [consent, payload.sub]
+    );
+    recordAuthAudit(payload.sub, consent ? "marketing.consent.on" : "marketing.consent.off", req, {});
+    res.json({ marketingConsent: consent });
+  } catch (err: any) {
+    captureAuthError(err, { route: "patch-me-marketing-consent" });
+    res.status(500).json({ error: "update failed" });
+  }
+});
+
+// 🔹 GET|POST /marketing/unsubscribe?email=&t= — ссылка отписки в каждом письме рассылки.
+//    Токен — HMAC адреса (lib/marketingConsent.ts); повтор безопасен.
+async function marketingUnsubscribe(req: any, res: any) {
+  try {
+    if (!marketingUnsubConfigured()) {
+      return res.status(503).json({ error: "unsubscribe temporarily unavailable; write to the contact in the email" });
+    }
+    const email = String(req.query?.email ?? req.body?.email ?? "").trim().toLowerCase();
+    const t = req.query?.t ?? req.body?.t;
+    if (!email || !verifyMarketingToken(email, t)) {
+      return res.status(400).json({ error: "invalid unsubscribe link" });
+    }
+    await ensureAuthTier2Tables();
+    await pool.query(
+      `UPDATE "AEVIONUser" SET "marketingConsent" = FALSE, "marketingConsentAt" = NOW()
+       WHERE LOWER("email") = $1 AND "marketingConsent" = TRUE`,
+      [email]
+    );
+    res.status(200).type("html").send(
+      "<!doctype html><meta charset=utf-8><title>AEVION</title><p>Готово: вы отписаны от новостей и предложений AEVION. / Done: you are unsubscribed. / Жазылымнан бас тарттыңыз.</p>"
+    );
+  } catch (err: any) {
+    captureAuthError(err, { route: "marketing-unsubscribe" });
+    res.status(500).json({ error: "unsubscribe failed" });
+  }
+}
+authRouter.get("/marketing/unsubscribe", marketingUnsubscribe);
+authRouter.post("/marketing/unsubscribe", marketingUnsubscribe);
 
 // 🔹 DELETE /account — soft delete (GDPR-style anonymization).
 //    Email is rotated to a tombstone form so it can be re-registered later;

@@ -9,6 +9,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { catalog } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { useQstoreT } from "./i18n";
 
 interface Product {
   id: string;
@@ -34,23 +35,10 @@ interface FeaturedBuckets {
   topRated: Product[];
 }
 
-const SORT_OPTIONS: { id: string; name: string }[] = [
-  { id: "popular", name: "Most popular" },
-  { id: "newest", name: "Newest" },
-  { id: "trending", name: "Trending" },
-  { id: "rating", name: "Top rated" },
-];
+// Подписи — из словаря (./i18n): здесь только идентификаторы.
+const SORT_IDS = ["popular", "newest", "trending", "rating"] as const;
 
-const CATEGORIES = [
-  { id: "", name: "All" },
-  { id: "template", name: "Templates" },
-  { id: "preset", name: "Presets" },
-  { id: "music", name: "Music" },
-  { id: "video", name: "Video" },
-  { id: "design", name: "Design" },
-  { id: "code", name: "Code" },
-  { id: "other", name: "Other" },
-];
+const CATEGORY_IDS = ["", "template", "preset", "music", "video", "design", "code", "other"] as const;
 
 const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
   template: { bg: "#dbeafe", fg: "#1d4ed8" },
@@ -62,13 +50,14 @@ const CATEGORY_COLORS: Record<string, { bg: string; fg: string }> = {
   other: { bg: "#f1f5f9", fg: "#475569" },
 };
 
-function priceLabel(price: number, currency: string): string {
-  if (price === 0) return "Free";
+function priceLabel(price: number, currency: string, free: string): string {
+  if (price === 0) return free;
   const sym = currency === "usd" ? "$" : currency.toUpperCase() + " ";
   return `${sym}${(price / 100).toFixed(2)}`;
 }
 
 function CategoryBadge({ category }: { category: string }) {
+  const { catName } = useQstoreT();
   const colors = CATEGORY_COLORS[category] ?? CATEGORY_COLORS.other;
   return (
     <span
@@ -82,7 +71,7 @@ function CategoryBadge({ category }: { category: string }) {
         textTransform: "capitalize",
       }}
     >
-      {category}
+      {catName(category)}
     </span>
   );
 }
@@ -96,6 +85,7 @@ function ProductCard({
   onPurchase: (id: string) => void;
   compact?: boolean;
 }) {
+  const { t } = useQstoreT();
   return (
     <Link
       href={`/qstore/${product.id}`}
@@ -170,7 +160,7 @@ function ProductCard({
               color: product.price === 0 ? "#0d9488" : "#0f172a",
             }}
           >
-            {priceLabel(product.price, product.currency)}
+            {priceLabel(product.price, product.currency, t("free"))}
           </span>
           {/* 20.10.2026: у платных товаров кассы нет (503 no_payment_provider) — вместо «Buy»
               ведём на страницу товара, где форма «Payment soon — leave your email» (QStoreNotify). */}
@@ -179,7 +169,7 @@ function ProductCard({
               data-qstore-payment-soon
               style={{ padding: compact ? "5px 12px" : "7px 16px", borderRadius: 8, background: "#f1f5f9", color: "#475569", fontWeight: 700, fontSize: compact ? 12 : 13 }}
             >
-              Payment soon — leave your email
+              {t("paySoon")}
             </span>
           ) : (
           <button
@@ -210,11 +200,11 @@ function ProductCard({
                Признак опасного места общий: подпись внутри цикла отрисовки. */
             aria-label={
               product.price === 0
-                ? `Get free: ${product.title}`
-                : `Buy: ${product.title}`
+                ? t("getFree.aria", { title: product.title })
+                : t("buy.aria", { title: product.title })
             }
           >
-            {product.price === 0 ? "Get free" : "Buy"}
+            {product.price === 0 ? t("getFree") : t("buy")}
           </button>
           )}
         </div>
@@ -231,6 +221,7 @@ interface CreateForm {
 }
 
 export default function QStorePage() {
+  const { t, count, catName } = useQstoreT();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -267,7 +258,7 @@ export default function QStorePage() {
           setLoadError(
             typeof data?.warning === "string"
               ? data.warning
-              : "Каталог не загрузился. Это не значит, что товаров нет — попробуйте обновить страницу.",
+              : t("err.catalog"),
           );
           setProducts([]);
           return;
@@ -316,7 +307,7 @@ export default function QStorePage() {
   const handlePurchase = async (productId: string) => {
     const token = typeof window !== "undefined" ? getAuthToken() : null;
     if (!token) {
-      setNotice("Sign in to purchase products.");
+      setNotice(t("n.signInBuy"));
       return;
     }
     try {
@@ -329,12 +320,12 @@ export default function QStorePage() {
         if (d.checkoutUrl) {
           window.location.href = d.checkoutUrl;
         } else {
-          setNotice("Purchase successful!");
+          setNotice(t("n.bought"));
           fetchProducts();
           fetchFeatured();
         }
       } else if (d.error?.includes("checkout_not_enabled")) {
-        setNotice("Payment gateway is being verified — available within 1-3 days. Write us at support@aevion.app to purchase manually.");
+        setNotice(t("n.gateway"));
       } else {
         // Сервер отдаёт человеческий `message` рядом с машинным `error` —
         // читаем именно его. Без этого покупатель видел бы код вроде
@@ -342,10 +333,10 @@ export default function QStorePage() {
         // отказы вместо тихой выдачи товара без оплаты, и без этой строки
         // одна незаметная неисправность заменилась бы другой — кнопкой,
         // которая ругается непонятным словом.
-        setNotice(d.message || d.error || "Purchase failed");
+        setNotice(d.message || d.error || t("n.buyFailed"));
       }
     } catch {
-      setNotice("Network error");
+      setNotice(t("n.network"));
     }
   };
 
@@ -353,8 +344,8 @@ export default function QStorePage() {
     e.preventDefault();
     setFormError(null);
     const token = typeof window !== "undefined" ? getAuthToken() : null;
-    if (!token) { setFormError("Sign in to list products"); return; }
-    if (!form.title.trim()) { setFormError("Title is required"); return; }
+    if (!token) { setFormError(t("n.signInList")); return; }
+    if (!form.title.trim()) { setFormError(t("n.titleReq")); return; }
     setCreating(true);
     try {
       const res = await fetch(apiUrl("/api/qstore/me/products"), {
@@ -368,13 +359,13 @@ export default function QStorePage() {
         }),
       });
       const d = await res.json();
-      if (!res.ok) { setFormError(d.error || "Failed to create"); return; }
+      if (!res.ok) { setFormError(d.error || t("n.createFailed")); return; }
       setShowForm(false);
       setForm({ title: "", description: "", category: "template", price: "0" });
       fetchProducts();
       fetchFeatured();
     } catch {
-      setFormError("Network error");
+      setFormError(t("n.network"));
     } finally {
       setCreating(false);
     }
@@ -398,7 +389,7 @@ export default function QStorePage() {
                 QStore
               </h1>
               <p style={{ color: "#64748b", margin: 0, fontSize: 15 }}>
-                Digital marketplace — templates, code, music & more
+                {t("hero.sub")}
               </p>
             </div>
             <button
@@ -414,7 +405,7 @@ export default function QStorePage() {
                 cursor: "pointer",
               }}
             >
-              + List a product
+              {t("hero.list")}
             </button>
           </div>
 
@@ -434,7 +425,7 @@ export default function QStorePage() {
               }}
             >
               {notice}
-              <button onClick={() => setNotice(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontWeight: 700 }}>×</button>
+              <button onClick={() => setNotice(null)} aria-label={t("close")} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontWeight: 700 }}>×</button>
             </div>
           )}
 
@@ -450,17 +441,17 @@ export default function QStorePage() {
               }}
             >
               <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 16 }}>
-                List a new product
+                {t("form.heading")}
               </div>
               <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <input aria-label="Title"
-                  placeholder="Title *"
+                <input aria-label={t("form.title")}
+                  placeholder={t("form.titlePh")}
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14 }}
                 />
-                <textarea aria-label="Description"
-                  placeholder="Description"
+                <textarea aria-label={t("form.desc")}
+                  placeholder={t("form.desc")}
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   rows={3}
@@ -468,17 +459,18 @@ export default function QStorePage() {
                 />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <select
+                    aria-label={t("form.category")}
                     value={form.category}
                     onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                     style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14 }}
                   >
-                    {CATEGORIES.slice(1).map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                    {CATEGORY_IDS.slice(1).map((c) => (
+                      <option key={c} value={c}>{catName(c)}</option>
                     ))}
                   </select>
-                  <input aria-label="Price"
+                  <input aria-label={t("form.price")}
                     type="number"
-                    placeholder="Price (USD, 0 = free)"
+                    placeholder={t("form.pricePh")}
                     value={form.price}
                     min="0"
                     step="0.01"
@@ -502,14 +494,14 @@ export default function QStorePage() {
                       cursor: creating ? "not-allowed" : "pointer",
                     }}
                   >
-                    {creating ? "Listing..." : "List product"}
+                    {creating ? t("form.listing") : t("form.submit")}
                   </button>
                   <button
                     type="button"
                     onClick={() => { setShowForm(false); setFormError(null); }}
                     style={{ padding: "9px 20px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 600, fontSize: 14, cursor: "pointer", color: "#64748b" }}
                   >
-                    Cancel
+                    {t("form.cancel")}
                   </button>
                 </div>
               </form>
@@ -521,15 +513,15 @@ export default function QStorePage() {
             <section style={{ marginBottom: 36 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
                 <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0 }}>
-                  ✨ Featured
+                  {t("featured")}
                 </h2>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {(
                     [
-                      { id: "popular", label: "🔥 Popular" },
-                      { id: "trending", label: "📈 Trending" },
-                      { id: "newest", label: "🆕 New" },
-                      { id: "topRated", label: "⭐ Top rated" },
+                      { id: "popular", label: t("featured.popular") },
+                      { id: "trending", label: t("featured.trending") },
+                      { id: "newest", label: t("featured.newest") },
+                      { id: "topRated", label: t("featured.topRated") },
                     ] as { id: keyof FeaturedBuckets; label: string }[]
                   ).map((t) => (
                     <button
@@ -563,7 +555,7 @@ export default function QStorePage() {
                     fontSize: 13,
                   }}
                 >
-                  Nothing here yet.
+                  {t("featured.empty")}
                 </div>
               ) : (
                 <div
@@ -583,27 +575,27 @@ export default function QStorePage() {
 
           {/* Category filter chips */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-            {CATEGORIES.map((c) => (
+            {CATEGORY_IDS.map((c) => (
               <button
-                key={c.id}
-                onClick={() => setSelectedCategory(c.id)}
+                key={c}
+                onClick={() => setSelectedCategory(c)}
                 style={{
                   padding: "6px 16px",
                   borderRadius: 20,
-                  border: selectedCategory === c.id ? "2px solid #0d9488" : "2px solid #e2e8f0",
-                  background: selectedCategory === c.id ? "#f0fdfa" : "#fff",
-                  color: selectedCategory === c.id ? "#0d9488" : "#374151",
-                  fontWeight: selectedCategory === c.id ? 700 : 500,
+                  border: selectedCategory === c ? "2px solid #0d9488" : "2px solid #e2e8f0",
+                  background: selectedCategory === c ? "#f0fdfa" : "#fff",
+                  color: selectedCategory === c ? "#0d9488" : "#374151",
+                  fontWeight: selectedCategory === c ? 700 : 500,
                   fontSize: 13,
                   cursor: "pointer",
                   transition: "all 0.15s",
                 }}
               >
-                {c.name}
+                {c ? catName(c) : t("cat.all")}
               </button>
             ))}
-            <input aria-label="Search"
-              placeholder="Search..."
+            <input aria-label={t("search.aria")}
+              placeholder={t("search")}
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}
               style={{
@@ -622,15 +614,15 @@ export default function QStorePage() {
           {/* Sort + result heading */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
             <div style={{ fontSize: 14, color: "#64748b" }}>
-              {loading ? "" : `${products.length} ${products.length === 1 ? "product" : "products"}`}
+              {loading ? "" : count("count", products.length)}
               {selectedCategory && (
                 <span style={{ marginLeft: 6, color: "#0d9488", fontWeight: 600 }}>
-                  · {CATEGORIES.find((c) => c.id === selectedCategory)?.name}
+                  · {catName(selectedCategory)}
                 </span>
               )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12, color: "#94a3b8" }}>Sort by:</span>
+              <span style={{ fontSize: 12, color: "#94a3b8" }}>{t("sort.label")}</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
@@ -646,8 +638,8 @@ export default function QStorePage() {
                   outline: "none",
                 }}
               >
-                {SORT_OPTIONS.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
+                {SORT_IDS.map((o) => (
+                  <option key={o} value={o}>{t(`sort.${o}`)}</option>
                 ))}
               </select>
             </div>
@@ -656,7 +648,7 @@ export default function QStorePage() {
           {/* Product grid */}
           {loading ? (
             <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0", fontSize: 15 }}>
-              Loading products...
+              {t("loading")}
             </div>
           ) : loadError ? (
             // Отдельное состояние, а не «товаров нет». Пустой каталог при
@@ -668,7 +660,7 @@ export default function QStorePage() {
               style={{ textAlign: "center", color: "#78350f", padding: "48px 20px" }}
             >
               <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
-                Каталог не загрузился
+                {t("err.catalogH")}
               </div>
               <div style={{ fontSize: 14, lineHeight: 1.55, maxWidth: 520, margin: "0 auto" }}>
                 {loadError}
@@ -678,9 +670,9 @@ export default function QStorePage() {
             <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0" }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>🛒</div>
               <div style={{ fontSize: 16, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-                No products yet
+                {t("empty.h")}
               </div>
-              <div style={{ fontSize: 14 }}>Be the first to list one!</div>
+              <div style={{ fontSize: 14 }}>{t("empty.p")}</div>
             </div>
           ) : (
             <div

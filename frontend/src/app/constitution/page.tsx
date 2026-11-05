@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { getAuthHeaders } from "@/lib/auth";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { countryByCode } from "@/lib/constitution";
+import { countryName, presetName, sliderText } from "@/lib/constitutionI18n";
 import { useFunnel } from "@/lib/useFunnel";
 
 const API = "/api-backend/api/constitution";
@@ -198,7 +199,7 @@ type SavedScenario = {
 };
 
 export default function ConstitutionPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { track } = useFunnel();
   useEffect(() => { track("page_view"); }, [track]);
 
@@ -238,9 +239,10 @@ export default function ConstitutionPage() {
     () =>
       SLIDER_META.map((m) => ({
         ...m,
+        ...sliderText(m.key, lang, m),
         label: t(`constitution.slider.${m.key}.label`),
       })),
-    [t],
+    [t, lang],
   );
   const [sliders, setSliders] = useState<Sliders>(DEFAULT_SLIDERS);
   const [title, setTitle] = useState<string>("");
@@ -859,7 +861,7 @@ export default function ConstitutionPage() {
                 href="/constitution/leaderboard"
                 className="px-4 py-2 rounded border border-emerald-400/60 text-emerald-300 font-semibold hover:bg-emerald-500/10"
               >
-                🌍 Planet Leaderboard →
+                🌍 {t("constitution.editor.leaderboardLink")}
               </Link>
               <Link
                 href="/constitution/stats"
@@ -1062,7 +1064,7 @@ export default function ConstitutionPage() {
                     onClick={() => setSliders(p.sliders)}
                     className="text-xs px-3 py-1 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
                   >
-                    {p.name}
+                    {presetName(p.name, lang)}
                   </button>
                 ))}
               </div>
@@ -1447,7 +1449,7 @@ function WorldMapScatter({
   shockedSliders?: Sliders | null;
   shockLabel?: string | null;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const currentMetrics = computeMetrics(sliders);
   const shockedMetrics = shockedSliders ? computeMetrics(shockedSliders) : null;
   const W = 720;
@@ -1537,7 +1539,7 @@ function WorldMapScatter({
                 fill="#9aa3c0"
                 fontSize="10"
               >
-                {p.name}
+                {countryName(p.code, lang, p.name)}
               </text>
             </g>
           ))}

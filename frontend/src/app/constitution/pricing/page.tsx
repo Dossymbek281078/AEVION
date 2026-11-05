@@ -55,7 +55,7 @@ export default function ConstitutionPricingPage() {
       id: "free",
       name: "Free",
       price: "$0",
-      period: "forever",
+      period: t("constitution.pricing.tier.period.forever"),
       tagline: t("constitution.pricing.tier.free.tagline"),
       features: [
         t("constitution.pricing.tier.free.feature.saved"),
@@ -71,7 +71,7 @@ export default function ConstitutionPricingPage() {
     {
       id: "pro",
       name: "Pro · AEVION",
-      price: `от $${planetFromPerMonth()}`,
+      price: t("constitution.pricing.from", { price: `$${planetFromPerMonth()}` }),
       period: t("constitution.pricing.tier.period.monthly"),
       tagline: t("constitution.pricing.tier.pro.tagline"),
       features: [
@@ -177,10 +177,10 @@ export default function ConstitutionPricingPage() {
       <div className="max-w-6xl mx-auto">
         <header className="mb-10 text-center">
           <Link href="/constitution" className="text-[#d4af37] hover:underline text-sm">
-            ← Constitution
+            {t("constitution.pricing.back")}
           </Link>
           <h1 className="text-3xl md:text-5xl font-bold mt-2 text-[#d4af37]">
-            Constitution Pricing
+            {t("constitution.pricing.title")}
           </h1>
           <p className="text-[#9aa3c0] mt-3 max-w-2xl mx-auto">
             {t("constitution.pricing.header.subtitle", { price: `$${planetFromPerMonth()}` })}
@@ -199,7 +199,7 @@ export default function ConstitutionPricingPage() {
             >
               {tier.highlight && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] text-xs font-bold px-3 py-1 rounded-full">
-                  ★ MOST POPULAR
+                  {t("constitution.pricing.mostPopular")}
                 </div>
               )}
               <div className="text-center">

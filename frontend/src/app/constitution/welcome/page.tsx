@@ -12,6 +12,7 @@ import {
   type Sliders,
 } from "@/lib/constitution";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
+import { countryName, regimeText, sliderText } from "@/lib/constitutionI18n";
 import { useI18n } from "@/lib/i18n";
 
 const ONBOARDED_KEY = "constitution.onboarded";
@@ -151,6 +152,7 @@ function StepPickCountry({
   onBack: () => void;
   t: TFn;
 }) {
+  const { lang } = useI18n();
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-2xl p-6 md:p-8">
       <div className="text-xs uppercase tracking-wider text-[#9aa3c0] mb-1">
@@ -177,7 +179,7 @@ function StepPickCountry({
               }`}
             >
               <div className="text-2xl">{c.flag}</div>
-              <div className="text-xs mt-1 truncate">{c.name}</div>
+              <div className="text-xs mt-1 truncate">{countryName(c.code, lang, c.name)}</div>
             </button>
           );
         })}
@@ -226,22 +228,26 @@ function StepMiniTask({
     return entries[0]?.k ?? "ruleOfLaw";
   }, [country]);
 
-  const meta = SLIDER_META.find((m) => m.key === weakestKey)!;
+  const { lang } = useI18n();
+  const metaRu = SLIDER_META.find((m) => m.key === weakestKey)!;
+  const meta = { ...metaRu, ...sliderText(weakestKey, lang, metaRu), label: t(`constitution.slider.${weakestKey}.label`) };
+  const countryTitle = countryName(country.code, lang, country.name);
   const baseline = country.sliders[weakestKey];
   const current = sliders[weakestKey];
   const moved = current !== baseline;
   const regime = useMemo(() => classify(sliders), [sliders]);
+  const regimeShown = regimeText(regime, lang);
 
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-2xl p-6 md:p-8">
       <div className="text-xs uppercase tracking-wider text-[#9aa3c0] mb-1">
-        {t("constitution.welcome.step3.label", { flag: country.flag, country: country.name })}
+        {t("constitution.welcome.step3.label", { flag: country.flag, country: countryTitle })}
       </div>
       <h2 className="text-2xl md:text-3xl font-bold text-[#d4af37] mb-2">
         {t("constitution.welcome.miniTask.title", { label: meta.label })}
       </h2>
       <p className="text-sm text-[#9aa3c0] mb-1">
-        {t("constitution.welcome.miniTask.subtitle", { country: country.name, baseline })}
+        {t("constitution.welcome.miniTask.subtitle", { country: countryTitle, baseline })}
       </p>
       <p className="text-xs text-[#9aa3c0] italic mb-5">{meta.hint}</p>
 
@@ -275,8 +281,8 @@ function StepMiniTask({
         <div className="text-xs text-[#9aa3c0] mb-1">
           {t("constitution.welcome.miniTask.resulting")}
         </div>
-        <div className="text-[#f5d27a] font-bold">{regime.name}</div>
-        <div className="text-xs text-[#9aa3c0] italic">{regime.era}</div>
+        <div className="text-[#f5d27a] font-bold">{regimeShown.name}</div>
+        <div className="text-xs text-[#9aa3c0] italic">{regimeShown.era}</div>
       </div>
 
       <div className="flex justify-between">
@@ -313,6 +319,8 @@ function StepDone({
   t: TFn;
 }) {
   const regime = useMemo(() => classify(sliders), [sliders]);
+  const { lang } = useI18n();
+  const regimeShown = regimeText(regime, lang);
 
   return (
     <div className="bg-[#0b1736]/60 border border-emerald-400/40 rounded-2xl p-6 md:p-8 text-center">
@@ -321,10 +329,10 @@ function StepDone({
         {t("constitution.welcome.done.title")}
       </h2>
       <p className="text-[#9aa3c0] mb-5">
-        {t("constitution.welcome.done.body", { flag: country.flag, country: country.name })}
+        {t("constitution.welcome.done.body", { flag: country.flag, country: countryName(country.code, lang, country.name) })}
       </p>
       <div className="my-5 flex justify-center">
-        <ConstitutionEmbed sliders={sliders} label={regime.name} size="md" />
+        <ConstitutionEmbed sliders={sliders} label={regimeShown.name} size="md" lang={lang === "en" || lang === "kk" ? lang : undefined} />
       </div>
       <p className="text-sm text-[#e7ecf8] max-w-md mx-auto mb-6 leading-relaxed">
         {t("constitution.welcome.done.next")}

@@ -12,6 +12,7 @@ import {
 import { useFunnel } from "@/lib/useFunnel";
 import { PLANET_BASE_MONTHLY, fromPricePerMonth, planetFromPerMonth } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
+import { presetName, regimeText } from "@/lib/constitutionI18n";
 
 const SHOWCASE_PRESETS = [
   "Open Access (идеал)",
@@ -46,7 +47,7 @@ const QUOTE_META = [
 export default function ConstitutionShowcasePage() {
   const [activeIdx, setActiveIdx] = useState<number>(0);
   const { track } = useFunnel();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   const ACADEMIC_QUOTES = useMemo(
     () =>
@@ -120,7 +121,7 @@ console.log(items[0].id); // "open-access"`;
             </div>
           </div>
           <div className="flex justify-center">
-            <ShowcaseRadar sliders={sliders} label={preset.name} regime={regime.name} />
+            <ShowcaseRadar sliders={sliders} label={presetName(preset.name, lang)} regime={regimeText(regime, lang).name} />
           </div>
         </div>
       </section>
@@ -247,7 +248,7 @@ console.log(items[0].id); // "open-access"`;
           <h2 className="text-2xl md:text-3xl font-bold text-[#f5d27a] mb-2">
             {/* 15.09.2026: Pro/Team отдельными подписками сняты — Pro в подписке
                 AEVION; «от» — месяц на 12-месячном сроке, из лестницы сроков. */}
-            Free → от ${planetFromPerMonth()}/мес
+            {t("constitution.showcase.freeToFrom", { price: `$${planetFromPerMonth()}` })}
           </h2>
           <p className="text-[#9aa3c0] mb-6">
             {t("constitution.showcase.pricingDescription")}

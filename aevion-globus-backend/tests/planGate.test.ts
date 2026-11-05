@@ -6,6 +6,7 @@ import {
   paywallEnabledFor,
   requireModule,
   type ResolvedPlan,
+  нашВнутреннийАдрес,
 } from "../src/lib/planGate";
 
 function plan(tier: ResolvedPlan["tier"], chosenModules: string[] = []): ResolvedPlan {
@@ -216,5 +217,18 @@ describe("requireModule middleware", () => {
     const tiers: string[] = r.body.requiredTiers;
     expect(new Set(tiers).size).toBe(tiers.length);
     expect(r.body.message).not.toMatch(/full, full/);
+  });
+});
+
+// 02.11.2026: адреса смоука вебхука LS — наши (замер 30.10: два payment_confirmed со свой:false).
+describe("нашВнутреннийАдрес: смоук вебхука кассы — наш", () => {
+  it("ls-smoke-*@test.aevion.dev и любой поддомен aevion.dev/aevion.app — свои", () => {
+    expect(нашВнутреннийАдрес("ls-smoke-1761847926-lite@test.aevion.dev")).toBe(true);
+    expect(нашВнутреннийАдрес("someone@test.aevion.app")).toBe(true);
+    expect(нашВнутреннийАдрес("ls-smoke-x@gmail.com")).toBe(true);
+  });
+  it("похожие чужие адреса — не наши", () => {
+    expect(нашВнутреннийАдрес("anna@notaevion.dev")).toBe(false);
+    expect(нашВнутреннийАдрес("smokey@gmail.com")).toBe(false);
   });
 });

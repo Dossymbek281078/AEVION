@@ -721,9 +721,9 @@ export const LIVE_MODULE_COUNT = projects.filter((p) => String(p.status) === "li
  */
 export function includedLine(sub: Subscription): string {
   if (sub.modules.length > 0) return sub.modules.join(" · ");
-  if (sub.tierId === "lite") {
-    return "Один модуль на ваш выбор — выберите его в кабинете";
-  }
+  // 5.11.2026: с 15.09 Lite — это месяц ВСЕЙ планеты (data/pricing.ts: "Все продукты AEVION
+  // в одной подписке", limits.modules null; planGate.normalizeTier: lite → full). Письмо
+  // «один модуль на выбор» обещало МЕНЬШЕ, чем продано на /pricing (проба Lite на проде 5.11).
   if (sub.tierId === "free") return "Бесплатный доступ к открытым модулям";
   return `Все модули AEVION (сейчас ${LIVE_MODULE_COUNT} в работе)`;
 }

@@ -43,6 +43,7 @@ import { safeErrorText } from "../lib/safeError";
 import { anchorSummary } from "../lib/opentimestamps/anchorSummary";
 import { sostoyanieKlyucha, podpisat, proverit, АЛГОРИТМ as АЛГОРИТМ_ПОДПИСИ } from "../lib/bureauNotaryKey";
 import { queryDate } from "../lib/queryDate";
+import { stubBlocked } from "../lib/stubGuard";
 const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
@@ -1931,6 +1932,7 @@ bureauRouter.use(
 );
 
 bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
+  if (stubBlocked(res)) return;
   // Спрашиваем ту же функцию, что отдаёт состояние наружу, а не своё третье
   // прочтение переменной. Раньше здесь было сравнение БЕЗ приведения регистра:
   // при BUREAU_KYC_PROVIDER=STUB фабрика запускала демо-заглушку, а этот

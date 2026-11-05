@@ -58,10 +58,11 @@ describe("письмо после оплаты описывает купленн
     }
   });
 
-  it("Lite не обещает все модули, пока модуль не выбран", () => {
+  it("Lite без списка модулей — вся планета (с 15.09 Lite = месяц всего AEVION, /pricing так и продаёт)", () => {
+    // 5.11.2026: прежде здесь ждали «выберите модуль» — письмо обещало меньше проданного.
     const line = includedLine(sub({ tierId: "lite", modules: [] }));
-    expect(line.toLowerCase()).not.toContain("все модули");
-    expect(line).toContain("выберите");
+    expect(line.toLowerCase()).toContain("все модули");
+    expect(line).not.toContain("выберите");
   });
 
   it("купленный модуль называется поимённо", () => {

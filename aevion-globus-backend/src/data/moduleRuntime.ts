@@ -90,7 +90,8 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
   },
   qtradeoffline: {
     tier: "mvp_live",
-    primaryPath: "/qtrade",
+    // 5.11.2026: был "/qtrade" — это другой модуль (торговый терминал); страница офлайн-кошелька живёт на /qtradeoffline.
+    primaryPath: "/qtradeoffline",
     apiHints: ["/api/qtradeoffline/*"],
     hint: "Торговый MVP · Postgres (wallets/transfers/nonces)",
   },
@@ -122,7 +123,8 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     tier: "mvp_live",
     primaryPath: "/revenue",
     apiHints: ["/api/revenue/*"],
-    hint: "Монетизация: LemonSqueezy живой канал подписок",
+    // 5.11.2026: по src/routes/revenue.ts читаются Gumroad (основной), LemonSqueezy, PayBox, PayPal, YouTube, Twitch; Stripe в маршруте нет.
+    hint: "Монетизация: Gumroad (основной) и LemonSqueezy — продажи и подписки; также PayBox, PayPal, YouTube, Twitch",
   },
   qcontract: {
     tier: "mvp_live",
@@ -146,7 +148,8 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     tier: "mvp_live",
     primaryPath: "/mapreality",
     apiHints: ["/api/mapreality/*"],
-    hint: "Карта потребностей · 17 сигналов · Postgres",
+    // 5.11.2026: убрано «17 сигналов» — прод отдаёт {"signals":[],"total":0}, карта пуста до первых записей.
+    hint: "Карта потребностей · сигналы добавляются через форму, карта пуста до первых записей · Postgres",
   },
   qnews: {
     tier: "mvp_live",

@@ -7,6 +7,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 const capture = makeServiceCapture("bankTest");
 function requireAuth(req: any, res: any, next: any) { const p = verifyBearerOptional(req); if (!p) return res.status(401).json({ error: "auth required" }); (req as any).auth = p; next(); }
 import { stableStringify } from "../lib/stableStringify";
+import { stubBlocked } from "../lib/stubGuard";
 
 // Server-side proxy that fires synthetic partner webhooks against the
 // backend's own /api/qright/royalties/verify-webhook,
@@ -47,6 +48,7 @@ function shortId(): string {
 }
 
 bankTestRouter.post("/test-webhook/qright", requireAuth, async (req, res, next) => {
+  if (stubBlocked(res)) return;
   try {
     const email = ownerEmail(req);
     const eventId = `test_qright_${Date.now()}_${shortId()}`;
@@ -74,6 +76,7 @@ bankTestRouter.post("/test-webhook/qright", requireAuth, async (req, res, next) 
 });
 
 bankTestRouter.post("/test-webhook/chess", requireAuth, async (req, res, next) => {
+  if (stubBlocked(res)) return;
   try {
     const email = ownerEmail(req);
     const tournamentId = `test_tour_${Date.now()}_${shortId()}`;
@@ -98,6 +101,7 @@ bankTestRouter.post("/test-webhook/chess", requireAuth, async (req, res, next) =
 });
 
 bankTestRouter.post("/test-webhook/planet", requireAuth, async (req, res, next) => {
+  if (stubBlocked(res)) return;
   try {
     const email = ownerEmail(req);
     const eventId = `test_planet_${Date.now()}_${shortId()}`;

@@ -74,6 +74,7 @@ import { sseHeartbeat } from "../lib/sseHeartbeat";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
 import { ukazanieBezVydumannyhDannyh, yazykZaprosa, tekushchiyGod, ochistitFaylyOtZaglushek } from "../lib/devhubNoFakeData";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
+import { подставитьЗаглушкиКартинок } from "../lib/devhubMissingImages";
 import { ценаПоЕдиницам, тарифЕсть } from "../lib/unitPricing";
 
 export const devhubRouter = Router();
@@ -4035,6 +4036,14 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
     }
   }
 
+  // 4.11.2026 (замер Ниш): <img src> без файла в проекте → SVG-заглушка, иначе alt лезет поверх заголовка.
+  {
+    const { files: починенные } = подставитьЗаглушкиКартинок(
+      generatedFiles.map((f) => ({ path: String(f.path), content: String(f.content ?? "") })),
+      existingFiles.map((f) => ({ path: String((f as { path?: string }).path ?? ""), content: "" })),
+    );
+    починенные.forEach((f, i) => { generatedFiles[i].content = f.content; });
+  }
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);

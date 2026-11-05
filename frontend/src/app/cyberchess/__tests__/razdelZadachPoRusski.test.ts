@@ -27,7 +27,8 @@ describe("раздел задач говорит по-русски", () => {
       expect(список, `${слово} видно человеку среди русских подписей`).not.toContain(слово);
     }
     expect(список).toContain('cc.t("pz.mode.custom")');
-    expect(список).toContain('"Серия"');
+    expect(список).toContain('cc.t("cpn.sess.streak")');
+    expect(ruOf("cpn.sess.streak")).toBe("Серия");
     expect(ruOf("pz.mode.learn")).toBe("Обучение");
     expect(ruOf("pz.mode.3min")).toBe("3 мин");
     expect(ruOf("pz.mode.5min")).toBe("5 мин");

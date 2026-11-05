@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { DeepEngine, type DeepEngineState } from "./deepEngine";
 import { checkAppAccess, type AppAccess } from "@/lib/appAccess";
 import { CyberChessPaidList } from "./CyberChessPaidList";
-import { useI18nOptional } from "@/lib/i18n";
 import { keepChannel, PRICING_APP } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useСсылкаВхода } from "../auth/loginHref";
+import { useCcI18n } from "./i18n";
 
 /**
  * Opt-in «Глубокий анализ» (Stockfish 17.1 + полный NNUE, сила уровня lichess).
@@ -19,12 +19,12 @@ import { useСсылкаВхода } from "../auth/loginHref";
  * Это единственная точка интеграции; сам компонент ничего в page.tsx не меняет.
  */
 
-const STATE_LABEL: Record<DeepEngineState, string> = {
+const STATE_KEY: Record<DeepEngineState, string> = {
   idle: "",
-  "loading-engine": "Поднимаю движок…",
-  "loading-nets": "Загружаю нейросеть…",
-  ready: "SF 17.1 · NNUE",
-  error: "Не удалось запустить",
+  "loading-engine": "cpn.deep.st.engine",
+  "loading-nets": "cpn.deep.st.nets",
+  ready: "cpn.deep.st.ready",
+  error: "cpn.deep.st.error",
 };
 
 /** Оценка движка → строка для человека. Экспортирована для теста.
@@ -47,6 +47,7 @@ export function toWhiteRelative(cp: number, mate: number, fen: string): { cp: nu
 }
 
 export default function DeepAnalysisPanel({ fen }: { fen: string }) {
+  const cc = useCcI18n();
   const loginHref = useСсылкаВхода("/cyberchess"); // с меткой канала, как /bureau
   const [on, setOn] = useState(false);
   const [state, setState] = useState<DeepEngineState>("idle");
@@ -115,7 +116,7 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
           background: "rgba(0,0,0,0.03)", color: "#7a7a7a", fontWeight: 700, fontSize: 13,
         }}
       >
-        🧠 Глубокий анализ · проверяю доступ…
+        {cc.t("cpn.deep.checking")}
       </div>
     );
   }
@@ -135,12 +136,11 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
             видно: покупку не сделали, а отказ никуда не записался. */}
         {/* 07.10: «недоступен» — сетей /nnue не было (404). 4.11: сети на проде есть (200, 75 МБ),
             состав ниже — только подтверждённое гейтами page.tsx (сторож deepAnalysisLockNamesPaidFeatures). */}
-        <div style={{ fontWeight: 800, color: "#5b7a00" }}>🔒 Глубокий анализ — в CyberChess за $50/год</div>
+        <div style={{ fontWeight: 800, color: "#5b7a00" }}>{cc.t("cpn.deep.lock")}</div>
         <div style={{ marginTop: 6, color: "#4a4a4a", lineHeight: 1.5 }}>
-          Stockfish 17.1 с полной нейросетью — глубина анализа уровня lichess.
-          Игра, 500&nbsp;000 задач, ИИ-коуч и лёгкий анализ остаются бесплатными.
+          {cc.t("cpn.deep.body")}
         </div>
-        <div style={{ marginTop: 8 }}><CyberChessPaidList lang={useI18nOptional()?.lang} /></div>
+        <div style={{ marginTop: 8 }}><CyberChessPaidList lang={cc.locale} /></div>
         <a
           // Метка канала переживает переход: человек пришёл с ролика или
           // рекламы, и если она теряется здесь, покупка Pro запишется в
@@ -152,11 +152,11 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
             background: "#5b7a00", color: "#fff", fontWeight: 700, textDecoration: "none",
           }}
         >
-          Открыть доступ
+          {cc.t("cpn.deep.open")}
         </a>
         {access === "unknown" && (
           <div style={{ marginTop: 8, color: "#7a7a7a", fontSize: 12 }}>
-            Уже оплачивали CyberChess? <a href={loginHref} style={{ color: "#5b7a00", fontWeight: 700 }}>Войти</a>
+            {cc.t("cpn.deep.paid")} <a href={loginHref} style={{ color: "#5b7a00", fontWeight: 700 }}>{cc.t("cpn.deep.signin")}</a>
           </div>
         )}
       </div>
@@ -173,9 +173,9 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
           background: "rgba(117,153,0,0.10)", color: "#5b7a00", fontWeight: 700,
           fontSize: 13, cursor: "pointer",
         }}
-        title="Stockfish 17.1 с полной нейросетью — сила анализа уровня lichess. Загрузит ~75 МБ один раз."
+        title={cc.t("cpn.deep.btnTitle")}
       >
-        🧠 Глубокий анализ (Stockfish 17.1 · NNUE)
+        {cc.t("cpn.deep.btn")}
       </button>
     );
   }
@@ -189,8 +189,8 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontWeight: 700, color: "#5b7a00" }}>🧠 Глубокий анализ</span>
-        <span style={{ color: "#7a7a7a", fontSize: 11 }}>{STATE_LABEL[state]}</span>
+        <span style={{ fontWeight: 700, color: "#5b7a00" }}>{cc.t("cpn.deep.head")}</span>
+        <span style={{ color: "#7a7a7a", fontSize: 11 }}>{STATE_KEY[state] ? cc.t(STATE_KEY[state]) : ""}</span>
       </div>
 
       {state === "loading-nets" && (
@@ -199,14 +199,14 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
             <div style={{ width: `${pct}%`, height: "100%", background: "#7a9a00", transition: "width .2s" }} />
           </div>
           <div style={{ marginTop: 4, color: "#7a7a7a", fontSize: 11 }}>
-            Нейросеть {pct}% · грузится один раз, дальше из кэша
+            {cc.t("cpn.deep.netPct").replace("{n}", String(pct))}
           </div>
         </div>
       )}
 
       {state === "error" && (
         <div style={{ marginTop: 6, color: "#b23", fontSize: 12 }}>
-          {engRef.current?.error || "Не удалось запустить глубокий анализ."}
+          {(cc.locale === "ru" && engRef.current?.error) || cc.t("cpn.deep.err")}
         </div>
       )}
 
@@ -215,7 +215,7 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
           <span style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#16161a" }}>
             {scoreText(cp, mate)}
           </span>
-          <span style={{ color: "#7a7a7a", fontSize: 11 }}>глубина {depth}</span>
+          <span style={{ color: "#7a7a7a", fontSize: 11 }}>{cc.t("cpn.deep.depth").replace("{n}", String(depth))}</span>
         </div>
       )}
     </div>

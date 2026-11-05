@@ -48,7 +48,13 @@ describe("экран коуча говорит по-русски", () => {
     for (const slovo of ["Coach видит", "eval Stockfish", "Anthropic Claude Sonnet", "текущий FEN"]) {
       expect(kod).not.toContain(slovo);
     }
-    expect(kod).toContain("Тренер видит вашу позицию");
+    expect(kod).toContain('cc.t("cpn.chat.hint")');
+    // 4.11: текст в словаре (p/coachPanelSlova.ts), в page.tsx — только ключ
+    const slovar = readFileSync(join(__dirname, "..", "p", "coachPanelSlova.ts"), "utf8");
+    expect(slovar).toContain("Тренер видит вашу позицию");
+    for (const slovo of ["Coach видит", "eval Stockfish", "Anthropic Claude Sonnet", "текущий FEN"]) {
+      expect(slovar).not.toContain(slovo);
+    }
   });
 
   it("контроль: вырезалка комментариев не съедает текст экрана", () => {

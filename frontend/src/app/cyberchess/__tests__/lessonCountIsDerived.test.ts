@@ -24,7 +24,7 @@ const PAGE = readFileSync(
 
 describe("счётчик уроков не вписан числом", () => {
   test("подпись кнопки берёт длину из LESSONS", () => {
-    expect(PAGE).toContain("📖 Курс ({LESSONS.length} уроков)");
+    expect(PAGE).toContain('cc.t("cpn.course").replace("{n}",String(LESSONS.length))');
   });
 
   test("подсказка палитры команд — тоже", () => {

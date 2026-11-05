@@ -48,7 +48,7 @@ function dictKeys(): Set<string> {
     // 143е (18.10.2026): у лёгкой страницы задачи (/cyberchess/p) словарь — pzSlova.ts (ключи pz.*, ru/en/kk в одной
     // строке). Без него проверка краснела 45 живыми ключами (pz.hint, pz.oshibka.*, pz.otzyv.*), и красный сторож,
     // который никто не читает, слеп к настоящей потере ключа.
-    if (!basename(f).startsWith("i18n.") && basename(f) !== "pzSlova.ts") continue;   // без регулярки: путь на Windows с обратной косой
+    if (!basename(f).startsWith("i18n.") && basename(f) !== "pzSlova.ts" && basename(f) !== "coachPanelSlova.ts") continue;   // без регулярки: путь на Windows с обратной косой
     for (const m of readFileSync(f, "utf8").matchAll(/"([a-z][a-zA-Z0-9_.]{2,})"\s*:/g)) keys.add(m[1]);
   }
   for (const m of readFileSync(join(LIB, "i18n-data.ts"), "utf8").matchAll(/"([a-z][a-zA-Z0-9_.]{2,})"\s*:/g)) {
@@ -133,7 +133,9 @@ describe("каждый вызываемый ключ есть в словаре"
     );
     // Известный долг назван ПОИМЁННО, а не числом: появится ДРУГОЙ динамический ключ —
     // сторож краснеет даже при том же количестве. Замер 05.10: таких ключей ровно 1.
-    const ИЗВЕСТНЫЙ_ДОЛГ_ОХВАТА = ["qskyway.just."];
+    // 5.11.2026: шесть приставок cpn.* панели тренера CyberChess — значения этого сторожа не видны,
+    // их перебирает по фазам/принципам/целям/вариантам на ru/en/kk cyberchess/__tests__/enPanelBezKirillicy.guard.test.ts.
+    const ИЗВЕСТНЫЙ_ДОЛГ_ОХВАТА = ["qskyway.just.", "cpn.dm.m.", "cpn.dm.c.", "cpn.phase.", "cpn.intro.", "cpn.tip.", "cpn.var."];
     expect(
       [...new Set(неПроверяемыеКлючи)].filter((k) => !ИЗВЕСТНЫЙ_ДОЛГ_ОХВАТА.includes(k)),
       "появился новый ключ, собираемый из частей: его значения сторож проверить НЕ МОЖЕТ, " +

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ruOf } from "./_ruSlovar";
 import { CC_PAID_FEATURES } from "../CyberChessPaidList";
 
 /**
@@ -15,7 +16,9 @@ const page = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 
 describe("замок глубокого анализа называет цену и состав", () => {
   it("цена $50/год и пять пунктов, каждый подтверждён гейтом в page.tsx", () => {
-    expect(panel).toContain("за $50/год");
+    // 5.11.2026: заголовок замка — ключ cpn.deep.lock (en/kk рядом), список — общий CyberChessPaidList
+    expect(panel).toContain('cc.t("cpn.deep.lock")');
+    expect(ruOf("cpn.deep.lock")).toContain("за $50/год");
     const list = listSrc.slice(listSrc.indexOf("ru: {"), listSrc.indexOf("en: {"));
     expect(panel).toContain("<CyberChessPaidList");
     for (const l of ["ru", "en", "kk"]) expect(CC_PAID_FEATURES[l as "ru"].items, l).toHaveLength(5);

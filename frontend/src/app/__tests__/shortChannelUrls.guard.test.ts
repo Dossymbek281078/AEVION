@@ -27,8 +27,10 @@ const ROUTES: Array<[string, string]> = [
   ["tt", "/go?c=tt"],
   ["ig", "/go?c=ig"],
   ["yt", "/go?c=yt"],
-  ["ch-a", "/go?c=ch-a"],
-  ["ch-b", "/go?c=ch-b"],
+  // 5.11.2026 (Оркестратор): безликие каналы ведут на свой продукт, а не на общий /go —
+  // шахматный зритель на ловушки, зритель про ИИ-инструменты — на DevHub.
+  ["ch-a", "/cyberchess/traps?c=ch-a"],
+  ["ch-b", "/devhub?c=ch-b"],
   ["dz", "/go?c=dz"],
   ["vk", "/go?c=vk"],
   ["tg", "/go?c=tg"],

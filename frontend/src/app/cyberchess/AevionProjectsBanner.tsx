@@ -2,13 +2,14 @@
 import React from "react";
 import Link from "next/link";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { useCcI18n } from "./i18n";
 
 const PROJECTS = [
-  { id:"bureau",  name:"Патентное Бюро", emoji:"🏛", href:"/bureau",         tag:"IP · Патенты" },
-  { id:"build",   name:"QBuild",          emoji:"💼", href:"/build",          tag:"Строительство" },
-  { id:"qright",  name:"QRight",          emoji:"©",  href:"/qright",         tag:"Авторские права" },
-  { id:"shield",  name:"Крайт / QShield", emoji:"🛡", href:"/quantum-shield", tag:"Кибербезопасность" },
-  { id:"qsign",   name:"Ксайн / QSign",   emoji:"✍", href:"/qsign",          tag:"Электр. подписи" },
+  { id:"bureau",  name:"cpn.banner.bureau", emoji:"🏛", href:"/bureau",         tag:"cpn.banner.bureau.tag" },
+  { id:"build",   name:"QBuild",          emoji:"💼", href:"/build",          tag:"cpn.banner.build.tag" },
+  { id:"qright",  name:"QRight",          emoji:"©",  href:"/qright",         tag:"cpn.banner.qright.tag" },
+  { id:"shield",  name:"cpn.banner.shield", emoji:"🛡", href:"/quantum-shield", tag:"cpn.banner.shield.tag" },
+  { id:"qsign",   name:"cpn.banner.qsign",   emoji:"✍", href:"/qsign",          tag:"cpn.banner.qsign.tag" },
 ];
 
 interface Props {
@@ -34,6 +35,7 @@ export const POLOSA_VSPLYVASHEK = 96;
 export const OTSTUP_SVERHU = 56;
 
 export default function AevionProjectsBanner({ onHide }: Props) {
+  const cc = useCcI18n();
   // Панель фиксированная и лежит ПОВЕРХ страницы: без компенсации она срезает
   // правый край контента — на лаунчпаде под неё уходил край кнопки «Играть».
   // Отступ снимается при размонтировании, поэтому «скрыть панель» возвращает
@@ -68,11 +70,11 @@ export default function AevionProjectsBanner({ onHide }: Props) {
           fontSize: 10, fontWeight: 900, color: "#5d5b59",
           letterSpacing: 1.2, textTransform: "uppercase",
         }}>
-          Проекты АЕВИОН
+          {cc.t("cpn.banner.title")}
         </span>
         <button
           onClick={onHide}
-          title="Скрыть панель"
+          title={cc.t("cpn.banner.hide")}
           style={{
             background: "transparent", border: "none", color: "#5d5b59",
             cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1,
@@ -103,10 +105,10 @@ export default function AevionProjectsBanner({ onHide }: Props) {
               {/* translate="no": это имена продуктов. Без него авто-перевод
                   делал из «Ксайн / QSign» — «Xsign / QSign», а из «Крайт» — «Krait». */}
               <div translate="no" className="notranslate" style={{ fontSize: 11, fontWeight: 700, color: "inherit", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {p.name}
+                {p.name.startsWith("cpn.") ? cc.t(p.name) : p.name}
               </div>
               <div style={{ fontSize: 9, fontWeight: 600, color: "#5d5b59", marginTop: 1 }}>
-                {p.tag}
+                {cc.t(p.tag)}
               </div>
             </div>
           </a>
@@ -125,7 +127,7 @@ export default function AevionProjectsBanner({ onHide }: Props) {
         background: "#262421",
       }}>
         <div style={{ fontSize: 9, fontWeight: 800, color: "#5d5b59", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>
-          CyberChess подписка
+          {cc.t("cpn.banner.sub")}
         </div>
         <ModulePricingChip moduleId="cyberchess" theme="dark" />
         <Link
@@ -135,7 +137,7 @@ export default function AevionProjectsBanner({ onHide }: Props) {
             color: "#34d399", textDecoration: "none", textAlign: "center",
           }}
         >
-          Все тарифы →
+          {cc.t("cpn.banner.plans")}
         </Link>
       </div>
     </div>

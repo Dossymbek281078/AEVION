@@ -27,7 +27,7 @@ describe("AevionProjectsBanner", () => {
 
   it("имена продуктов помечены как непереводимые", () => {
     const { getByText } = render(<AevionProjectsBanner onHide={() => {}} />);
-    for (const name of ["Крайт / QShield", "Ксайн / QSign", "QBuild", "QRight"]) {
+    for (const name of ["QShield", "QSign", "QBuild", "QRight"]) {
       const el = getByText(name);
       expect(el.getAttribute("translate"), `${name}: нет translate="no"`).toBe("no");
       expect(el.classList.contains("notranslate"), `${name}: нет класса notranslate`).toBe(true);

@@ -81,7 +81,7 @@ describe("заход по ссылке из ролика уходит в вор�
   test("/cyberchess/traps?c=yt-0311-1 — один page_view, канал youtube, пост ролика", async () => {
     const { default: TrapsPageRu } = await import("../cyberchess/traps/page");
     window.history.replaceState({}, "", "/cyberchess/traps?c=yt-0311-1");
-    render(<TrapsPageRu />);
+    render(await TrapsPageRu({ searchParams: Promise.resolve({ c: "yt-0311-1" }) })); // 4.11: страница стала async (язык браузера)
     const v = await визиты();
     expect(v).toHaveLength(1);
     expect(v[0].url).toMatch(/\/api\/pricing\/events$/);
@@ -94,7 +94,7 @@ describe("заход по ссылке из ролика уходит в вор�
   test("контроль: адрес из кадра без метки — визит есть, канал direct", async () => {
     const { default: TrapsPageRu } = await import("../cyberchess/traps/page");
     window.history.replaceState({}, "", "/cyberchess/traps");
-    render(<TrapsPageRu />);
+    render(await TrapsPageRu({ searchParams: Promise.resolve({}) }));
     const v = await визиты();
     expect(v).toHaveLength(1);
     expect((v[0].body.meta as Record<string, unknown>).channel).toBe("direct");

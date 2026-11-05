@@ -29,7 +29,7 @@ describe("экран анализа говорит по-русски", () => {
   it("состояние движка — по-русски", () => {
     const s = EKRAN();
     expect(s).not.toContain('sfOk?"ready":"loading"');
-    expect(s).toContain('sfOk?"готов":"загружается"');
+    expect(s).toContain('sfOk?cc.t("cpn.engine.ready"):cc.t("cpn.engine.loading")');
   });
 
   it("строка расчёта — по-русски", () => {

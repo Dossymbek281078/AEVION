@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, Badge, Btn, Tooltip, Icon, SectionHeader } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION } from "./theme";
+import { useCcI18n, tFor } from "./i18n";
 
 /* ══════════════════════════════════════════════════════════════════════
    Daily Mission — killer #2B
@@ -80,9 +81,7 @@ export function bumpDaily(key: "puzzle" | "game" | "daily-puzzle" | "coach") {
 type MissionDef = {
   id: string;
   emoji: string;
-  label: string;
   reward: number;
-  ctaLabel: string;
   ctaTab?: "play" | "puzzles" | "analysis" | "coach";
   ctaScroll?: "daily-puzzle";
   current: (s: DailyState) => number;
@@ -90,10 +89,10 @@ type MissionDef = {
 };
 
 const MISSIONS: MissionDef[] = [
-  { id: "puzzles3", emoji: "📚", label: "Реши 3 задачи", reward: 10, ctaTab: "puzzles", ctaLabel: "К задачам",       current: s => Math.min(3, s.puzzles), target: 3 },
-  { id: "game1",    emoji: "♔", label: "Сыграй партию", reward: 15, ctaTab: "play",    ctaLabel: "Играть",         current: s => Math.min(1, s.games),   target: 1 },
-  { id: "daily",    emoji: "⭐", label: "Реши задачу дня", reward: 50, ctaTab: "puzzles", ctaScroll: "daily-puzzle", ctaLabel: "Открыть",         current: s => s.dailyPuzzle ? 1 : 0, target: 1 },
-  { id: "coach",    emoji: "🎓", label: "Спроси Coach",   reward: 5,  ctaTab: "coach",   ctaLabel: "К тренеру",     current: s => s.coach ? 1 : 0,        target: 1 },
+  { id: "puzzles3", emoji: "📚", reward: 10, ctaTab: "puzzles", current: s => Math.min(3, s.puzzles), target: 3 },
+  { id: "game1",    emoji: "♔", reward: 15, ctaTab: "play",    current: s => Math.min(1, s.games),   target: 1 },
+  { id: "daily",    emoji: "⭐", reward: 50, ctaTab: "puzzles", ctaScroll: "daily-puzzle", current: s => s.dailyPuzzle ? 1 : 0, target: 1 },
+  { id: "coach",    emoji: "🎓",   reward: 5,  ctaTab: "coach",   current: s => s.coach ? 1 : 0,        target: 1 },
 ];
 
 type Props = {
@@ -102,6 +101,7 @@ type Props = {
 };
 
 export default function DailyMission({ onReward, onNavigate }: Props) {
+  const cc = useCcI18n();
   const [state, setState] = useState<DailyState>(() => loadDaily());
 
   // Re-read state on the bump event from anywhere in the app
@@ -125,7 +125,7 @@ export default function DailyMission({ onReward, onNavigate }: Props) {
     for (const m of MISSIONS) {
       const done = m.current(s) >= m.target;
       if (done && !s.paid.includes(m.id)) {
-        onReward(m.reward, `daily · ${m.label}`);
+        onReward(m.reward, `daily · ${tFor("ru", "cpn.dm.m." + m.id)}`);
         s = { ...s, paid: [...s.paid, m.id] };
         dirty = true;
       }
@@ -156,14 +156,14 @@ export default function DailyMission({ onReward, onNavigate }: Props) {
         <span style={{ fontSize: 20 }}>{allDone ? "🎉" : "🎯"}</span>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: allDone ? "#065f46" : CC.accent, letterSpacing: 0.5, textTransform: "uppercase" }}>
-            Дневные цели · {completedCount}/{MISSIONS.length}
+            {cc.t("cpn.dm.title")} · {completedCount}/{MISSIONS.length}
           </div>
           <div style={{ fontSize: 11, color: CC.textDim, marginTop: 1 }}>
-            {allDone ? "Все цели выполнены — отличный день!" : `Сегодня можно заработать +${totalReward - earnedReward} Chessy`}
+            {allDone ? cc.t("cpn.dm.all") : cc.t("cpn.dm.earn").replace("{n}", String(totalReward - earnedReward))}
           </div>
         </div>
         {state.streak > 0 && (
-          <Tooltip label={`${state.streak} ${state.streak === 1 ? "день подряд" : "дней подряд"} выполнял все цели`}>
+          <Tooltip label={cc.t(state.streak === 1 ? "cpn.dm.streak1" : "cpn.dm.streakN").replace("{n}", String(state.streak))}>
             <Badge tone="danger" size="md">🔥 {state.streak}</Badge>
           </Tooltip>
         )}
@@ -204,7 +204,7 @@ export default function DailyMission({ onReward, onNavigate }: Props) {
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: CC.text, textDecoration: done ? "line-through" : undefined, opacity: done ? 0.7 : 1 }}>
-                  {m.label}
+                  {cc.t("cpn.dm.m." + m.id)}
                 </div>
                 <div style={{ fontSize: 11, color: CC.textDim, fontWeight: 600 }}>
                   {cur} / {m.target} · +{m.reward} <Icon.Coin width={9} height={9}/>
@@ -213,7 +213,7 @@ export default function DailyMission({ onReward, onNavigate }: Props) {
 
               {!done && onNavigate && m.ctaTab && (
                 <Btn size="xs" variant="ghost" onClick={() => onNavigate(m.ctaTab!)} style={{ color: CC.accent, fontWeight: 800 }}>
-                  {m.ctaLabel} →
+                  {cc.t("cpn.dm.c." + m.id)} →
                 </Btn>
               )}
             </div>
@@ -223,7 +223,7 @@ export default function DailyMission({ onReward, onNavigate }: Props) {
 
       {allDone && !state.bonusPaid && (
         <div style={{ marginTop: SPACE[3], textAlign: "center", fontSize: 12, color: "#065f46", fontWeight: 700 }}>
-          💎 Бонус +50 Chessy выдан · streak +1
+          {cc.t("cpn.dm.bonus")}
         </div>
       )}
     </Card>

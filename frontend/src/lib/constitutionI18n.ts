@@ -89,3 +89,94 @@ export const METRIC_LABELS: Record<ConstitutionLang, { innovation: string; stabi
   en: { innovation: "Innovation", stability: "Stability" },
   kk: { innovation: "Инновация", stability: "Тұрақтылық" },
 };
+
+/* ───────── 5.11.2026, окно «Приложения»: тексты редактора и знакомства ─────────
+ * Замер на проде 5.11 (en-US, 1463×724): в редакторе /constitution?country=us 44 строки
+ * по-русски — подсказки и полюса ползунков, имена стран и пресетов. Метки ползунков
+ * (label) уже шли через словарь t(), а hint/low/high/name жили русскими литералами в
+ * lib/constitution.ts и зависели от живого перевода. Русский источник остаётся там же;
+ * здесь только en/kk. kk — черновик, на вычитку носителю.
+ */
+export type SliderText = { hint: string; low: string; high: string };
+
+export const SLIDER_TEXT: Record<"en" | "kk", Record<keyof Sliders, SliderText>> = {
+  en: {
+    floor: { hint: "Guaranteed minimum: basic income / education / health", low: "Every man for himself", high: "No one falls below the floor" },
+    ruleOfLaw: { hint: "Even an oligarch can lose in court", low: "Law for the poor", high: "Everyone is equal under the law" },
+    rotation: { hint: "Randomly chosen citizens in chambers, councils, juries", low: "Lifelong castes", high: "Regular turnover by lot" },
+    transparency: { hint: "Open declarations, public record of decisions", low: "Smoke-filled rooms", high: "Glass corridors" },
+    multiStatus: { hint: "Respect through science, craft, care, art, not only money", low: "One axis: money / power", high: "Many legitimate arenas" },
+    skinInGame: { hint: "Whoever decides bears the consequences personally (Taleb)", low: "Some decide, others answer", high: "Everyone has their own stakes" },
+    polycentricity: { hint: "Real sovereignty of local jurisdictions (Ostrom)", low: "Super-state", high: "Federation of localities" },
+    positiveSum: { hint: "A pie that visibly and truly grows (Acemoglu/Robinson)", low: "Carving up a fixed pie", high: "A growing economy for everyone" },
+  },
+  kk: {
+    floor: { hint: "Кепілдік берілген минимум: базалық табыс / білім / денсаулық", low: "Әркім өз қамын ойлайды", high: "Ешкім еденнен төмен түспейді" },
+    ruleOfLaw: { hint: "Олигарх та сотта ұтылуы мүмкін", low: "Заң кедейлерге ғана", high: "Заң алдында бәрі тең" },
+    rotation: { hint: "Палаталарда, кеңестерде, қазылар алқасында кездейсоқ таңдалған азаматтар", low: "Өмір бойғы касталар", high: "Жеребе арқылы тұрақты ауысу" },
+    transparency: { hint: "Ашық декларациялар, шешімдердің жария есебі", low: "Жабық бөлмелер", high: "Шыны дәліздер" },
+    multiStatus: { hint: "Ғылым, қолөнер, қамқорлық, өнер арқылы құрмет, тек ақша емес", low: "Бір ось: ақша / билік", high: "Көптеген заңды арена" },
+    skinInGame: { hint: "Шешім қабылдаған адам салдарын өзі көтереді (Талеб)", low: "Біреулер шешеді, басқалары жауап береді", high: "Әркім өз тәуекелінде" },
+    polycentricity: { hint: "Жергілікті юрисдикциялардың нақты егемендігі (Остром)", low: "Аса мемлекет", high: "Жергілікті қауымдастықтар федерациясы" },
+    positiveSum: { hint: "Көзге көрініп, шынымен өсетін пирог (Acemoglu/Robinson)", low: "Тұрақты пирогты бөлісу", high: "Барлығына арналған өсетін экономика" },
+  },
+};
+
+/** Имя страны по коду (ru-источник — COUNTRIES[].name). */
+export const COUNTRY_NAMES: Record<string, Tr2> = {
+  us: { en: "USA", kk: "АҚШ" },
+  de: { en: "Germany", kk: "Германия" },
+  no: { en: "Norway", kk: "Норвегия" },
+  jp: { en: "Japan", kk: "Жапония" },
+  sg: { en: "Singapore", kk: "Сингапур" },
+  ae: { en: "UAE", kk: "БАӘ" },
+  sa: { en: "Saudi Arabia", kk: "Сауд Арабиясы" },
+  ru: { en: "Russia", kk: "Ресей" },
+  cn: { en: "China", kk: "Қытай" },
+  ir: { en: "Iran", kk: "Иран" },
+  kp: { en: "North Korea", kk: "КХДР" },
+  ve: { en: "Venezuela", kk: "Венесуэла" },
+  in: { en: "India", kk: "Үндістан" },
+  br: { en: "Brazil", kk: "Бразилия" },
+  kz: { en: "Kazakhstan", kk: "Қазақстан" },
+};
+
+/** Имя пресета по русскому имени из PRESETS (оно же ключ). */
+export const PRESET_NAMES: Record<string, Tr2> = {
+  "Open Access (идеал)": { en: "Open Access (ideal)", kk: "Open Access (идеал)" },
+  "Скандинавская": { en: "Nordic", kk: "Скандинавиялық" },
+  "США XXI века": { en: "21st-century USA", kk: "XXI ғасыр АҚШ" },
+  "Авторитарная": { en: "Authoritarian", kk: "Авторитарлық" },
+  "Феодализм": { en: "Feudalism", kk: "Феодализм" },
+  "Сингапур": { en: "Singapore", kk: "Сингапур" },
+  "ОАЭ": { en: "UAE", kk: "БАӘ" },
+  "Саудовская Аравия": { en: "Saudi Arabia", kk: "Сауд Арабиясы" },
+  "СССР 1980": { en: "USSR 1980", kk: "КСРО 1980" },
+  "Кочевая Степь": { en: "Nomadic Steppe", kk: "Көшпенді дала" },
+};
+
+type AnyLang = string | undefined | null;
+const чужойЯзык = (lang: AnyLang): "en" | "kk" | null => (lang === "en" || lang === "kk" ? lang : null);
+
+/** Подсказка и полюса ползунка на языке читателя; ru и прочие языки — русский источник. */
+export function sliderText(key: keyof Sliders, lang: AnyLang, ru: SliderText): SliderText {
+  const l = чужойЯзык(lang);
+  return l ? SLIDER_TEXT[l][key] : { hint: ru.hint, low: ru.low, high: ru.high };
+}
+
+export function countryName(code: string, lang: AnyLang, ru: string): string {
+  const l = чужойЯзык(lang);
+  return (l && COUNTRY_NAMES[code]?.[l]) || ru;
+}
+
+export function presetName(ruName: string, lang: AnyLang): string {
+  const l = чужойЯзык(lang);
+  return (l && PRESET_NAMES[ruName]?.[l]) || ruName;
+}
+
+/** Имя и эпоха режима на языке читателя; ru и прочие языки — русский источник из classify(). */
+export function regimeText(r: { id: string; name: string; era: string }, lang: AnyLang): { name: string; era: string } {
+  const l = чужойЯзык(lang);
+  const t = l ? REGIME_TEXT[r.id] : undefined;
+  return l && t ? { name: t.name[l], era: t.era[l] } : { name: r.name, era: r.era };
+}

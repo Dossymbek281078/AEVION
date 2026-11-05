@@ -180,7 +180,7 @@ export function DemoView({ demo }: { demo: Demo }) {
       <main className={s.wrap}>
         <h1>Демо для «{demo.company}»: как могла бы идти запись</h1>
         <Notice demo={demo} />
-        <p className={s.lead}>Что мы заметили на сайте: {demo.weakFact}. Нажимайте как клиент: справа видно, что получил бы владелец.</p>
+        <p className={s.lead}>Что мы заметили на сайте: {demo.weakFact}. Нажимайте как клиент: в соседнем блоке видно, что получил бы владелец.</p>
         <h2>1. Страница с заявкой</h2>
         <FormBlock demo={demo} />
         <h2>2. Бот записи в WhatsApp или Telegram</h2>

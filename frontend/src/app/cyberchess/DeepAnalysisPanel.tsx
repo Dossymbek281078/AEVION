@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DeepEngine, type DeepEngineState } from "./deepEngine";
 import { checkAppAccess, type AppAccess } from "@/lib/appAccess";
+import { CyberChessPaidList } from "./CyberChessPaidList";
 import { keepChannel, PRICING_APP } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useСсылкаВхода } from "../auth/loginHref";
@@ -139,13 +140,7 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
         <div style={{ marginTop: 6, color: "#4a4a4a", lineHeight: 1.5 }}>
           {cc.t("cpn.deep.body")}
         </div>
-        <ul data-testid="cc-paid-features" style={{ margin: "8px 0 0", paddingLeft: 18, color: "#4a4a4a", lineHeight: 1.5 }}>
-          <li>{cc.t("cpn.deep.f.levels")}</li>
-          <li>{cc.t("cpn.deep.f.ghost")}</li>
-          <li>{cc.t("cpn.deep.f.review")}</li>
-          <li>{cc.t("cpn.deep.f.nnue")}</li>
-          <li>{cc.t("cpn.deep.f.badge")}</li>
-        </ul>
+        <div style={{ marginTop: 8 }}><CyberChessPaidList lang={cc.locale} /></div>
         <a
           // Метка канала переживает переход: человек пришёл с ролика или
           // рекламы, и если она теряется здесь, покупка Pro запишется в

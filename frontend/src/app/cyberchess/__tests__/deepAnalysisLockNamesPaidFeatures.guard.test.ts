@@ -25,17 +25,13 @@ describe("замок глубокого анализа называет цену
     expect(CC_PAID_FEATURES.en.items.join(" ")).not.toMatch(/[А-Яа-я]/);
     expect(list).toMatch(/Уровни ИИ 5–6/);
     expect(page).toMatch(/\(chessy\.owned\.master_ai\|\|isPro\)\?6:4/);
-    expect(list).toContain('cc.t("cpn.deep.f.ghost")');
-    expect(ruOf("cpn.deep.f.ghost")).toMatch(/Ghost-подсказки без монет/);
+    expect(list).toMatch(/Ghost-подсказки без монет/);
     expect(page).toMatch(/return isPro\?0:15;/);
-    expect(list).toContain('cc.t("cpn.deep.f.review")');
-    expect(ruOf("cpn.deep.f.review")).toMatch(/Глубокий разбор партии без монет/);
+    expect(list).toMatch(/Глубокий разбор партии без монет/);
     expect(page).toMatch(/cost:isPro\?0:20/);
-    expect(list).toContain('cc.t("cpn.deep.f.badge")');
-    expect(ruOf("cpn.deep.f.badge")).toMatch(/Значок Pro/);
+    expect(list).toMatch(/Значок Pro/);
     expect(page).toMatch(/"Pro активен"/);
-    expect(list).toContain('cc.t("cpn.deep.f.nnue")');
-    expect(ruOf("cpn.deep.f.nnue")).toMatch(/NNUE/);
+    expect(list).toMatch(/NNUE/);
     expect(panel).toMatch(/checkAppAccess\("cyberchess"\)/);
   });
   it("список стоит на /pricing, traps и guide", () => {

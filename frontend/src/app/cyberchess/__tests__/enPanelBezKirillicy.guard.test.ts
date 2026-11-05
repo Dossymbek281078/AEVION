@@ -52,7 +52,7 @@ const ВЫНЕСЕНО: Array<[string, string]> = [
   // вкладка «Задачи»
   ["cpn.dm.title", "Дневные цели"], ["cpn.dm.earn", "Сегодня можно заработать +{n} Chessy"], ["cpn.dm.m.puzzles3", "Реши 3 задачи"],
   ["cpn.dm.c.puzzles3", "К задачам"], ["cpn.dm.m.game1", "Сыграй партию"], ["cpn.dm.c.game1", "Играть"],
-  ["cpn.dm.m.daily", "Реши задачу дня"], ["cpn.dm.c.daily", "Открыть"], ["cpn.dm.m.coach", "Спроси Coach"],
+  ["cpn.dm.m.daily", "Реши задачу дня"], ["cpn.dm.c.daily", "Открыть"], ["cpn.dm.m.coach", "Спроси тренера"],
   ["cpn.dm.c.coach", "К тренеру"], ["cpn.sess.streak", "Серия"], ["cpn.diff.hard", "Сложная"],
   ["cpn.pip.ask", "Включить стрим любимого стримера к варианту дня?"], ["cpn.var.kingofthehill", "Царь горы"],
 ];

@@ -16,8 +16,7 @@ describe("/agency/demo — черновик по данным компании",
   });
   it("цена с точкой на конце — без второй точки", () => {
     const d = { ...demo, services: [{ name: "Чистка ушей", price: "7 000 тг." }] };
-    expect(buildDraft("чистка ушей", d).draft).toContain("Чистка ушей — 7 000 тг.
-");
+    expect(buildDraft("чистка ушей", d).draft).toContain("Чистка ушей — 7 000 тг.\n");
   });
   it("цены нет — не выдумывает", () => {
     const r = buildDraft("Нужна чистка зубов", demo);

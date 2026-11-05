@@ -53,7 +53,7 @@ export const demoDeepSections: DeepSection[] = [
       "Layer 1 — SHA-256 over canonical JSON. Every QRight entry hashes its declared payload using the same key ordering on client and server. Two implementations producing the same hash is the proof that the registry is not a trust-the-UI construct.",
       "Layer 2 — HMAC-SHA256 with a server-side secret. QSign re-derives the canonical JSON server-side and signs it. The verify endpoint accepts the original payload and the signature; mismatched key order, missing fields or stray whitespace all return INVALID. Bureau stores both the payload and the signature so any auditor can replay the verification later.",
       "Layer 3 — Ed25519 keypair with Shamir Secret Sharing. Quantum Shield generates the keypair on creation, signs the artifact root, then splits the private key into N shards (default 3) with threshold T (default 2). Shards live in separate trust zones; a single shard reveals nothing. Recovery is a Lagrange interpolation over T shards.",
-      "Why this combination: SHA-256 is fast and universally trusted (proof of existence). HMAC is cheap to verify and needs no PKI (cross-module integrity). Ed25519 + SSS gives classical signing today (not quantum-resistant); migration to lattice-based PQC is planned, and the post-quantum signature is in preview.",
+      "Why this combination: SHA-256 is fast and universally trusted (proof of existence). HMAC is cheap to verify and needs no PKI (cross-module integrity). Ed25519 + SSS gives classical signing today, without post-quantum resistance; migration to lattice-based PQC is planned, and the post-quantum signature is in preview.",
     ],
     pre: `// Pseudocode — what /api/qsign/verify does
 function verify(payload, signature, secret) {

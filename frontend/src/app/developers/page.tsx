@@ -69,7 +69,7 @@ const APIS = [
     name: "Quantum Shield",
     color: "#5eead4",
     href: "/quantum-shield",
-    desc: "Threshold key management. Shamir's Secret Sharing (k of n). Shard rotation, recovery, post-quantum-ready KDF.",
+    desc: "Threshold key management. Shamir's Secret Sharing (k of n). Shard rotation, recovery.",
     endpoints: ["POST /api/quantum-shield/derive", "POST /api/quantum-shield/recover", "POST /api/quantum-shield/rotate"],
   },
   {

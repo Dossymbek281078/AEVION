@@ -124,7 +124,7 @@ const es: Record<string, string> = {
   "shield.create": "Crear Shield",
   "shield.dashboard": "Panel de control",
   "shield.shards": "Fragmentos totales",
-  "shield.subtitle": "Protección criptográfica post-cuántica. Las claves se dividen en fragmentos — cualquier umbral puede reconstruir, pero ningún fragmento revela nada.",
+  "shield.subtitle": "División de claves según Shamir y firma Ed25519 (la firma poscuántica está en vista previa). Las claves se dividen en fragmentos — cualquier umbral puede reconstruir, pero ningún fragmento revela nada.",
   "shield.threshold": "Umbral promedio",
   "shield.title": "Quantum Shield",
   "shield.total": "Shields totales",

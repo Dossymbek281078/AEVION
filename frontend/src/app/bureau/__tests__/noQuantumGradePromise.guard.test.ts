@@ -24,3 +24,22 @@ describe("бюро не обещает «квантовый уровень» б�
     expect(t).toMatch(/постквантты қолтаңба — алдын ала қарауда/);
   });
 });
+
+// Расширение 5.11: те же ложные обещания защиты по всему сайту (название «Quantum Shield» — не обещание, его не трогаем).
+import { readdirSync, statSync } from "node:fs";
+function обойти(d: string, out: string[] = []): string[] {
+  for (const n of readdirSync(d)) {
+    const p = join(d, n);
+    if (statSync(p).isDirectory()) { if (n !== "__tests__" && n !== "node_modules") обойти(p, out); }
+    else if (/\.(ts|tsx)$/.test(n) && !/\.test\./.test(n)) out.push(p);
+  }
+  return out;
+}
+const ПО_САЙТУ = /quantum[- ]grade|quantum-resistant|post-quantum-ready|квантового уровня|кванттық деңгей|Постквантовая криптографическая защита|Post-Quantum Cryptographic Layer|Post-quantum cryptographic protection/i;
+describe("по всему сайту нет обещания квантовой защиты без боевой подписи", () => {
+  it.skipIf(ПОДПИСЬ_ПОСТКВАНТОВАЯ_БОЕВАЯ)("src без quantum-grade / quantum-resistant / post-quantum-ready / «постквантовая защита»", () => {
+    const src = join(dir, "..", "..");
+    const плохие = обойти(src).filter((f) => ПО_САЙТУ.test(readFileSync(f, "utf8")));
+    expect(плохие).toEqual([]);
+  });
+});

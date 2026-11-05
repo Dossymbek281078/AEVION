@@ -100,7 +100,7 @@ export default function SecurityOg() {
           }}
         >
           <div style={{ display: "flex" }}>aevion.app/security</div>
-          <div style={{ color: "#5eead4", display: "flex" }}>Ed25519 · Shamir · post-quantum-ready</div>
+          <div style={{ color: "#5eead4", display: "flex" }}>Ed25519 · Shamir · PQ signature: preview</div>
         </div>
       </div>
     ),

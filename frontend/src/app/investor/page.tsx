@@ -103,7 +103,7 @@ export default function InvestorPage() {
         <p style={{ fontSize: 20, color: "#94a3b8", maxWidth: 640, lineHeight: 1.6, marginBottom: 32 }}>
           One pipeline instead of four disconnected services:
           {" "}<strong style={{ color: "#f1f5f9" }}>register → sign → certify → vote → earn.</strong>
-          {" "}Post-quantum cryptography, Trust Graph moat, automated royalties.
+          {" "}Ed25519 signatures (post-quantum in preview), Trust Graph moat, automated royalties.
         </p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <a href="https://aevion.app" style={btnPrimary}>
@@ -442,7 +442,7 @@ export default function InvestorPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))", gap: 16 }}>
           {[
             { n: "1", title: "Trust Graph", desc: "Accumulates with every signature. Competitor starting today is 2 years behind." },
-            { n: "2", title: "Post-quantum built in", desc: "ML-DSA-65 (FIPS 204) is implemented in the product, key-activated — ahead of a mandatory migration." },
+            { n: "2", title: "Post-quantum signature implemented", desc: "ML-DSA-65 (FIPS 204) is implemented in the product but in preview on prod until the signing key is activated." },
             { n: "3", title: "Atomic pipeline", desc: "4 platforms → 1 UI. Switching cost grows with every cert issued." },
             { n: "4", title: "Open velocity", desc: "130+ merged PRs in 30 days. Verifiable in public GitHub history." },
           ].map(m => (

@@ -40,7 +40,7 @@ const faqJsonLd = {
       name: "Are you ready for post-quantum?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "The signature stack today is Ed25519. Quantum Shield key derivation is post-quantum-ready — KDF can swap to a PQ-safe primitive (e.g. ML-KEM) without re-issuing existing receipts. Dilithium preview is already in the QSign repository.",
+        text: "The signature stack today is Ed25519. Quantum Shield's key derivation is not post-quantum today; a swap to a PQ-safe primitive (e.g. ML-KEM) is planned, not implemented. The post-quantum signature (ML-DSA-65) is in preview in QSign.",
       },
     },
     {

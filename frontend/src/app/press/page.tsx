@@ -94,14 +94,14 @@ function buildKeyStats(stats: RegistryStats | null): Array<{ value: string; labe
     },
     { value: "$340B", label: "addressable market", hint: "IP, creator economy, payments" },
     { value: "3", label: "languages", hint: "EN · RU · KK from day 1" },
-    { value: "Ed25519", label: "signature stack", hint: "+ Shamir SSS · post-quantum-ready" },
+    { value: "Ed25519", label: "signature stack", hint: "+ Shamir SSS · PQ signature in preview" },
   ];
 }
 
 const ONE_LINERS = [
   "AEVION is the trust operating system for digital creation: registry, signature, bureau, validators, bank — under one identity.",
   "AEVION turns authorship into payable rights — register IP in seconds, settle royalties in AEC, all on one Trust Graph.",
-  "AEVION is what you get when you bundle USPTO, Stripe, DocuSign and a creator wallet into a single quantum-resistant pipeline.",
+  "AEVION is what you get when you bundle USPTO, Stripe, DocuSign and a creator wallet into a single cryptographically signed pipeline.",
 ];
 
 const BRAND_COLORS = [
@@ -116,7 +116,7 @@ const BRAND_COLORS = [
 const COVERAGE_NOTE =
   "Coverage and analyst commentary will be linked here as it lands. For first-party briefings (architecture deep-dive, demo, founder interview) email data@aevion.app with subject \"AEVION press\".";
 
-const BOILERPLATE = `AEVION is a trust infrastructure platform for digital creation. It bundles IP registration (QRight), cryptographic signatures (QSign), a authorship & prior-art bureau, validator-quorum compliance certification (Planet), creator awards, and a digital bank (AEC) under a single identity and a single Trust Graph. Authorship is provable from the first second; payouts settle straight to a wallet that already understands royalties, autopilot rules and savings goals. The crypto floor is Ed25519 + Shamir's Secret Sharing, designed to remain credible after the post-quantum transition. AEVION ships in EN, RU and KK from day one.`;
+const BOILERPLATE = `AEVION is a trust infrastructure platform for digital creation. It bundles IP registration (QRight), cryptographic signatures (QSign), a authorship & prior-art bureau, validator-quorum compliance certification (Planet), creator awards, and a digital bank (AEC) under a single identity and a single Trust Graph. Authorship is provable from the first second; payouts settle straight to a wallet that already understands royalties, autopilot rules and savings goals. The crypto floor is Ed25519 + Shamir's Secret Sharing, with a post-quantum signature in preview. AEVION ships in EN, RU and KK from day one.`;
 
 export default async function PressPage() {
   const [stats, catalog] = await Promise.all([fetchStats(), fetchCatalog()]);

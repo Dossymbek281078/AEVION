@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { bezKommentariev } from "./bezKommentariev";
+import { COACH_PANEL_SLOVA } from "../p/coachPanelSlova";
 
 /**
  * Решение основателя 07.09.2026: «Глубокий анализ» (Stockfish 17.1 + NNUE) —
@@ -54,7 +55,12 @@ describe("Глубокий анализ закрыт за CyberChess Pro", () =>
     // Смотрим ТЕКСТ ДЛЯ ЧЕЛОВЕКА: в комментариях слово «Pro» законно — там
     // объясняется, почему его убрали. Без вырезания комментариев сторож
     // краснел бы на собственном объяснении.
-    const текст = bezKommentariev(fs.readFileSync(SRC, "utf-8"));
+    // 5.11.2026: подписи панели — ключи cpn.deep.* на трёх языках: проверяем и код, и значения словаря.
+    const слова = Object.values(COACH_PANEL_SLOVA).flatMap((я) =>
+      Object.entries(я).filter(([k]) => k.startsWith("cpn.deep.")).map(([, v]) => v),
+    );
+    expect(слова.length, "словарь панели не прочитан").toBeGreaterThan(40);
+    const текст = bezKommentariev(fs.readFileSync(SRC, "utf-8")) + " " + слова.join(" ");
     for (const ступень of ["Pro", "Lite", "Medium", "Full", "Max"]) {
       expect(текст).not.toContain(`CyberChess ${ступень}`);
       expect(текст).not.toContain(`Открыть ${ступень}`);
